@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('项目设置', ~{::content})}">
+<body>
+<div th:fragment="content">
+    <div class="row justify-content-center">
+        <div class="col-md-8" x-data="projectFormHelper()">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="mb-0" th:text="${projectId != null} ? '编辑项目' : '新建创作项目'">新建项目</h2>
+                <button type="button" class="btn btn-outline-info btn-sm" @click="showRefModal = true"
+                        th:if="${projectId == null && allProjects != null && !allProjects.isEmpty()}">
+                    <i class="bi bi-clipboard-data"></i> 参考已有项目
+                </button>
+            </div>
+
+            <!-- Reference Project Modal -->
+            <div class="modal fade" :class="{'show d-block': showRefModal}" tabindex="-1"
+                 x-show="showRefModal" @click.self="showRefModal = false">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">选择参考项目</h5>
+                            <button type="button" class="btn-close" @click="showRefModal = false"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="text-muted small">选择一个项目，其配置信息将填入当前表单（不包括标题）</p>
+                            <div style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-hover table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th style="width:40px"></th>
+                                        <th>项目名称</th>
+                                        <th>题材类型</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr th:each="p : ${allProjects}" style="cursor:pointer"
+                                        th:attr="data-pid=${p.id}"
+                                        @click="selectedRefId = $el.dataset.pid">
+                                        <td>
+                                            <input type="radio" class="form-check-input" name="refProject"
+                                                   th:attr="value=${p.id}"
+                                                   :checked="selectedRefId == $el.closest('tr').dataset.pid">
+                                        </td>
+                                        <td th:text="${p.title}">标题</td>
+                                        <td th:text="${p.genre.displayName}">题材</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary btn-sm" @click="showRefModal = false">取消</button>
+                            <button type="button" class="btn btn-primary btn-sm" @click="applyReference()" :disabled="!selectedRefId">确认</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-backdrop fade show" x-show="showRefModal" @click="showRefModal = false"></div>
+
+            <form th:action="${projectId != null} ? @{/projects/{id}(id=${projectId})} : @{/projects}"
+                  method="post" th:object="${form}" id="projectForm">
+
+                <div class="mb-3">
+                    <label for="title" class="form-label">小说标题</label>
+                    <input type="text" class="form-control" id="title" th:field="*{title}"
+                           placeholder="例如：星辰大海" th:classappend="${#fields.hasErrors('title')} ? 'is-invalid'">
+                    <div class="invalid-feedback" th:if="${#fields.hasErrors('title')}" th:errors="*{title}">错误</div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="genre" class="form-label">题材类型</label>
+                    <select class="form-select" id="genre" th:field="*{genre}"
+                            th:classappend="${#fields.hasErrors('genre')} ? 'is-invalid'">
+                        <option value="">-- 请选择题材 --</option>
+                        <option th:each="g : ${genres}" th:value="${g}" th:text="${g.displayName}">题材</option>
+                    </select>
+                    <div class="invalid-feedback" th:if="${#fields.hasErrors('genre')}" th:errors="*{genre}">错误</div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="description" class="form-label">故事简介</label>
+                    <textarea class="form-control" id="description" th:field="*{description}" rows="4"
+                              placeholder="简单描述你想写的故事，AI将基于此生成世界观和角色..."></textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label for="totalChapters" class="form-label">章节数</label>
+                    <input type="number" class="form-control" id="totalChapters" th:field="*{totalChapters}"
+                           min="1" max="200" placeholder="10">
+                    <div class="form-text">计划写多少章，默认10章</div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="characterCount" class="form-label">主要角色数</label>
+                    <input type="number" class="form-control" id="characterCount" th:field="*{characterCount}"
+                           min="1" max="20" placeholder="5">
+                    <div class="form-text">AI将为每个主要角色生成独立角色卡，默认5个</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">每章字数设置</label>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">目标</span>
+                                <input type="number" class="form-control" th:field="*{chapterWordCount}"
+                                       min="1000" max="20000" step="500">
+                                <span class="input-group-text">字</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">下限</span>
+                                <input type="number" class="form-control" th:field="*{chapterWordCountMin}"
+                                       min="500" max="20000" step="500">
+                                <span class="input-group-text">字</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">上限</span>
+                                <input type="number" class="form-control" th:field="*{chapterWordCountMax}"
+                                       min="1000" max="30000" step="500">
+                                <span class="input-group-text">字</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-text">控制AI生成每章的大致字数，默认5000字（4000-6000）</div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="defaultModelConfigId" class="form-label">项目默认模型</label>
+                    <select class="form-select" id="defaultModelConfigId" th:field="*{defaultModelConfigId}">
+                        <option value="">-- 使用全局默认模型 --</option>
+                        <option th:each="mc : ${modelConfigs}" th:value="${mc.id}"
+                                th:text="${mc.displayName} + ' (' + ${mc.provider} + '/' + ${mc.modelId} + ')'">模型</option>
+                    </select>
+                    <div class="form-text">不选择则使用全局默认模型</div>
+                </div>
+
+                <div class="mb-3">
+                    <div class="form-check form-switch">
+                        <input type="checkbox" class="form-check-input" id="autoMode" th:field="*{autoMode}">
+                        <label class="form-check-label" for="autoMode">全自动模式</label>
+                    </div>
+                    <div class="form-text">开启后可在创作页面一键执行全流程，自动完成所有步骤</div>
+                </div>
+
+                <!-- Step Guidance Section -->
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <label class="form-label mb-0">创作指导</label>
+                        <button type="button" class="btn btn-sm btn-link text-decoration-none" data-bs-toggle="collapse" data-bs-target="#guidanceCollapse">
+                            <i class="bi bi-chevron-down"></i> 展开/收起
+                        </button>
+                    </div>
+                    <div class="form-text mb-2">为每个创作环节配置AI生成时的指导信息（可选），例如文风要求、情节偏好等</div>
+                    <div class="collapse" id="guidanceCollapse"
+                         th:classappend="${form.stepGuidances != null && !form.stepGuidances.isEmpty()} ? 'show'">
+                        <div class="border rounded p-3 bg-light">
+                            <div th:each="step : ${workflowSteps}" class="mb-3">
+                                <label class="form-label small fw-bold" th:text="${step.displayName}">步骤名</label>
+                                <textarea class="form-control form-control-sm" rows="2"
+                                          th:name="'stepGuidances[' + ${step.name()} + ']'"
+                                          th:text="${form.stepGuidances != null} ? ${form.stepGuidances[step.name()]} : ''"
+                                          th:placeholder="'为【' + ${step.displayName} + '】环节提供创作指导...'"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i>
+                        <span th:text="${projectId != null} ? '保存修改' : '创建并开始创作'">提交</span>
+                    </button>
+                    <a th:href="@{/}" class="btn btn-outline-secondary">取消</a>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script>
+    function projectFormHelper() {
+        return {
+            showRefModal: false,
+            selectedRefId: null,
+            applyReference() {
+                if (!this.selectedRefId) return;
+                this.showRefModal = false;
+                fetch('/projects/' + this.selectedRefId + '/form-data')
+                    .then(r => r.json())
+                    .then(data => {
+                        const form = document.getElementById('projectForm');
+                        if (data.genre) form.querySelector('#genre').value = data.genre;
+                        if (data.description) form.querySelector('#description').value = data.description;
+                        form.querySelector('#totalChapters').value = data.totalChapters || 10;
+                        form.querySelector('#characterCount').value = data.characterCount || 5;
+                        form.querySelector('[name="chapterWordCount"]').value = data.chapterWordCount || 5000;
+                        form.querySelector('[name="chapterWordCountMin"]').value = data.chapterWordCountMin || 4000;
+                        form.querySelector('[name="chapterWordCountMax"]').value = data.chapterWordCountMax || 6000;
+                        if (data.defaultModelConfigId) {
+                            form.querySelector('#defaultModelConfigId').value = data.defaultModelConfigId;
+                        }
+                        form.querySelector('#autoMode').checked = data.autoMode;
+                        if (data.stepGuidances) {
+                            for (const [step, guidance] of Object.entries(data.stepGuidances)) {
+                                const textarea = form.querySelector('[name="stepGuidances[' + step + ']"]');
+                                if (textarea) textarea.value = guidance || '';
+                            }
+                            if (Object.values(data.stepGuidances).some(v => v && v.trim())) {
+                                const collapse = document.getElementById('guidanceCollapse');
+                                if (collapse && !collapse.classList.contains('show')) {
+                                    new bootstrap.Collapse(collapse, {toggle: true});
+                                }
+                            }
+                        }
+                    });
+            }
+        };
+    }
+    </script>
+</div>
+</body>
+</html>

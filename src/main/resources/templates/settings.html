@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('AI模型配置', ~{::content})}">
+<body>
+<div th:fragment="content">
+    <h2 class="mb-4">AI模型配置</h2>
+
+    <!-- Global Default Model -->
+    <div class="card mb-4">
+        <div class="card-header"><strong>全局默认模型</strong></div>
+        <div class="card-body">
+            <form th:action="@{/settings/global-default}" method="post" class="d-flex gap-2 align-items-center">
+                <select class="form-select form-select-sm" name="modelConfigId" style="max-width: 300px;">
+                    <option value="" th:selected="${globalDefaultId == null}">-- 未指定 --</option>
+                    <option th:each="config : ${configs}"
+                            th:if="${config.active}"
+                            th:value="${config.id}"
+                            th:selected="${config.id == globalDefaultId}"
+                            th:text="${config.displayName} + ' (' + ${config.provider} + '/' + ${config.modelId} + ')'">模型</option>
+                </select>
+                <button type="submit" class="btn btn-sm btn-primary">保存</button>
+            </form>
+            <small class="text-muted mt-1 d-block">所有项目和步骤默认使用此模型（除非单独配置）</small>
+        </div>
+    </div>
+
+    <!-- AI Timeout -->
+    <div class="card mb-4">
+        <div class="card-header"><strong>AI生成超时时间</strong></div>
+        <div class="card-body">
+            <form th:action="@{/settings/ai-timeout}" method="post" class="d-flex gap-2 align-items-center">
+                <input type="number" class="form-control form-control-sm" name="timeoutSeconds"
+                       th:value="${aiTimeoutSeconds}" min="30" max="3600" style="max-width: 120px;">
+                <span class="text-muted small">秒</span>
+                <button type="submit" class="btn btn-sm btn-primary">保存</button>
+            </form>
+            <small class="text-muted mt-1 d-block">AI模型连接和生成的超时时间，默认300秒（5分钟），范围30-3600秒</small>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6" th:each="config : ${configs}">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span th:text="${config.displayName}">模型名</span>
+                    <span class="badge" th:classappend="${config.active} ? 'bg-success' : 'bg-secondary'"
+                          th:text="${config.active} ? '启用' : '禁用'">状态</span>
+                </div>
+                <div class="card-body">
+                    <form th:action="@{/settings/ai-models/{id}(id=${config.id})}" method="post">
+                        <div class="mb-2">
+                            <label class="form-label small">Provider</label>
+                            <input type="text" class="form-control form-control-sm" th:value="${config.provider}" disabled>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">Model ID</label>
+                            <input type="text" class="form-control form-control-sm" th:value="${config.modelId}" disabled>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">API Key</label>
+                            <input type="password" class="form-control form-control-sm" name="apiKey"
+                                   th:placeholder="${config.apiKey != null && !config.apiKey.isEmpty()} ? '已设置（重新输入以更新）' : '未设置'">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">Base URL</label>
+                            <input type="text" class="form-control form-control-sm" name="baseUrl" th:value="${config.baseUrl}">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small">额外参数 (JSON)</label>
+                            <textarea class="form-control form-control-sm" name="extraParams" rows="2"
+                                      th:text="${config.extraParams}"
+                                      placeholder='例: {"enable_thinking": false}'></textarea>
+                            <small class="text-muted">合并到API请求体，可关闭思考模式等</small>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" name="active" value="true"
+                                       th:checked="${config.active}">
+                                <label class="form-check-label small">启用</label>
+                            </div>
+                            <div class="d-flex gap-1">
+                                <button type="submit" class="btn btn-sm btn-primary">保存</button>
+                            </div>
+                        </div>
+                    </form>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <div>
+                            <button type="button" class="btn btn-sm btn-outline-success"
+                                    th:attr="onclick='testConnection(' + ${config.id} + ', this)'">
+                                <i class="bi bi-plug"></i> 连接测试
+                            </button>
+                            <span class="ms-2 small test-result" th:id="'test-result-' + ${config.id}"></span>
+                        </div>
+                        <form th:action="@{/settings/ai-models/{id}/delete(id=${config.id})}" method="post"
+                              onsubmit="return confirm('确定要删除此模型配置吗？')" style="display:inline">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="bi bi-trash"></i> 删除
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <hr class="my-4">
+
+    <h5>添加新模型</h5>
+    <form th:action="@{/settings/ai-models}" method="post" class="row g-2 align-items-end">
+        <div class="col-md-2">
+            <label class="form-label small">Provider</label>
+            <select class="form-select form-select-sm" name="provider">
+                <option value="claude">Claude</option>
+                <option value="openai">OpenAI</option>
+                <option value="ollama">Ollama</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Model ID</label>
+            <input type="text" class="form-control form-control-sm" name="modelId" required>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">显示名称</label>
+            <input type="text" class="form-control form-control-sm" name="displayName" required>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">API Key</label>
+            <input type="password" class="form-control form-control-sm" name="apiKey">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Base URL</label>
+            <input type="text" class="form-control form-control-sm" name="baseUrl">
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-sm btn-success w-100">添加</button>
+        </div>
+        <div class="col-md-12">
+            <label class="form-label small">额外参数 (JSON，可选)</label>
+            <input type="text" class="form-control form-control-sm" name="extraParams"
+                   placeholder='例: {"enable_thinking": false}'>
+        </div>
+    </form>
+    <script>
+    function testConnection(configId, btn) {
+        const resultEl = document.getElementById('test-result-' + configId);
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 测试中...';
+        resultEl.textContent = '';
+        resultEl.className = 'ms-2 small test-result';
+
+        fetch('/settings/ai-models/' + configId + '/test', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                resultEl.textContent = data.message;
+                resultEl.className = 'ms-2 small test-result ' + (data.success ? 'text-success' : 'text-danger');
+            })
+            .catch(err => {
+                resultEl.textContent = '请求失败: ' + err.message;
+                resultEl.className = 'ms-2 small test-result text-danger';
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-plug"></i> 连接测试';
+            });
+    }
+    </script>
+</div>
+</body>
+</html>

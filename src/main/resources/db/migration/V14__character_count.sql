@@ -1,0 +1,1 @@
+ALTER TABLE projects ADD COLUMN character_count INT NOT NULL DEFAULT 5;

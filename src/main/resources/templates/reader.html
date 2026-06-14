@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${project.title} + ' - 全文阅读'">全文阅读</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        body { margin: 0; }
+        .reader-sidebar {
+            width: 260px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border-right: 1px solid #dee2e6;
+            padding: 1rem;
+            transition: transform 0.3s ease;
+            z-index: 1000;
+        }
+        .reader-sidebar.collapsed {
+            transform: translateX(-100%);
+        }
+        .reader-main {
+            margin-left: 260px;
+            padding: 2rem 3rem;
+            max-width: 900px;
+            transition: margin-left 0.3s ease;
+        }
+        .reader-main.expanded {
+            margin-left: 0;
+        }
+        .toggle-btn {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1100;
+            transition: left 0.3s ease;
+        }
+        .toggle-btn.shifted {
+            left: 270px;
+        }
+        .chapter-content {
+            white-space: pre-wrap;
+            font-size: 1.05rem;
+            line-height: 1.8;
+        }
+        .chapter-divider {
+            border: 0;
+            border-top: 2px dashed #dee2e6;
+            margin: 3rem 0;
+        }
+        .toc-link {
+            display: block;
+            padding: 0.3rem 0.5rem;
+            color: #333;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        .toc-link:hover {
+            background: #e9ecef;
+            color: #000;
+        }
+        @media (max-width: 768px) {
+            .reader-sidebar { transform: translateX(-100%); }
+            .reader-sidebar.show-mobile { transform: translateX(0); }
+            .reader-main { margin-left: 0; }
+            .toggle-btn { left: 10px !important; }
+        }
+    </style>
+</head>
+<body x-data="{ sidebarOpen: window.innerWidth > 768 }">
+
+    <button class="btn btn-sm btn-outline-dark toggle-btn"
+            :class="{ 'shifted': sidebarOpen && window.innerWidth > 768 }"
+            @click="sidebarOpen = !sidebarOpen">
+        <i class="bi bi-list"></i>
+    </button>
+
+    <aside class="reader-sidebar"
+           :class="{ 'collapsed': !sidebarOpen, 'show-mobile': sidebarOpen }">
+        <div class="mb-3 mt-4">
+            <a th:href="@{/projects/{id}(id=${project.id})}" class="btn btn-sm btn-outline-secondary w-100">
+                <i class="bi bi-arrow-left"></i> 返回项目
+            </a>
+        </div>
+        <h6 class="text-muted mb-2" th:text="${project.title}">书名</h6>
+        <hr>
+        <nav>
+            <a th:each="chapter : ${chapters}"
+               th:href="'#chapter-' + ${chapter.chapterNumber}"
+               th:text="'第' + ${chapter.chapterNumber} + '章 ' + (${chapter.title} ?: '')"
+               class="toc-link"
+               @click="if(window.innerWidth <= 768) sidebarOpen = false">
+            </a>
+        </nav>
+    </aside>
+
+    <main class="reader-main" :class="{ 'expanded': !sidebarOpen }">
+        <h2 class="mb-4" th:text="${project.title}">书名</h2>
+
+        <div th:each="chapter, iter : ${chapters}">
+            <hr th:if="${!iter.first}" class="chapter-divider">
+            <h3 th:id="'chapter-' + ${chapter.chapterNumber}"
+                th:text="'第' + ${chapter.chapterNumber} + '章 ' + (${chapter.title} ?: '')">
+                章节标题
+            </h3>
+            <div class="chapter-content mt-3" th:text="${chapter.content ?: '（暂无内容）'}">
+                章节内容
+            </div>
+        </div>
+
+        <div th:if="${#lists.isEmpty(chapters)}" class="text-muted text-center py-5">
+            <i class="bi bi-journal-x" style="font-size: 3rem;"></i>
+            <p class="mt-2">暂无章节内容</p>
+        </div>
+    </main>
+
+    <script src="https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js" defer></script>
+</body>
+</html>

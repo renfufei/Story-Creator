@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('项目列表', ~{::content})}">
+<body>
+<div th:fragment="content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>我的创作项目</h2>
+        <div class="d-flex gap-2">
+            <a th:href="@{/import}" class="btn btn-outline-secondary">
+                <i class="bi bi-upload"></i> 导入项目
+            </a>
+            <a th:href="@{/projects/new}" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i> 新建项目
+            </a>
+        </div>
+    </div>
+
+    <div th:if="${#lists.isEmpty(projects)}" class="text-center py-5">
+        <i class="bi bi-journal-text display-1 text-muted"></i>
+        <p class="mt-3 text-muted">还没有创作项目，开始你的第一部小说吧！</p>
+        <a th:href="@{/projects/new}" class="btn btn-primary btn-lg mt-2">
+            <i class="bi bi-plus-lg"></i> 创建新项目
+        </a>
+    </div>
+
+    <div class="row g-3" th:unless="${#lists.isEmpty(projects)}">
+        <div class="col-md-4" th:each="project : ${projects}">
+            <a th:href="@{/projects/{id}(id=${project.id})}" class="text-decoration-none">
+                <div class="card h-100 project-card" style="cursor: pointer;">
+                    <div class="card-body">
+                        <h5 class="card-title" th:text="${project.title}">项目名</h5>
+                        <span class="badge bg-info mb-2" th:text="${project.genre.displayName}">题材</span>
+                        <span class="badge bg-secondary mb-2" th:text="${project.currentStep.displayName}">当前步骤</span>
+                        <p class="card-text text-muted small" th:text="${#strings.abbreviate(project.description, 80)}">描述</p>
+                    </div>
+                    <div class="card-footer bg-transparent">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted" th:text="${#temporals.format(project.updatedAt, 'yyyy-MM-dd HH:mm')}">时间</small>
+                            <div>
+                                <span class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-info-circle"></i> 项目详情
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,2684 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout(${project.title} + ' - 创作', ~{::content})}">
+<body>
+<div th:fragment="content" x-data="workflowApp()">
+    <!-- Sticky header area -->
+    <div class="sticky-top bg-white pb-2" style="z-index: 100;">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h4 class="mb-0" th:text="${project.title}">项目名</h4>
+            <div class="d-flex gap-2">
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-download"></i> 导出
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=markdown(id=${project.id})}"><i class="bi bi-filetype-md me-2"></i>Markdown (.md)</a></li>
+                        <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=txt(id=${project.id})}"><i class="bi bi-file-text me-2"></i>纯文本 (.txt)</a></li>
+                        <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=pdf(id=${project.id})}"><i class="bi bi-filetype-pdf me-2"></i>PDF (.pdf)</a></li>
+                        <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=epub(id=${project.id})}"><i class="bi bi-book me-2"></i>电子书 (.epub)</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=json(id=${project.id})}"><i class="bi bi-filetype-json me-2"></i>完整备份 (.json)</a></li>
+                    </ul>
+                </div>
+                <a th:href="@{/projects/{id}/edit(id=${project.id})}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-pencil-square"></i> 编辑项目
+                </a>
+            </div>
+        </div>
+
+        <!-- Step Navigation (clickable, reactive) -->
+        <div class="workflow-steps mb-0">
+            <template x-for="(s, idx) in stepList" :key="s.name">
+                <a class="workflow-step text-decoration-none"
+                   :class="s.name === autoRunActiveStep ? 'active' : (s.order < autoRunActiveOrder ? 'completed' : '')"
+                   :href="'/projects/' + projectId + '/workflow?step=' + s.name">
+                    <div class="step-number" x-text="idx + 1"></div>
+                    <div class="small" x-text="s.label"></div>
+                </a>
+            </template>
+        </div>
+
+        <!-- Full Auto Mode Control Bar -->
+        <template x-if="autoMode">
+            <div class="alert mb-0 mt-2 py-2"
+                 :class="fullAutoRunning ? 'alert-info' : (fullAutoError ? 'alert-danger' : 'alert-secondary')">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>
+                        <template x-if="!fullAutoRunning && !fullAutoError">
+                            <span><i class="bi bi-lightning"></i> 全自动模式已开启</span>
+                        </template>
+                        <template x-if="fullAutoRunning">
+                            <span><span class="spinner-border spinner-border-sm me-1"></span> <span x-text="fullAutoStatus"></span></span>
+                        </template>
+                        <template x-if="!fullAutoRunning && fullAutoError">
+                            <span><i class="bi bi-exclamation-triangle"></i> 出错: <span x-text="fullAutoError"></span></span>
+                        </template>
+                    </span>
+                    <div class="d-flex gap-2">
+                        <button x-show="!fullAutoRunning" class="btn btn-sm btn-primary" @click="startFullAuto()">
+                            <i class="bi bi-play-fill"></i> 开始全自动创作
+                        </button>
+                        <button x-show="fullAutoRunning" class="btn btn-sm btn-outline-danger" @click="stopFullAuto()">
+                            <i class="bi bi-stop-fill"></i> 停止
+                        </button>
+                    </div>
+                </div>
+                <div x-show="!fullAutoRunning" class="mt-2 d-flex align-items-center flex-wrap gap-2" style="font-size:0.85rem;">
+                    <span class="text-muted me-1">步骤:</span>
+                    <template x-for="s in stepList" :key="s.name">
+                        <label class="form-check form-check-inline form-switch mb-0" style="min-height:auto;">
+                            <input class="form-check-input" type="checkbox"
+                                   :checked="autoRunStepConfigs[s.name] !== false"
+                                   @change="toggleStepConfig(s.name, $event.target.checked)">
+                            <span class="form-check-label" x-text="s.label"></span>
+                        </label>
+                    </template>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Main Content Card -->
+    <div class="card mt-2">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>
+                <strong th:text="${viewStep.displayName}">当前步骤</strong>
+                <span class="badge bg-info ms-2" th:text="${project.genre.displayName}">题材</span>
+                <span th:if="${viewStep != project.currentStep}" class="badge bg-warning ms-1">已完成步骤</span>
+            </span>
+            <div class="d-flex gap-2 align-items-center">
+                <!-- Step-level model selector -->
+                <form th:action="@{/projects/{id}/step-model(id=${project.id})}" method="post" class="d-flex gap-1 align-items-center">
+                    <input type="hidden" name="step" th:value="${viewStep.name()}">
+                    <select class="form-select form-select-sm" name="modelConfigId" style="max-width:200px; font-size:0.8rem;">
+                        <option value="">默认模型</option>
+                        <option th:each="mc : ${modelConfigs}" th:value="${mc.id}"
+                                th:selected="${mc.id == stepModelConfigId}"
+                                th:text="${mc.displayName}">模型</option>
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="保存步骤模型">
+                        <i class="bi bi-check"></i>
+                    </button>
+                </form>
+                <template x-if="currentStep === 'CHAPTER_WRITING'">
+                    <button class="btn btn-sm btn-primary" @click="generateAllChapters()"
+                            :disabled="generating || fullAutoRunning">
+                        <span x-show="!generating"><i class="bi bi-magic"></i> 全部自动生成</span>
+                        <span x-show="generating"><span class="spinner-border spinner-border-sm"></span> 生成中...</span>
+                    </button>
+                </template>
+                <template x-if="currentStep === 'POLISHING'">
+                    <button class="btn btn-sm btn-primary" @click="batchPolish()"
+                            :disabled="generating || fullAutoRunning">
+                        <span x-show="!generating"><i class="bi bi-brush"></i> 批量自动润色</span>
+                        <span x-show="generating"><span class="spinner-border spinner-border-sm"></span> 润色中...</span>
+                    </button>
+                </template>
+                <template x-if="currentStep !== 'CHAPTER_WRITING' && currentStep !== 'POLISHING' && currentStep !== 'PROOFREADING'">
+                    <button class="btn btn-sm btn-primary" @click="generate()"
+                            :disabled="generating || fullAutoRunning">
+                        <span x-show="!generating"><i class="bi bi-magic"></i> AI生成</span>
+                        <span x-show="generating"><span class="spinner-border spinner-border-sm"></span> 生成中...</span>
+                    </button>
+                </template>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- Step Guidance Section -->
+            <div class="mb-3 border rounded p-2 bg-light">
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted fw-bold">
+                        <i class="bi bi-compass"></i> 创作指导
+                        <span x-show="stepGuidance && !editingGuidance" class="ms-1 text-success"><i class="bi bi-check-circle-fill"></i></span>
+                    </small>
+                    <button x-show="!editingGuidance" class="btn btn-sm btn-outline-secondary py-0 px-1"
+                            @click="editingGuidance = true; stepGuidanceEdit = stepGuidance"
+                            :disabled="fullAutoRunning">
+                        <i class="bi bi-pencil"></i> 配置
+                    </button>
+                </div>
+                <div x-show="!editingGuidance && stepGuidance" class="mt-1">
+                    <small class="text-muted" style="white-space: pre-line;" x-text="stepGuidance"></small>
+                </div>
+                <div x-show="!editingGuidance && !stepGuidance" class="mt-1">
+                    <small class="text-muted fst-italic">未设置（可配置风格偏好、写作要求等指导信息）</small>
+                </div>
+                <div x-show="editingGuidance" class="mt-2">
+                    <textarea class="form-control form-control-sm" rows="3" x-model="stepGuidanceEdit"
+                              placeholder="输入创作指导信息，例如：文风要求、情节偏好、禁忌内容等..."></textarea>
+                    <div class="d-flex justify-content-end gap-1 mt-1">
+                        <button class="btn btn-sm btn-outline-secondary" @click="editingGuidance = false">取消</button>
+                        <button class="btn btn-sm btn-primary" @click="saveGuidance()">保存配置</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chapter title indicator (only for CHAPTER_WRITING during generation) -->
+            <template x-if="currentStep === 'CHAPTER_WRITING' && generating">
+                <div class="mb-2">
+                    <span x-show="viewingChapterNum > 0" class="badge bg-primary fs-6">
+                        <i class="bi bi-bookmark"></i>
+                        <span x-text="'第' + viewingChapterNum + '章'"></span>
+                        <span x-show="viewingChapterTitle" x-text="' ' + viewingChapterTitle"></span>
+                    </span>
+                </div>
+            </template>
+
+            <!-- === OUTLINE GENERATION: Accordion UI === -->
+            <template x-if="currentStep === 'OUTLINE_GENERATION'">
+                <div>
+                    <!-- Generating indicator -->
+                    <div x-show="generating" class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                                <span x-text="outlineStreamingStatus || '正在生成大纲...'"></span>
+                                <span class="ms-3"><i class="bi bi-clock"></i> <span x-text="generateElapsed"></span></span>
+                            </small>
+                            <button class="btn btn-sm btn-outline-danger" @click="stopAutoGenerate()">
+                                <i class="bi bi-stop-circle"></i> 停止生成
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Story Summary Section -->
+                    <div x-show="outlineSummary || (generating && streamingTarget && streamingTarget.type === 'SUMMARY')" class="mb-3">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center py-2">
+                                <strong><i class="bi bi-book"></i> 故事总纲</strong>
+                                <button x-show="!generating && outlineSummary" class="btn btn-sm btn-outline-primary py-0 px-1"
+                                        @click="editOutlineSummary()" :disabled="fullAutoRunning">
+                                    <i class="bi bi-pencil"></i> 编辑
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div x-show="!editingSummary">
+                                    <pre class="mb-0" style="white-space:pre-wrap; font-family:inherit; font-size:0.9rem;" x-text="outlineSummary"></pre>
+                                    <span x-show="generating && streamingTarget && streamingTarget.type === 'SUMMARY'" class="cursor"></span>
+                                </div>
+                                <div x-show="editingSummary">
+                                    <textarea class="form-control" rows="6" x-model="outlineSummaryEdit"></textarea>
+                                    <div class="d-flex justify-content-end gap-1 mt-2">
+                                        <button class="btn btn-sm btn-outline-secondary" @click="editingSummary = false">取消</button>
+                                        <button class="btn btn-sm btn-primary" @click="saveOutlineSummary()">保存</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Volume Accordion -->
+                    <div class="accordion" id="outlineAccordion">
+                        <template x-for="(vol, vIdx) in outlineVolumes" :key="vol.volumeNumber">
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button" :class="!vol.expanded ? 'collapsed' : ''" type="button"
+                                            @click="vol.expanded = !vol.expanded">
+                                        <span x-text="'第' + vol.volumeNumber + '卷 (第' + vol.chapterStart + '-' + vol.chapterEnd + '章)'"></span>
+                                        <span x-show="vol.chapters && vol.chapters.length > 0" class="badge bg-secondary ms-2" x-text="vol.chapters.length + '章'"></span>
+                                    </button>
+                                </h2>
+                                <div class="accordion-collapse" :class="vol.expanded ? 'show' : 'collapse'">
+                                    <div class="accordion-body">
+                                        <!-- Volume Arc -->
+                                        <div class="mb-3 p-2 bg-light rounded border">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <small class="fw-bold text-muted"><i class="bi bi-diagram-3"></i> 本卷故事弧线</small>
+                                                <button x-show="!generating && vol.arcSummary" class="btn btn-sm btn-outline-primary py-0 px-1"
+                                                        @click="editVolumeArc(vol)" :disabled="fullAutoRunning">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                            </div>
+                                            <div x-show="!vol.editingArc">
+                                                <pre class="mb-0" style="white-space:pre-wrap; font-family:inherit; font-size:0.85rem;" x-text="vol.arcSummary || ''"></pre>
+                                                <span x-show="generating && streamingTarget && streamingTarget.type === 'VOLUME' && streamingTarget.volumeNumber === vol.volumeNumber" class="cursor"></span>
+                                            </div>
+                                            <div x-show="vol.editingArc">
+                                                <textarea class="form-control form-control-sm" rows="4" x-model="vol.arcSummaryEdit"></textarea>
+                                                <div class="d-flex justify-content-end gap-1 mt-1">
+                                                    <button class="btn btn-sm btn-outline-secondary" @click="vol.editingArc = false">取消</button>
+                                                    <button class="btn btn-sm btn-primary" @click="saveVolumeArc(vol)">保存</button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Chapters in this volume -->
+                                        <div class="list-group">
+                                            <template x-for="(ch, cIdx) in vol.chapters" :key="ch.chapterNumber">
+                                                <div class="list-group-item" :class="{'list-group-item-light': ch.status === 'PENDING', 'list-group-item-danger': ch.status === 'FAILED'}">
+                                                    <div class="d-flex justify-content-between align-items-start">
+                                                        <div class="flex-grow-1">
+                                                            <div class="fw-bold">
+                                                                <span x-text="'第' + ch.chapterNumber + '章'"></span>
+                                                                <span x-show="ch.status === 'COMPLETED' || ch.summary" x-text="' - ' + (ch.title || '')"></span>
+                                                                <span x-show="ch.status === 'PENDING' && !ch.summary" class="text-muted fw-normal"> - 待生成</span>
+                                                                <span x-show="ch.status === 'GENERATING'" class="text-primary fw-normal"> - 生成中<span class="cursor"></span></span>
+                                                                <span x-show="ch.status === 'FAILED'" class="text-danger fw-normal"> - 生成失败</span>
+                                                            </div>
+                                                            <small x-show="ch.characterNames" class="text-muted">
+                                                                <i class="bi bi-people"></i> <span x-text="ch.characterNames"></span>
+                                                            </small>
+                                                            <div x-show="!ch.editing && ch.summary" class="mt-1" style="font-size:0.85rem;">
+                                                                <span x-text="ch.summary || ''"></span>
+                                                                <span x-show="ch.regenerating || (generating && streamingTarget && streamingTarget.type === 'CHAPTER' && streamingTarget.chapterNumber === ch.chapterNumber)" class="cursor"></span>
+                                                            </div>
+                                                            <div x-show="ch.editing" class="mt-1">
+                                                                <div class="mb-1">
+                                                                    <input type="text" class="form-control form-control-sm" x-model="ch.titleEdit" placeholder="章节标题">
+                                                                </div>
+                                                                <div class="mb-1">
+                                                                    <input type="text" class="form-control form-control-sm" x-model="ch.characterNamesEdit" placeholder="出场角色（逗号分隔）">
+                                                                </div>
+                                                                <textarea class="form-control form-control-sm" rows="3" x-model="ch.summaryEdit" placeholder="章节大纲"></textarea>
+                                                                <div class="d-flex justify-content-end gap-1 mt-1">
+                                                                    <button class="btn btn-sm btn-outline-secondary" @click="ch.editing = false">取消</button>
+                                                                    <button class="btn btn-sm btn-primary" @click="saveChapterOutline(ch)">保存</button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div x-show="!generating && ch.status === 'COMPLETED' && !ch.editing" class="d-flex gap-1 ms-2">
+                                                            <button class="btn btn-sm btn-outline-primary"
+                                                                    @click="editChapterOutline(ch)" :disabled="fullAutoRunning">
+                                                                <i class="bi bi-pencil"></i> 编辑
+                                                            </button>
+                                                            <button class="btn btn-sm btn-outline-warning"
+                                                                    @click="regenerateChapterOutline(ch)" :disabled="fullAutoRunning || ch.regenerating">
+                                                                <i class="bi bi-arrow-clockwise" :class="ch.regenerating ? 'spin' : ''"></i> 重新生成
+                                                            </button>
+                                                        </div>
+                                                        <div x-show="!generating && ch.status === 'FAILED' && !ch.editing" class="ms-2">
+                                                            <button class="btn btn-sm btn-outline-danger py-0 px-1"
+                                                                    @click="regenerateChapterOutline(ch)" :disabled="fullAutoRunning || ch.regenerating"
+                                                                    title="重新生成">
+                                                                <i class="bi bi-arrow-clockwise" :class="ch.regenerating ? 'spin' : ''"></i> 重试
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Confirm & Advance buttons -->
+                    <div x-show="!generating && outlineLoaded && outlineVolumes.length > 0" class="mt-3 text-end d-flex gap-2 justify-content-end">
+                        <button th:if="${viewStep == project.currentStep}" type="button" class="btn btn-success"
+                                @click="confirmStep()" :disabled="fullAutoRunning || stepConfirmed">
+                            <i class="bi bi-check-lg"></i> <span x-text="stepConfirmed ? '已确认' : '确认'"></span>
+                        </button>
+                        <button th:if="${viewStep == project.currentStep && viewStep.next() != null}" type="button" class="btn btn-primary"
+                                @click="advanceStep()" :disabled="fullAutoRunning">
+                            <i class="bi bi-arrow-right"></i> 进入下一步
+                        </button>
+                    </div>
+
+                    <!-- Empty state -->
+                    <div x-show="!generating && !outlineLoaded && outlineVolumes.length === 0" class="text-center py-4 text-muted">
+                        <i class="bi bi-robot display-4"></i>
+                        <p class="mt-2">点击"AI生成"开始生成分卷大纲</p>
+                    </div>
+                </div>
+            </template>
+
+            <!-- === NON-OUTLINE STEPS: Generic content display === -->
+            <template x-if="currentStep !== 'OUTLINE_GENERATION' && currentStep !== 'PROOFREADING'">
+                <div>
+
+                    <!-- === DEFAULT: Generating (not POLISHING, not CHAPTER_WRITING) === -->
+                    <div x-show="generating && currentStep !== 'POLISHING' && currentStep !== 'CHAPTER_WRITING'" class="mb-3">
+                        <div class="streaming-output" x-ref="output" style="max-height: 50vh; overflow-y: auto;">
+                            <span x-text="generatedContent"></span>
+                            <span class="cursor"></span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <small class="text-muted">
+                                当前字数: <strong x-text="generatedContent.length"></strong>
+                                <template x-if="currentStep === 'CHAPTER_WRITING' || currentStep === 'POLISHING'">
+                                    <span> / 目标 <span x-text="chapterWordCount"></span>字（<span x-text="chapterWordCountMin"></span>-<span x-text="chapterWordCountMax"></span>）</span>
+                                </template>
+                                <span class="ms-3"><i class="bi bi-clock"></i> <span x-text="generateElapsed"></span></span>
+                            </small>
+                            <button class="btn btn-sm btn-outline-danger" @click="stopAutoGenerate()">
+                                <i class="bi bi-stop-circle"></i> 停止生成
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- === DEFAULT: Has content, not generating (not POLISHING, not CHAPTER_WRITING) === -->
+                    <div x-show="!generating && currentStep !== 'POLISHING' && currentStep !== 'CHAPTER_WRITING' && (generatedContent || existingContent)" class="mb-3">
+                        <!-- Read-only view -->
+                        <div x-show="!editing">
+                            <pre class="streaming-output mb-0" style="max-height: 50vh; overflow-y: auto; white-space:pre-wrap; font-family:inherit;" x-text="editableContent"></pre>
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <small class="text-muted">
+                                    字数: <strong x-text="editableContent.length"></strong>
+                                    <span x-show="generateElapsed" class="ms-3"><i class="bi bi-clock"></i> 耗时 <span x-text="generateElapsed"></span></span>
+                                </small>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" @click="editing = true"
+                                            :disabled="fullAutoRunning">
+                                        <i class="bi bi-pencil"></i> 编辑
+                                    </button>
+                                    <button th:if="${viewStep == project.currentStep}" type="button" class="btn btn-success btn-sm"
+                                            @click="confirmStep()" :disabled="fullAutoRunning || stepConfirmed">
+                                        <i class="bi bi-check-lg"></i> <span x-text="stepConfirmed ? '已确认' : '确认'"></span>
+                                    </button>
+                                    <button th:if="${viewStep == project.currentStep && viewStep.next() != null}" type="button" class="btn btn-primary btn-sm"
+                                            @click="advanceStep()" :disabled="fullAutoRunning">
+                                        <i class="bi bi-arrow-right"></i> 进入下一步
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Editable view -->
+                        <div x-show="editing">
+                            <form th:action="@{/projects/{id}/save-edit(id=${project.id})}" method="post">
+                                <input type="hidden" name="step" th:value="${viewStep.name()}">
+                                <textarea class="form-control content-editor" name="content"
+                                          style="height: 50vh; overflow-y: auto;"
+                                          x-model="editableContent"
+                                          placeholder="在此编辑内容..."></textarea>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <small class="text-muted">字数: <strong x-text="editableContent.length"></strong></small>
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" @click="editing = false">
+                                            <i class="bi bi-x-lg"></i> 取消
+                                        </button>
+                                        <button type="submit" class="btn btn-primary btn-sm">
+                                            <i class="bi bi-save"></i> 保存编辑
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- State 3: Empty -->
+                    <div x-show="!generating && !generatedContent && !existingContent && currentStep !== 'CHAPTER_WRITING' && currentStep !== 'POLISHING'" class="text-center py-4 text-muted">
+                        <i class="bi bi-robot display-4"></i>
+                        <p class="mt-2">点击"AI生成"开始创作此步骤的内容</p>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Character Cards Section (for CHARACTER_DESIGN step) -->
+    <div th:if="${viewStep.name() == 'CHARACTER_DESIGN'}" class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><strong>角色列表</strong>
+                <span class="badge bg-secondary ms-2" x-text="characterList.length + '个角色'"></span>
+            </span>
+            <button class="btn btn-sm btn-outline-success" @click="showAddCharacter = true"
+                    :disabled="fullAutoRunning">
+                <i class="bi bi-plus-lg"></i> 添加角色
+            </button>
+        </div>
+        <div class="card-body">
+            <!-- Add character form -->
+            <div x-show="showAddCharacter" class="mb-3 p-2 border rounded bg-light">
+                <div class="d-flex gap-2 align-items-center">
+                    <input type="text" class="form-control form-control-sm" x-model="newCharacterName"
+                           placeholder="输入角色姓名" style="max-width: 200px;">
+                    <button class="btn btn-sm btn-primary" @click="addCharacter()">确认添加</button>
+                    <button class="btn btn-sm btn-outline-secondary" @click="showAddCharacter = false; newCharacterName = ''">取消</button>
+                </div>
+            </div>
+
+            <!-- Character cards list -->
+            <div x-show="characterList.length === 0 && !generating" class="text-center py-3 text-muted">
+                <p>暂无角色，请先点击"AI生成"或手动添加角色</p>
+            </div>
+            <div class="row g-3">
+                <template x-for="ch in characterList" :key="ch.id">
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header d-flex justify-content-between align-items-center py-2">
+                                <span class="fw-bold" x-text="ch.name || '未命名'"></span>
+                                <div class="d-flex gap-1">
+                                    <button class="btn btn-sm btn-outline-primary py-0 px-1"
+                                            @click="editCharacter(ch)" :disabled="fullAutoRunning">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger py-0 px-1"
+                                            @click="deleteCharacter(ch.id)" :disabled="fullAutoRunning">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body py-2" style="font-size: 0.85rem;">
+                                <div x-show="editingCharacterId !== ch.id">
+                                    <div class="row g-1">
+                                        <div class="col-4"><span class="text-muted">性别:</span> <span x-text="ch.gender || '-'"></span></div>
+                                        <div class="col-4"><span class="text-muted">年龄:</span> <span x-text="ch.age || '-'"></span></div>
+                                        <div class="col-4"><span class="text-muted">身份:</span> <span x-text="ch.role || '-'"></span></div>
+                                    </div>
+                                    <div class="mt-1"><span class="text-muted">性格:</span> <span x-text="ch.personality || '-'"></span></div>
+                                    <div class="mt-1"><span class="text-muted">外貌:</span> <span x-text="ch.appearance || '-'"></span></div>
+                                    <div class="mt-1"><span class="text-muted">背景:</span> <span x-text="ch.background || '-'"></span></div>
+                                    <div class="mt-1"><span class="text-muted">动机:</span> <span x-text="ch.motivation || '-'"></span></div>
+                                    <div class="mt-1"><span class="text-muted">能力:</span> <span x-text="ch.abilities || '-'"></span></div>
+                                    <div class="mt-1"><span class="text-muted">关系:</span> <span x-text="ch.relationships || '-'"></span></div>
+                                </div>
+                                <!-- Edit form (inline) -->
+                                <div x-show="editingCharacterId === ch.id">
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-4">
+                                            <label class="form-label small mb-0">姓名</label>
+                                            <input type="text" class="form-control form-control-sm" x-model="editForm.name">
+                                        </div>
+                                        <div class="col-4">
+                                            <label class="form-label small mb-0">性别</label>
+                                            <input type="text" class="form-control form-control-sm" x-model="editForm.gender">
+                                        </div>
+                                        <div class="col-4">
+                                            <label class="form-label small mb-0">年龄</label>
+                                            <input type="text" class="form-control form-control-sm" x-model="editForm.age">
+                                        </div>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-0">身份</label>
+                                        <input type="text" class="form-control form-control-sm" x-model="editForm.role">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-0">性格</label>
+                                        <input type="text" class="form-control form-control-sm" x-model="editForm.personality">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-0">外貌</label>
+                                        <input type="text" class="form-control form-control-sm" x-model="editForm.appearance">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-0">背景</label>
+                                        <textarea class="form-control form-control-sm" rows="2" x-model="editForm.background"></textarea>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-0">动机</label>
+                                        <input type="text" class="form-control form-control-sm" x-model="editForm.motivation">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-0">能力</label>
+                                        <input type="text" class="form-control form-control-sm" x-model="editForm.abilities">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-0">关系</label>
+                                        <input type="text" class="form-control form-control-sm" x-model="editForm.relationships">
+                                    </div>
+                                    <div class="d-flex gap-1 justify-content-end">
+                                        <button class="btn btn-sm btn-outline-secondary" @click="editingCharacterId = null">取消</button>
+                                        <button class="btn btn-sm btn-primary" @click="saveCharacter()">保存</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- Proofreading Section -->
+    <div th:if="${viewStep.name() == 'PROOFREADING'}" class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>
+                <strong>校对精修</strong>
+                <span class="badge bg-secondary ms-2" x-text="proofreadData.length + '章'"></span>
+                <span class="badge bg-success ms-1" x-text="proofreadCompletedCount() + '章已校对'"></span>
+            </span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" @click="openGlobalReplace()"
+                        :disabled="generating || fullAutoRunning">
+                    <i class="bi bi-arrow-repeat"></i> 全局替换
+                </button>
+                <button class="btn btn-sm btn-primary" @click="generate()"
+                        :disabled="generating || fullAutoRunning">
+                    <span x-show="!generating"><i class="bi bi-magic"></i> 开始校对</span>
+                    <span x-show="generating"><span class="spinner-border spinner-border-sm"></span> 校对中...</span>
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- Generating progress -->
+            <div x-show="generating && proofreadStreaming" class="alert alert-info mb-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                        正在校对第 <strong x-text="proofreadStreaming ? proofreadStreaming.chapterNumber : ''"></strong> 章 -
+                        <span x-text="proofreadStreaming ? getSubstepLabel(proofreadStreaming.substep) : ''"></span>
+                        <span class="ms-3"><i class="bi bi-clock"></i> <span x-text="generateElapsed"></span></span>
+                    </span>
+                    <button class="btn btn-sm btn-outline-danger" @click="stopAutoGenerate()">
+                        <i class="bi bi-stop-circle"></i> 停止
+                    </button>
+                </div>
+            </div>
+
+            <!-- Results list -->
+            <div x-show="proofreadData.length === 0 && !generating" class="text-center py-4 text-muted">
+                <i class="bi bi-search display-4"></i>
+                <p class="mt-2">点击"开始校对"对所有章节进行校对精修</p>
+            </div>
+
+            <div class="list-group">
+                <template x-for="item in proofreadData" :key="item.chapterNumber">
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>
+                                <span x-text="'第' + item.chapterNumber + '章'"></span>
+                                <span x-show="item.title" x-text="' - ' + item.title" class="fw-bold"></span>
+                                <span x-show="item.proofreadStatus === 'GENERATING'" class="badge bg-warning ms-1">校对中</span>
+                                <span x-show="item.proofreadStatus === 'GENERATED' || item.proofreadStatus === 'CONFIRMED'" class="badge bg-success ms-1">已校对</span>
+                                <span x-show="item.proofreadStatus === 'NOT_STARTED'" class="badge bg-secondary ms-1">未校对</span>
+                                <span x-show="item.proofreadFixStatus === 'GENERATING'" class="badge bg-warning ms-1">精修中</span>
+                                <span x-show="item.proofreadFixStatus === 'GENERATED' || item.proofreadFixStatus === 'CONFIRMED'" class="badge bg-info ms-1">已精修</span>
+                            </span>
+                            <div class="d-flex gap-1 align-items-center">
+                                <template x-if="item.proofreadStatus === 'GENERATED' || item.proofreadStatus === 'CONFIRMED'">
+                                    <span class="small text-muted me-2">
+                                        <span x-text="'角色:' + parseJson(item.characterIssues).length + '项'"></span>
+                                        <span class="ms-1" x-text="'一致性:' + parseJson(item.consistencyIssues).length + '项'"></span>
+                                        <span class="ms-1" x-text="'衔接:' + parseJson(item.continuityIssues).length + '项'"></span>
+                                    </span>
+                                </template>
+                                <!-- Proofread Fix status & buttons -->
+                                <template x-if="item.proofreadStatus === 'GENERATED' || item.proofreadStatus === 'CONFIRMED'">
+                                    <span class="d-flex gap-1 align-items-center">
+                                        <button x-show="item.proofreadFixStatus === 'GENERATED' || item.proofreadFixStatus === 'CONFIRMED'"
+                                                class="btn btn-sm btn-outline-success"
+                                                @click="previewProofreadFix(item.chapterNumber)"
+                                                :disabled="proofreadFixGenerating">
+                                            <i class="bi bi-eye"></i> 对比
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-warning"
+                                                @click="proofreadFixChapter(item.chapterNumber)"
+                                                :disabled="proofreadFixGenerating || generating || fullAutoRunning">
+                                            <i class="bi bi-wrench"></i>
+                                            <span x-text="(item.proofreadFixStatus === 'GENERATED' || item.proofreadFixStatus === 'CONFIRMED') ? '重新精修' : '精修'"></span>
+                                        </button>
+                                    </span>
+                                </template>
+                                <button x-show="item.proofreadStatus === 'GENERATED' || item.proofreadStatus === 'CONFIRMED'"
+                                        class="btn btn-sm btn-outline-info"
+                                        @click="proofreadExpandedChapter = (proofreadExpandedChapter === item.chapterNumber ? null : item.chapterNumber)">
+                                    <i class="bi" :class="proofreadExpandedChapter === item.chapterNumber ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+                                    <span x-text="proofreadExpandedChapter === item.chapterNumber ? '收起' : '详情'"></span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Expanded detail -->
+                        <div x-show="proofreadExpandedChapter === item.chapterNumber" class="mt-2 pt-2 border-top">
+                            <!-- Plot Summary -->
+                            <div class="mb-2">
+                                <small class="fw-bold text-muted"><i class="bi bi-file-text"></i> 情节摘要</small>
+                                <p class="mb-1 small" x-text="item.plotSummary || '（无）'"></p>
+                            </div>
+
+                            <!-- Character Issues -->
+                            <div class="mb-2">
+                                <small class="fw-bold text-muted"><i class="bi bi-people"></i> 角色校正</small>
+                                <template x-if="parseJson(item.characterIssues).length === 0">
+                                    <p class="mb-1 small text-success">无问题</p>
+                                </template>
+                                <template x-if="parseJson(item.characterIssues).length > 0">
+                                    <ul class="list-unstyled mb-1">
+                                        <template x-for="issue in parseJson(item.characterIssues)" :key="issue.found">
+                                            <li class="small text-warning">
+                                                "<span x-text="issue.found"></span>" → "<span x-text="issue.should_be"></span>"
+                                                <span x-show="issue.context" class="text-muted" x-text="'(' + issue.context + ')'"></span>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </template>
+                            </div>
+
+                            <!-- Consistency Issues -->
+                            <div class="mb-2">
+                                <small class="fw-bold text-muted"><i class="bi bi-exclamation-triangle"></i> 一致性问题</small>
+                                <template x-if="parseJson(item.consistencyIssues).length === 0">
+                                    <p class="mb-1 small text-success">无问题</p>
+                                </template>
+                                <template x-if="parseJson(item.consistencyIssues).length > 0">
+                                    <ul class="list-unstyled mb-1">
+                                        <template x-for="(issue, idx) in parseJson(item.consistencyIssues)" :key="idx">
+                                            <li class="small">
+                                                <span class="badge" :class="issue.severity === 'high' ? 'bg-danger' : (issue.severity === 'medium' ? 'bg-warning' : 'bg-info')" x-text="issue.type"></span>
+                                                <span x-text="issue.description"></span>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </template>
+                            </div>
+
+                            <!-- Continuity Issues -->
+                            <div class="mb-2">
+                                <small class="fw-bold text-muted"><i class="bi bi-link-45deg"></i> 章节衔接</small>
+                                <template x-if="parseJson(item.continuityIssues).length === 0">
+                                    <p class="mb-1 small text-success">衔接良好</p>
+                                </template>
+                                <template x-if="parseJson(item.continuityIssues).length > 0">
+                                    <ul class="list-unstyled mb-1">
+                                        <template x-for="(issue, idx) in parseJson(item.continuityIssues)" :key="idx">
+                                            <li class="small text-warning" x-text="issue.issue"></li>
+                                        </template>
+                                    </ul>
+                                </template>
+                            </div>
+
+                            <!-- Foreshadowing -->
+                            <div class="mb-2">
+                                <small class="fw-bold text-muted"><i class="bi bi-lightbulb"></i> 伏笔追踪</small>
+                                <template x-if="parseJson(item.foreshadowing).length === 0">
+                                    <p class="mb-1 small text-muted">无伏笔</p>
+                                </template>
+                                <template x-if="parseJson(item.foreshadowing).length > 0">
+                                    <ul class="list-unstyled mb-1">
+                                        <template x-for="(f, idx) in parseJson(item.foreshadowing)" :key="idx">
+                                            <li class="small">
+                                                <span class="badge" :class="f.type === 'planted' ? 'bg-primary' : 'bg-success'" x-text="f.type === 'planted' ? '新伏笔' : '已回收'"></span>
+                                                <span x-text="f.content"></span>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Inline: Proofread Fix Generating (shown for the chapter being fixed) -->
+                        <div x-show="proofreadFixGenerating && proofreadFixChapterNum === item.chapterNumber" class="mt-2 pt-2 border-top">
+                            <div class="d-flex align-items-center mb-2">
+                                <small class="text-muted">
+                                    <span class="spinner-border spinner-border-sm me-1"></span>
+                                    正在精修...
+                                </small>
+                            </div>
+                            <div class="split-view-container">
+                                <div class="split-view-panel">
+                                    <div class="split-view-header">精修前原文</div>
+                                    <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;" x-text="proofreadFixDraft"></pre>
+                                </div>
+                                <div class="split-view-panel">
+                                    <div class="split-view-header">精修中...</div>
+                                    <div class="streaming-output split-panel-content">
+                                        <span x-text="proofreadFixContent"></span>
+                                        <span class="cursor"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Inline: Proofread Fix Preview (each chapter independently) -->
+                        <div x-show="proofreadFixPreviews[item.chapterNumber]" class="mt-2 pt-2 border-top">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <small class="text-muted">精修对比预览</small>
+                                <button class="btn btn-sm btn-outline-secondary" @click="previewProofreadFix(item.chapterNumber)">
+                                    <i class="bi bi-x-lg"></i> 关闭
+                                </button>
+                            </div>
+                            <div class="split-view-container">
+                                <div class="split-view-panel">
+                                    <div class="split-view-header">精修前 (<span x-text="(proofreadFixPreviews[item.chapterNumber]?.draft || '').length"></span>字)</div>
+                                    <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;" x-text="proofreadFixPreviews[item.chapterNumber]?.draft || ''"></pre>
+                                </div>
+                                <div class="split-view-panel">
+                                    <div class="split-view-header">精修后 (<span x-text="(proofreadFixPreviews[item.chapterNumber]?.content || '').length"></span>字)</div>
+                                    <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;" x-text="proofreadFixPreviews[item.chapterNumber]?.content || ''"></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+
+            <!-- Confirm button -->
+            <div x-show="!generating && proofreadLoaded && proofreadCompletedCount() > 0" class="mt-3 text-end d-flex gap-2 justify-content-end">
+                <button th:if="${viewStep == project.currentStep}" type="button" class="btn btn-success"
+                        @click="confirmStep()" :disabled="fullAutoRunning || stepConfirmed">
+                    <i class="bi bi-check-lg"></i> <span x-text="stepConfirmed ? '已确认' : '确认'"></span>
+                </button>
+                <button th:if="${viewStep == project.currentStep && viewStep.next() != null}" type="button" class="btn btn-primary"
+                        @click="advanceStep()" :disabled="fullAutoRunning">
+                    <i class="bi bi-arrow-right"></i> 进入下一步
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chapter Management Section -->
+    <div th:if="${viewStep.name() == 'CHAPTER_WRITING' || viewStep.name() == 'POLISHING'}" class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>
+                <strong>章节管理</strong>
+                <span class="badge bg-secondary ms-2" th:text="${totalChapters + '章'}">章数</span>
+            </span>
+            <template x-if="currentStep === 'POLISHING'">
+                <button class="btn btn-sm btn-outline-success" @click="generateAllTitles()"
+                        :disabled="generating || fullAutoRunning">
+                    <i class="bi bi-magic"></i> AI生成章节标题
+                </button>
+            </template>
+        </div>
+        <div class="card-body">
+            <!-- Chapter list -->
+            <div class="list-group">
+                <template x-for="ch in chapterListData" :key="ch.chapterNumber">
+                    <div class="list-group-item chapter-item"
+                         :class="{'list-group-item-success': ch.status === 'CONFIRMED', 'list-group-item-warning': ch.status === 'GENERATING'}">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>
+                                <span x-text="'第' + ch.chapterNumber + '章'"></span>
+                                <span x-show="ch.title" x-text="' - ' + ch.title" class="fw-bold"></span>
+                                <small class="text-muted ms-2" x-text="ch.wordCount + '字'"></small>
+                                <template x-if="currentStep === 'POLISHING'">
+                                    <span>
+                                        <span x-show="ch.polishStatus === 'CONFIRMED'" class="badge bg-success ms-1">已润色</span>
+                                        <span x-show="ch.polishStatus !== 'CONFIRMED' && ch.polishNote" class="badge bg-warning ms-1">待润色</span>
+                                    </span>
+                                </template>
+                            </span>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        @click="previewChapter(ch.chapterNumber)"
+                                        x-show="(currentStep !== 'CHAPTER_WRITING' || inlinePreviewChapter !== ch.chapterNumber) && (currentStep !== 'POLISHING' || !polishPreviews[ch.chapterNumber])">
+                                    <i class="bi bi-eye"></i> 预览
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        @click="closeInlinePreview()"
+                                        x-show="inlinePreviewChapter === ch.chapterNumber && currentStep === 'CHAPTER_WRITING'">
+                                    <i class="bi bi-x-lg"></i> 关闭预览
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        @click="previewChapter(ch.chapterNumber)"
+                                        x-show="currentStep === 'POLISHING' && polishPreviews[ch.chapterNumber]">
+                                    <i class="bi bi-x-lg"></i> 关闭预览
+                                </button>
+                                <template x-if="currentStep === 'CHAPTER_WRITING'">
+                                    <button class="btn btn-sm btn-outline-primary"
+                                            @click="generateChapter(ch.chapterNumber)"
+                                            :disabled="generating || fullAutoRunning">
+                                        <i class="bi bi-magic"></i> 重新生成
+                                    </button>
+                                </template>
+                                <template x-if="currentStep === 'POLISHING'">
+                                    <div class="d-flex gap-1">
+                                        <button class="btn btn-sm btn-outline-info"
+                                                @click="editPolishNote(ch.chapterNumber, ch.polishNote)"
+                                                :disabled="fullAutoRunning">
+                                            <i class="bi bi-pencil"></i> 修改意见
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-warning"
+                                                @click="polishChapter(ch.chapterNumber)"
+                                                :disabled="generating || fullAutoRunning">
+                                            <i class="bi bi-brush"></i> 重新润色
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                        <!-- Inline preview (CHAPTER_WRITING only) -->
+                        <template x-if="currentStep === 'CHAPTER_WRITING' && inlinePreviewChapter === ch.chapterNumber">
+                            <div class="mt-2 pt-2 border-top">
+                                <div x-show="!inlinePreviewEditing">
+                                    <pre class="streaming-output mb-0" style="max-height: 50vh; overflow-y: auto; white-space:pre-wrap; font-family:inherit;" x-text="inlinePreviewContent"></pre>
+                                    <div class="d-flex justify-content-between align-items-center mt-2">
+                                        <small class="text-muted">字数: <strong x-text="inlinePreviewContent.length"></strong></small>
+                                        <div class="d-flex gap-1">
+                                            <button type="button" class="btn btn-outline-primary btn-sm" @click="startInlineEdit()"
+                                                    :disabled="fullAutoRunning">
+                                                <i class="bi bi-pencil"></i> 编辑
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div x-show="inlinePreviewEditing">
+                                    <textarea class="form-control content-editor" style="height: 50vh; overflow-y: auto;"
+                                              x-model="inlinePreviewEditContent"
+                                              placeholder="编辑章节内容..."></textarea>
+                                    <div class="d-flex justify-content-between align-items-center mt-2">
+                                        <small class="text-muted">字数: <strong x-text="inlinePreviewEditContent.length"></strong></small>
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" @click="inlinePreviewEditing = false">
+                                                <i class="bi bi-x-lg"></i> 取消
+                                            </button>
+                                            <button type="button" class="btn btn-primary btn-sm" @click="saveInlineEdit()">
+                                                <i class="bi bi-save"></i> 保存
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Inline polish preview (POLISHING) -->
+                        <template x-if="currentStep === 'POLISHING' && polishPreviews[ch.chapterNumber]">
+                            <div class="mt-2 pt-2 border-top">
+                                <div x-show="polishEditingChapter !== ch.chapterNumber">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <small class="text-muted">
+                                            原稿 <strong x-text="(polishPreviews[ch.chapterNumber]?.draft || '').length"></strong>字
+                                            → 润色后 <strong x-text="(polishPreviews[ch.chapterNumber]?.content || '').length"></strong>字
+                                        </small>
+                                        <button type="button" class="btn btn-outline-primary btn-sm"
+                                                @click="polishEditingChapter = ch.chapterNumber; polishEditContent = polishPreviews[ch.chapterNumber]?.content || ''"
+                                                :disabled="fullAutoRunning">
+                                            <i class="bi bi-pencil"></i> 编辑润色稿
+                                        </button>
+                                    </div>
+                                    <div class="split-view-container">
+                                        <div class="split-view-panel">
+                                            <div class="split-view-header">原稿</div>
+                                            <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;"
+                                                 x-text="polishPreviews[ch.chapterNumber]?.draft || ''"></pre>
+                                        </div>
+                                        <div class="split-view-panel">
+                                            <div class="split-view-header">润色后</div>
+                                            <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;"
+                                                 x-text="polishPreviews[ch.chapterNumber]?.content || ''"></pre>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div x-show="polishEditingChapter === ch.chapterNumber">
+                                    <textarea class="form-control content-editor" style="height: 50vh; overflow-y: auto;"
+                                              x-model="polishEditContent"
+                                              placeholder="编辑润色后的内容..."></textarea>
+                                    <div class="d-flex justify-content-between align-items-center mt-2">
+                                        <small class="text-muted">字数: <strong x-text="polishEditContent.length"></strong></small>
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" @click="polishEditingChapter = null">
+                                                <i class="bi bi-x-lg"></i> 取消
+                                            </button>
+                                            <button type="button" class="btn btn-primary btn-sm" @click="savePolishEdit(ch.chapterNumber)">
+                                                <i class="bi bi-save"></i> 保存
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Inline polish generating (POLISHING, streaming) -->
+                        <template x-if="currentStep === 'POLISHING' && generating && viewingChapterNum === ch.chapterNumber && viewingChapterDraft">
+                            <div class="mt-2 pt-2 border-top">
+                                <div class="d-flex align-items-center mb-2">
+                                    <small class="text-muted">
+                                        <span class="spinner-border spinner-border-sm me-1"></span>
+                                        润色中... 当前字数: <strong x-text="generatedContent.length"></strong>
+                                        / 目标 <span x-text="chapterWordCount"></span>字
+                                        <span class="ms-3"><i class="bi bi-clock"></i> <span x-text="generateElapsed"></span></span>
+                                    </small>
+                                </div>
+                                <div class="split-view-container">
+                                    <div class="split-view-panel">
+                                        <div class="split-view-header">原稿</div>
+                                        <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;" x-text="viewingChapterDraft"></pre>
+                                    </div>
+                                    <div class="split-view-panel">
+                                        <div class="split-view-header">润色中...</div>
+                                        <div class="streaming-output split-panel-content">
+                                            <span x-text="generatedContent"></span>
+                                            <span class="cursor"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Auto-generation progress -->
+            <template x-if="autoProgress.length > 0">
+                <div class="alert alert-info mt-3 d-flex justify-content-between align-items-center">
+                    <span><span class="spinner-border spinner-border-sm me-2"></span><span x-text="autoProgress"></span></span>
+                    <button class="btn btn-sm btn-outline-danger" @click="stopAutoGenerate()">
+                        <i class="bi bi-stop-circle"></i> 停止
+                    </button>
+                </div>
+            </template>
+
+            <!-- Generate next chapter (only for CHAPTER_WRITING) -->
+            <template x-if="currentStep === 'CHAPTER_WRITING'">
+                <button class="btn btn-outline-primary mt-3" @click="generateNextChapter()"
+                        :disabled="generating || autoGenerating || fullAutoRunning">
+                    <i class="bi bi-plus-lg"></i> 自动生成下一章
+                </button>
+            </template>
+        </div>
+    </div>
+
+    <!-- Polish Note Edit Modal -->
+    <div class="modal fade" id="polishNoteModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" x-text="'第' + polishNoteChapter + '章 - 修改意见'">修改意见</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <textarea class="form-control" rows="5" x-model="polishNoteText"
+                              placeholder="请输入对本章的修改意见，AI润色时会参考这些意见..."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" @click="savePolishNote()">保存意见</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Replace Modal -->
+    <div class="modal fade" id="globalReplaceModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-arrow-repeat"></i> 全局替换</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" :disabled="globalReplacing"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-2">替换将应用于：世界观、角色、大纲、章节等所有内容</p>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>查找文本</th>
+                                <th>替换为</th>
+                                <th style="width:40px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="(pair, idx) in replacePairs" :key="idx">
+                                <tr>
+                                    <td><input type="text" class="form-control form-control-sm" x-model="pair.oldText" placeholder="查找..." :disabled="globalReplacing"></td>
+                                    <td><input type="text" class="form-control form-control-sm" x-model="pair.newText" placeholder="替换为..." :disabled="globalReplacing"></td>
+                                    <td><button class="btn btn-sm btn-outline-danger" @click="replacePairs.splice(idx, 1)" :disabled="globalReplacing || replacePairs.length <= 1"><i class="bi bi-x"></i></button></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                    <button class="btn btn-sm btn-outline-secondary" @click="replacePairs.push({oldText:'',newText:''})" :disabled="globalReplacing">
+                        <i class="bi bi-plus"></i> 增加一行
+                    </button>
+
+                    <div x-show="globalReplaceLog.length > 0" class="mt-3">
+                        <strong class="small">执行进度：</strong>
+                        <div class="border rounded p-2 mt-1" style="max-height:200px; overflow-y:auto; font-size:0.85rem;">
+                            <template x-for="(msg, i) in globalReplaceLog" :key="i">
+                                <div x-text="msg"></div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" :disabled="globalReplacing">取消</button>
+                    <button type="button" class="btn btn-primary" @click="executeGlobalReplace()" :disabled="globalReplacing">
+                        <span x-show="!globalReplacing">执行替换</span>
+                        <span x-show="globalReplacing"><span class="spinner-border spinner-border-sm"></span> 替换中...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Advance Step (always available when on current step and not the last step) -->
+    <div th:if="${viewStep == project.currentStep && viewStep.next() != null}" class="mt-3 text-end" x-show="!generating && !fullAutoRunning">
+        <button type="button" class="btn btn-outline-primary" @click="advanceStep()">
+            <i class="bi bi-arrow-right"></i> 跳过当前步骤，进入下一步
+        </button>
+    </div>
+
+    <!-- Confirm Form (hidden, kept for backward compat) -->
+    <form th:action="@{/projects/{id}/confirm(id=${project.id})}" method="post" x-ref="confirmForm" style="display:none">
+        <input type="hidden" name="step" th:value="${viewStep.name()}">
+    </form>
+
+    <script th:inline="javascript">
+        function workflowApp() {
+            return {
+                generating: false,
+                generatedContent: '',
+                existingContent: /*[[${currentContent ?: ''}]]*/ '',
+                editableContent: /*[[${currentContent ?: ''}]]*/ '',
+                projectId: /*[[${project.id}]]*/ 0,
+                currentStep: /*[[${viewStep.name()}]]*/ '',
+                currentStepOrder: /*[[${viewStep.order}]]*/ 1,
+                stepConfirmed: /*[[${stepConfirmed}]]*/ false,
+                isLastStep: /*[[${viewStep.next() == null}]]*/ false,
+                totalChapters: /*[[${totalChapters}]]*/ 10,
+                chapterWordCount: /*[[${project.chapterWordCount}]]*/ 5000,
+                chapterWordCountMin: /*[[${project.chapterWordCountMin}]]*/ 4000,
+                chapterWordCountMax: /*[[${project.chapterWordCountMax}]]*/ 6000,
+                autoGenerating: false,
+                autoProgress: '',
+                currentEventSource: null,
+                generateStartTime: null,
+                generateElapsed: '',
+                generateTimer: null,
+                chapterListData: [],
+                editing: false,
+                viewingChapterNum: 0,
+                viewingChapterTitle: '',
+                // Inline chapter preview (CHAPTER_WRITING)
+                inlinePreviewChapter: 0,
+                inlinePreviewContent: '',
+                inlinePreviewEditing: false,
+                inlinePreviewEditContent: '',
+                polishNoteChapter: 0,
+                polishNoteText: '',
+                polishNoteModal: null,
+                batchPolishList: [],
+                batchPolishIndex: 0,
+                characterList: [],
+                editingCharacterId: null,
+                editForm: {},
+                showAddCharacter: false,
+                newCharacterName: '',
+                stepGuidance: /*[[${stepGuidance}]]*/ '',
+                stepGuidanceEdit: '',
+                editingGuidance: false,
+                autoMode: /*[[${project.autoMode}]]*/ false,
+                autoRunStepConfigs: /*[[${autoRunStepConfigs}]]*/ {},
+                fullAutoRunning: false,
+                fullAutoStatus: '',
+                fullAutoError: '',
+                autoRunPollTimer: null,
+                autoRunActiveStep: /*[[${viewStep.name()}]]*/ '',
+                autoRunActiveOrder: /*[[${viewStep.order}]]*/ 1,
+                // Outline accordion state
+                outlineVolumes: [],
+                outlineSummary: '',
+                outlineSummaryEdit: '',
+                editingSummary: false,
+                streamingTarget: null,
+                outlineLoaded: false,
+                outlineStreamingStatus: '',
+                _outlineMergeLoading: false,
+                stepList: [
+                    { name: 'WORLD_BUILDING', label: '世界观设定', order: 1 },
+                    { name: 'CHARACTER_DESIGN', label: '角色设计', order: 2 },
+                    { name: 'OUTLINE_GENERATION', label: '大纲生成', order: 3 },
+                    { name: 'CHAPTER_WRITING', label: '分章节写作', order: 4 },
+                    { name: 'POLISHING', label: '润色修改', order: 5 },
+                    { name: 'PROOFREADING', label: '校对精修', order: 6 },
+                ],
+                // Polish comparison state
+                viewingChapterDraft: '',
+                polishPreviews: {},
+                polishEditingChapter: null,
+                polishEditContent: '',
+
+                // Proofreading state
+                proofreadData: [],
+                proofreadStreaming: null,
+                proofreadLoaded: false,
+                proofreadExpandedChapter: null,
+                // Proofreading fix state
+                proofreadFixGenerating: false,
+                proofreadFixChapterNum: 0,
+                proofreadFixDraft: '',
+                proofreadFixContent: '',
+                proofreadFixPreviews: {},
+
+                // Global replace state
+                replacePairs: [{oldText:'',newText:''},{oldText:'',newText:''},{oldText:'',newText:''},{oldText:'',newText:''},{oldText:'',newText:''}],
+                globalReplaceLog: [],
+                globalReplacing: false,
+
+                init() {
+                    this.loadChapterList();
+                    this.loadCharacterList();
+                    if (this.currentStep === 'OUTLINE_GENERATION') {
+                        this.loadOutlineData();
+                    }
+                    if (this.currentStep === 'PROOFREADING') {
+                        this.loadProofreadData();
+                    }
+                    // Check background generation for multi-step flows
+                    if (['OUTLINE_GENERATION','CHARACTER_DESIGN','PROOFREADING'].includes(this.currentStep)) {
+                        this.checkBgGenStatus();
+                    }
+                    if (this.autoMode) {
+                        this.checkAutoRunStatus();
+                    }
+                    // Global scroll sync for all split-view panels
+                    this.initGlobalScrollSync();
+                },
+
+                // Check if a background generation task is running for the current step
+                checkBgGenStatus() {
+                    fetch(`/projects/${this.projectId}/bg-gen/status?step=${this.currentStep}&chapter=0`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.bgActive) {
+                                this.generating = true;
+                                this.startElapsedTimer();
+                                // Load existing data from DB
+                                if (this.currentStep === 'OUTLINE_GENERATION') {
+                                    this.outlineStreamingStatus = '后台正在生成大纲...';
+                                    this.loadOutlineData();
+                                } else if (this.currentStep === 'CHARACTER_DESIGN') {
+                                    this.loadCharacterList();
+                                } else if (this.currentStep === 'PROOFREADING') {
+                                    this.loadProofreadData();
+                                }
+                                // Attach to live stream
+                                this.attachBgStream(this.currentStep, 0);
+                            }
+                        })
+                        .catch(() => {});
+                },
+
+                // Attach to a running background generation stream
+                attachBgStream(step, chapter) {
+                    if (this.currentEventSource) {
+                        this.currentEventSource.close();
+                    }
+                    const url = `/projects/${this.projectId}/bg-gen/stream?step=${step}&chapter=${chapter}`;
+                    const eventSource = new EventSource(url);
+                    this.currentEventSource = eventSource;
+
+                    // Handle replay-buffer: partial content of the currently generating item
+                    eventSource.addEventListener('replay-buffer', (e) => {
+                        // For outline/character/proofreading, the replay-buffer contains raw tokens
+                        // including section markers. We don't re-process the full replay since
+                        // loadOutlineData/loadCharacterList already loaded completed items from DB.
+                        // The replay only helps show that generation is active.
+                    });
+
+                    if (step === 'OUTLINE_GENERATION') {
+                        this.setupOutlineStreamEvents(eventSource);
+                    } else if (step === 'CHARACTER_DESIGN') {
+                        this.setupCharacterStreamEvents(eventSource);
+                    } else if (step === 'PROOFREADING') {
+                        this.setupProofreadStreamEvents(eventSource);
+                    }
+                },
+
+                // Setup outline stream event handlers on an EventSource
+                setupOutlineStreamEvents(eventSource) {
+                    eventSource.addEventListener('outline-section', (e) => {
+                        const marker = e.data;
+                        const match = marker.match(/\[\[SECTION:(\w+)(?::(.+))?\]\]/);
+                        if (!match) return;
+                        const type = match[1];
+                        const params = match[2] ? match[2].split(':') : [];
+
+                        // Mark previously streaming chapter as COMPLETED
+                        if (this.streamingTarget && (this.streamingTarget.type === 'CHAPTER' || this.streamingTarget.type === 'REFINE')) {
+                            const prevVol = this.outlineVolumes.find(v => v.volumeNumber === this.streamingTarget.volumeNumber);
+                            if (prevVol) {
+                                const prevCh = prevVol.chapters.find(c => c.chapterNumber === this.streamingTarget.chapterNumber);
+                                if (prevCh && prevCh.status === 'GENERATING') prevCh.status = 'COMPLETED';
+                            }
+                        }
+
+                        if (type === 'VOLUME') {
+                            const volNum = parseInt(params[0]);
+                            const chStart = parseInt(params[1]);
+                            const chEnd = parseInt(params[2]);
+                            this.outlineStreamingStatus = `正在生成第${volNum}卷故事弧线...`;
+                            let vol = this.outlineVolumes.find(v => v.volumeNumber === volNum);
+                            if (!vol) {
+                                vol = {
+                                    volumeNumber: volNum, title: '第' + volNum + '卷',
+                                    arcSummary: '', chapterStart: chStart, chapterEnd: chEnd,
+                                    expanded: true, editingArc: false, arcSummaryEdit: '', chapters: []
+                                };
+                                this.outlineVolumes.push(vol);
+                            }
+                            this.streamingTarget = { type: 'VOLUME', volumeNumber: volNum };
+                        } else if (type === 'CHAPTER') {
+                            const chNum = parseInt(params[0]);
+                            const volNum = parseInt(params[1]);
+                            this.outlineStreamingStatus = `正在生成第${chNum}章大纲...`;
+                            let vol = this.outlineVolumes.find(v => v.volumeNumber === volNum);
+                            if (!vol) {
+                                // Volume not yet in local state — create placeholder and reload from DB
+                                vol = {
+                                    volumeNumber: volNum, title: '第' + volNum + '卷',
+                                    arcSummary: '', chapterStart: chNum, chapterEnd: chNum,
+                                    expanded: true, editingArc: false, arcSummaryEdit: '', chapters: []
+                                };
+                                this.outlineVolumes.push(vol);
+                                this.loadOutlineData(true);
+                            } else {
+                                // Check if there's a gap: previous chapters missing from local list
+                                const maxExisting = vol.chapters.length > 0
+                                    ? Math.max(...vol.chapters.map(c => c.chapterNumber))
+                                    : vol.chapterStart - 1;
+                                if (chNum > maxExisting + 1) {
+                                    // Gap detected — reload completed chapters from DB
+                                    this.loadOutlineData(true);
+                                }
+                            }
+                            let ch = vol.chapters.find(c => c.chapterNumber === chNum);
+                            if (!ch) {
+                                ch = { chapterNumber: chNum, title: '', summary: '', characterNames: '',
+                                       status: 'GENERATING', editing: false, titleEdit: '', summaryEdit: '', characterNamesEdit: '' };
+                                vol.chapters.push(ch);
+                            } else {
+                                ch.status = 'GENERATING';
+                            }
+                            this.streamingTarget = { type: 'CHAPTER', chapterNumber: chNum, volumeNumber: volNum };
+                        } else if (type === 'REFINE') {
+                            const chNum = parseInt(params[0]);
+                            const volNum = parseInt(params[1]);
+                            this.outlineStreamingStatus = `正在精修第${chNum}章大纲...`;
+                            let vol = this.outlineVolumes.find(v => v.volumeNumber === volNum);
+                            if (vol) {
+                                let ch = vol.chapters.find(c => c.chapterNumber === chNum);
+                                if (ch) {
+                                    ch.summary = '';
+                                    ch.title = '';
+                                    ch.characterNames = '';
+                                    ch.status = 'GENERATING';
+                                }
+                            }
+                            this.streamingTarget = { type: 'REFINE', chapterNumber: chNum, volumeNumber: volNum };
+                        } else if (type === 'SUMMARY') {
+                            this.outlineStreamingStatus = '正在生成故事总纲...';
+                            this.streamingTarget = { type: 'SUMMARY' };
+                        }
+                    });
+
+                    eventSource.addEventListener('token', (e) => {
+                        const token = e.data;
+                        if (this.streamingTarget) {
+                            if (this.streamingTarget.type === 'VOLUME') {
+                                const vol = this.outlineVolumes.find(v => v.volumeNumber === this.streamingTarget.volumeNumber);
+                                if (vol) vol.arcSummary += token;
+                            } else if (this.streamingTarget.type === 'CHAPTER' || this.streamingTarget.type === 'REFINE') {
+                                const vol = this.outlineVolumes.find(v => v.volumeNumber === this.streamingTarget.volumeNumber);
+                                if (vol) {
+                                    const ch = vol.chapters.find(c => c.chapterNumber === this.streamingTarget.chapterNumber);
+                                    if (ch) {
+                                        ch.summary += token;
+                                        if (!ch.title) {
+                                            const titleMatch = ch.summary.match(/\*\*标题[：:]\*\*\s*(.+)/);
+                                            if (titleMatch) ch.title = titleMatch[1].trim();
+                                        }
+                                        if (!ch.characterNames) {
+                                            const charMatch = ch.summary.match(/\*\*出场角色[：:]\*\*\s*(.+)/);
+                                            if (charMatch) ch.characterNames = charMatch[1].trim();
+                                        }
+                                    }
+                                }
+                            } else if (this.streamingTarget.type === 'SUMMARY') {
+                                this.outlineSummary += token;
+                            }
+                        }
+                    });
+
+                    eventSource.addEventListener('done', () => {
+                        this.generating = false;
+                        this.currentEventSource = null;
+                        this.streamingTarget = null;
+                        this.outlineStreamingStatus = '';
+                        this.outlineLoaded = true;
+                        this.stopElapsedTimer();
+                        eventSource.close();
+                        this.loadOutlineData();
+                    });
+
+                    eventSource.addEventListener('stopped', () => {
+                        this.generating = false;
+                        this.currentEventSource = null;
+                        this.streamingTarget = null;
+                        this.outlineStreamingStatus = '';
+                        this.stopElapsedTimer();
+                        eventSource.close();
+                        this.loadOutlineData();
+                    });
+
+                    eventSource.addEventListener('error', (e) => {
+                        this.generating = false;
+                        this.currentEventSource = null;
+                        this.streamingTarget = null;
+                        this.outlineStreamingStatus = '';
+                        this.stopElapsedTimer();
+                        if (e.data) alert('生成出错: ' + e.data);
+                        eventSource.close();
+                    });
+
+                    // For bg streams, SSE disconnect doesn't mean failure - task continues in background
+                    eventSource.onerror = () => {
+                        this.currentEventSource = null;
+                        eventSource.close();
+                        // Don't set generating=false - task may still be running in background
+                    };
+                },
+
+                // Setup character design stream event handlers
+                setupCharacterStreamEvents(eventSource) {
+                    eventSource.addEventListener('char-section', (e) => {
+                        this.loadCharacterList();
+                    });
+
+                    eventSource.addEventListener('token', (e) => {
+                        this.generatedContent += e.data;
+                        if (this.$refs.output) {
+                            this.$refs.output.scrollTop = this.$refs.output.scrollHeight;
+                        }
+                    });
+
+                    eventSource.addEventListener('done', () => {
+                        this.generating = false;
+                        this.currentEventSource = null;
+                        this.editableContent = this.generatedContent;
+                        this.editing = false;
+                        this.stopElapsedTimer();
+                        eventSource.close();
+                        this.loadCharacterList();
+                    });
+
+                    eventSource.addEventListener('stopped', () => {
+                        this.generating = false;
+                        this.currentEventSource = null;
+                        this.stopElapsedTimer();
+                        eventSource.close();
+                        this.loadCharacterList();
+                    });
+
+                    eventSource.addEventListener('error', (e) => {
+                        this.generating = false;
+                        this.currentEventSource = null;
+                        this.stopElapsedTimer();
+                        if (e.data) alert('生成出错: ' + e.data);
+                        eventSource.close();
+                    });
+
+                    eventSource.onerror = () => {
+                        this.currentEventSource = null;
+                        eventSource.close();
+                    };
+                },
+
+                // Setup proofreading stream event handlers
+                setupProofreadStreamEvents(eventSource) {
+                    eventSource.addEventListener('proofread-section', (e) => {
+                        const match = e.data.match(/\[\[PROOFREAD:CHAPTER:(\d+):(\w+)\]\]/);
+                        if (match) {
+                            this.proofreadStreaming = {
+                                chapterNumber: parseInt(match[1]),
+                                substep: match[2]
+                            };
+                            this.proofreadFixGenerating = false;
+                        }
+                    });
+
+                    eventSource.addEventListener('proofread-fix-section', (e) => {
+                        const match = e.data.match(/\[\[PROOFREAD_FIX:CHAPTER:(\d+)\]\]/);
+                        if (match) {
+                            const chNum = parseInt(match[1]);
+                            this.proofreadStreaming = {
+                                chapterNumber: chNum,
+                                substep: 'FIX'
+                            };
+                            this.proofreadFixGenerating = true;
+                            this.proofreadFixChapterNum = chNum;
+                            this.proofreadFixContent = '';
+                        }
+                    });
+
+                    eventSource.addEventListener('token', (e) => {
+                        this.generatedContent += e.data;
+                        if (this.proofreadFixGenerating) {
+                            this.proofreadFixContent += e.data;
+                        }
+                    });
+
+                    eventSource.addEventListener('done', () => {
+                        this.generating = false;
+                        this.proofreadStreaming = null;
+                        this.proofreadFixGenerating = false;
+                        this.currentEventSource = null;
+                        this.stopElapsedTimer();
+                        eventSource.close();
+                        this.loadProofreadData();
+                    });
+
+                    eventSource.addEventListener('stopped', () => {
+                        this.generating = false;
+                        this.proofreadStreaming = null;
+                        this.proofreadFixGenerating = false;
+                        this.currentEventSource = null;
+                        this.stopElapsedTimer();
+                        eventSource.close();
+                        this.loadProofreadData();
+                    });
+
+                    eventSource.addEventListener('error', (e) => {
+                        this.generating = false;
+                        this.proofreadStreaming = null;
+                        this.currentEventSource = null;
+                        this.stopElapsedTimer();
+                        if (e.data) alert('校对出错: ' + e.data);
+                        eventSource.close();
+                    });
+
+                    eventSource.onerror = () => {
+                        this.currentEventSource = null;
+                        eventSource.close();
+                    };
+                },
+
+                checkAutoRunStatus() {
+                    fetch(`/projects/${this.projectId}/auto-run/status`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.status === 'RUNNING' || data.status === 'STOPPING') {
+                                this.fullAutoRunning = true;
+                                this.fullAutoStatus = data.progress || '运行中...';
+                                this.fullAutoError = '';
+                                this.startAutoRunPolling();
+                            } else if (data.status === 'FAILED') {
+                                this.fullAutoError = data.error || '未知错误';
+                            }
+                        });
+                },
+
+                generate() {
+                    this.generating = true;
+                    this.generatedContent = '';
+                    this.viewingChapterNum = 0;
+                    this.viewingChapterTitle = '';
+                    if (['OUTLINE_GENERATION','CHARACTER_DESIGN','PROOFREADING'].includes(this.currentStep)) {
+                        // Background generation mode for multi-step flows
+                        if (this.currentStep === 'OUTLINE_GENERATION') {
+                            this.outlineVolumes = [];
+                            this.outlineSummary = '';
+                            this.streamingTarget = null;
+                            this.outlineLoaded = false;
+                            this.outlineStreamingStatus = '正在生成分卷大纲...';
+                        } else if (this.currentStep === 'PROOFREADING') {
+                            this.proofreadStreaming = { chapterNumber: 0, substep: '' };
+                        }
+                        fetch(`/projects/${this.projectId}/bg-gen/start?step=${this.currentStep}&chapter=0`, {method:'POST'})
+                            .then(r => r.json())
+                            .then(data => {
+                                if (data.status === 'ok') {
+                                    this.startElapsedTimer();
+                                    this.attachBgStream(this.currentStep, 0);
+                                } else {
+                                    alert('启动失败: ' + data.message);
+                                    this.generating = false;
+                                }
+                            })
+                            .catch(err => {
+                                alert('启动失败: ' + err);
+                                this.generating = false;
+                            });
+                    } else {
+                        const url = `/projects/${this.projectId}/generate?step=${this.currentStep}`;
+                        this.startSSE(url);
+                    }
+                },
+
+                generateChapter(num) {
+                    this.generating = true;
+                    this.generatedContent = '';
+                    this.viewingChapterNum = num;
+                    this.viewingChapterTitle = '';
+                    const url = `/projects/${this.projectId}/generate?step=CHAPTER_WRITING&chapter=${num}`;
+                    this.startSSE(url, () => this.loadChapterList());
+                },
+
+                polishChapter(num) {
+                    this.generating = true;
+                    this.generatedContent = '';
+                    this.viewingChapterNum = num;
+                    this.viewingChapterTitle = '';
+                    // Close existing preview for this chapter, will re-open after done
+                    const { [num]: _, ...restPrev } = this.polishPreviews;
+                    this.polishPreviews = restPrev;
+                    // Load current content as draft for left panel comparison
+                    fetch(`/projects/${this.projectId}/chapters/${num}/content`)
+                        .then(r => r.json())
+                        .then(data => {
+                            this.viewingChapterDraft = data.content || '';
+                        });
+                    const url = `/projects/${this.projectId}/generate?step=POLISHING&chapter=${num}`;
+                    this.startSSE(url, () => {
+                        // After polish done, auto-show inline preview
+                        if (this.viewingChapterDraft && this.generatedContent) {
+                            this.polishPreviews = { ...this.polishPreviews, [num]: {
+                                draft: this.viewingChapterDraft,
+                                content: this.generatedContent
+                            }};
+                        }
+                        this.viewingChapterDraft = '';
+                        this.loadChapterList();
+                    });
+                },
+
+                generateNextChapter() {
+                    const nextNum = this.chapterListData.length + 1;
+                    if (nextNum > this.totalChapters) {
+                        alert('已达到设定的最大章节数: ' + this.totalChapters);
+                        return;
+                    }
+                    this.generateChapterWithAutoSave(nextNum);
+                },
+
+                generateAllChapters() {
+                    // Find first chapter with no valid content (wordCount=0)
+                    let startNum = this.totalChapters + 1;
+                    for (let i = 0; i < this.chapterListData.length; i++) {
+                        const ch = this.chapterListData[i];
+                        if (ch.wordCount === 0) {
+                            startNum = ch.chapterNumber;
+                            break;
+                        }
+                    }
+                    // If all existing chapters have content, start from next new chapter
+                    if (startNum > this.totalChapters && this.chapterListData.length < this.totalChapters) {
+                        startNum = this.chapterListData.length + 1;
+                    }
+                    if (startNum > this.totalChapters) {
+                        alert('所有章节已生成完毕！');
+                        return;
+                    }
+                    this.autoGenerating = true;
+                    this.autoGenerateFrom(startNum);
+                },
+
+                autoGenerateFrom(chapterNum) {
+                    if (chapterNum > this.totalChapters || !this.autoGenerating) {
+                        this.autoGenerating = false;
+                        this.autoProgress = '';
+                        if (chapterNum > this.totalChapters) {
+                            alert('全部章节自动生成完成！共 ' + this.totalChapters + ' 章');
+                        }
+                        this.loadChapterList();
+                        return;
+                    }
+                    this.autoProgress = `正在自动生成第 ${chapterNum}/${this.totalChapters} 章...`;
+                    this.generateChapterWithAutoSave(chapterNum, () => {
+                        this.loadChapterList();
+                        if (this.autoGenerating) {
+                            this.autoGenerateFrom(chapterNum + 1);
+                        }
+                    });
+                },
+
+                generateChapterWithAutoSave(num, onComplete) {
+                    this.generating = true;
+                    this.generatedContent = '';
+                    this.viewingChapterNum = num;
+                    this.viewingChapterTitle = '';
+                    const url = `/projects/${this.projectId}/generate?step=CHAPTER_WRITING&chapter=${num}`;
+                    this.startSSE(url, onComplete);
+                },
+
+                batchPolish() {
+                    const needsPolish = this.chapterListData.filter(ch =>
+                        ch.polishStatus !== 'CONFIRMED'
+                    );
+                    if (needsPolish.length === 0) {
+                        alert('所有章节均已润色完毕！');
+                        return;
+                    }
+                    this.autoGenerating = true;
+                    this.batchPolishList = needsPolish.map(ch => ch.chapterNumber);
+                    this.batchPolishIndex = 0;
+                    this.batchPolishNext();
+                },
+
+                batchPolishNext() {
+                    if (this.batchPolishIndex >= this.batchPolishList.length || !this.autoGenerating) {
+                        this.autoGenerating = false;
+                        this.autoProgress = '';
+                        this.viewingChapterDraft = '';
+                        if (this.batchPolishIndex >= this.batchPolishList.length) {
+                            alert('批量润色完成！');
+                        }
+                        this.loadChapterList();
+                        return;
+                    }
+                    const chNum = this.batchPolishList[this.batchPolishIndex];
+                    this.autoProgress = `正在润色第 ${chNum} 章（${this.batchPolishIndex + 1}/${this.batchPolishList.length}）...`;
+                    this.generating = true;
+                    this.generatedContent = '';
+                    this.viewingChapterNum = chNum;
+                    // Load draft for inline split-view
+                    fetch(`/projects/${this.projectId}/chapters/${chNum}/content`)
+                        .then(r => r.json())
+                        .then(data => { this.viewingChapterDraft = data.content || ''; });
+                    const url = `/projects/${this.projectId}/generate?step=POLISHING&chapter=${chNum}`;
+                    this.startSSE(url, () => {
+                        // Auto-show inline preview after done
+                        if (this.viewingChapterDraft && this.generatedContent) {
+                            this.polishPreviews = { ...this.polishPreviews, [chNum]: {
+                                draft: this.viewingChapterDraft,
+                                content: this.generatedContent
+                            }};
+                        }
+                        this.viewingChapterDraft = '';
+                        this.batchPolishIndex++;
+                        this.loadChapterList();
+                        if (this.autoGenerating) {
+                            this.batchPolishNext();
+                        }
+                    });
+                },
+
+                generateAllTitles() {
+                    if (!confirm('将为所有章节自动生成标题，确认继续？')) return;
+                    this.generating = true;
+                    this.autoProgress = '正在生成章节标题...';
+                    const url = `/projects/${this.projectId}/chapters/generate-titles`;
+                    const eventSource = new EventSource(url);
+                    this.currentEventSource = eventSource;
+                    eventSource.addEventListener('title', (e) => {
+                        const [num, ...titleParts] = e.data.split('|');
+                        const title = titleParts.join('|');
+                        this.autoProgress = `已生成第 ${num} 章标题: ${title}`;
+                        const ch = this.chapterListData.find(c => c.chapterNumber == num);
+                        if (ch) ch.title = title;
+                    });
+                    eventSource.addEventListener('done', () => {
+                        this.generating = false;
+                        this.autoProgress = '';
+                        this.currentEventSource = null;
+                        eventSource.close();
+                        this.loadChapterList();
+                    });
+                    eventSource.addEventListener('error', (e) => {
+                        this.generating = false;
+                        this.autoProgress = '';
+                        this.currentEventSource = null;
+                        if (e.data) alert('生成标题出错: ' + e.data);
+                        eventSource.close();
+                    });
+                    eventSource.onerror = () => {
+                        this.generating = false;
+                        this.autoProgress = '';
+                        this.currentEventSource = null;
+                        eventSource.close();
+                    };
+                },
+
+                startSSE(url, onComplete) {
+                    if (this.currentEventSource) {
+                        this.currentEventSource.close();
+                    }
+                    this.startElapsedTimer();
+                    const eventSource = new EventSource(url);
+                    this.currentEventSource = eventSource;
+                    eventSource.addEventListener('token', (e) => {
+                        this.generatedContent += e.data;
+                        if (this.$refs.output) {
+                            this.$refs.output.scrollTop = this.$refs.output.scrollHeight;
+                        }
+                    });
+                    eventSource.addEventListener('char-section', (e) => {
+                        // Each character card/overview saved — refresh card list
+                        this.loadCharacterList();
+                    });
+                    eventSource.addEventListener('done', () => {
+                        this.generating = false;
+                        this.currentEventSource = null;
+                        this.editableContent = this.generatedContent;
+                        this.editing = false;
+                        this.stopElapsedTimer();
+                        eventSource.close();
+                        this.loadCharacterList();
+                        if (onComplete) {
+                            onComplete();
+                        }
+                    });
+                    eventSource.addEventListener('error', (e) => {
+                        this.generating = false;
+                        this.autoGenerating = false;
+                        this.autoProgress = '';
+                        this.currentEventSource = null;
+                        this.stopElapsedTimer();
+                        if (e.data) {
+                            alert('生成出错: ' + e.data);
+                        }
+                        eventSource.close();
+                    });
+                    eventSource.onerror = () => {
+                        this.generating = false;
+                        this.autoGenerating = false;
+                        this.autoProgress = '';
+                        this.stopElapsedTimer();
+                        this.currentEventSource = null;
+                        eventSource.close();
+                    };
+                },
+
+                startElapsedTimer() {
+                    this.generateStartTime = Date.now();
+                    this.generateElapsed = '0:00';
+                    if (this.generateTimer) clearInterval(this.generateTimer);
+                    this.generateTimer = setInterval(() => {
+                        const seconds = Math.floor((Date.now() - this.generateStartTime) / 1000);
+                        const min = Math.floor(seconds / 60);
+                        const sec = seconds % 60;
+                        this.generateElapsed = min + ':' + (sec < 10 ? '0' : '') + sec;
+                    }, 1000);
+                },
+
+                stopElapsedTimer() {
+                    if (this.generateTimer) {
+                        clearInterval(this.generateTimer);
+                        this.generateTimer = null;
+                    }
+                    // Keep generateElapsed showing the final value
+                    if (this.generateStartTime) {
+                        const seconds = Math.floor((Date.now() - this.generateStartTime) / 1000);
+                        const min = Math.floor(seconds / 60);
+                        const sec = seconds % 60;
+                        this.generateElapsed = min + ':' + (sec < 10 ? '0' : '') + sec;
+                    }
+                },
+
+                stopAutoGenerate() {
+                    this.autoGenerating = false;
+                    this.autoProgress = '';
+                    this.generating = false;
+                    this.stopElapsedTimer();
+                    if (this.currentEventSource) {
+                        this.currentEventSource.close();
+                        this.currentEventSource = null;
+                    }
+                    // Stop background task for multi-step flows
+                    if (['OUTLINE_GENERATION','CHARACTER_DESIGN','PROOFREADING'].includes(this.currentStep)) {
+                        fetch(`/projects/${this.projectId}/bg-gen/stop?step=${this.currentStep}&chapter=0`, {method:'POST'});
+                    }
+                },
+
+                loadChapterList() {
+                    fetch(`/projects/${this.projectId}/chapters/list`)
+                        .then(r => r.json())
+                        .then(data => { this.chapterListData = data; })
+                        .catch(err => console.error('Failed to load chapters:', err));
+                },
+
+                previewChapter(num) {
+                    fetch(`/projects/${this.projectId}/chapters/${num}/content`)
+                        .then(r => {
+                            if (!r.ok) throw new Error('请求失败');
+                            return r.json();
+                        })
+                        .then(data => {
+                            if (this.currentStep === 'CHAPTER_WRITING') {
+                                // Inline preview mode
+                                this.inlinePreviewChapter = num;
+                                this.inlinePreviewContent = data.content || '（暂无内容）';
+                                this.inlinePreviewEditing = false;
+                                this.inlinePreviewEditContent = '';
+                            } else if (this.currentStep === 'POLISHING') {
+                                // Inline polish preview (toggle)
+                                if (this.polishPreviews[num]) {
+                                    const { [num]: _, ...rest } = this.polishPreviews;
+                                    this.polishPreviews = rest;
+                                } else {
+                                    this.polishPreviews = { ...this.polishPreviews, [num]: {
+                                        draft: data.contentDraft || '',
+                                        content: data.content || '（暂无内容）'
+                                    }};
+                                }
+                            } else {
+                                this.editableContent = data.content || '（暂无内容）';
+                                this.existingContent = data.content || '';
+                                this.generatedContent = '';
+                                this.editing = false;
+                                this.viewingChapterNum = data.chapterNumber;
+                                this.viewingChapterTitle = data.title || '';
+                                this.viewingChapterDraft = data.contentDraft || '';
+                            }
+                        })
+                        .catch(err => alert('加载章节内容失败'));
+                },
+
+                closeInlinePreview() {
+                    this.inlinePreviewChapter = 0;
+                    this.inlinePreviewContent = '';
+                    this.inlinePreviewEditing = false;
+                },
+
+                startInlineEdit() {
+                    this.inlinePreviewEditing = true;
+                    this.inlinePreviewEditContent = this.inlinePreviewContent;
+                },
+
+                saveInlineEdit() {
+                    const num = this.inlinePreviewChapter;
+                    const content = this.inlinePreviewEditContent;
+                    const formData = new FormData();
+                    formData.append('content', content);
+                    fetch(`/projects/${this.projectId}/chapters/${num}/save-ajax`, {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.status === 'ok') {
+                            this.inlinePreviewContent = content;
+                            this.inlinePreviewEditing = false;
+                            this.loadChapterList();
+                        }
+                    })
+                    .catch(err => alert('保存失败: ' + err));
+                },
+
+                savePolishEdit(num) {
+                    const content = this.polishEditContent;
+                    const formData = new FormData();
+                    formData.append('content', content);
+                    fetch(`/projects/${this.projectId}/chapters/${num}/save-ajax`, {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.status === 'ok') {
+                            // Update inline preview content
+                            if (this.polishPreviews[num]) {
+                                this.polishPreviews = { ...this.polishPreviews, [num]: {
+                                    ...this.polishPreviews[num],
+                                    content: content
+                                }};
+                            }
+                            this.polishEditingChapter = null;
+                            this.loadChapterList();
+                        }
+                    })
+                    .catch(err => alert('保存失败: ' + err));
+                },
+
+                initGlobalScrollSync() {
+                    let syncing = false;
+                    document.addEventListener('scroll', (e) => {
+                        if (syncing) return;
+                        const source = e.target;
+                        if (!source.classList || !source.classList.contains('split-panel-content')) return;
+                        const container = source.closest('.split-view-container');
+                        if (!container) return;
+                        const panels = container.querySelectorAll('.split-panel-content');
+                        if (panels.length < 2) return;
+                        const target = panels[0] === source ? panels[1] : panels[0];
+                        syncing = true;
+                        const max = source.scrollHeight - source.clientHeight;
+                        const ratio = max > 0 ? source.scrollTop / max : 0;
+                        target.scrollTop = ratio * (target.scrollHeight - target.clientHeight);
+                        syncing = false;
+                    }, true);
+                },
+
+                editPolishNote(chapterNum, currentNote) {
+                    this.polishNoteChapter = chapterNum;
+                    this.polishNoteText = currentNote || '';
+                    if (!this.polishNoteModal) {
+                        this.polishNoteModal = new bootstrap.Modal(document.getElementById('polishNoteModal'));
+                    }
+                    this.polishNoteModal.show();
+                },
+
+                savePolishNote() {
+                    const formData = new FormData();
+                    formData.append('note', this.polishNoteText);
+                    fetch(`/projects/${this.projectId}/chapters/${this.polishNoteChapter}/polish-note`, {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(r => r.json())
+                    .then(() => {
+                        if (this.polishNoteModal) this.polishNoteModal.hide();
+                        this.loadChapterList();
+                    })
+                    .catch(err => alert('保存失败: ' + err));
+                },
+
+                saveGuidance() {
+                    const formData = new FormData();
+                    formData.append('step', this.currentStep);
+                    formData.append('guidance', this.stepGuidanceEdit);
+                    fetch(`/projects/${this.projectId}/step-guidance`, {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(r => r.json())
+                    .then(() => {
+                        this.stepGuidance = this.stepGuidanceEdit;
+                        this.editingGuidance = false;
+                    })
+                    .catch(err => alert('保存失败: ' + err));
+                },
+
+                confirmStep() {
+                    fetch(`/projects/${this.projectId}/confirm-only-ajax?step=${this.currentStep}`, {method:'POST'})
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.status === 'ok') {
+                                this.stepConfirmed = true;
+                            }
+                        });
+                },
+
+                advanceStep() {
+                    fetch(`/projects/${this.projectId}/advance-ajax?step=${this.currentStep}`, {method:'POST'})
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.status === 'ok') {
+                                location.reload();
+                            }
+                        });
+                },
+
+                // === Character Management Methods ===
+
+                loadCharacterList() {
+                    if (this.currentStep !== 'CHARACTER_DESIGN') return;
+                    fetch(`/projects/${this.projectId}/characters`)
+                        .then(r => r.json())
+                        .then(data => { this.characterList = data; })
+                        .catch(err => console.error('Failed to load characters:', err));
+                },
+
+                editCharacter(ch) {
+                    this.editingCharacterId = ch.id;
+                    this.editForm = { ...ch };
+                },
+
+                saveCharacter() {
+                    const formData = new FormData();
+                    const fields = ['name', 'gender', 'age', 'role', 'personality', 'appearance', 'background', 'motivation', 'abilities', 'relationships', 'description'];
+                    fields.forEach(f => { if (this.editForm[f] != null) formData.append(f, this.editForm[f]); });
+                    fetch(`/projects/${this.projectId}/characters/${this.editingCharacterId}`, {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(r => r.json())
+                    .then(() => {
+                        this.editingCharacterId = null;
+                        this.loadCharacterList();
+                    })
+                    .catch(err => alert('保存失败: ' + err));
+                },
+
+                addCharacter() {
+                    if (!this.newCharacterName.trim()) { alert('请输入角色姓名'); return; }
+                    const formData = new FormData();
+                    formData.append('name', this.newCharacterName.trim());
+                    fetch(`/projects/${this.projectId}/characters/add`, {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(r => r.json())
+                    .then(() => {
+                        this.newCharacterName = '';
+                        this.showAddCharacter = false;
+                        this.loadCharacterList();
+                    })
+                    .catch(err => alert('添加失败: ' + err));
+                },
+
+                deleteCharacter(id) {
+                    if (!confirm('确定删除该角色？')) return;
+                    fetch(`/projects/${this.projectId}/characters/${id}/delete`, { method: 'POST' })
+                        .then(r => r.json())
+                        .then(() => this.loadCharacterList())
+                        .catch(err => alert('删除失败: ' + err));
+                },
+
+                // === Outline Accordion Methods ===
+
+                loadOutlineData(mergeOnly = false) {
+                    if (mergeOnly && this._outlineMergeLoading) return;
+                    if (mergeOnly) this._outlineMergeLoading = true;
+                    fetch(`/projects/${this.projectId}/outline/data`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (mergeOnly) this._outlineMergeLoading = false;
+                            if (mergeOnly && this.generating) {
+                                // Merge mode: only add missing chapters from DB without disrupting streaming state
+                                this.outlineSummary = data.storySummary || this.outlineSummary;
+                                if (data.volumes && data.volumes.length > 0) {
+                                    for (const sv of data.volumes) {
+                                        let vol = this.outlineVolumes.find(v => v.volumeNumber === sv.volumeNumber);
+                                        if (!vol) {
+                                            vol = {
+                                                volumeNumber: sv.volumeNumber, title: sv.title,
+                                                arcSummary: sv.arcSummary || '', chapterStart: sv.chapterStart,
+                                                chapterEnd: sv.chapterEnd, expanded: true,
+                                                editingArc: false, arcSummaryEdit: '', chapters: []
+                                            };
+                                            this.outlineVolumes.push(vol);
+                                        } else if (!vol.arcSummary && sv.arcSummary) {
+                                            vol.arcSummary = sv.arcSummary;
+                                        }
+                                        for (const sch of (sv.chapters || [])) {
+                                            let existingCh = vol.chapters.find(c => c.chapterNumber === sch.chapterNumber);
+                                            if (!existingCh) {
+                                                vol.chapters.push({
+                                                    chapterNumber: sch.chapterNumber,
+                                                    title: sch.title || '', summary: sch.summary || '',
+                                                    characterNames: sch.characterNames || '',
+                                                    status: sch.status || 'COMPLETED',
+                                                    editing: false, regenerating: false,
+                                                    titleEdit: '', summaryEdit: '', characterNamesEdit: ''
+                                                });
+                                            } else if (sch.status) {
+                                                existingCh.status = sch.status;
+                                            }
+                                        }
+                                        vol.chapters.sort((a, b) => a.chapterNumber - b.chapterNumber);
+                                    }
+                                    this.outlineVolumes.sort((a, b) => a.volumeNumber - b.volumeNumber);
+                                }
+                                return;
+                            }
+                            this.outlineSummary = data.storySummary || '';
+                            if (data.volumes && data.volumes.length > 0) {
+                                this.outlineVolumes = data.volumes.map(v => ({
+                                    volumeNumber: v.volumeNumber,
+                                    title: v.title,
+                                    arcSummary: v.arcSummary || '',
+                                    chapterStart: v.chapterStart,
+                                    chapterEnd: v.chapterEnd,
+                                    expanded: true,
+                                    editingArc: false,
+                                    arcSummaryEdit: '',
+                                    chapters: (v.chapters || []).map(ch => ({
+                                        chapterNumber: ch.chapterNumber,
+                                        title: ch.title || '',
+                                        summary: ch.summary || '',
+                                        characterNames: ch.characterNames || '',
+                                        status: ch.status || 'COMPLETED',
+                                        editing: false,
+                                        regenerating: false,
+                                        titleEdit: '',
+                                        summaryEdit: '',
+                                        characterNamesEdit: ''
+                                    }))
+                                }));
+                                this.outlineLoaded = true;
+                            } else if (data.legacyChapters && data.legacyChapters.length > 0) {
+                                // Legacy data: show as a single volume
+                                this.outlineVolumes = [{
+                                    volumeNumber: 1,
+                                    title: '全部章节',
+                                    arcSummary: '',
+                                    chapterStart: 1,
+                                    chapterEnd: data.legacyChapters.length,
+                                    expanded: true,
+                                    editingArc: false,
+                                    arcSummaryEdit: '',
+                                    chapters: data.legacyChapters.map(ch => ({
+                                        chapterNumber: ch.chapterNumber,
+                                        title: ch.title || '',
+                                        summary: ch.summary || '',
+                                        characterNames: ch.characterNames || '',
+                                        status: ch.status || 'COMPLETED',
+                                        editing: false,
+                                        regenerating: false,
+                                        titleEdit: '',
+                                        summaryEdit: '',
+                                        characterNamesEdit: ''
+                                    }))
+                                }];
+                                this.outlineLoaded = true;
+                            }
+                        })
+                        .catch(err => {
+                            this._outlineMergeLoading = false;
+                            console.error('Failed to load outline data:', err);
+                        });
+                },
+
+                startOutlineSSE(url) {
+                    if (this.currentEventSource) {
+                        this.currentEventSource.close();
+                    }
+                    this.startElapsedTimer();
+                    const eventSource = new EventSource(url);
+                    this.currentEventSource = eventSource;
+
+                    eventSource.addEventListener('outline-section', (e) => {
+                        const marker = e.data;
+                        // Parse marker: SECTION:TYPE:params
+                        const match = marker.match(/\[\[SECTION:(\w+)(?::(.+))?\]\]/);
+                        if (!match) return;
+                        const type = match[1];
+                        const params = match[2] ? match[2].split(':') : [];
+
+                        // Mark previously streaming chapter as COMPLETED
+                        if (this.streamingTarget && (this.streamingTarget.type === 'CHAPTER' || this.streamingTarget.type === 'REFINE')) {
+                            const prevVol = this.outlineVolumes.find(v => v.volumeNumber === this.streamingTarget.volumeNumber);
+                            if (prevVol) {
+                                const prevCh = prevVol.chapters.find(c => c.chapterNumber === this.streamingTarget.chapterNumber);
+                                if (prevCh && prevCh.status === 'GENERATING') prevCh.status = 'COMPLETED';
+                            }
+                        }
+
+                        if (type === 'VOLUME') {
+                            const volNum = parseInt(params[0]);
+                            const chStart = parseInt(params[1]);
+                            const chEnd = parseInt(params[2]);
+                            this.outlineStreamingStatus = `正在生成第${volNum}卷故事弧线...`;
+                            // Add or find volume
+                            let vol = this.outlineVolumes.find(v => v.volumeNumber === volNum);
+                            if (!vol) {
+                                vol = {
+                                    volumeNumber: volNum, title: '第' + volNum + '卷',
+                                    arcSummary: '', chapterStart: chStart, chapterEnd: chEnd,
+                                    expanded: true, editingArc: false, arcSummaryEdit: '', chapters: []
+                                };
+                                this.outlineVolumes.push(vol);
+                            }
+                            this.streamingTarget = { type: 'VOLUME', volumeNumber: volNum };
+                        } else if (type === 'CHAPTER') {
+                            const chNum = parseInt(params[0]);
+                            const volNum = parseInt(params[1]);
+                            this.outlineStreamingStatus = `正在生成第${chNum}章大纲...`;
+                            // Find or create chapter entry in the correct volume
+                            let vol = this.outlineVolumes.find(v => v.volumeNumber === volNum);
+                            if (vol) {
+                                let ch = vol.chapters.find(c => c.chapterNumber === chNum);
+                                if (!ch) {
+                                    ch = { chapterNumber: chNum, title: '', summary: '', characterNames: '',
+                                           status: 'GENERATING', editing: false, titleEdit: '', summaryEdit: '', characterNamesEdit: '' };
+                                    vol.chapters.push(ch);
+                                } else {
+                                    ch.status = 'GENERATING';
+                                }
+                            }
+                            this.streamingTarget = { type: 'CHAPTER', chapterNumber: chNum, volumeNumber: volNum };
+                        } else if (type === 'REFINE') {
+                            const chNum = parseInt(params[0]);
+                            const volNum = parseInt(params[1]);
+                            this.outlineStreamingStatus = `正在精修第${chNum}章大纲...`;
+                            let vol = this.outlineVolumes.find(v => v.volumeNumber === volNum);
+                            if (vol) {
+                                let ch = vol.chapters.find(c => c.chapterNumber === chNum);
+                                if (ch) {
+                                    ch.summary = '';
+                                    ch.title = '';
+                                    ch.characterNames = '';
+                                    ch.status = 'GENERATING';
+                                }
+                            }
+                            this.streamingTarget = { type: 'REFINE', chapterNumber: chNum, volumeNumber: volNum };
+                        } else if (type === 'SUMMARY') {
+                            this.outlineStreamingStatus = '正在生成故事总纲...';
+                            this.streamingTarget = { type: 'SUMMARY' };
+                        }
+                    });
+
+                    eventSource.addEventListener('token', (e) => {
+                        const token = e.data;
+                        if (this.streamingTarget) {
+                            if (this.streamingTarget.type === 'VOLUME') {
+                                const vol = this.outlineVolumes.find(v => v.volumeNumber === this.streamingTarget.volumeNumber);
+                                if (vol) vol.arcSummary += token;
+                            } else if (this.streamingTarget.type === 'CHAPTER' || this.streamingTarget.type === 'REFINE') {
+                                const vol = this.outlineVolumes.find(v => v.volumeNumber === this.streamingTarget.volumeNumber);
+                                if (vol) {
+                                    const ch = vol.chapters.find(c => c.chapterNumber === this.streamingTarget.chapterNumber);
+                                    if (ch) {
+                                        ch.summary += token;
+                                        // Try to extract title from streaming text
+                                        if (!ch.title) {
+                                            const titleMatch = ch.summary.match(/\*\*标题[：:]\*\*\s*(.+)/);
+                                            if (titleMatch) ch.title = titleMatch[1].trim();
+                                        }
+                                        // Try to extract characters
+                                        if (!ch.characterNames) {
+                                            const charMatch = ch.summary.match(/\*\*出场角色[：:]\*\*\s*(.+)/);
+                                            if (charMatch) ch.characterNames = charMatch[1].trim();
+                                        }
+                                    }
+                                }
+                            } else if (this.streamingTarget.type === 'SUMMARY') {
+                                this.outlineSummary += token;
+                            }
+                        }
+                    });
+
+                    eventSource.addEventListener('done', () => {
+                        this.generating = false;
+                        this.currentEventSource = null;
+                        this.streamingTarget = null;
+                        this.outlineStreamingStatus = '';
+                        this.outlineLoaded = true;
+                        this.stopElapsedTimer();
+                        eventSource.close();
+                        // Reload data from server to get properly parsed data
+                        this.loadOutlineData();
+                    });
+
+                    eventSource.addEventListener('error', (e) => {
+                        this.generating = false;
+                        this.currentEventSource = null;
+                        this.streamingTarget = null;
+                        this.outlineStreamingStatus = '';
+                        this.stopElapsedTimer();
+                        if (e.data) alert('生成出错: ' + e.data);
+                        eventSource.close();
+                    });
+
+                    eventSource.onerror = () => {
+                        this.generating = false;
+                        this.currentEventSource = null;
+                        this.streamingTarget = null;
+                        this.outlineStreamingStatus = '';
+                        this.stopElapsedTimer();
+                        eventSource.close();
+                    };
+                },
+
+                editOutlineSummary() {
+                    this.editingSummary = true;
+                    this.outlineSummaryEdit = this.outlineSummary;
+                },
+
+                saveOutlineSummary() {
+                    const formData = new FormData();
+                    formData.append('content', this.outlineSummaryEdit);
+                    fetch(`/projects/${this.projectId}/outline/edit-summary`, { method: 'POST', body: formData })
+                        .then(r => r.json())
+                        .then(() => {
+                            this.outlineSummary = this.outlineSummaryEdit;
+                            this.editingSummary = false;
+                        })
+                        .catch(err => alert('保存失败: ' + err));
+                },
+
+                editVolumeArc(vol) {
+                    vol.editingArc = true;
+                    vol.arcSummaryEdit = vol.arcSummary;
+                },
+
+                saveVolumeArc(vol) {
+                    const formData = new FormData();
+                    formData.append('volumeNumber', vol.volumeNumber);
+                    formData.append('arcSummary', vol.arcSummaryEdit);
+                    fetch(`/projects/${this.projectId}/outline/edit-volume`, { method: 'POST', body: formData })
+                        .then(r => r.json())
+                        .then(() => {
+                            vol.arcSummary = vol.arcSummaryEdit;
+                            vol.editingArc = false;
+                        })
+                        .catch(err => alert('保存失败: ' + err));
+                },
+
+                editChapterOutline(ch) {
+                    ch.editing = true;
+                    ch.titleEdit = ch.title;
+                    ch.summaryEdit = ch.summary;
+                    ch.characterNamesEdit = ch.characterNames;
+                },
+
+                saveChapterOutline(ch) {
+                    const formData = new FormData();
+                    formData.append('chapterNumber', ch.chapterNumber);
+                    formData.append('title', ch.titleEdit);
+                    formData.append('summary', ch.summaryEdit);
+                    formData.append('characterNames', ch.characterNamesEdit);
+                    fetch(`/projects/${this.projectId}/outline/edit-chapter`, { method: 'POST', body: formData })
+                        .then(r => r.json())
+                        .then(() => {
+                            ch.title = ch.titleEdit;
+                            ch.summary = ch.summaryEdit;
+                            ch.characterNames = ch.characterNamesEdit;
+                            ch.editing = false;
+                        })
+                        .catch(err => alert('保存失败: ' + err));
+                },
+
+                regenerateChapterOutline(ch) {
+                    if (ch.regenerating) return;
+                    ch.regenerating = true;
+                    ch.status = 'GENERATING';
+                    ch.summary = '';
+                    ch.title = '';
+                    ch.characterNames = '';
+
+                    const url = `/projects/${this.projectId}/outline/regenerate-chapter?chapterNumber=${ch.chapterNumber}`;
+                    const eventSource = new EventSource(url);
+                    let content = '';
+
+                    eventSource.addEventListener('token', (e) => {
+                        content += e.data;
+                        // Live parse title and characters
+                        const titleMatch = content.match(/\*\*标题[：:]\*\*\s*(.+)/);
+                        if (titleMatch) ch.title = titleMatch[1].trim();
+                        const charMatch = content.match(/\*\*出场角色[：:]\*\*\s*(.+)/);
+                        if (charMatch) ch.characterNames = charMatch[1].trim();
+                        // Show summary (strip title and character lines)
+                        ch.summary = content
+                            .replace(/\*\*标题[：:]\*\*[^\n]*\n?/, '')
+                            .replace(/\*\*出场角色[：:]\*\*[^\n]*\n?/, '')
+                            .trim();
+                    });
+
+                    eventSource.addEventListener('done', () => {
+                        eventSource.close();
+                        ch.regenerating = false;
+                        ch.status = 'COMPLETED';
+                        // Reload from server to get properly parsed data
+                        this.loadOutlineData();
+                    });
+
+                    eventSource.addEventListener('error', (e) => {
+                        eventSource.close();
+                        ch.regenerating = false;
+                        ch.status = 'FAILED';
+                        alert('重新生成失败: ' + (e.data || '未知错误'));
+                    });
+
+                    eventSource.onerror = () => {
+                        eventSource.close();
+                        ch.regenerating = false;
+                        if (!content) {
+                            ch.status = 'FAILED';
+                        }
+                    };
+                },
+
+                // === Full Auto Mode Methods ===
+
+                startFullAuto() {
+                    this.fullAutoError = '';
+                    fetch(`/projects/${this.projectId}/auto-run/start`, { method: 'POST' })
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.status === 'ok') {
+                                this.fullAutoRunning = true;
+                                this.fullAutoStatus = '正在启动...';
+                                this.startAutoRunPolling();
+                            } else {
+                                this.fullAutoError = data.message || '启动失败';
+                            }
+                        })
+                        .catch(err => { this.fullAutoError = '请求失败: ' + err.message; });
+                },
+
+                stopFullAuto() {
+                    fetch(`/projects/${this.projectId}/auto-run/stop`, { method: 'POST' })
+                        .then(r => r.json())
+                        .then(() => { this.fullAutoStatus = '正在停止...'; });
+                },
+
+                toggleStepConfig(stepName, enabled) {
+                    this.autoRunStepConfigs[stepName] = enabled;
+                    fetch(`/projects/${this.projectId}/auto-run/step-config?step=${stepName}&enabled=${enabled}`, { method: 'PUT' })
+                        .catch(() => { this.autoRunStepConfigs[stepName] = !enabled; });
+                },
+
+                startAutoRunPolling() {
+                    if (this.autoRunPollTimer) return;
+                    this.autoRunPollTimer = setInterval(() => this.pollAutoRunStatus(), 2000);
+                },
+
+                stopAutoRunPolling() {
+                    if (this.autoRunPollTimer) {
+                        clearInterval(this.autoRunPollTimer);
+                        this.autoRunPollTimer = null;
+                    }
+                },
+
+                pollAutoRunStatus() {
+                    fetch(`/projects/${this.projectId}/auto-run/status`)
+                        .then(r => r.json())
+                        .then(data => {
+                            this.fullAutoStatus = data.progress || '';
+
+                            // Update active step indicator from auto-run step
+                            if (data.step) {
+                                const matched = this.stepList.find(s => s.label === data.step);
+                                if (matched) {
+                                    this.autoRunActiveStep = matched.name;
+                                    this.autoRunActiveOrder = matched.order;
+                                }
+                            }
+
+                            if (data.status === 'RUNNING' || data.status === 'STOPPING') {
+                                this.fullAutoRunning = true;
+                            } else {
+                                this.fullAutoRunning = false;
+                                this.stopAutoRunPolling();
+
+                                if (data.status === 'COMPLETED') {
+                                    this.fullAutoStatus = '全自动创作完成！即将刷新...';
+                                    setTimeout(() => location.reload(), 2000);
+                                } else if (data.status === 'FAILED') {
+                                    this.fullAutoError = data.error || '未知错误';
+                                } else {
+                                    // IDLE - stopped by user
+                                    this.fullAutoStatus = '';
+                                    this.loadChapterList();
+                                }
+                            }
+                        })
+                        .catch(() => {});
+                },
+
+                // === Proofreading Methods ===
+
+                loadProofreadData() {
+                    fetch(`/projects/${this.projectId}/proofreading/data`)
+                        .then(r => r.json())
+                        .then(data => {
+                            this.proofreadData = data;
+                            this.proofreadLoaded = true;
+                        })
+                        .catch(err => console.error('Failed to load proofreading data:', err));
+                },
+
+                startProofreadSSE(url) {
+                    if (this.currentEventSource) {
+                        this.currentEventSource.close();
+                    }
+                    this.startElapsedTimer();
+                    const eventSource = new EventSource(url);
+                    this.currentEventSource = eventSource;
+
+                    eventSource.addEventListener('proofread-section', (e) => {
+                        const match = e.data.match(/\[\[PROOFREAD:CHAPTER:(\d+):(\w+)\]\]/);
+                        if (match) {
+                            this.proofreadStreaming = {
+                                chapterNumber: parseInt(match[1]),
+                                substep: match[2]
+                            };
+                            this.proofreadFixGenerating = false;
+                        }
+                    });
+
+                    eventSource.addEventListener('proofread-fix-section', (e) => {
+                        const match = e.data.match(/\[\[PROOFREAD_FIX:CHAPTER:(\d+)\]\]/);
+                        if (match) {
+                            const chNum = parseInt(match[1]);
+                            this.proofreadStreaming = {
+                                chapterNumber: chNum,
+                                substep: 'FIX'
+                            };
+                            this.proofreadFixGenerating = true;
+                            this.proofreadFixChapterNum = chNum;
+                            this.proofreadFixContent = '';
+                        }
+                    });
+
+                    eventSource.addEventListener('token', (e) => {
+                        this.generatedContent += e.data;
+                        if (this.proofreadFixGenerating) {
+                            this.proofreadFixContent += e.data;
+                        }
+                    });
+
+                    eventSource.addEventListener('done', () => {
+                        this.generating = false;
+                        this.proofreadStreaming = null;
+                        this.proofreadFixGenerating = false;
+                        this.currentEventSource = null;
+                        this.stopElapsedTimer();
+                        eventSource.close();
+                        this.loadProofreadData();
+                    });
+
+                    eventSource.addEventListener('error', (e) => {
+                        this.generating = false;
+                        this.proofreadStreaming = null;
+                        this.proofreadFixGenerating = false;
+                        this.currentEventSource = null;
+                        this.stopElapsedTimer();
+                        if (e.data) alert('校对出错: ' + e.data);
+                        eventSource.close();
+                    });
+
+                    eventSource.onerror = () => {
+                        this.generating = false;
+                        this.proofreadStreaming = null;
+                        this.proofreadFixGenerating = false;
+                        this.currentEventSource = null;
+                        this.stopElapsedTimer();
+                        eventSource.close();
+                    };
+                },
+
+                getSubstepLabel(substep) {
+                    const labels = {
+                        'PLOT_SUMMARY': '情节提取',
+                        'CHARACTER_CHECK': '角色校正',
+                        'CONSISTENCY': '一致性检查',
+                        'CONTINUITY': '衔接检查',
+                        'FORESHADOWING': '伏笔追踪',
+                        'FIX': '精修正文'
+                    };
+                    return labels[substep] || substep;
+                },
+
+                parseJson(str) {
+                    if (!str) return [];
+                    try {
+                        // Strip markdown code block wrapper if present
+                        let cleaned = str.trim();
+                        if (cleaned.startsWith('```')) {
+                            cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+                        }
+                        const parsed = JSON.parse(cleaned);
+                        return Array.isArray(parsed) ? parsed : [];
+                    } catch (e) { return []; }
+                },
+
+                proofreadCompletedCount() {
+                    return this.proofreadData.filter(d => d.proofreadStatus === 'GENERATED' || d.proofreadStatus === 'CONFIRMED').length;
+                },
+
+                proofreadFixChapter(num) {
+                    this.proofreadFixGenerating = true;
+                    this.proofreadFixChapterNum = num;
+                    this.proofreadFixContent = '';
+                    const { [num]: _, ...restFix } = this.proofreadFixPreviews;
+                    this.proofreadFixPreviews = restFix;
+                    // Update local status immediately
+                    const item = this.proofreadData.find(d => d.chapterNumber === num);
+                    if (item) item.proofreadFixStatus = 'GENERATING';
+                    // Load current content as draft (before fix)
+                    fetch(`/projects/${this.projectId}/chapters/${num}/content`)
+                        .then(r => r.json())
+                        .then(data => {
+                            this.proofreadFixDraft = data.content || '';
+                        });
+                    // Start SSE for fix
+                    const eventSource = new EventSource(`/projects/${this.projectId}/proofread-fix/${num}`);
+                    eventSource.addEventListener('token', (e) => {
+                        this.proofreadFixContent += e.data;
+                    });
+                    eventSource.addEventListener('done', () => {
+                        this.proofreadFixGenerating = false;
+                        eventSource.close();
+                        this.loadProofreadData();
+                        this.loadChapterList();
+                    });
+                    eventSource.addEventListener('error', (e) => {
+                        this.proofreadFixGenerating = false;
+                        eventSource.close();
+                        if (e.data) alert('精修出错: ' + e.data);
+                    });
+                    eventSource.onerror = () => {
+                        this.proofreadFixGenerating = false;
+                        eventSource.close();
+                    };
+                },
+
+                previewProofreadFix(num) {
+                    if (this.proofreadFixPreviews[num]) {
+                        const { [num]: _, ...rest } = this.proofreadFixPreviews;
+                        this.proofreadFixPreviews = rest;
+                        return;
+                    }
+                    fetch(`/projects/${this.projectId}/chapters/${num}/content`)
+                        .then(r => r.json())
+                        .then(data => {
+                            this.proofreadFixPreviews = { ...this.proofreadFixPreviews, [num]: {
+                                draft: data.contentBeforeFix || '',
+                                content: data.content || ''
+                            }};
+                        });
+                },
+
+                openGlobalReplace() {
+                    this.globalReplaceLog = [];
+                    this.globalReplacing = false;
+                    new bootstrap.Modal(document.getElementById('globalReplaceModal')).show();
+                },
+
+                executeGlobalReplace() {
+                    const validPairs = this.replacePairs.filter(p => p.oldText.trim() !== '');
+                    if (validPairs.length === 0) {
+                        alert('请至少输入一对替换文本');
+                        return;
+                    }
+                    this.globalReplacing = true;
+                    this.globalReplaceLog = ['开始执行全局替换...'];
+
+                    const params = new URLSearchParams();
+                    validPairs.forEach(p => {
+                        params.append('oldTexts', p.oldText);
+                        params.append('newTexts', p.newText);
+                    });
+
+                    const es = new EventSource(`/projects/${this.projectId}/global-replace?${params.toString()}`);
+                    es.addEventListener('progress', (e) => {
+                        this.globalReplaceLog.push(e.data);
+                    });
+                    es.addEventListener('done', (e) => {
+                        this.globalReplaceLog.push(e.data);
+                        this.globalReplacing = false;
+                        es.close();
+                        // Reload data
+                        this.loadChapterList();
+                        this.loadCharacterList();
+                        if (this.currentStep === 'PROOFREADING') this.loadProofreadData();
+                    });
+                    es.addEventListener('error', (e) => {
+                        if (e.data) this.globalReplaceLog.push('错误: ' + e.data);
+                        this.globalReplacing = false;
+                        es.close();
+                    });
+                    es.onerror = () => {
+                        if (this.globalReplacing) {
+                            this.globalReplaceLog.push('连接断开');
+                            this.globalReplacing = false;
+                        }
+                        es.close();
+                    };
+                },
+
+                loadChapterListAsync() {
+                    return fetch(`/projects/${this.projectId}/chapters/list`)
+                        .then(r => r.json())
+                        .then(data => { this.chapterListData = data; });
+                }
+            }
+        }
+    </script>
+</div>
+</body>
+</html>

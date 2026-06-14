@@ -1,0 +1,2 @@
+ALTER TABLE chapters ADD COLUMN polish_note VARCHAR(500);
+ALTER TABLE chapters ADD COLUMN polish_status VARCHAR(30) DEFAULT 'NOT_STARTED';

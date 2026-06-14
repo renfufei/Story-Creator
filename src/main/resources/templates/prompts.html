@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('流程模板配置', ~{::content})}">
+<body>
+<div th:fragment="content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Prompt模板管理</h2>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+            <tr>
+                <th>步骤</th>
+                <th>题材</th>
+                <th>名称</th>
+                <th>默认</th>
+                <th>修改时间</th>
+                <th>操作</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="t : ${templates}">
+                <td><span class="badge bg-primary" th:text="${t.step.displayName}">步骤</span></td>
+                <td th:text="${t.genre != null ? t.genre.displayName : '通用'}">题材</td>
+                <td th:text="${t.name}">名称</td>
+                <td><i class="bi" th:classappend="${t.isDefault()} ? 'bi-check-circle-fill text-success' : 'bi-circle'"></i></td>
+                <td><small class="text-muted" th:text="${#temporals.format(t.updatedAt, 'yyyy-MM-dd HH:mm')}"></small></td>
+                <td>
+                    <div class="d-flex gap-1">
+                        <a th:href="@{/prompts/{id}/edit(id=${t.id})}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-pencil"></i> 编辑
+                        </a>
+                        <form th:if="${!t.isDefault()}" th:action="@{/prompts/{id}/set-default(id=${t.id})}" method="post" class="d-inline">
+                            <button type="submit" class="btn btn-sm btn-outline-success">
+                                <i class="bi bi-check-circle"></i> 设为默认
+                            </button>
+                        </form>
+                        <form th:action="@{/prompts/{id}/reset(id=${t.id})}" method="post" class="d-inline"
+                              onsubmit="return confirm('确定要重置此模板为默认内容吗？当前修改将丢失。')">
+                            <button type="submit" class="btn btn-sm btn-outline-warning">
+                                <i class="bi bi-arrow-counterclockwise"></i> 重置
+                            </button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <hr class="my-4">
+    <h5>新建模板</h5>
+    <form th:action="@{/prompts}" method="post">
+        <div class="row g-2 mb-2">
+            <div class="col-md-3">
+                <select class="form-select form-select-sm" name="step" required>
+                    <option value="">-- 选择步骤 --</option>
+                    <option th:each="s : ${steps}" th:value="${s}" th:text="${s.displayName}">步骤</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select form-select-sm" name="genre">
+                    <option value="">通用（不限题材）</option>
+                    <option th:each="g : ${genres}" th:value="${g}" th:text="${g.displayName}">题材</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <input type="text" class="form-control form-control-sm" name="name" placeholder="模板名称" required>
+            </div>
+        </div>
+        <div class="mb-2">
+            <textarea class="form-control" name="template" rows="8" placeholder="模板内容，使用 {{变量名}} 作为占位符..." required></textarea>
+        </div>
+        <button type="submit" class="btn btn-success btn-sm">创建模板</button>
+    </form>
+</div>
+</body>
+</html>

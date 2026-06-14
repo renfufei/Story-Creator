@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout(${project.title}, ~{::content})}">
+<body>
+<div th:fragment="content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 th:text="${project.title}">项目名</h2>
+            <span class="badge bg-info" th:text="${project.genre.displayName}">题材</span>
+            <span class="badge bg-secondary" th:text="${project.currentStep.displayName}">当前步骤</span>
+        </div>
+        <div class="d-flex gap-2">
+            <a th:href="@{/projects/{id}/workflow(id=${project.id})}" class="btn btn-primary">
+                <i class="bi bi-pencil-square"></i> 继续创作
+            </a>
+            <a th:href="@{/projects/{id}/read(id=${project.id})}" class="btn btn-outline-success">
+                <i class="bi bi-book"></i> 全文阅读
+            </a>
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-download"></i> 导出
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=markdown(id=${project.id})}"><i class="bi bi-filetype-md me-2"></i>Markdown (.md)</a></li>
+                    <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=txt(id=${project.id})}"><i class="bi bi-file-text me-2"></i>纯文本 (.txt)</a></li>
+                    <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=pdf(id=${project.id})}"><i class="bi bi-filetype-pdf me-2"></i>PDF (.pdf)</a></li>
+                    <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=epub(id=${project.id})}"><i class="bi bi-book me-2"></i>电子书 (.epub)</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=json(id=${project.id})}"><i class="bi bi-filetype-json me-2"></i>完整备份 (.json)</a></li>
+                </ul>
+            </div>
+            <a th:href="@{/projects/{id}/edit(id=${project.id})}" class="btn btn-outline-secondary">
+                <i class="bi bi-gear"></i> 编辑
+            </a>
+            <form th:action="@{/projects/{id}/delete(id=${project.id})}" method="post"
+                  onsubmit="return confirm('确定要删除此项目吗？')">
+                <button type="submit" class="btn btn-outline-danger">
+                    <i class="bi bi-trash"></i> 删除
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card mb-3" th:if="${project.description}">
+        <div class="card-body">
+            <h6 class="card-subtitle mb-2 text-muted">故事简介</h6>
+            <p th:text="${project.description}">描述</p>
+        </div>
+    </div>
+
+    <h5>工作流进度</h5>
+    <div class="list-group">
+        <div class="list-group-item d-flex justify-content-between align-items-center"
+             th:each="state : ${workflowStates}">
+            <span th:text="${state.step.displayName}">步骤名</span>
+            <span class="badge" th:classappend="${state.status.name() == 'CONFIRMED'} ? 'bg-success' : (${state.status.name() == 'GENERATED'} ? 'bg-warning' : 'bg-secondary')"
+                  th:text="${state.status}">状态</span>
+        </div>
+    </div>
+
+    <div class="card mt-4" th:if="${!usageStats.isEmpty()}">
+        <div class="card-body">
+            <h6 class="card-subtitle mb-3 text-muted">AI 用时统计</h6>
+            <table class="table table-sm table-striped mb-0">
+                <thead>
+                    <tr>
+                        <th>模型</th>
+                        <th>供应商</th>
+                        <th>累计用时</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="stat : ${usageStats}">
+                        <td th:text="${stat.modelId}">model</td>
+                        <td th:text="${stat.providerName}">provider</td>
+                        <td th:text="${stat.formattedDuration}">0s</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>

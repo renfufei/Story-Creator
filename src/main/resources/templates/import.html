@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('导入项目', ~{::content})}">
+<body>
+<div th:fragment="content">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <h2 class="mb-4">导入项目</h2>
+
+            <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
+            <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>
+
+            <div class="card">
+                <div class="card-body">
+                    <form method="post" th:action="@{/import}" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="file" class="form-label">选择备份文件</label>
+                            <input type="file" class="form-control" id="file" name="file" accept=".json" required>
+                            <div class="form-text">支持通过"完整备份(.json)"导出的文件</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="projectName" class="form-label">项目名称（可选）</label>
+                            <input type="text" class="form-control" id="projectName" name="projectName"
+                                   placeholder="留空则使用文件中的原始名称">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">导入模式</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="importMode" id="modeNew" value="new" checked>
+                                <label class="form-check-label" for="modeNew">
+                                    全新导入 — 创建新项目
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="importMode" id="modeOverwrite" value="overwrite">
+                                <label class="form-check-label" for="modeOverwrite">
+                                    覆盖导入 — 若同名项目存在则替换所有数据
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-upload"></i> 开始导入
+                            </button>
+                            <a th:href="@{/}" class="btn btn-outline-secondary">取消</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
