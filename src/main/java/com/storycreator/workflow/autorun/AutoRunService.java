@@ -4,11 +4,17 @@ import com.storycreator.core.domain.StepStatus;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.core.service.GlobalSettingService;
 import com.storycreator.persistence.entity.AutoRunStepConfigEntity;
+import com.storycreator.persistence.entity.CharacterEntity;
 import com.storycreator.persistence.entity.ChapterEntity;
+import com.storycreator.persistence.entity.ChapterOutlineEntity;
 import com.storycreator.persistence.entity.ProjectEntity;
 import com.storycreator.persistence.repository.AutoRunStepConfigRepository;
+import com.storycreator.persistence.repository.CharacterRepository;
+import com.storycreator.persistence.repository.ChapterOutlineRepository;
 import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
+import com.storycreator.persistence.repository.StoryOutlineRepository;
+import com.storycreator.persistence.repository.WorldSettingRepository;
 import com.storycreator.workflow.engine.WorkflowEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +23,7 @@ import reactor.core.Disposable;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -26,8 +33,14 @@ public class AutoRunService {
 
     private static final Logger log = LoggerFactory.getLogger(AutoRunService.class);
 
+    private static final int CONTENT_MIN_LENGTH = 50;
+
     private final ProjectRepository projectRepository;
     private final ChapterRepository chapterRepository;
+    private final ChapterOutlineRepository chapterOutlineRepository;
+    private final CharacterRepository characterRepository;
+    private final WorldSettingRepository worldSettingRepository;
+    private final StoryOutlineRepository storyOutlineRepository;
     private final WorkflowEngine workflowEngine;
     private final GlobalSettingService globalSettingService;
     private final AutoRunStepConfigRepository autoRunStepConfigRepository;
@@ -36,11 +49,19 @@ public class AutoRunService {
 
     public AutoRunService(ProjectRepository projectRepository,
                           ChapterRepository chapterRepository,
+                          ChapterOutlineRepository chapterOutlineRepository,
+                          CharacterRepository characterRepository,
+                          WorldSettingRepository worldSettingRepository,
+                          StoryOutlineRepository storyOutlineRepository,
                           WorkflowEngine workflowEngine,
                           GlobalSettingService globalSettingService,
                           AutoRunStepConfigRepository autoRunStepConfigRepository) {
         this.projectRepository = projectRepository;
         this.chapterRepository = chapterRepository;
+        this.chapterOutlineRepository = chapterOutlineRepository;
+        this.characterRepository = characterRepository;
+        this.worldSettingRepository = worldSettingRepository;
+        this.storyOutlineRepository = storyOutlineRepository;
         this.workflowEngine = workflowEngine;
         this.globalSettingService = globalSettingService;
         this.autoRunStepConfigRepository = autoRunStepConfigRepository;
@@ -49,6 +70,13 @@ public class AutoRunService {
     public void startAutoRun(Long projectId) {
         ProjectEntity project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
+
+        if (project.getStatus() == com.storycreator.core.domain.ProjectStatus.COMPLETED) {
+            throw new IllegalStateException("项目状态为「已完本」，无法启动自动创作");
+        }
+        if (project.getStatus() == com.storycreator.core.domain.ProjectStatus.ABANDONED) {
+            throw new IllegalStateException("项目状态为「已废弃」，无法启动自动创作");
+        }
 
         if (project.getAutoRunStatus() == AutoRunStatus.RUNNING) {
             throw new IllegalStateException("自动创作已在运行中");
@@ -105,17 +133,24 @@ public class AutoRunService {
         ProjectEntity project = projectRepository.findById(projectId).orElseThrow();
         WorkflowStep currentStep = project.getCurrentStep();
 
-        // If current step is past CHAPTER_WRITING, check if there are incomplete chapters that need (re)generation
-        if (currentStep.ordinal() > WorkflowStep.CHAPTER_WRITING.ordinal()) {
-            List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
-            boolean hasIncomplete = chapters.stream()
-                    .anyMatch(ch -> ch.getWordCount() == 0 || ch.getContent() == null || ch.getContent().isBlank());
-            if (hasIncomplete) {
-                log.info("[P{}][AutoRun] Found incomplete chapters, rewinding to CHAPTER_WRITING", projectId);
-                currentStep = WorkflowStep.CHAPTER_WRITING;
-                project.setCurrentStep(currentStep);
-                projectRepository.save(project);
+        // Rewind to the earliest enabled step whose content is incomplete
+        WorkflowStep rewindTo = null;
+        WorkflowStep scan = WorkflowStep.values()[0];
+        while (scan != null && scan.ordinal() < currentStep.ordinal()) {
+            AutoRunStepConfigEntity scanConfig = autoRunStepConfigRepository
+                    .findByProjectIdAndStep(projectId, scan).orElse(null);
+            boolean enabled = (scanConfig == null || scanConfig.isEnabled());
+            if (enabled && !isStepContentComplete(projectId, scan)) {
+                rewindTo = scan;
+                break;
             }
+            scan = scan.next();
+        }
+        if (rewindTo != null) {
+            log.info("[P{}][AutoRun] Rewinding from {} to {} (content incomplete)", projectId, currentStep, rewindTo);
+            currentStep = rewindTo;
+            project.setCurrentStep(currentStep);
+            projectRepository.save(project);
         }
 
         WorkflowStep step = currentStep;
@@ -129,8 +164,16 @@ public class AutoRunService {
             AutoRunStepConfigEntity stepConfig = autoRunStepConfigRepository
                     .findByProjectIdAndStep(projectId, step).orElse(null);
             if (stepConfig != null && !stepConfig.isEnabled()) {
-                log.info("[P{}][AutoRun] Step {} skipped (disabled)", projectId, step);
+                log.info("[P{}][AutoRun] Step {} skipped (disabled), no state modified", projectId, step);
                 updateProgress(projectId, step.getDisplayName(), 0, step.getDisplayName() + " 已跳过（未启用）");
+                step = step.next();
+                continue;
+            }
+
+            // Check if step content is already complete — skip generation but confirm
+            if (isStepContentComplete(projectId, step)) {
+                log.info("[P{}][AutoRun] Step {} content already complete, skipping", projectId, step);
+                updateProgress(projectId, step.getDisplayName(), 0, step.getDisplayName() + " 内容已完整，跳过");
                 workflowEngine.ensureWorkflowStateExists(projectId, step);
                 workflowEngine.confirmStep(projectId, step);
                 step = step.next();
@@ -140,6 +183,12 @@ public class AutoRunService {
             updateProgress(projectId, step.getDisplayName(), 0, "正在生成: " + step.getDisplayName() + "...");
 
             switch (step) {
+                case CHARACTER_DESIGN -> {
+                    generateAndSave(projectId, step, 0);
+                    if (shouldStop(projectId)) { markStopped(projectId); return; }
+                    // Auto-refine characters after generation
+                    runCharacterRefine(projectId);
+                }
                 case CHAPTER_WRITING -> {
                     runChapterWriting(projectId);
                     if (shouldStop(projectId)) { markStopped(projectId); return; }
@@ -175,6 +224,61 @@ public class AutoRunService {
         log.info("Auto run completed for project {}", projectId);
     }
 
+    private boolean isStepContentComplete(Long projectId, WorkflowStep step) {
+        ProjectEntity project = projectRepository.findById(projectId).orElseThrow();
+        switch (step) {
+            case WORLD_BUILDING -> {
+                var ws = worldSettingRepository.findByProjectId(projectId).orElse(null);
+                return ws != null && ws.getContent() != null && ws.getContent().length() > CONTENT_MIN_LENGTH;
+            }
+            case CHARACTER_DESIGN -> {
+                List<CharacterEntity> cards = characterRepository
+                        .findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
+                long validCards = cards.stream()
+                        .filter(c -> c.getContent() != null && c.getContent().length() > CONTENT_MIN_LENGTH)
+                        .count();
+                return validCards >= project.getCharacterCount();
+            }
+            case OUTLINE_GENERATION -> {
+                var outline = storyOutlineRepository.findByProjectId(projectId).orElse(null);
+                if (outline == null || outline.getContent() == null || outline.getContent().length() <= CONTENT_MIN_LENGTH) {
+                    return false;
+                }
+                List<ChapterOutlineEntity> chapterOutlines = chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId);
+                long validOutlines = chapterOutlines.stream()
+                        .filter(o -> o.getSummary() != null && !o.getSummary().isBlank())
+                        .count();
+                return validOutlines >= project.getTotalChapters();
+            }
+            case CHAPTER_WRITING -> {
+                List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
+                if (chapters.isEmpty()) return false;
+                long validChapters = chapters.stream()
+                        .filter(ch -> ch.getContent() != null && !ch.getContent().isBlank() && ch.getWordCount() > 0)
+                        .count();
+                return validChapters >= project.getTotalChapters();
+            }
+            case POLISHING -> {
+                List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
+                List<ChapterEntity> withContent = chapters.stream()
+                        .filter(ch -> ch.getContent() != null && !ch.getContent().isBlank())
+                        .toList();
+                if (withContent.isEmpty()) return false;
+                return withContent.stream().allMatch(ch -> ch.getPolishStatus() == StepStatus.CONFIRMED);
+            }
+            case PROOFREADING -> {
+                List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
+                List<ChapterEntity> withContent = chapters.stream()
+                        .filter(ch -> ch.getContent() != null && !ch.getContent().isBlank())
+                        .toList();
+                if (withContent.isEmpty()) return false;
+                return withContent.stream().allMatch(ch ->
+                        ch.getProofreadFixStatus() == StepStatus.CONFIRMED || ch.getProofreadFixStatus() == StepStatus.GENERATED);
+            }
+            default -> { return false; }
+        }
+    }
+
     private void generateAndSave(Long projectId, WorkflowStep step, int chapter) {
         log.info("[P{}][AutoRun] generateAndSave START step={} chapter={}", projectId, step, chapter);
         long gsStart = System.currentTimeMillis();
@@ -196,6 +300,7 @@ public class AutoRunService {
             default -> perStepTimeout * 1000L;
         };
         long deadline = System.currentTimeMillis() + totalTimeoutMs;
+        int outlinePollCount = 0;
         while (!disposable.isDisposed()) {
             if (shouldStop(projectId)) {
                 disposable.dispose();
@@ -213,6 +318,9 @@ public class AutoRunService {
                 disposable.dispose();
                 Thread.currentThread().interrupt();
                 return;
+            }
+            if (step == WorkflowStep.OUTLINE_GENERATION && ++outlinePollCount % 4 == 0) {
+                updateOutlineProgress(projectId);
             }
         }
 
@@ -273,6 +381,13 @@ public class AutoRunService {
             updateProgress(projectId, WorkflowStep.CHAPTER_WRITING.getDisplayName(), num,
                     "正在生成第 " + num + "/" + totalChapters + " 章...");
             generateAndSave(projectId, WorkflowStep.CHAPTER_WRITING, num);
+            // 同步生成角色状态，确保不与下一章 AI 请求并发
+            try {
+                workflowEngine.generateCharacterStates(projectId, num);
+            } catch (Exception e) {
+                log.warn("[P{}][AutoRun] Failed to generate character states for ch{}: {}",
+                        projectId, num, e.getMessage());
+            }
         }
     }
 
@@ -325,6 +440,54 @@ public class AutoRunService {
         }
     }
 
+    private void runCharacterRefine(Long projectId) {
+        // Check if any characters need refining
+        List<CharacterEntity> cards = characterRepository
+                .findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
+        boolean needsRefine = cards.stream().anyMatch(c -> !"REFINED".equals(c.getStatus()));
+        if (!needsRefine) {
+            log.info("[P{}][AutoRun] All characters already refined, skipping", projectId);
+            return;
+        }
+
+        updateProgress(projectId, "角色精修", 0, "正在自动精修角色卡...");
+        log.info("[P{}][AutoRun] Starting character refine", projectId);
+
+        Throwable[] error = {null};
+        var disposable = workflowEngine.refineAllCharacters(projectId)
+                .doOnError(e -> error[0] = e)
+                .subscribe();
+
+        int perStepTimeout = globalSettingService.getAiTimeoutSeconds();
+        long totalTimeoutMs = perStepTimeout * 8L * 1000L;
+        long deadline = System.currentTimeMillis() + totalTimeoutMs;
+
+        while (!disposable.isDisposed()) {
+            if (shouldStop(projectId)) {
+                disposable.dispose();
+                return;
+            }
+            if (System.currentTimeMillis() > deadline) {
+                disposable.dispose();
+                throw new RuntimeException("角色精修超时（" + (totalTimeoutMs / 1000) + "秒）");
+            }
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                disposable.dispose();
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+
+        if (error[0] != null) {
+            throw new RuntimeException("角色精修失败: " + error[0].getMessage(), error[0]);
+        }
+
+        log.info("[P{}][AutoRun] Character refine completed", projectId);
+        updateProgress(projectId, "角色精修", 0, "角色精修完成");
+    }
+
     private void runGenerateTitles(Long projectId) {
         workflowEngine.generateAndSaveTitles(projectId, () -> shouldStop(projectId));
     }
@@ -362,5 +525,20 @@ public class AutoRunService {
         }
         project.setAutoRunProgress(progress);
         projectRepository.save(project);
+    }
+
+    private void updateOutlineProgress(Long projectId) {
+        List<ChapterOutlineEntity> outlines = chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId);
+        if (outlines.isEmpty()) return;
+        Optional<ChapterOutlineEntity> active = outlines.stream()
+                .filter(o -> "GENERATING".equals(o.getStatus()) || "REFINING".equals(o.getStatus()))
+                .findFirst();
+        if (active.isPresent()) {
+            boolean refining = "REFINING".equals(active.get().getStatus());
+            String msg = refining
+                    ? "正在精修第" + active.get().getChapterNumber() + "章大纲..."
+                    : "正在生成第" + active.get().getChapterNumber() + "章大纲...";
+            updateProgress(projectId, refining ? "大纲生成-精修中" : "大纲生成", active.get().getChapterNumber(), msg);
+        }
     }
 }

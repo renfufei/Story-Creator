@@ -29,6 +29,9 @@
                     <div class="card-body">
                         <h5 class="card-title" th:text="${project.title}">项目名</h5>
                         <span class="badge bg-info mb-2" th:text="${project.genre.displayName}">题材</span>
+                        <span class="badge mb-2"
+                              th:classappend="${project.status.name() == 'COMPLETED'} ? 'bg-success' : (${project.status.name() == 'ABANDONED'} ? 'bg-danger' : (${project.status.name() == 'NOT_STARTED'} ? 'bg-secondary' : 'bg-primary'))"
+                              th:text="${project.status.displayName}">状态</span>
                         <span class="badge bg-secondary mb-2" th:text="${project.currentStep.displayName}">当前步骤</span>
                         <p class="card-text text-muted small" th:text="${#strings.abbreviate(project.description, 80)}">描述</p>
                     </div>

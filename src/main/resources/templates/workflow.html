@@ -7,6 +7,9 @@
         <div class="d-flex justify-content-between align-items-center mb-2">
             <h4 class="mb-0" th:text="${project.title}">项目名</h4>
             <div class="d-flex gap-2">
+                <a th:href="@{/projects/{id}/read(id=${project.id})}" class="btn btn-sm btn-outline-success" target="_blank">
+                    <i class="bi bi-book"></i> 全文阅读
+                </a>
                 <div class="dropdown">
                     <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                         <i class="bi bi-download"></i> 导出
@@ -55,6 +58,9 @@
                         </template>
                     </span>
                     <div class="d-flex gap-2">
+                        <button x-show="!fullAutoRunning" class="btn btn-sm btn-outline-secondary" @click="openWorkflowStateModal()">
+                            <i class="bi bi-gear"></i> 设置工作流状态
+                        </button>
                         <button x-show="!fullAutoRunning" class="btn btn-sm btn-primary" @click="startFullAuto()">
                             <i class="bi bi-play-fill"></i> 开始全自动创作
                         </button>
@@ -84,7 +90,7 @@
             <span>
                 <strong th:text="${viewStep.displayName}">当前步骤</strong>
                 <span class="badge bg-info ms-2" th:text="${project.genre.displayName}">题材</span>
-                <span th:if="${viewStep != project.currentStep}" class="badge bg-warning ms-1">已完成步骤</span>
+                <span th:if="${viewStep.order < project.currentStep.order}" class="badge bg-warning ms-1">已完成步骤</span>
             </span>
             <div class="d-flex gap-2 align-items-center">
                 <!-- Step-level model selector -->
@@ -250,9 +256,12 @@
                                                         <div class="flex-grow-1">
                                                             <div class="fw-bold">
                                                                 <span x-text="'第' + ch.chapterNumber + '章'"></span>
-                                                                <span x-show="ch.status === 'COMPLETED' || ch.summary" x-text="' - ' + (ch.title || '')"></span>
+                                                                <span x-show="(ch.status === 'COMPLETED' || ch.status === 'REFINED' || ch.status === 'REFINING') && ch.title" x-text="' - ' + ch.title"></span>
                                                                 <span x-show="ch.status === 'PENDING' && !ch.summary" class="text-muted fw-normal"> - 待生成</span>
                                                                 <span x-show="ch.status === 'GENERATING'" class="text-primary fw-normal"> - 生成中<span class="cursor"></span></span>
+                                                                <span x-show="ch.status === 'COMPLETED'" class="badge bg-success ms-1">已生成</span>
+                                                                <span x-show="ch.status === 'REFINING'" class="badge bg-info ms-1">精修中</span>
+                                                                <span x-show="ch.status === 'REFINED'" class="badge bg-primary ms-1">已精修</span>
                                                                 <span x-show="ch.status === 'FAILED'" class="text-danger fw-normal"> - 生成失败</span>
                                                             </div>
                                                             <small x-show="ch.characterNames" class="text-muted">
@@ -276,7 +285,7 @@
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                        <div x-show="!generating && ch.status === 'COMPLETED' && !ch.editing" class="d-flex gap-1 ms-2">
+                                                        <div x-show="!generating && (ch.status === 'COMPLETED' || ch.status === 'REFINED') && !ch.editing" class="d-flex gap-1 ms-2">
                                                             <button class="btn btn-sm btn-outline-primary"
                                                                     @click="editChapterOutline(ch)" :disabled="fullAutoRunning">
                                                                 <i class="bi bi-pencil"></i> 编辑
@@ -412,10 +421,17 @@
             <span><strong>角色列表</strong>
                 <span class="badge bg-secondary ms-2" x-text="characterList.length + '个角色'"></span>
             </span>
-            <button class="btn btn-sm btn-outline-success" @click="showAddCharacter = true"
-                    :disabled="fullAutoRunning">
-                <i class="bi bi-plus-lg"></i> 添加角色
-            </button>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-warning" @click="refineAllCharacters()"
+                        :disabled="generating || fullAutoRunning || refiningCharacters || characterList.length === 0">
+                    <span x-show="!refiningCharacters"><i class="bi bi-stars"></i> 自动AI精修</span>
+                    <span x-show="refiningCharacters"><span class="spinner-border spinner-border-sm"></span> 精修中...</span>
+                </button>
+                <button class="btn btn-sm btn-outline-success" @click="showAddCharacter = true"
+                        :disabled="fullAutoRunning">
+                    <i class="bi bi-plus-lg"></i> 添加角色
+                </button>
+            </div>
         </div>
         <div class="card-body">
             <!-- Add character form -->
@@ -428,6 +444,12 @@
                 </div>
             </div>
 
+            <!-- Refine progress -->
+            <div x-show="refiningCharacters" class="alert alert-warning py-2 mb-3">
+                <span class="spinner-border spinner-border-sm me-1"></span>
+                <span x-text="refineProgress || '正在精修角色...'"></span>
+            </div>
+
             <!-- Character cards list -->
             <div x-show="characterList.length === 0 && !generating" class="text-center py-3 text-muted">
                 <p>暂无角色，请先点击"AI生成"或手动添加角色</p>
@@ -437,7 +459,15 @@
                     <div class="col-md-6">
                         <div class="card h-100">
                             <div class="card-header d-flex justify-content-between align-items-center py-2">
-                                <span class="fw-bold" x-text="ch.name || '未命名'"></span>
+                                <span class="fw-bold">
+                                    <span x-text="ch.name || '未命名'"></span>
+                                    <span class="badge ms-1" :class="{
+                                        'bg-secondary': ch.status === 'PENDING',
+                                        'bg-info': ch.status === 'GENERATED',
+                                        'bg-warning text-dark': ch.status === 'REFINING',
+                                        'bg-success': ch.status === 'REFINED'
+                                    }" x-text="ch.status === 'PENDING' ? '待生成' : ch.status === 'GENERATED' ? '已生成' : ch.status === 'REFINING' ? '精修中' : ch.status === 'REFINED' ? '已精修' : ''" style="font-size: 0.7rem;"></span>
+                                </span>
                                 <div class="d-flex gap-1">
                                     <button class="btn btn-sm btn-outline-primary py-0 px-1"
                                             @click="editCharacter(ch)" :disabled="fullAutoRunning">
@@ -950,6 +980,56 @@
         </div>
     </div>
 
+    <!-- Workflow State Setting Modal -->
+    <div class="modal fade" id="workflowStateModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-gear"></i> 设置工作流状态</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">设置各步骤状态以指导全自动工作流的起始位置。全自动创作从"当前步骤"开始执行。</p>
+                    <!-- Current Step -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">当前步骤（自动创作起点）</label>
+                        <select class="form-select form-select-sm" x-model="wfStateCurrentStep"
+                                :disabled="fullAutoRunning">
+                            <template x-for="s in stepList" :key="s.name">
+                                <option :value="s.name" x-text="s.label"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <hr>
+                    <!-- Per-step status -->
+                    <label class="form-label fw-bold">各步骤状态</label>
+                    <template x-for="s in stepList" :key="s.name">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="small" x-text="s.label" style="min-width:100px;"></span>
+                            <select class="form-select form-select-sm" style="max-width:180px;"
+                                    x-model="wfStateSteps[s.name]"
+                                    :disabled="fullAutoRunning">
+                                <template x-for="opt in (wfStateAllowedStatuses[s.name] || [{name:'NOT_STARTED',label:'未开始'},{name:'GENERATED',label:'已生成'},{name:'CONFIRMED',label:'已确认'}])" :key="opt.name">
+                                    <option :value="opt.name" x-text="opt.label"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </template>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary btn-sm" @click="saveWorkflowState()"
+                            :disabled="fullAutoRunning">
+                        <i class="bi bi-save"></i> 保存
+                    </button>
+                    <span x-show="fullAutoRunning" class="text-warning small ms-2">
+                        <i class="bi bi-exclamation-triangle"></i> 自动创作运行中，无法修改
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Polish Note Edit Modal -->
     <div class="modal fade" id="polishNoteModal" tabindex="-1">
         <div class="modal-dialog">
@@ -1075,6 +1155,8 @@
                 editForm: {},
                 showAddCharacter: false,
                 newCharacterName: '',
+                refiningCharacters: false,
+                refineProgress: '',
                 stepGuidance: /*[[${stepGuidance}]]*/ '',
                 stepGuidanceEdit: '',
                 editingGuidance: false,
@@ -1084,6 +1166,10 @@
                 fullAutoStatus: '',
                 fullAutoError: '',
                 autoRunPollTimer: null,
+                wfStateModal: null,
+                wfStateCurrentStep: /*[[${project.currentStep.name()}]]*/ 'WORLD_BUILDING',
+                wfStateSteps: {},
+                wfStateAllowedStatuses: {},
                 autoRunActiveStep: /*[[${viewStep.name()}]]*/ '',
                 autoRunActiveOrder: /*[[${viewStep.order}]]*/ 1,
                 // Outline accordion state
@@ -1210,7 +1296,9 @@
                             const prevVol = this.outlineVolumes.find(v => v.volumeNumber === this.streamingTarget.volumeNumber);
                             if (prevVol) {
                                 const prevCh = prevVol.chapters.find(c => c.chapterNumber === this.streamingTarget.chapterNumber);
-                                if (prevCh && prevCh.status === 'GENERATING') prevCh.status = 'COMPLETED';
+                                if (prevCh && (prevCh.status === 'GENERATING' || prevCh.status === 'REFINING')) {
+                                    prevCh.status = this.streamingTarget.type === 'REFINE' ? 'REFINED' : 'COMPLETED';
+                                }
                             }
                         }
 
@@ -1273,7 +1361,7 @@
                                     ch.summary = '';
                                     ch.title = '';
                                     ch.characterNames = '';
-                                    ch.status = 'GENERATING';
+                                    ch.status = 'REFINING';
                                 }
                             }
                             this.streamingTarget = { type: 'REFINE', chapterNumber: chNum, volumeNumber: volNum };
@@ -2026,6 +2114,57 @@
                         .catch(err => alert('删除失败: ' + err));
                 },
 
+                refineAllCharacters() {
+                    if (this.refiningCharacters) return;
+                    this.refiningCharacters = true;
+                    this.refineProgress = '正在准备精修...';
+
+                    const es = new EventSource(`/projects/${this.projectId}/characters/refine-all`);
+                    let currentIdx = 0;
+
+                    es.addEventListener('char-refine', (e) => {
+                        const data = e.data;
+                        const match = data.match(/\[\[CHAR:REFINE:(\d+)\]\]/);
+                        if (match) {
+                            currentIdx = parseInt(match[1]);
+                            this.refineProgress = `正在精修第 ${currentIdx}/${this.characterList.length} 个角色...`;
+                            // Update the character's status in the list to show spinner
+                            if (currentIdx - 1 < this.characterList.length) {
+                                this.characterList[currentIdx - 1].status = 'REFINING';
+                            }
+                        }
+                        if (data.includes('DONE')) {
+                            this.refineProgress = '精修完成！';
+                        }
+                    });
+
+                    es.addEventListener('token', (e) => {
+                        // Tokens are streaming but we don't display them for refine
+                    });
+
+                    es.addEventListener('done', (e) => {
+                        es.close();
+                        this.refiningCharacters = false;
+                        this.refineProgress = '';
+                        this.loadCharacterList();
+                    });
+
+                    es.addEventListener('error', (e) => {
+                        es.close();
+                        this.refiningCharacters = false;
+                        this.refineProgress = '';
+                        alert('精修失败: ' + (e.data || '连接中断'));
+                        this.loadCharacterList();
+                    });
+
+                    es.onerror = () => {
+                        es.close();
+                        this.refiningCharacters = false;
+                        this.refineProgress = '';
+                        this.loadCharacterList();
+                    };
+                },
+
                 // === Outline Accordion Methods ===
 
                 loadOutlineData(mergeOnly = false) {
@@ -2152,7 +2291,9 @@
                             const prevVol = this.outlineVolumes.find(v => v.volumeNumber === this.streamingTarget.volumeNumber);
                             if (prevVol) {
                                 const prevCh = prevVol.chapters.find(c => c.chapterNumber === this.streamingTarget.chapterNumber);
-                                if (prevCh && prevCh.status === 'GENERATING') prevCh.status = 'COMPLETED';
+                                if (prevCh && (prevCh.status === 'GENERATING' || prevCh.status === 'REFINING')) {
+                                    prevCh.status = this.streamingTarget.type === 'REFINE' ? 'REFINED' : 'COMPLETED';
+                                }
                             }
                         }
 
@@ -2200,7 +2341,7 @@
                                     ch.summary = '';
                                     ch.title = '';
                                     ch.characterNames = '';
-                                    ch.status = 'GENERATING';
+                                    ch.status = 'REFINING';
                                 }
                             }
                             this.streamingTarget = { type: 'REFINE', chapterNumber: chNum, volumeNumber: volNum };
@@ -2383,6 +2524,44 @@
 
                 // === Full Auto Mode Methods ===
 
+                openWorkflowStateModal() {
+                    // Load current state from server
+                    fetch(`/projects/${this.projectId}/workflow-states`)
+                        .then(r => r.json())
+                        .then(data => {
+                            this.wfStateCurrentStep = data.currentStep;
+                            this.wfStateSteps = data.stepStatuses;
+                            this.wfStateAllowedStatuses = data.allowedStatuses || {};
+                            if (!this.wfStateModal) {
+                                this.wfStateModal = new bootstrap.Modal(document.getElementById('workflowStateModal'));
+                            }
+                            this.wfStateModal.show();
+                        })
+                        .catch(err => alert('加载工作流状态失败: ' + err.message));
+                },
+
+                saveWorkflowState() {
+                    const payload = {
+                        currentStep: this.wfStateCurrentStep,
+                        stepStatuses: this.wfStateSteps
+                    };
+                    fetch(`/projects/${this.projectId}/workflow-states`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.status === 'ok') {
+                            if (this.wfStateModal) this.wfStateModal.hide();
+                            location.reload();
+                        } else {
+                            alert('保存失败: ' + (data.message || ''));
+                        }
+                    })
+                    .catch(err => alert('保存失败: ' + err.message));
+                },
+
                 startFullAuto() {
                     this.fullAutoError = '';
                     fetch(`/projects/${this.projectId}/auto-run/start`, { method: 'POST' })
@@ -2440,6 +2619,9 @@
 
                             if (data.status === 'RUNNING' || data.status === 'STOPPING') {
                                 this.fullAutoRunning = true;
+                                if (data.step && data.step.includes('大纲') && this.outlineLoaded) {
+                                    this.loadOutlineData(true);
+                                }
                             } else {
                                 this.fullAutoRunning = false;
                                 this.stopAutoRunPolling();

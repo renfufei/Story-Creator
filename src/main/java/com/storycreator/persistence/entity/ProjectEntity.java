@@ -1,6 +1,7 @@
 package com.storycreator.persistence.entity;
 
 import com.storycreator.core.domain.Genre;
+import com.storycreator.core.domain.ProjectStatus;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.workflow.autorun.AutoRunStatus;
 import jakarta.persistence.*;
@@ -48,6 +49,10 @@ public class ProjectEntity {
 
     @Column(name = "auto_mode", nullable = false)
     private boolean autoMode = true;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    private ProjectStatus status = ProjectStatus.IN_PROGRESS;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "auto_run_status", nullable = false, length = 30)
@@ -124,6 +129,9 @@ public class ProjectEntity {
 
     public boolean isAutoMode() { return autoMode; }
     public void setAutoMode(boolean autoMode) { this.autoMode = autoMode; }
+
+    public ProjectStatus getStatus() { return status; }
+    public void setStatus(ProjectStatus status) { this.status = status; }
 
     public AutoRunStatus getAutoRunStatus() { return autoRunStatus; }
     public void setAutoRunStatus(AutoRunStatus autoRunStatus) { this.autoRunStatus = autoRunStatus; }

@@ -261,6 +261,17 @@ public class WorkflowController {
                                 workflowEngine.saveGeneratedContent(projectId, step, fullContent.toString(), chapter);
                                 emitter.send(SseEmitter.event().name("done").data("complete"));
                                 emitter.complete();
+                                // After SSE is closed, async generate character states (no concurrency issue in manual mode)
+                                if (step == WorkflowStep.CHAPTER_WRITING && chapter > 0) {
+                                    final int chNum = chapter;
+                                    Thread.startVirtualThread(() -> {
+                                        try {
+                                            workflowEngine.generateCharacterStates(projectId, chNum);
+                                        } catch (Exception e) {
+                                            log.warn("[P{}] Failed to generate character states for ch{}: {}", projectId, chNum, e.getMessage());
+                                        }
+                                    });
+                                }
                             } catch (IOException e) {
                                 emitter.completeWithError(e);
                             }
@@ -518,8 +529,68 @@ public class WorkflowController {
             map.put("relationships", ch.getRelationships());
             map.put("description", ch.getDescription());
             map.put("sortOrder", ch.getSortOrder());
+            map.put("status", ch.getStatus() != null ? ch.getStatus() : "GENERATED");
             return map;
         }).toList();
+    }
+
+    /**
+     * SSE endpoint to refine all character cards via AI
+     */
+    @GetMapping(value = "/characters/refine-all", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @ResponseBody
+    public SseEmitter refineAllCharacters(@PathVariable Long projectId) {
+        long timeoutMs = 120 * 60 * 1000L; // 2 hours
+        SseEmitter emitter = new SseEmitter(timeoutMs);
+
+        executor.submit(() -> {
+            try {
+                workflowEngine.refineAllCharacters(projectId)
+                        .doOnNext(token -> {
+                            try {
+                                if (token.startsWith("[[CHAR:REFINE:")) {
+                                    emitter.send(SseEmitter.event()
+                                            .name("char-refine")
+                                            .data(token));
+                                } else {
+                                    emitter.send(SseEmitter.event()
+                                            .name("token")
+                                            .data(token));
+                                }
+                            } catch (IOException e) {
+                                emitter.completeWithError(e);
+                            }
+                        })
+                        .doOnComplete(() -> {
+                            try {
+                                emitter.send(SseEmitter.event().name("done").data("complete"));
+                                emitter.complete();
+                            } catch (IOException e) {
+                                emitter.completeWithError(e);
+                            }
+                        })
+                        .doOnError(error -> {
+                            log.error("Character refine error", error);
+                            try {
+                                emitter.send(SseEmitter.event().name("error").data(error.getMessage()));
+                            } catch (IOException e) {
+                                // ignore
+                            }
+                            emitter.completeWithError(error);
+                        })
+                        .blockLast();
+            } catch (Exception e) {
+                log.error("Character refine execution error", e);
+                try {
+                    emitter.send(SseEmitter.event().name("error").data(e.getMessage()));
+                } catch (IOException ex) {
+                    // ignore
+                }
+                emitter.completeWithError(e);
+            }
+        });
+
+        return emitter;
     }
 
     /**
@@ -571,6 +642,7 @@ public class WorkflowController {
         CharacterEntity ch = new CharacterEntity();
         ch.setProjectId(projectId);
         ch.setName(name);
+        ch.setStatus("PENDING");
         ch.setSortOrder(maxOrder + 1);
         characterRepository.save(ch);
 
@@ -661,6 +733,101 @@ public class WorkflowController {
                 .map(s -> s.getStatus().name())
                 .orElse("NOT_STARTED");
         return ResponseEntity.ok(Map.of("status", status));
+    }
+
+    /**
+     * Get all workflow states for the workflow state setting modal
+     */
+    @GetMapping("/workflow-states")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> getWorkflowStates(@PathVariable Long projectId) {
+        ProjectEntity project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+        List<WorkflowStateEntity> states = workflowStateRepository.findByProjectId(projectId);
+
+        Map<String, String> stepStatuses = new LinkedHashMap<>();
+        Map<String, List<Map<String, String>>> allowedStatuses = new LinkedHashMap<>();
+        for (WorkflowStep ws : WorkflowStep.values()) {
+            String status = states.stream()
+                    .filter(s -> s.getStep() == ws)
+                    .map(s -> s.getStatus().name())
+                    .findFirst()
+                    .orElse("NOT_STARTED");
+            stepStatuses.put(ws.name(), status);
+            allowedStatuses.put(ws.name(), ws.getAllowedManualStatuses().stream()
+                    .map(s -> Map.of("name", s.name(), "label", s.getDisplayName()))
+                    .toList());
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("currentStep", project.getCurrentStep().name());
+        result.put("stepStatuses", stepStatuses);
+        result.put("allowedStatuses", allowedStatuses);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Save workflow states (set current step and per-step statuses)
+     */
+    @PostMapping("/workflow-states")
+    @ResponseBody
+    public ResponseEntity<Map<String, String>> saveWorkflowStates(@PathVariable Long projectId,
+                                                                    @RequestBody Map<String, Object> payload) {
+        ProjectEntity project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+
+        // Block changes while auto-run is active
+        if (project.getAutoRunStatus() != null
+                && (project.getAutoRunStatus().name().equals("RUNNING")
+                    || project.getAutoRunStatus().name().equals("STOPPING"))) {
+            return ResponseEntity.badRequest().body(Map.of("status", "error", "message", "自动创作运行中，无法修改工作流状态"));
+        }
+
+        // Update current step
+        String currentStepStr = (String) payload.get("currentStep");
+        if (currentStepStr != null) {
+            project.setCurrentStep(WorkflowStep.valueOf(currentStepStr));
+            projectRepository.save(project);
+        }
+
+        // Update per-step statuses
+        @SuppressWarnings("unchecked")
+        Map<String, String> stepStatuses = (Map<String, String>) payload.get("stepStatuses");
+        if (stepStatuses != null) {
+            for (Map.Entry<String, String> entry : stepStatuses.entrySet()) {
+                WorkflowStep ws = WorkflowStep.valueOf(entry.getKey());
+                StepStatus status = StepStatus.valueOf(entry.getValue());
+
+                // Validate status is allowed for this step
+                if (!ws.getAllowedManualStatuses().contains(status)) {
+                    return ResponseEntity.badRequest().body(Map.of("status", "error",
+                            "message", ws.getDisplayName() + " 不允许设置为 " + status.getDisplayName()));
+                }
+
+                WorkflowStateEntity state = workflowStateRepository
+                        .findByProjectIdAndStep(projectId, ws)
+                        .orElse(null);
+
+                if (status == StepStatus.NOT_STARTED) {
+                    // If set to NOT_STARTED, delete the state row if exists
+                    if (state != null) {
+                        workflowStateRepository.delete(state);
+                    }
+                } else {
+                    // Create or update
+                    if (state == null) {
+                        state = new WorkflowStateEntity();
+                        state.setProjectId(projectId);
+                        state.setStep(ws);
+                        state.setGeneratedContent("[manually set]");
+                    }
+                    state.setStatus(status);
+                    workflowStateRepository.save(state);
+                }
+            }
+        }
+
+        return ResponseEntity.ok(Map.of("status", "ok"));
     }
 
     // --- Outline structured data endpoints ---

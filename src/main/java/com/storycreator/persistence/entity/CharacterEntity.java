@@ -53,6 +53,9 @@ public class CharacterEntity {
     @Column(columnDefinition = "TEXT")
     private String summary;
 
+    @Column(length = 20)
+    private String status;
+
     @Column(name = "sort_order")
     private int sortOrder;
 
@@ -117,6 +120,9 @@ public class CharacterEntity {
 
     public String getSummary() { return summary; }
     public void setSummary(String summary) { this.summary = summary; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
     public int getSortOrder() { return sortOrder; }
     public void setSortOrder(int sortOrder) { this.sortOrder = sortOrder; }

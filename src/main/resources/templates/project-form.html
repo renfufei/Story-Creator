@@ -146,6 +146,13 @@
                     <div class="form-text">开启后可在创作页面一键执行全流程，自动完成所有步骤</div>
                 </div>
 
+                <div class="mb-3" th:if="${projectId != null}">
+                    <label for="projectStatus" class="form-label">项目状态</label>
+                    <select class="form-select" id="projectStatus" th:field="*{projectStatus}">
+                        <option th:each="ps : ${projectStatuses}" th:value="${ps}" th:text="${ps.displayName}">状态</option>
+                    </select>
+                </div>
+
                 <!-- Step Guidance Section -->
                 <div class="mb-3">
                     <div class="d-flex align-items-center mb-2">
@@ -175,8 +182,35 @@
                         <span th:text="${projectId != null} ? '保存修改' : '创建并开始创作'">提交</span>
                     </button>
                     <a th:href="@{/}" class="btn btn-outline-secondary">取消</a>
+                    <button type="button" class="btn btn-danger ms-auto"
+                            th:if="${projectId != null && form.projectStatus != null && form.projectStatus.name() == 'ABANDONED'}"
+                            data-bs-toggle="modal" data-bs-target="#deleteProjectModal">
+                        <i class="bi bi-trash"></i> 删除项目
+                    </button>
                 </div>
             </form>
+
+            <!-- Delete Project Confirmation Modal -->
+            <div class="modal fade" id="deleteProjectModal" tabindex="-1" th:if="${projectId != null}">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title text-danger">确认删除项目</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p>确定要永久删除项目 <strong th:text="${form.title}">项目名</strong> 吗？</p>
+                            <p class="text-danger mb-0">此操作不可撤销，项目的所有数据（章节、角色、大纲等）都将被永久删除。</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                            <form th:action="@{/projects/{id}/delete(id=${projectId})}" method="post" class="d-inline">
+                                <button type="submit" class="btn btn-danger">确认删除</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     <script>

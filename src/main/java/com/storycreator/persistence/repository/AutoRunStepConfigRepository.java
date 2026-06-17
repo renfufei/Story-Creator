@@ -12,4 +12,6 @@ public interface AutoRunStepConfigRepository extends JpaRepository<AutoRunStepCo
     List<AutoRunStepConfigEntity> findByProjectId(Long projectId);
 
     Optional<AutoRunStepConfigEntity> findByProjectIdAndStep(Long projectId, WorkflowStep step);
+
+    void deleteByProjectId(Long projectId);
 }

@@ -1,16 +1,24 @@
 package com.storycreator.web;
 
 import com.storycreator.core.domain.Genre;
+import com.storycreator.core.domain.ProjectStatus;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.persistence.entity.ProjectEntity;
 import com.storycreator.persistence.entity.ChapterEntity;
 import com.storycreator.persistence.entity.StepGuidanceEntity;
 import com.storycreator.persistence.repository.AiModelConfigRepository;
 import com.storycreator.persistence.repository.AiUsageStatRepository;
+import com.storycreator.persistence.repository.AutoRunStepConfigRepository;
+import com.storycreator.persistence.repository.ChapterOutlineRepository;
 import com.storycreator.persistence.repository.ChapterRepository;
+import com.storycreator.persistence.repository.CharacterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
+import com.storycreator.persistence.repository.ProofreadingReportRepository;
 import com.storycreator.persistence.repository.StepGuidanceRepository;
+import com.storycreator.persistence.repository.StoryOutlineRepository;
+import com.storycreator.persistence.repository.VolumeOutlineRepository;
 import com.storycreator.persistence.repository.WorkflowStateRepository;
+import com.storycreator.persistence.repository.WorldSettingRepository;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +27,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
@@ -32,19 +41,40 @@ public class ProjectController {
     private final AiUsageStatRepository aiUsageStatRepository;
     private final ChapterRepository chapterRepository;
     private final StepGuidanceRepository stepGuidanceRepository;
+    private final CharacterRepository characterRepository;
+    private final ChapterOutlineRepository chapterOutlineRepository;
+    private final StoryOutlineRepository storyOutlineRepository;
+    private final VolumeOutlineRepository volumeOutlineRepository;
+    private final ProofreadingReportRepository proofreadingReportRepository;
+    private final WorldSettingRepository worldSettingRepository;
+    private final AutoRunStepConfigRepository autoRunStepConfigRepository;
 
     public ProjectController(ProjectRepository projectRepository,
                            WorkflowStateRepository workflowStateRepository,
                            AiModelConfigRepository modelConfigRepository,
                            AiUsageStatRepository aiUsageStatRepository,
                            ChapterRepository chapterRepository,
-                           StepGuidanceRepository stepGuidanceRepository) {
+                           StepGuidanceRepository stepGuidanceRepository,
+                           CharacterRepository characterRepository,
+                           ChapterOutlineRepository chapterOutlineRepository,
+                           StoryOutlineRepository storyOutlineRepository,
+                           VolumeOutlineRepository volumeOutlineRepository,
+                           ProofreadingReportRepository proofreadingReportRepository,
+                           WorldSettingRepository worldSettingRepository,
+                           AutoRunStepConfigRepository autoRunStepConfigRepository) {
         this.projectRepository = projectRepository;
         this.workflowStateRepository = workflowStateRepository;
         this.modelConfigRepository = modelConfigRepository;
         this.aiUsageStatRepository = aiUsageStatRepository;
         this.chapterRepository = chapterRepository;
         this.stepGuidanceRepository = stepGuidanceRepository;
+        this.characterRepository = characterRepository;
+        this.chapterOutlineRepository = chapterOutlineRepository;
+        this.storyOutlineRepository = storyOutlineRepository;
+        this.volumeOutlineRepository = volumeOutlineRepository;
+        this.proofreadingReportRepository = proofreadingReportRepository;
+        this.worldSettingRepository = worldSettingRepository;
+        this.autoRunStepConfigRepository = autoRunStepConfigRepository;
     }
 
     @GetMapping("/")
@@ -57,6 +87,7 @@ public class ProjectController {
     public String newProject(Model model) {
         model.addAttribute("form", new ProjectForm());
         model.addAttribute("genres", Genre.values());
+        model.addAttribute("projectStatuses", ProjectStatus.values());
         model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrue());
         model.addAttribute("workflowSteps", WorkflowStep.values());
         model.addAttribute("allProjects", projectRepository.findAllByOrderByUpdatedAtDesc());
@@ -68,6 +99,7 @@ public class ProjectController {
                                BindingResult result, Model model) {
         if (result.hasErrors()) {
             model.addAttribute("genres", Genre.values());
+            model.addAttribute("projectStatuses", ProjectStatus.values());
             model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrue());
             model.addAttribute("workflowSteps", WorkflowStep.values());
             model.addAttribute("allProjects", projectRepository.findAllByOrderByUpdatedAtDesc());
@@ -129,6 +161,7 @@ public class ProjectController {
         form.setCharacterCount(project.getCharacterCount());
         form.setDefaultModelConfigId(project.getDefaultModelConfigId());
         form.setAutoMode(project.isAutoMode());
+        form.setProjectStatus(project.getStatus());
 
         // Load step guidances
         List<StepGuidanceEntity> guidances = stepGuidanceRepository.findByProjectId(id);
@@ -141,6 +174,7 @@ public class ProjectController {
         model.addAttribute("form", form);
         model.addAttribute("projectId", id);
         model.addAttribute("genres", Genre.values());
+        model.addAttribute("projectStatuses", ProjectStatus.values());
         model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrue());
         model.addAttribute("workflowSteps", WorkflowStep.values());
         model.addAttribute("allProjects", projectRepository.findAllByOrderByUpdatedAtDesc());
@@ -154,6 +188,7 @@ public class ProjectController {
         if (result.hasErrors()) {
             model.addAttribute("projectId", id);
             model.addAttribute("genres", Genre.values());
+            model.addAttribute("projectStatuses", ProjectStatus.values());
             model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrue());
             model.addAttribute("workflowSteps", WorkflowStep.values());
             model.addAttribute("allProjects", projectRepository.findAllByOrderByUpdatedAtDesc());
@@ -172,6 +207,9 @@ public class ProjectController {
         project.setCharacterCount(form.getCharacterCount() > 0 ? form.getCharacterCount() : 5);
         project.setDefaultModelConfigId(form.getDefaultModelConfigId());
         project.setAutoMode(form.isAutoMode());
+        if (form.getProjectStatus() != null) {
+            project.setStatus(form.getProjectStatus());
+        }
         projectRepository.save(project);
 
         // Save step guidances
@@ -211,8 +249,27 @@ public class ProjectController {
     }
 
     @PostMapping("/projects/{id}/delete")
+    @Transactional
     public String deleteProject(@PathVariable Long id) {
+        ProjectEntity project = projectRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found: " + id));
+        if (project.getStatus() != ProjectStatus.ABANDONED) {
+            throw new IllegalStateException("只能删除已废弃的项目");
+        }
+
+        workflowStateRepository.deleteByProjectId(id);
+        chapterRepository.deleteByProjectId(id);
+        characterRepository.deleteByProjectId(id);
+        chapterOutlineRepository.deleteByProjectId(id);
+        storyOutlineRepository.deleteByProjectId(id);
+        volumeOutlineRepository.deleteByProjectId(id);
+        proofreadingReportRepository.deleteByProjectId(id);
+        stepGuidanceRepository.deleteByProjectId(id);
+        aiUsageStatRepository.deleteByProjectId(id);
+        autoRunStepConfigRepository.deleteByProjectId(id);
+        worldSettingRepository.deleteByProjectId(id);
         projectRepository.deleteById(id);
+
         return "redirect:/";
     }
 
@@ -267,6 +324,8 @@ public class ProjectController {
 
         private boolean autoMode = true;
 
+        private ProjectStatus projectStatus;
+
         private Map<String, String> stepGuidances = new HashMap<>();
 
         public String getTitle() { return title; }
@@ -298,6 +357,9 @@ public class ProjectController {
 
         public boolean isAutoMode() { return autoMode; }
         public void setAutoMode(boolean autoMode) { this.autoMode = autoMode; }
+
+        public ProjectStatus getProjectStatus() { return projectStatus; }
+        public void setProjectStatus(ProjectStatus projectStatus) { this.projectStatus = projectStatus; }
 
         public Map<String, String> getStepGuidances() { return stepGuidances; }
         public void setStepGuidances(Map<String, String> stepGuidances) { this.stepGuidances = stepGuidances; }

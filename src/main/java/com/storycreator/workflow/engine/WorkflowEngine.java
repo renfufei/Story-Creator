@@ -18,7 +18,10 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
+import reactor.util.retry.Retry;
 
+import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -209,6 +212,9 @@ public class WorkflowEngine {
                                 content = "..." + content.substring(content.length() - 300);
                             }
                             context.setPreviousChapterContent(content);
+                            if (prev.getCharacterStates() != null && !prev.getCharacterStates().isBlank()) {
+                                context.setPreviousCharacterStates(prev.getCharacterStates());
+                            }
                         });
             }
         }
@@ -225,6 +231,17 @@ public class WorkflowEngine {
     }
 
     public Flux<String> generate(Long projectId, WorkflowStep step, int chapterNumber) {
+        // Check project status — disallow generation for completed/abandoned projects
+        ProjectEntity proj = projectRepository.findById(projectId).orElse(null);
+        if (proj != null && proj.getStatus() != null) {
+            if (proj.getStatus() == com.storycreator.core.domain.ProjectStatus.COMPLETED) {
+                return Flux.error(new IllegalStateException("项目状态为「已完本」，无法进行AI生成"));
+            }
+            if (proj.getStatus() == com.storycreator.core.domain.ProjectStatus.ABANDONED) {
+                return Flux.error(new IllegalStateException("项目状态为「已废弃」，无法进行AI生成"));
+            }
+        }
+
         WorkflowStepHandler handler = handlers.get(step);
         if (handler == null) {
             return Flux.error(new IllegalArgumentException("No handler for step: " + step));
@@ -415,6 +432,7 @@ public class WorkflowEngine {
         card.setProjectId(projectId);
         card.setSortOrder(sortOrder);
         card.setContent(content);
+        card.setStatus("GENERATED");
 
         // Parse structured fields
         card.setName(truncateNullable(extractField(content, "姓名"), 100));
@@ -476,20 +494,24 @@ public class WorkflowEngine {
                 简介：%s
                 【世界观摘要】%s
                 %s
-                请严格按以下格式输出角色信息卡：
+                请严格按以下纯文本格式输出角色信息卡，每个字段独占一行，【字段名】后直接写内容：
 
-                【姓名】（角色全名）
-                【性别】（男/女/其他）
-                【年龄】（具体数字或描述性年龄）
-                【身份】（角色在故事中的身份/职业）
-                【性格】（2-3个关键词 + 简短描述）
-                【外貌】（简洁的外貌特征描述）
-                【背景】（角色的前史和来历）
-                【动机】（角色在故事中的核心驱动力）
-                【能力】（角色的特长或能力）
-                【关系】（与其他角色的关键关系）
+                【姓名】角色全名
+                【性别】男/女/其他
+                【年龄】具体数字或描述性年龄
+                【身份】角色在故事中的身份/职业
+                【性格】2-3个关键词加简短描述
+                【外貌】简洁的外貌特征描述
+                【背景】角色的前史和来历
+                【动机】角色在故事中的核心驱动力
+                【能力】角色的特长或能力
+                【关系】与其他角色的关键关系
 
-                注意：这是第%d个角色（共%d个），请确保与其他角色有差异化设计，角色之间有张力。用中文输出。
+                注意：
+                1. 这是第%d个角色（共%d个），请确保与其他角色有差异化设计，角色之间有张力。
+                2. 禁止使用markdown格式（如**加粗**、#标题等），只用纯文本。
+                3. 每个【字段】必须另起一行，不要将多个字段写在同一行。
+                4. 用中文输出。
                 """,
                 cardNum, totalCards,
                 baseContext.getTitle(),
@@ -507,7 +529,7 @@ public class WorkflowEngine {
         AiRequest request = AiRequest.builder()
                 .systemPrompt(systemPrompt)
                 .userPrompt(prompt)
-                .maxTokens(1024)
+                .maxTokens(2048)
                 .temperature(0.8)
                 .build();
         applyResolvedConfig(request, resolved);
@@ -726,6 +748,7 @@ public class WorkflowEngine {
                                         : "";
                                 String volumeArc = volumeArcSummaries.get(vol.volumeNumber() - 1);
 
+                                updateChapterOutlineStatus(projectId, chapterNum, "REFINING");
                                 log.info("[P{}] Chapter {} refining (vol{})", projectId, chapterNum, vol.volumeNumber());
                                 long refineStart = System.currentTimeMillis();
                                 StringBuilder refineContent = new StringBuilder();
@@ -741,13 +764,15 @@ public class WorkflowEngine {
                                             chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, chapterNum)
                                                     .ifPresent(entity -> {
                                                         entity.setRefined(true);
+                                                        entity.setStatus("REFINED");
                                                         chapterOutlineRepository.save(entity);
                                                     });
                                             long refineElapsed = System.currentTimeMillis() - refineStart;
                                             log.info("[P{}] Chapter {} refined ({}s, {}chars)", projectId, chapterNum,
                                                     refineElapsed / 1000, text.length());
                                             aiUsageTracker.record(projectId, resolved.modelId(), resolved.provider().getProviderName(), refineElapsed);
-                                        });
+                                        })
+                                        .doOnError(e -> updateChapterOutlineStatus(projectId, chapterNum, "FAILED"));
 
                                 return Flux.just(refineMarker).concatWith(refineFlux);
                             }));
@@ -863,7 +888,7 @@ public class WorkflowEngine {
                 3. 关键转折点（1-2个）
                 4. 与前后卷的衔接（如有前卷，承接前文；暗示后续发展）
 
-                简洁概括，300-500字。用中文输出。
+                简洁概括，300-500字。用中文输出。请使用纯文本格式，不要使用Markdown标记（如星号、井号等）。
                 """,
                 vol.volumeNumber(), vol.chapterStart(), vol.chapterEnd(), totalChapters,
                 baseContext.getTitle(),
@@ -886,7 +911,8 @@ public class WorkflowEngine {
                 .build();
         applyResolvedConfig(request, resolved);
 
-        return resolved.provider().streamText(request);
+        return Flux.defer(() -> resolved.provider().streamText(request))
+                .retryWhen(retryOnConnectionReset("VolumeArc-" + vol.volumeNumber()));
     }
 
     private Flux<String> generateSingleChapterOutlineV2(WorkflowContext baseContext,
@@ -923,13 +949,15 @@ public class WorkflowEngine {
                 【主要角色】%s
                 【当前阶段】%s（第%d/%d章）
                 %s
-                请严格按以下格式输出本章大纲，不要改变格式：
+                请严格按以下格式输出本章大纲，不要改变格式，不要输出任何分析、解释、策划笔记、前言或总结：
 
                 **标题：**（4-10字的章节标题）
 
                 **出场角色：**（从主要角色中选择本章涉及的角色姓名，逗号分隔）
 
                 （用2-4句话描述本章核心事件、涉及角色、情绪基调和章末悬念，100-200字。注意与前后章节的连贯性和本卷弧线的一致性。）
+
+                注意：直接输出上述格式内容即可，不要添加任何其他文字。
                 """,
                 chapterNum, totalChapters, vol.chapterStart(), vol.chapterEnd(),
                 baseContext.getTitle(),
@@ -941,7 +969,7 @@ public class WorkflowEngine {
 
         String systemPrompt = getSystemPromptForStep(WorkflowStep.OUTLINE_GENERATION);
         if (systemPrompt == null) {
-            systemPrompt = "你是一位网络小说策划，请简洁地生成单章大纲。确保与前后章节连贯，符合本卷故事弧线。";
+            systemPrompt = "你是一位网络小说策划，请简洁地生成单章大纲。直接输出大纲内容，禁止输出任何分析、评论或解释说明。";
         }
 
         AiRequest request = AiRequest.builder()
@@ -952,7 +980,8 @@ public class WorkflowEngine {
                 .build();
         applyResolvedConfig(request, resolved);
 
-        return resolved.provider().streamText(request);
+        return Flux.defer(() -> resolved.provider().streamText(request))
+                .retryWhen(retryOnConnectionReset("ChapterOutline-" + chapterNum));
     }
 
     private Flux<String> generateSingleChapterRefine(WorkflowContext baseContext,
@@ -989,7 +1018,7 @@ public class WorkflowEngine {
                 3. 确保章节间过渡自然、逻辑连贯
                 4. 如发现本章内容与前后章高度重复，调整本章侧重点使其差异化
 
-                请严格按以下格式输出精修后的大纲，不要改变格式：
+                请严格按以下格式直接输出精修后的大纲，不要改变格式。禁止输出任何分析过程、精修说明、策划笔记、修改理由或前言后语，只输出最终大纲本身：
 
                 **标题：**（4-10字的章节标题，可沿用或微调原标题）
 
@@ -1006,7 +1035,7 @@ public class WorkflowEngine {
 
         String systemPrompt = getSystemPromptForStep(WorkflowStep.OUTLINE_GENERATION);
         if (systemPrompt == null) {
-            systemPrompt = "你是一位网络小说策划，正在对章节大纲进行精修校对。请确保各章节间内容不重复、逻辑连贯。";
+            systemPrompt = "你是一位网络小说策划，正在对章节大纲进行精修校对。直接输出精修后的大纲内容，禁止输出任何分析过程、修改说明或策划笔记。";
         }
 
         AiRequest request = AiRequest.builder()
@@ -1017,7 +1046,8 @@ public class WorkflowEngine {
                 .build();
         applyResolvedConfig(request, resolved);
 
-        return resolved.provider().streamText(request);
+        return Flux.defer(() -> resolved.provider().streamText(request))
+                .retryWhen(retryOnConnectionReset("ChapterRefine-" + chapterNum));
     }
 
     private Flux<String> generateStorySummary(WorkflowContext baseContext, int totalChapters,
@@ -1069,7 +1099,34 @@ public class WorkflowEngine {
                 .build();
         applyResolvedConfig(request, resolved);
 
-        return resolved.provider().streamText(request);
+        return Flux.defer(() -> resolved.provider().streamText(request))
+                .retryWhen(retryOnConnectionReset("StorySummary"));
+    }
+
+    // --- Retry helper for transient network errors ---
+
+    private Retry retryOnConnectionReset(String context) {
+        return Retry.backoff(3, Duration.ofSeconds(2))
+                .maxBackoff(Duration.ofSeconds(10))
+                .filter(this::isRetryableError)
+                .doBeforeRetry(signal -> log.warn("[{}] Retrying due to transient error (attempt {}): {}",
+                        context, signal.totalRetries() + 1, signal.failure().getMessage()));
+    }
+
+    private boolean isRetryableError(Throwable e) {
+        if (e instanceof IOException) return true;
+        String msg = e.getMessage();
+        if (msg == null) {
+            return e.getCause() instanceof IOException;
+        }
+        return msg.contains("Connection reset")
+                || msg.contains("connection reset")
+                || msg.contains("Connection refused")
+                || msg.contains("Connection timed out")
+                || msg.contains("Connection prematurely closed")
+                || msg.contains("premature close")
+                || msg.contains("GOAWAY")
+                || msg.contains("connection was aborted");
     }
 
     // --- Incremental save methods for outline generation ---
@@ -1125,6 +1182,30 @@ public class WorkflowEngine {
     }
 
     private void saveSingleChapterOutline(Long projectId, int chapterNum, int volumeNum, String content) {
+        // Post-processing: strip AI commentary before/after the actual outline
+        String text = content.strip();
+
+        // Strip leading commentary before the actual outline start
+        int titleIdx = text.indexOf("**标题：**");
+        if (titleIdx < 0) titleIdx = text.indexOf("**标题:**");
+        if (titleIdx > 0) {
+            text = text.substring(titleIdx);
+        }
+
+        // Strip trailing commentary after the outline body
+        String[] trailingPatterns = {"---", "策划笔记", "修改说明", "精修逻辑", "【备注】", "【说明】", "注：", "注意："};
+        for (String pattern : trailingPatterns) {
+            int idx = text.lastIndexOf(pattern);
+            if (idx > 0) {
+                int newlineIdx = text.lastIndexOf('\n', idx);
+                if (newlineIdx >= 0 && text.substring(newlineIdx, idx).isBlank()) {
+                    text = text.substring(0, newlineIdx).stripTrailing();
+                }
+            }
+        }
+
+        content = text;
+
         Pattern titlePattern = Pattern.compile("\\*\\*标题[：:]\\*\\*\\s*(.+)");
         Pattern characterPattern = Pattern.compile("\\*\\*出场角色[：:]\\*\\*\\s*(.+)");
 
@@ -1252,6 +1333,67 @@ public class WorkflowEngine {
         }
     }
 
+    public void generateCharacterStates(Long projectId, int chapterNumber) {
+        ChapterEntity chapter = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber).orElse(null);
+        if (chapter == null || chapter.getContent() == null || chapter.getContent().isBlank()) return;
+
+        AiProviderRouter.ResolvedModel resolved = resolveModelForProject(projectId);
+
+        // Build content excerpt (first 2000 + last 1000 chars for long chapters)
+        String content = chapter.getContent();
+        String excerpt;
+        if (content.length() > 3000) {
+            excerpt = content.substring(0, 2000) + "\n...\n" + content.substring(content.length() - 1000);
+        } else {
+            excerpt = content;
+        }
+
+        // Load previous chapter states as reference
+        String prevStates = "";
+        if (chapterNumber > 1) {
+            prevStates = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber - 1)
+                    .map(ChapterEntity::getCharacterStates)
+                    .filter(s -> s != null && !s.isBlank())
+                    .orElse("");
+        }
+
+        // Load character names from outline
+        String charNames = chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
+                .map(ChapterOutlineEntity::getCharacterNames)
+                .filter(s -> s != null && !s.isBlank())
+                .orElse("");
+
+        String userPrompt = "请根据以下章节内容，汇总本章结束时各出场角色的当前状态。\n"
+                + "包括：修为等级、重要装备/宝物、所处位置、关键关系变化等。\n"
+                + "每个角色一行，格式「角色名：状态描述」，每行不超过50字。只输出状态信息，不要其他内容。\n"
+                + "请使用纯文本格式，不要使用Markdown标记。\n\n"
+                + (charNames.isBlank() ? "" : "【本章出场角色】\n" + charNames + "\n\n")
+                + (prevStates.isBlank() ? "" : "【前章角色状态（参考）】\n" + prevStates + "\n\n")
+                + "【章节内容】\n" + excerpt;
+
+        AiRequest request = AiRequest.builder()
+                .systemPrompt("你是一位小说编辑助手，擅长从章节内容中提取角色状态变化。请简洁准确地汇总。")
+                .userPrompt(userPrompt)
+                .maxTokens(500)
+                .temperature(0.3)
+                .build();
+        applyResolvedConfig(request, resolved);
+
+        StringBuilder result = new StringBuilder();
+        long start = System.currentTimeMillis();
+        resolved.provider().streamText(request)
+                .doOnNext(result::append)
+                .blockLast();
+        aiUsageTracker.record(projectId, resolved.modelId(), resolved.provider().getProviderName(), System.currentTimeMillis() - start);
+
+        String states = result.toString().trim();
+        if (!states.isBlank()) {
+            chapter.setCharacterStates(states);
+            chapterRepository.save(chapter);
+            log.info("[P{}] Generated character states for chapter {} ({}chars)", projectId, chapterNumber, states.length());
+        }
+    }
+
     @Transactional
     public void ensureWorkflowStateExists(Long projectId, WorkflowStep step) {
         workflowStateRepository.findByProjectIdAndStep(projectId, step)
@@ -1330,9 +1472,48 @@ public class WorkflowEngine {
         // Update specific tables with edited content
         switch (step) {
             case WORLD_BUILDING -> saveWorldSetting(projectId, editedContent);
-            case CHARACTER_DESIGN -> saveCharacters(projectId, editedContent);
+            case CHARACTER_DESIGN -> saveCharacterOverviewOnly(projectId, editedContent);
             case OUTLINE_GENERATION -> saveOutline(projectId, editedContent);
         }
+    }
+
+    /**
+     * Save only the overview portion from the edited content, without touching individual character cards.
+     */
+    private void saveCharacterOverviewOnly(Long projectId, String content) {
+        if (content == null || content.isBlank()) return;
+
+        // Extract overview content from the full text
+        String overviewContent = null;
+        String[] segments = content.split("\\n+\\s*-{3,}\\s*\\n+");
+        for (String segment : segments) {
+            if (segment.contains("## 角色总览")) {
+                overviewContent = segment.replaceFirst("(?s).*?## 角色总览\\s*", "").strip();
+                break;
+            }
+        }
+
+        if (overviewContent == null) {
+            // No overview section found — treat entire content as overview
+            overviewContent = content.strip();
+        }
+
+        // Update or create the overview entity (sortOrder=0) only
+        List<CharacterEntity> all = characterRepository.findByProjectIdOrderBySortOrder(projectId);
+        CharacterEntity overview = all.stream()
+                .filter(c -> c.getSortOrder() == 0)
+                .findFirst()
+                .orElseGet(() -> {
+                    CharacterEntity o = new CharacterEntity();
+                    o.setProjectId(projectId);
+                    o.setName("全部角色");
+                    o.setSortOrder(0);
+                    return o;
+                });
+        overview.setContent(overviewContent);
+        String overviewSummary = contextSummaryService.summarizeCharacterOverview(projectId, overviewContent);
+        if (overviewSummary != null) overview.setSummary(overviewSummary);
+        characterRepository.save(overview);
     }
 
     @Transactional
@@ -1379,6 +1560,10 @@ public class WorkflowEngine {
         for (ChapterEntity ch : chapters) {
             if (shouldStop.getAsBoolean()) return;
             if (ch.getContent() == null || ch.getContent().isBlank()) continue;
+            if (ch.getTitle() != null && !ch.getTitle().isBlank()) {
+                log.info("Chapter {} already has title '{}', skipping", ch.getChapterNumber(), ch.getTitle());
+                continue;
+            }
 
             String contentPreview = ch.getContent().length() > 1000
                     ? ch.getContent().substring(0, 1000) : ch.getContent();
@@ -1891,6 +2076,7 @@ public class WorkflowEngine {
             card.setProjectId(projectId);
             card.setSortOrder(sortOrder);
             card.setContent(segment);
+            card.setStatus("GENERATED");
 
             // Extract structured fields from 【bracket】 format
             card.setName(truncateNullable(extractField(segment, "姓名"), 100));
@@ -1913,12 +2099,29 @@ public class WorkflowEngine {
         }
     }
 
+    private String cleanMarkdownForParsing(String text) {
+        if (text == null) return null;
+        // Remove bold/italic markdown markers
+        String cleaned = text.replaceAll("\\*{1,3}", "");
+        cleaned = cleaned.replaceAll("_{1,3}", "");
+        // Remove heading markers
+        cleaned = cleaned.replaceAll("(?m)^#{1,6}\\s*", "");
+        // Ensure each 【 starts on a new line
+        cleaned = cleaned.replaceAll("(?<!^)(?<!\\n)【", "\n【");
+        return cleaned;
+    }
+
     private String extractField(String text, String fieldName) {
+        String cleaned = cleanMarkdownForParsing(text);
+        if (cleaned == null) return null;
         java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
-                "【" + fieldName + "】\\s*(.+?)(?=\\n【|$)", java.util.regex.Pattern.DOTALL);
-        java.util.regex.Matcher matcher = pattern.matcher(text);
+                "【" + fieldName + "】[：:]?\\s*(.+?)(?=\\n【|\\z)", java.util.regex.Pattern.DOTALL);
+        java.util.regex.Matcher matcher = pattern.matcher(cleaned);
         if (matcher.find()) {
-            return matcher.group(1).trim();
+            String result = matcher.group(1).trim();
+            // Remove any residual markdown markers
+            result = result.replaceAll("\\*+", "");
+            return result;
         }
         return null;
     }
@@ -2125,6 +2328,160 @@ public class WorkflowEngine {
         chapter.setContent(content);
         chapter.setWordCount(content != null ? content.length() : 0);
         chapter.setStatus(StepStatus.GENERATED);
+        // Apply outline title if chapter has no title
+        if (chapter.getTitle() == null || chapter.getTitle().isBlank()) {
+            chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
+                    .map(ChapterOutlineEntity::getTitle)
+                    .filter(t -> t != null && !t.isBlank())
+                    .ifPresent(chapter::setTitle);
+        }
         chapterRepository.save(chapter);
+    }
+
+    // === Character Refine ===
+
+    public Flux<String> refineAllCharacters(Long projectId) {
+        // Check project status
+        ProjectEntity proj = projectRepository.findById(projectId).orElse(null);
+        if (proj != null && proj.getStatus() != null) {
+            if (proj.getStatus() == com.storycreator.core.domain.ProjectStatus.COMPLETED) {
+                return Flux.error(new IllegalStateException("项目状态为「已完本」，无法进行AI生成"));
+            }
+            if (proj.getStatus() == com.storycreator.core.domain.ProjectStatus.ABANDONED) {
+                return Flux.error(new IllegalStateException("项目状态为「已废弃」，无法进行AI生成"));
+            }
+        }
+
+        List<CharacterEntity> cards = characterRepository
+                .findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0)
+                .stream()
+                .filter(c -> !"REFINING".equals(c.getStatus()))
+                .toList();
+
+        if (cards.isEmpty()) {
+            return Flux.just("[[CHAR:REFINE:DONE]]");
+        }
+
+        // Build summaries list for context
+        List<String> allSummaries = cards.stream()
+                .map(c -> c.getName() + " - " + (c.getRole() != null ? c.getRole() : "") + " - " + (c.getPersonality() != null ? c.getPersonality() : ""))
+                .toList();
+
+        // Load world setting and project info
+        WorkflowContext ctx = buildContext(projectId, 0);
+        AiProviderRouter.ResolvedModel resolved = providerRouter.resolveModel(projectId, WorkflowStep.CHARACTER_DESIGN);
+
+        return Flux.range(0, cards.size())
+                .concatMap(idx -> {
+                    CharacterEntity card = cards.get(idx);
+                    // Mark as REFINING
+                    card.setStatus("REFINING");
+                    characterRepository.save(card);
+
+                    Flux<String> marker = Flux.just("[[CHAR:REFINE:" + (idx + 1) + "]]");
+                    StringBuilder refined = new StringBuilder();
+
+                    Flux<String> refineFlux = generateSingleRefine(ctx, card, allSummaries, resolved)
+                            .doOnNext(refined::append)
+                            .doOnComplete(() -> {
+                                String text = refined.toString();
+                                // Parse refined fields and update
+                                card.setContent(text);
+                                card.setName(truncateNullable(extractField(text, "姓名"), 100));
+                                if (card.getName() == null || card.getName().isBlank()) card.setName("角色" + card.getSortOrder());
+                                card.setGender(truncateNullable(extractField(text, "性别"), 20));
+                                card.setAge(truncateNullable(extractField(text, "年龄"), 20));
+                                card.setRole(truncateNullable(extractField(text, "身份"), 50));
+                                card.setPersonality(truncateNullable(extractField(text, "性格"), 500));
+                                card.setAppearance(truncateNullable(extractField(text, "外貌"), 500));
+                                card.setBackground(extractField(text, "背景"));
+                                card.setMotivation(truncateNullable(extractField(text, "动机"), 500));
+                                card.setAbilities(truncateNullable(extractField(text, "能力"), 500));
+                                card.setRelationships(truncateNullable(extractField(text, "关系"), 500));
+                                // Extract summary field
+                                String summaryField = extractField(text, "概要");
+                                if (summaryField != null && !summaryField.isBlank()) {
+                                    card.setSummary(truncateNullable(summaryField, 300));
+                                } else {
+                                    // Fallback: use AI to summarize
+                                    String summary = contextSummaryService.summarizeCharacterCard(projectId, text);
+                                    if (summary != null) card.setSummary(summary);
+                                }
+                                card.setStatus("REFINED");
+                                characterRepository.save(card);
+                                log.info("[P{}] Character {} refined: {}", projectId, card.getSortOrder(), card.getName());
+                            });
+
+                    return marker.concatWith(refineFlux);
+                })
+                .concatWith(Flux.just("[[CHAR:REFINE:DONE]]"));
+    }
+
+    private Flux<String> generateSingleRefine(WorkflowContext ctx, CharacterEntity card,
+                                               List<String> allSummaries, AiProviderRouter.ResolvedModel resolved) {
+        StringBuilder summariesText = new StringBuilder();
+        for (int i = 0; i < allSummaries.size(); i++) {
+            summariesText.append(i + 1).append(". ").append(allSummaries.get(i)).append("\n");
+        }
+
+        String prompt = String.format("""
+                你是一位资深网络小说角色设计师。请对以下角色卡片进行精修，基于全局世界观和其他角色信息进行一致性校验和细节丰富。
+
+                【小说信息】标题：%s，题材：%s
+                简介：%s
+                【世界观摘要】%s
+
+                【全部角色概要】
+                %s
+
+                【当前角色完整卡片】
+                %s
+
+                精修要求：
+                1. 校验与世界观一致性（设定、能力体系、时代背景等）
+                2. 校验与其他角色关系描述互相呼应
+                3. 丰富细节，使人物更加立体（增加具体事例、细节描写）
+                4. 保持核心设定不变（姓名、性别、基本身份）
+
+                请严格按以下纯文本格式输出精修后的角色信息卡：
+
+                【姓名】角色全名
+                【性别】男/女/其他
+                【年龄】具体数字或描述性年龄
+                【身份】角色在故事中的身份/职业
+                【性格】2-3个关键词加简短描述
+                【外貌】简洁的外貌特征描述
+                【背景】角色的前史和来历
+                【动机】角色在故事中的核心驱动力
+                【能力】角色的特长或能力
+                【关系】与其他角色的关键关系
+                【概要】用不超过300字概括该角色的核心定位、在故事中的作用和关键特征
+
+                注意：
+                1. 禁止使用markdown格式（如**加粗**、#标题等），只用纯文本。
+                2. 每个【字段】必须另起一行。
+                3. 用中文输出。
+                """,
+                ctx.getTitle(),
+                ctx.getGenre() != null ? ctx.getGenre().getDisplayName() : "",
+                ctx.getDescription() != null ? ctx.getDescription() : "",
+                truncate(ctx.getWorldSetting(), 600),
+                summariesText.toString(),
+                card.getContent() != null ? card.getContent() : "(无内容)");
+
+        String systemPrompt = getSystemPromptForStep(WorkflowStep.CHARACTER_DESIGN);
+        if (systemPrompt == null) {
+            systemPrompt = "你是一位网络小说角色设计师，请精修角色信息卡，确保一致性和细节丰富。";
+        }
+
+        AiRequest request = AiRequest.builder()
+                .systemPrompt(systemPrompt)
+                .userPrompt(prompt)
+                .maxTokens(2048)
+                .temperature(0.7)
+                .build();
+        applyResolvedConfig(request, resolved);
+
+        return resolved.provider().streamText(request);
     }
 }

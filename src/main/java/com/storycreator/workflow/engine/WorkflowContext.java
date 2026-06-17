@@ -32,6 +32,7 @@ public class WorkflowContext {
     private String polishNote;
     private String characterCards;
     private String stepGuidance;
+    private String previousCharacterStates;
 
     public Map<String, String> toTemplateVariables() {
         Map<String, String> vars = new HashMap<>();
@@ -59,6 +60,8 @@ public class WorkflowContext {
                 ? "【本章涉及角色详情】\n" + characterCards : "");
         vars.put("stepGuidance", stepGuidance != null && !stepGuidance.isBlank()
                 ? "【创作指导】\n" + stepGuidance + "\n请在生成时参考以上指导意见。" : "");
+        vars.put("previousCharacterStates", previousCharacterStates != null && !previousCharacterStates.isBlank()
+                ? "【前章角色状态】\n" + previousCharacterStates : "");
         return vars;
     }
 
@@ -134,4 +137,7 @@ public class WorkflowContext {
 
     public String getStepGuidance() { return stepGuidance; }
     public void setStepGuidance(String stepGuidance) { this.stepGuidance = stepGuidance; }
+
+    public String getPreviousCharacterStates() { return previousCharacterStates; }
+    public void setPreviousCharacterStates(String previousCharacterStates) { this.previousCharacterStates = previousCharacterStates; }
 }

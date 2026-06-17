@@ -11,4 +11,6 @@ public interface AiUsageStatRepository extends JpaRepository<AiUsageStatEntity, 
     List<AiUsageStatEntity> findByProjectIdOrderByTotalDurationMsDesc(Long projectId);
 
     Optional<AiUsageStatEntity> findByProjectIdAndModelId(Long projectId, String modelId);
+
+    void deleteByProjectId(Long projectId);
 }

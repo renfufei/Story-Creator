@@ -1,5 +1,8 @@
 package com.storycreator.core.domain;
 
+import java.util.Arrays;
+import java.util.List;
+
 public enum WorkflowStep {
     WORLD_BUILDING("世界观设定", 1),
     CHARACTER_DESIGN("角色设计", 2),
@@ -14,6 +17,18 @@ public enum WorkflowStep {
     WorkflowStep(String displayName, int order) {
         this.displayName = displayName;
         this.order = order;
+    }
+
+    /**
+     * Returns the statuses that can be manually set for this step in the workflow state modal.
+     * Filters by manualSettable flag, and PARTIALLY_DONE is only applicable to multi-chapter steps.
+     */
+    public List<StepStatus> getAllowedManualStatuses() {
+        boolean multiChapter = (this == CHAPTER_WRITING || this == POLISHING || this == PROOFREADING);
+        return Arrays.stream(StepStatus.values())
+                .filter(StepStatus::isManualSettable)
+                .filter(s -> s != StepStatus.PARTIALLY_DONE || multiChapter)
+                .toList();
     }
 
     public String getDisplayName() {

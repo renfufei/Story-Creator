@@ -52,6 +52,9 @@ public class ChapterEntity {
     @Column(name = "proofread_fix_status", length = 30)
     private StepStatus proofreadFixStatus = StepStatus.NOT_STARTED;
 
+    @Column(name = "character_states", columnDefinition = "TEXT")
+    private String characterStates;
+
     @Column(name = "plot_summary", length = 500)
     private String plotSummary;
 
@@ -110,6 +113,9 @@ public class ChapterEntity {
 
     public StepStatus getProofreadFixStatus() { return proofreadFixStatus; }
     public void setProofreadFixStatus(StepStatus proofreadFixStatus) { this.proofreadFixStatus = proofreadFixStatus; }
+
+    public String getCharacterStates() { return characterStates; }
+    public void setCharacterStates(String characterStates) { this.characterStates = characterStates; }
 
     public String getPlotSummary() { return plotSummary; }
     public void setPlotSummary(String plotSummary) { this.plotSummary = plotSummary; }
