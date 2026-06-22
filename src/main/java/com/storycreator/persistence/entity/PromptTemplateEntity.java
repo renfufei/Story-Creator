@@ -1,6 +1,7 @@
 package com.storycreator.persistence.entity;
 
 import com.storycreator.core.domain.Genre;
+import com.storycreator.core.domain.PromptSubStep;
 import com.storycreator.core.domain.WorkflowStep;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
@@ -20,6 +21,10 @@ public class PromptTemplateEntity {
     @Enumerated(EnumType.STRING)
     @Column(length = 50)
     private Genre genre;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "sub_step", length = 50)
+    private PromptSubStep subStep;
 
     @Column(nullable = false, length = 100)
     private String name;
@@ -64,6 +69,9 @@ public class PromptTemplateEntity {
 
     public Genre getGenre() { return genre; }
     public void setGenre(Genre genre) { this.genre = genre; }
+
+    public PromptSubStep getSubStep() { return subStep; }
+    public void setSubStep(PromptSubStep subStep) { this.subStep = subStep; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

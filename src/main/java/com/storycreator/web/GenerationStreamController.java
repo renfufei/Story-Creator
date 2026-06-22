@@ -5,6 +5,7 @@ import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.persistence.repository.WorkflowStateRepository;
 import com.storycreator.workflow.background.BackgroundGenerationService;
 import com.storycreator.workflow.background.BackgroundGenerationService.GenerationTask;
+import com.storycreator.workflow.engine.WorkflowEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -26,12 +27,15 @@ public class GenerationStreamController {
 
     private final BackgroundGenerationService bgService;
     private final WorkflowStateRepository workflowStateRepository;
+    private final WorkflowEngine workflowEngine;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     public GenerationStreamController(BackgroundGenerationService bgService,
-                                       WorkflowStateRepository workflowStateRepository) {
+                                       WorkflowStateRepository workflowStateRepository,
+                                       WorkflowEngine workflowEngine) {
         this.bgService = bgService;
         this.workflowStateRepository = workflowStateRepository;
+        this.workflowEngine = workflowEngine;
     }
 
     @PostMapping("/start")
@@ -39,7 +43,19 @@ public class GenerationStreamController {
                                                       @RequestParam WorkflowStep step,
                                                       @RequestParam(defaultValue = "0") int chapter) {
         try {
-            bgService.startGeneration(projectId, step, chapter);
+            Runnable postHook = null;
+            if (step == WorkflowStep.CHAPTER_WRITING && chapter > 0) {
+                final int chapterNum = chapter;
+                postHook = () -> {
+                    try {
+                        workflowEngine.generateCharacterStates(projectId, chapterNum);
+                    } catch (Exception e) {
+                        log.warn("[P{}] Post-hook generateCharacterStates failed ch={}: {}",
+                                projectId, chapterNum, e.getMessage());
+                    }
+                };
+            }
+            bgService.startGeneration(projectId, step, chapter, postHook);
             return ResponseEntity.ok(Map.of("status", "ok"));
         } catch (Exception e) {
             log.error("[P{}] bg-gen start failed step={}: {}", projectId, step, e.getMessage());
@@ -67,6 +83,16 @@ public class GenerationStreamController {
                 "bgActive", bgActive,
                 "status", dbStatus
         ));
+    }
+
+    @GetMapping("/active-chapter")
+    public ResponseEntity<Map<String, Object>> activeChapter(@PathVariable Long projectId,
+                                                              @RequestParam WorkflowStep step) {
+        var activeChapter = bgService.getActiveChapterForStep(projectId, step);
+        if (activeChapter.isPresent()) {
+            return ResponseEntity.ok(Map.of("bgActive", true, "chapter", activeChapter.get()));
+        }
+        return ResponseEntity.ok(Map.of("bgActive", false, "chapter", 0));
     }
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

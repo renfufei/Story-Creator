@@ -26,9 +26,6 @@ public class OutlineGenerationHandler implements WorkflowStepHandler {
         String prompt = promptRegistry.resolveTemplate(template, context.toTemplateVariables());
 
         String systemPrompt = promptRegistry.getSystemPrompt(WorkflowStep.OUTLINE_GENERATION, context.getGenre());
-        if (systemPrompt == null || systemPrompt.isBlank()) {
-            systemPrompt = "你是一位经验丰富的网络小说策划，擅长构建紧凑的故事结构和引人入胜的剧情节奏。";
-        }
 
         return AiRequest.builder()
                 .systemPrompt(systemPrompt)

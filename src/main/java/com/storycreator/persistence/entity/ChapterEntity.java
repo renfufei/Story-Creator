@@ -58,6 +58,9 @@ public class ChapterEntity {
     @Column(name = "plot_summary", length = 500)
     private String plotSummary;
 
+    @Column(name = "content_summary", columnDefinition = "TEXT")
+    private String contentSummary;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -119,6 +122,9 @@ public class ChapterEntity {
 
     public String getPlotSummary() { return plotSummary; }
     public void setPlotSummary(String plotSummary) { this.plotSummary = plotSummary; }
+
+    public String getContentSummary() { return contentSummary; }
+    public void setContentSummary(String contentSummary) { this.contentSummary = contentSummary; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

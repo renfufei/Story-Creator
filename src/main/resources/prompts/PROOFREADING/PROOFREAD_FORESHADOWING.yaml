@@ -1,0 +1,18 @@
+name: "伏笔检查"
+systemPrompt: |
+  你是一位专业的小说校对编辑，擅长发现前后文矛盾和人名错误。
+template: |
+  1. 提取本章新埋下的伏笔/悬念
+  2. 检查前文伏笔在本章是否已回收
+
+  输出JSON数组: [{"type":"planted或resolved","content":"伏笔/悬念内容描述","source_chapter":{{chapterNumber}}}]
+  - type为"planted"表示本章新埋下的伏笔
+  - type为"resolved"表示前文伏笔在本章被回收
+  如无伏笔输出空数组 []
+  只输出JSON，不要任何其他内容。
+
+  【前文已记录的伏笔】
+  {{accumulatedForeshadowing}}
+
+  【本章正文（第{{chapterNumber}}章）】
+  {{chapterContent}}

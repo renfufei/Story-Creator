@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<th:block th:fragment="characters">
+    <!-- Character Cards Section (for CHARACTER_DESIGN step) -->
+    <div th:if="${viewStep.name() == 'CHARACTER_DESIGN'}" class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><strong>角色列表</strong>
+                <span class="badge bg-secondary ms-2" x-text="characterList.length + '个角色'"></span>
+            </span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-warning" @click="refineAllCharacters()"
+                        :disabled="generating || fullAutoRunning || refiningCharacters || characterList.length === 0">
+                    <span x-show="!refiningCharacters"><i class="bi bi-stars"></i> 自动AI精修</span>
+                    <span x-show="refiningCharacters"><span class="spinner-border spinner-border-sm"></span> 精修中...</span>
+                </button>
+                <button class="btn btn-sm btn-outline-success" @click="showAddCharacter = true"
+                        :disabled="fullAutoRunning">
+                    <i class="bi bi-plus-lg"></i> 添加角色
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- Add character form -->
+            <div x-show="showAddCharacter" class="mb-3 p-2 border rounded bg-light">
+                <div class="d-flex gap-2 align-items-center">
+                    <input type="text" class="form-control form-control-sm" x-model="newCharacterName"
+                           placeholder="输入角色姓名" style="max-width: 200px;">
+                    <button class="btn btn-sm btn-primary" @click="addCharacter()">确认添加</button>
+                    <button class="btn btn-sm btn-outline-secondary" @click="showAddCharacter = false; newCharacterName = ''">取消</button>
+                </div>
+            </div>
+
+            <!-- Refine progress -->
+            <div x-show="refiningCharacters" class="alert alert-warning py-2 mb-3">
+                <span class="spinner-border spinner-border-sm me-1"></span>
+                <span x-text="refineProgress || '正在精修角色...'"></span>
+            </div>
+
+            <!-- Refine stream output -->
+            <div x-show="refiningCharacters && refineStreamContent" class="mb-3">
+                <div class="card border-warning">
+                    <div class="card-header py-1 bg-warning bg-opacity-10">
+                        <small class="fw-bold">精修实时输出</small>
+                    </div>
+                    <div class="card-body py-2" style="max-height: 200px; overflow-y: auto; font-size: 0.85rem; white-space: pre-wrap;" x-ref="refineStreamOutput" x-text="refineStreamContent"></div>
+                </div>
+            </div>
+
+            <!-- Character overview panel -->
+            <div x-show="characterOverview && !generating" class="mb-3">
+                <div class="card border-info">
+                    <div class="card-header py-1 bg-info bg-opacity-10 d-flex justify-content-between align-items-center" @click="showOverview = !showOverview" style="cursor: pointer;">
+                        <small class="fw-bold">角色总览</small>
+                        <i class="bi" :class="showOverview ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+                    </div>
+                    <div class="card-body py-2" x-show="showOverview" style="max-height: 300px; overflow-y: auto; font-size: 0.85rem; white-space: pre-wrap;" x-text="characterOverview"></div>
+                </div>
+            </div>
+
+            <!-- Character cards list -->
+            <div x-show="characterList.length === 0 && !generating" class="text-center py-3 text-muted">
+                <p>暂无角色，请先点击"AI生成"或手动添加角色</p>
+            </div>
+            <div class="row g-3">
+                <template x-for="ch in characterList" :key="ch.id">
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header d-flex justify-content-between align-items-center py-2">
+                                <span class="fw-bold">
+                                    <span x-text="ch.name || '未命名'"></span>
+                                    <span class="badge ms-1" :class="{
+                                        'bg-secondary': ch.status === 'PENDING',
+                                        'bg-info': ch.status === 'GENERATED',
+                                        'bg-warning text-dark': ch.status === 'REFINING',
+                                        'bg-success': ch.status === 'REFINED'
+                                    }" x-text="ch.status === 'PENDING' ? '待生成' : ch.status === 'GENERATED' ? '已生成' : ch.status === 'REFINING' ? '精修中' : ch.status === 'REFINED' ? '已精修' : ''" style="font-size: 0.7rem;"></span>
+                                </span>
+                                <div class="d-flex gap-1">
+                                    <button class="btn btn-sm btn-outline-primary py-0 px-1"
+                                            @click="editCharacter(ch)" :disabled="fullAutoRunning">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger py-0 px-1"
+                                            @click="deleteCharacter(ch.id)" :disabled="fullAutoRunning">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body py-2" style="font-size: 0.85rem;">
+                                <div x-show="editingCharacterId !== ch.id">
+                                    <div class="row g-1">
+                                        <div class="col-4"><span class="text-muted">性别:</span> <span x-text="ch.gender || '-'"></span></div>
+                                        <div class="col-4"><span class="text-muted">年龄:</span> <span x-text="ch.age || '-'"></span></div>
+                                        <div class="col-4"><span class="text-muted">身份:</span> <span x-text="ch.role || '-'"></span></div>
+                                    </div>
+                                    <div class="mt-1"><span class="text-muted">性格:</span> <span x-text="ch.personality || '-'"></span></div>
+                                    <div class="mt-1"><span class="text-muted">外貌:</span> <span x-text="ch.appearance || '-'"></span></div>
+                                    <div class="mt-1"><span class="text-muted">背景:</span> <span x-text="ch.background || '-'"></span></div>
+                                    <div class="mt-1"><span class="text-muted">动机:</span> <span x-text="ch.motivation || '-'"></span></div>
+                                    <div class="mt-1"><span class="text-muted">能力:</span> <span x-text="ch.abilities || '-'"></span></div>
+                                    <div class="mt-1"><span class="text-muted">关系:</span> <span x-text="ch.relationships || '-'"></span></div>
+                                </div>
+                                <!-- Edit form (inline) -->
+                                <div x-show="editingCharacterId === ch.id">
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-4">
+                                            <label class="form-label small mb-0">姓名</label>
+                                            <input type="text" class="form-control form-control-sm" x-model="editForm.name">
+                                        </div>
+                                        <div class="col-4">
+                                            <label class="form-label small mb-0">性别</label>
+                                            <input type="text" class="form-control form-control-sm" x-model="editForm.gender">
+                                        </div>
+                                        <div class="col-4">
+                                            <label class="form-label small mb-0">年龄</label>
+                                            <input type="text" class="form-control form-control-sm" x-model="editForm.age">
+                                        </div>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-0">身份</label>
+                                        <input type="text" class="form-control form-control-sm" x-model="editForm.role">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-0">性格</label>
+                                        <input type="text" class="form-control form-control-sm" x-model="editForm.personality">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-0">外貌</label>
+                                        <input type="text" class="form-control form-control-sm" x-model="editForm.appearance">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-0">背景</label>
+                                        <textarea class="form-control form-control-sm" rows="2" x-model="editForm.background"></textarea>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-0">动机</label>
+                                        <input type="text" class="form-control form-control-sm" x-model="editForm.motivation">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-0">能力</label>
+                                        <input type="text" class="form-control form-control-sm" x-model="editForm.abilities">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small mb-0">关系</label>
+                                        <input type="text" class="form-control form-control-sm" x-model="editForm.relationships">
+                                    </div>
+                                    <div class="d-flex gap-1 justify-content-end">
+                                        <button class="btn btn-sm btn-outline-secondary" @click="editingCharacterId = null">取消</button>
+                                        <button class="btn btn-sm btn-primary" @click="saveCharacter()">保存</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+</th:block>
+</body>
+</html>

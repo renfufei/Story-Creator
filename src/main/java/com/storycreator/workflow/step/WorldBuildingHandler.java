@@ -26,9 +26,6 @@ public class WorldBuildingHandler implements WorkflowStepHandler {
         String prompt = promptRegistry.resolveTemplate(template, context.toTemplateVariables());
 
         String systemPrompt = promptRegistry.getSystemPrompt(WorkflowStep.WORLD_BUILDING, context.getGenre());
-        if (systemPrompt == null || systemPrompt.isBlank()) {
-            systemPrompt = "你是一位专业的网络小说世界观架构师，擅长构建宏大而细腻的虚构世界。";
-        }
 
         return AiRequest.builder()
                 .systemPrompt(systemPrompt)

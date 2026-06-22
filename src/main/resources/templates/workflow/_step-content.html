@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<th:block th:fragment="stepContent">
+    <!-- Main Content Card -->
+    <div class="card mt-2">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>
+                <strong th:text="${viewStep.displayName}">当前步骤</strong>
+                <span class="badge bg-info ms-2" th:text="${project.genre.displayName}">题材</span>
+                <span th:if="${viewStep.order < project.currentStep.order}" class="badge bg-warning ms-1">已完成步骤</span>
+            </span>
+            <div class="d-flex gap-2 align-items-center">
+                <!-- Step-level model selector -->
+                <form th:action="@{/projects/{id}/step-model(id=${project.id})}" method="post" class="d-flex gap-1 align-items-center">
+                    <input type="hidden" name="step" th:value="${viewStep.name()}">
+                    <select class="form-select form-select-sm" name="modelConfigId" style="max-width:200px; font-size:0.8rem;">
+                        <option value="">默认模型</option>
+                        <option th:each="mc : ${modelConfigs}" th:value="${mc.id}"
+                                th:selected="${mc.id == stepModelConfigId}"
+                                th:text="${mc.displayName}">模型</option>
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="保存步骤模型">
+                        <i class="bi bi-check"></i>
+                    </button>
+                </form>
+                <template x-if="currentStep === 'CHAPTER_WRITING'">
+                    <button class="btn btn-sm btn-primary" @click="generateAllChapters()"
+                            :disabled="generating || fullAutoRunning">
+                        <span x-show="!generating"><i class="bi bi-magic"></i> 全部自动生成</span>
+                        <span x-show="generating"><span class="spinner-border spinner-border-sm"></span> 生成中...</span>
+                    </button>
+                </template>
+                <template x-if="currentStep === 'POLISHING'">
+                    <button class="btn btn-sm btn-primary" @click="batchPolish()"
+                            :disabled="generating || fullAutoRunning">
+                        <span x-show="!generating"><i class="bi bi-brush"></i> 批量自动润色</span>
+                        <span x-show="generating"><span class="spinner-border spinner-border-sm"></span> 润色中...</span>
+                    </button>
+                </template>
+                <template x-if="currentStep !== 'CHAPTER_WRITING' && currentStep !== 'POLISHING' && currentStep !== 'PROOFREADING'">
+                    <button class="btn btn-sm btn-primary" @click="generate()"
+                            :disabled="generating || fullAutoRunning">
+                        <span x-show="!generating"><i class="bi bi-magic"></i> AI生成</span>
+                        <span x-show="generating"><span class="spinner-border spinner-border-sm"></span> 生成中...</span>
+                    </button>
+                </template>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- Step Guidance Section -->
+            <div class="mb-3 border rounded p-2 bg-light">
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted fw-bold">
+                        <i class="bi bi-compass"></i> 创作指导
+                        <span x-show="stepGuidance && !editingGuidance" class="ms-1 text-success"><i class="bi bi-check-circle-fill"></i></span>
+                    </small>
+                    <button x-show="!editingGuidance" class="btn btn-sm btn-outline-secondary py-0 px-1"
+                            @click="editingGuidance = true; stepGuidanceEdit = stepGuidance"
+                            :disabled="fullAutoRunning">
+                        <i class="bi bi-pencil"></i> 配置
+                    </button>
+                </div>
+                <div x-show="!editingGuidance && stepGuidance" class="mt-1">
+                    <small class="text-muted" style="white-space: pre-line;" x-text="stepGuidance"></small>
+                </div>
+                <div x-show="!editingGuidance && !stepGuidance" class="mt-1">
+                    <small class="text-muted fst-italic">未设置（可配置风格偏好、写作要求等指导信息）</small>
+                </div>
+                <div x-show="editingGuidance" class="mt-2">
+                    <textarea class="form-control form-control-sm" rows="3" x-model="stepGuidanceEdit"
+                              placeholder="输入创作指导信息，例如：文风要求、情节偏好、禁忌内容等..."></textarea>
+                    <div class="d-flex justify-content-end gap-1 mt-1">
+                        <button class="btn btn-sm btn-outline-secondary" @click="editingGuidance = false">取消</button>
+                        <button class="btn btn-sm btn-primary" @click="saveGuidance()">保存配置</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chapter title indicator (only for CHAPTER_WRITING during generation) -->
+            <template x-if="currentStep === 'CHAPTER_WRITING' && generating">
+                <div class="mb-2">
+                    <span x-show="viewingChapterNum > 0" class="badge bg-primary fs-6">
+                        <i class="bi bi-bookmark"></i>
+                        <span x-text="'第' + viewingChapterNum + '章'"></span>
+                        <span x-show="viewingChapterTitle" x-text="' ' + viewingChapterTitle"></span>
+                    </span>
+                </div>
+            </template>
+
+            <!-- === OUTLINE GENERATION: Accordion UI === -->
+            <template x-if="currentStep === 'OUTLINE_GENERATION'">
+                <div>
+                    <!-- Generating indicator -->
+                    <div x-show="generating" class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                                <span x-text="outlineStreamingStatus || '正在生成大纲...'"></span>
+                                <span class="ms-3"><i class="bi bi-clock"></i> <span x-text="generateElapsed"></span></span>
+                            </small>
+                            <button class="btn btn-sm btn-outline-danger" @click="stopAutoGenerate()">
+                                <i class="bi bi-stop-circle"></i> 停止生成
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Story Summary Section -->
+                    <div x-show="outlineSummary || (generating && streamingTarget && streamingTarget.type === 'SUMMARY')" class="mb-3">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center py-2">
+                                <strong><i class="bi bi-book"></i> 故事总纲</strong>
+                                <button x-show="!generating && outlineSummary" class="btn btn-sm btn-outline-primary py-0 px-1"
+                                        @click="editOutlineSummary()" :disabled="fullAutoRunning">
+                                    <i class="bi bi-pencil"></i> 编辑
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div x-show="!editingSummary">
+                                    <pre class="mb-0" style="white-space:pre-wrap; font-family:inherit; font-size:0.9rem;" x-text="outlineSummary"></pre>
+                                    <span x-show="generating && streamingTarget && streamingTarget.type === 'SUMMARY'" class="cursor"></span>
+                                </div>
+                                <div x-show="editingSummary">
+                                    <textarea class="form-control" rows="6" x-model="outlineSummaryEdit"></textarea>
+                                    <div class="d-flex justify-content-end gap-1 mt-2">
+                                        <button class="btn btn-sm btn-outline-secondary" @click="editingSummary = false">取消</button>
+                                        <button class="btn btn-sm btn-primary" @click="saveOutlineSummary()">保存</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Volume Accordion -->
+                    <div class="accordion" id="outlineAccordion">
+                        <template x-for="(vol, vIdx) in outlineVolumes" :key="vol.volumeNumber">
+                            <div class="accordion-item">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button" :class="!vol.expanded ? 'collapsed' : ''" type="button"
+                                            @click="vol.expanded = !vol.expanded">
+                                        <span x-text="'第' + vol.volumeNumber + '卷 (第' + vol.chapterStart + '-' + vol.chapterEnd + '章)'"></span>
+                                        <span x-show="vol.chapters && vol.chapters.length > 0" class="badge bg-secondary ms-2" x-text="vol.chapters.length + '章'"></span>
+                                    </button>
+                                </h2>
+                                <div class="accordion-collapse" :class="vol.expanded ? 'show' : 'collapse'">
+                                    <div class="accordion-body">
+                                        <!-- Volume Arc -->
+                                        <div class="mb-3 p-2 bg-light rounded border">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <small class="fw-bold text-muted"><i class="bi bi-diagram-3"></i> 本卷故事弧线</small>
+                                                <button x-show="!generating && vol.arcSummary" class="btn btn-sm btn-outline-primary py-0 px-1"
+                                                        @click="editVolumeArc(vol)" :disabled="fullAutoRunning">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                            </div>
+                                            <div x-show="!vol.editingArc">
+                                                <pre class="mb-0" style="white-space:pre-wrap; font-family:inherit; font-size:0.85rem;" x-text="vol.arcSummary || ''"></pre>
+                                                <span x-show="generating && streamingTarget && streamingTarget.type === 'VOLUME' && streamingTarget.volumeNumber === vol.volumeNumber" class="cursor"></span>
+                                            </div>
+                                            <div x-show="vol.editingArc">
+                                                <textarea class="form-control form-control-sm" rows="4" x-model="vol.arcSummaryEdit"></textarea>
+                                                <div class="d-flex justify-content-end gap-1 mt-1">
+                                                    <button class="btn btn-sm btn-outline-secondary" @click="vol.editingArc = false">取消</button>
+                                                    <button class="btn btn-sm btn-primary" @click="saveVolumeArc(vol)">保存</button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Chapters in this volume -->
+                                        <div class="list-group">
+                                            <template x-for="(ch, cIdx) in vol.chapters" :key="ch.chapterNumber">
+                                                <div class="list-group-item" :class="{'list-group-item-light': ch.status === 'PENDING', 'list-group-item-danger': ch.status === 'FAILED'}">
+                                                    <div class="d-flex justify-content-between align-items-start">
+                                                        <div class="flex-grow-1">
+                                                            <div class="fw-bold">
+                                                                <span x-text="'第' + ch.chapterNumber + '章'"></span>
+                                                                <span x-show="(ch.status === 'COMPLETED' || ch.status === 'REFINED' || ch.status === 'REFINING') && ch.title" x-text="' - ' + ch.title"></span>
+                                                                <span x-show="ch.status === 'PENDING' && !ch.summary" class="text-muted fw-normal"> - 待生成</span>
+                                                                <span x-show="ch.status === 'GENERATING'" class="text-primary fw-normal"> - 生成中<span class="cursor"></span></span>
+                                                                <span x-show="ch.status === 'COMPLETED'" class="badge bg-success ms-1">已生成</span>
+                                                                <span x-show="ch.status === 'REFINING'" class="badge bg-info ms-1">精修中</span>
+                                                                <span x-show="ch.status === 'REFINED'" class="badge bg-primary ms-1">已精修</span>
+                                                                <span x-show="ch.status === 'FAILED'" class="text-danger fw-normal"> - 生成失败</span>
+                                                            </div>
+                                                            <small x-show="ch.characterNames" class="text-muted">
+                                                                <i class="bi bi-people"></i> <span x-text="ch.characterNames"></span>
+                                                            </small>
+                                                            <div x-show="!ch.editing && ch.summary" class="mt-1" style="font-size:0.85rem;">
+                                                                <span x-text="ch.summary || ''"></span>
+                                                                <span x-show="ch.regenerating || (generating && streamingTarget && streamingTarget.type === 'CHAPTER' && streamingTarget.chapterNumber === ch.chapterNumber)" class="cursor"></span>
+                                                            </div>
+                                                            <div x-show="ch.editing" class="mt-1">
+                                                                <div class="mb-1">
+                                                                    <input type="text" class="form-control form-control-sm" x-model="ch.titleEdit" placeholder="章节标题">
+                                                                </div>
+                                                                <div class="mb-1">
+                                                                    <input type="text" class="form-control form-control-sm" x-model="ch.characterNamesEdit" placeholder="出场角色（逗号分隔）">
+                                                                </div>
+                                                                <textarea class="form-control form-control-sm" rows="3" x-model="ch.summaryEdit" placeholder="章节大纲"></textarea>
+                                                                <div class="d-flex justify-content-end gap-1 mt-1">
+                                                                    <button class="btn btn-sm btn-outline-secondary" @click="ch.editing = false">取消</button>
+                                                                    <button class="btn btn-sm btn-primary" @click="saveChapterOutline(ch)">保存</button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div x-show="!generating && (ch.status === 'COMPLETED' || ch.status === 'REFINED') && !ch.editing" class="d-flex gap-1 ms-2">
+                                                            <button class="btn btn-sm btn-outline-primary"
+                                                                    @click="editChapterOutline(ch)" :disabled="fullAutoRunning">
+                                                                <i class="bi bi-pencil"></i> 编辑
+                                                            </button>
+                                                            <button class="btn btn-sm btn-outline-warning"
+                                                                    @click="regenerateChapterOutline(ch)" :disabled="fullAutoRunning || ch.regenerating">
+                                                                <i class="bi bi-arrow-clockwise" :class="ch.regenerating ? 'spin' : ''"></i> 重新生成
+                                                            </button>
+                                                        </div>
+                                                        <div x-show="!generating && ch.status === 'FAILED' && !ch.editing" class="ms-2">
+                                                            <button class="btn btn-sm btn-outline-danger py-0 px-1"
+                                                                    @click="regenerateChapterOutline(ch)" :disabled="fullAutoRunning || ch.regenerating"
+                                                                    title="重新生成">
+                                                                <i class="bi bi-arrow-clockwise" :class="ch.regenerating ? 'spin' : ''"></i> 重试
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Confirm & Advance buttons -->
+                    <div x-show="!generating && outlineLoaded && outlineVolumes.length > 0" class="mt-3 text-end d-flex gap-2 justify-content-end">
+                        <button th:if="${viewStep == project.currentStep}" type="button" class="btn btn-success"
+                                @click="confirmStep()" :disabled="fullAutoRunning || stepConfirmed">
+                            <i class="bi bi-check-lg"></i> <span x-text="stepConfirmed ? '已确认' : '确认'"></span>
+                        </button>
+                        <button th:if="${viewStep == project.currentStep && viewStep.next() != null}" type="button" class="btn btn-primary"
+                                @click="advanceStep()" :disabled="fullAutoRunning">
+                            <i class="bi bi-arrow-right"></i> 进入下一步
+                        </button>
+                    </div>
+
+                    <!-- Empty state -->
+                    <div x-show="!generating && !outlineLoaded && outlineVolumes.length === 0" class="text-center py-4 text-muted">
+                        <i class="bi bi-robot display-4"></i>
+                        <p class="mt-2">点击"AI生成"开始生成分卷大纲</p>
+                    </div>
+                </div>
+            </template>
+
+            <!-- === NON-OUTLINE STEPS: Generic content display === -->
+            <template x-if="currentStep !== 'OUTLINE_GENERATION' && currentStep !== 'PROOFREADING'">
+                <div>
+                    <!-- === DEFAULT: Generating (not POLISHING, not CHAPTER_WRITING) === -->
+                    <div x-show="generating && currentStep !== 'POLISHING' && currentStep !== 'CHAPTER_WRITING'" class="mb-3">
+                        <div class="streaming-output" x-ref="output" style="max-height: 50vh; overflow-y: auto;">
+                            <span x-text="generatedContent"></span>
+                            <span class="cursor"></span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <small class="text-muted">
+                                当前字数: <strong x-text="generatedContent.length"></strong>
+                                <template x-if="currentStep === 'CHAPTER_WRITING' || currentStep === 'POLISHING'">
+                                    <span> / 目标 <span x-text="chapterWordCount"></span>字（<span x-text="chapterWordCountMin"></span>-<span x-text="chapterWordCountMax"></span>）</span>
+                                </template>
+                                <span class="ms-3"><i class="bi bi-clock"></i> <span x-text="generateElapsed"></span></span>
+                            </small>
+                            <button class="btn btn-sm btn-outline-danger" @click="stopAutoGenerate()">
+                                <i class="bi bi-stop-circle"></i> 停止生成
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- === DEFAULT: Has content, not generating (not POLISHING, not CHAPTER_WRITING) === -->
+                    <div x-show="!generating && currentStep !== 'POLISHING' && currentStep !== 'CHAPTER_WRITING' && (generatedContent || existingContent)" class="mb-3">
+                        <!-- Read-only view -->
+                        <div x-show="!editing">
+                            <pre class="streaming-output mb-0" style="max-height: 50vh; overflow-y: auto; white-space:pre-wrap; font-family:inherit;" x-text="editableContent"></pre>
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <small class="text-muted">
+                                    字数: <strong x-text="editableContent.length"></strong>
+                                    <span x-show="generateElapsed" class="ms-3"><i class="bi bi-clock"></i> 耗时 <span x-text="generateElapsed"></span></span>
+                                </small>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" @click="editing = true"
+                                            :disabled="fullAutoRunning">
+                                        <i class="bi bi-pencil"></i> 编辑
+                                    </button>
+                                    <button th:if="${viewStep == project.currentStep}" type="button" class="btn btn-success btn-sm"
+                                            @click="confirmStep()" :disabled="fullAutoRunning || stepConfirmed">
+                                        <i class="bi bi-check-lg"></i> <span x-text="stepConfirmed ? '已确认' : '确认'"></span>
+                                    </button>
+                                    <button th:if="${viewStep == project.currentStep && viewStep.next() != null}" type="button" class="btn btn-primary btn-sm"
+                                            @click="advanceStep()" :disabled="fullAutoRunning">
+                                        <i class="bi bi-arrow-right"></i> 进入下一步
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Editable view -->
+                        <div x-show="editing">
+                            <form th:action="@{/projects/{id}/save-edit(id=${project.id})}" method="post">
+                                <input type="hidden" name="step" th:value="${viewStep.name()}">
+                                <textarea class="form-control content-editor" name="content"
+                                          style="height: 50vh; overflow-y: auto;"
+                                          x-model="editableContent"
+                                          placeholder="在此编辑内容..."></textarea>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <small class="text-muted">字数: <strong x-text="editableContent.length"></strong></small>
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" @click="editing = false">
+                                            <i class="bi bi-x-lg"></i> 取消
+                                        </button>
+                                        <button type="submit" class="btn btn-primary btn-sm">
+                                            <i class="bi bi-save"></i> 保存编辑
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- State 3: Empty -->
+                    <div x-show="!generating && !generatedContent && !existingContent && currentStep !== 'CHAPTER_WRITING' && currentStep !== 'POLISHING'" class="text-center py-4 text-muted">
+                        <i class="bi bi-robot display-4"></i>
+                        <p class="mt-2">点击"AI生成"开始创作此步骤的内容</p>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+</th:block>
+</body>
+</html>

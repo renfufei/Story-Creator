@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<th:block th:fragment="chapters">
+    <!-- Chapter Management Section -->
+    <div th:if="${viewStep.name() == 'CHAPTER_WRITING' || viewStep.name() == 'POLISHING'}" class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>
+                <strong>章节管理</strong>
+                <span class="badge bg-secondary ms-2" th:text="${totalChapters + '章'}">章数</span>
+            </span>
+            <template x-if="currentStep === 'POLISHING'">
+                <button class="btn btn-sm btn-outline-success" @click="generateAllTitles()"
+                        :disabled="generating || fullAutoRunning">
+                    <i class="bi bi-magic"></i> AI生成章节标题
+                </button>
+            </template>
+        </div>
+        <div class="card-body">
+            <!-- Chapter list -->
+            <div class="list-group">
+                <template x-for="ch in chapterListData" :key="ch.chapterNumber">
+                    <div class="list-group-item chapter-item"
+                         :class="{'list-group-item-success': ch.status === 'CONFIRMED', 'list-group-item-warning': ch.status === 'GENERATING'}">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>
+                                <span x-text="'第' + ch.chapterNumber + '章'"></span>
+                                <span x-show="ch.title" x-text="' - ' + ch.title" class="fw-bold"></span>
+                                <small class="text-muted ms-2" x-text="ch.wordCount + '字'"></small>
+                                <template x-if="currentStep === 'POLISHING'">
+                                    <span>
+                                        <span x-show="ch.polishStatus === 'CONFIRMED'" class="badge bg-success ms-1">已润色</span>
+                                        <span x-show="ch.polishStatus !== 'CONFIRMED' && ch.polishNote" class="badge bg-warning ms-1">待润色</span>
+                                    </span>
+                                </template>
+                            </span>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        @click="previewChapter(ch.chapterNumber)"
+                                        x-show="(currentStep !== 'CHAPTER_WRITING' || inlinePreviewChapter !== ch.chapterNumber) && (currentStep !== 'POLISHING' || !polishPreviews[ch.chapterNumber])">
+                                    <i class="bi bi-eye"></i> 预览
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        @click="closeInlinePreview()"
+                                        x-show="inlinePreviewChapter === ch.chapterNumber && currentStep === 'CHAPTER_WRITING'">
+                                    <i class="bi bi-x-lg"></i> 关闭预览
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        @click="previewChapter(ch.chapterNumber)"
+                                        x-show="currentStep === 'POLISHING' && polishPreviews[ch.chapterNumber]">
+                                    <i class="bi bi-x-lg"></i> 关闭预览
+                                </button>
+                                <template x-if="currentStep === 'CHAPTER_WRITING'">
+                                    <button class="btn btn-sm btn-outline-primary"
+                                            @click="generateChapter(ch.chapterNumber)"
+                                            :disabled="generating || fullAutoRunning">
+                                        <i class="bi bi-magic"></i> 重新生成
+                                    </button>
+                                </template>
+                                <template x-if="currentStep === 'POLISHING'">
+                                    <div class="d-flex gap-1">
+                                        <button class="btn btn-sm btn-outline-info"
+                                                @click="editPolishNote(ch.chapterNumber, ch.polishNote)"
+                                                :disabled="fullAutoRunning">
+                                            <i class="bi bi-pencil"></i> 修改意见
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-warning"
+                                                @click="polishChapter(ch.chapterNumber)"
+                                                :disabled="generating || fullAutoRunning">
+                                            <i class="bi bi-brush"></i> 重新润色
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                        <!-- Inline preview (CHAPTER_WRITING only) -->
+                        <template x-if="currentStep === 'CHAPTER_WRITING' && inlinePreviewChapter === ch.chapterNumber">
+                            <div class="mt-2 pt-2 border-top">
+                                <div x-show="!inlinePreviewEditing">
+                                    <pre class="streaming-output mb-0" style="max-height: 50vh; overflow-y: auto; white-space:pre-wrap; font-family:inherit;" x-text="inlinePreviewContent"></pre>
+                                    <div class="d-flex justify-content-between align-items-center mt-2">
+                                        <small class="text-muted">字数: <strong x-text="inlinePreviewContent.length"></strong></small>
+                                        <div class="d-flex gap-1">
+                                            <button type="button" class="btn btn-outline-primary btn-sm" @click="startInlineEdit()"
+                                                    :disabled="fullAutoRunning">
+                                                <i class="bi bi-pencil"></i> 编辑
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div x-show="inlinePreviewEditing">
+                                    <textarea class="form-control content-editor" style="height: 50vh; overflow-y: auto;"
+                                              x-model="inlinePreviewEditContent"
+                                              placeholder="编辑章节内容..."></textarea>
+                                    <div class="d-flex justify-content-between align-items-center mt-2">
+                                        <small class="text-muted">字数: <strong x-text="inlinePreviewEditContent.length"></strong></small>
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" @click="inlinePreviewEditing = false">
+                                                <i class="bi bi-x-lg"></i> 取消
+                                            </button>
+                                            <button type="button" class="btn btn-primary btn-sm" @click="saveInlineEdit()">
+                                                <i class="bi bi-save"></i> 保存
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Inline polish preview (POLISHING) -->
+                        <template x-if="currentStep === 'POLISHING' && polishPreviews[ch.chapterNumber]">
+                            <div class="mt-2 pt-2 border-top">
+                                <div x-show="polishEditingChapter !== ch.chapterNumber">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <small class="text-muted">
+                                            原稿 <strong x-text="(polishPreviews[ch.chapterNumber]?.draft || '').length"></strong>字
+                                            → 润色后 <strong x-text="(polishPreviews[ch.chapterNumber]?.content || '').length"></strong>字
+                                        </small>
+                                        <button type="button" class="btn btn-outline-primary btn-sm"
+                                                @click="polishEditingChapter = ch.chapterNumber; polishEditContent = polishPreviews[ch.chapterNumber]?.content || ''"
+                                                :disabled="fullAutoRunning">
+                                            <i class="bi bi-pencil"></i> 编辑润色稿
+                                        </button>
+                                    </div>
+                                    <div class="split-view-container">
+                                        <div class="split-view-panel">
+                                            <div class="split-view-header">原稿</div>
+                                            <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;"
+                                                 x-text="polishPreviews[ch.chapterNumber]?.draft || ''"></pre>
+                                        </div>
+                                        <div class="split-view-panel">
+                                            <div class="split-view-header">润色后</div>
+                                            <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;"
+                                                 x-text="polishPreviews[ch.chapterNumber]?.content || ''"></pre>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div x-show="polishEditingChapter === ch.chapterNumber">
+                                    <textarea class="form-control content-editor" style="height: 50vh; overflow-y: auto;"
+                                              x-model="polishEditContent"
+                                              placeholder="编辑润色后的内容..."></textarea>
+                                    <div class="d-flex justify-content-between align-items-center mt-2">
+                                        <small class="text-muted">字数: <strong x-text="polishEditContent.length"></strong></small>
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" @click="polishEditingChapter = null">
+                                                <i class="bi bi-x-lg"></i> 取消
+                                            </button>
+                                            <button type="button" class="btn btn-primary btn-sm" @click="savePolishEdit(ch.chapterNumber)">
+                                                <i class="bi bi-save"></i> 保存
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Inline polish generating (POLISHING, streaming) -->
+                        <template x-if="currentStep === 'POLISHING' && generating && viewingChapterNum === ch.chapterNumber && viewingChapterDraft">
+                            <div class="mt-2 pt-2 border-top">
+                                <div class="d-flex align-items-center mb-2">
+                                    <small class="text-muted">
+                                        <span class="spinner-border spinner-border-sm me-1"></span>
+                                        润色中... 当前字数: <strong x-text="generatedContent.length"></strong>
+                                        / 目标 <span x-text="chapterWordCount"></span>字
+                                        <span class="ms-3"><i class="bi bi-clock"></i> <span x-text="generateElapsed"></span></span>
+                                    </small>
+                                </div>
+                                <div class="split-view-container">
+                                    <div class="split-view-panel">
+                                        <div class="split-view-header">原稿</div>
+                                        <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;" x-text="viewingChapterDraft"></pre>
+                                    </div>
+                                    <div class="split-view-panel">
+                                        <div class="split-view-header">润色中...</div>
+                                        <div class="streaming-output split-panel-content">
+                                            <span x-text="generatedContent"></span>
+                                            <span class="cursor"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Auto-generation progress -->
+            <template x-if="autoProgress.length > 0">
+                <div class="alert alert-info mt-3 d-flex justify-content-between align-items-center">
+                    <span><span class="spinner-border spinner-border-sm me-2"></span><span x-text="autoProgress"></span></span>
+                    <button class="btn btn-sm btn-outline-danger" @click="stopAutoGenerate()">
+                        <i class="bi bi-stop-circle"></i> 停止
+                    </button>
+                </div>
+            </template>
+
+            <!-- Generate next chapter (only for CHAPTER_WRITING) -->
+            <template x-if="currentStep === 'CHAPTER_WRITING'">
+                <button class="btn btn-outline-primary mt-3" @click="generateNextChapter()"
+                        :disabled="generating || autoGenerating || fullAutoRunning">
+                    <i class="bi bi-plus-lg"></i> 自动生成下一章
+                </button>
+            </template>
+        </div>
+    </div>
+
+    <!-- Character State Dimension Config (CHAPTER_WRITING only) -->
+    <div th:if="${viewStep.name() == 'CHAPTER_WRITING'}" class="card mt-3">
+        <div class="card-header" data-bs-toggle="collapse" data-bs-target="#dimConfigCollapse"
+             role="button" style="cursor: pointer;">
+            <strong><i class="bi bi-sliders"></i> 角色状态追踪维度</strong>
+            <small class="text-muted ms-2">（点击展开配置）</small>
+        </div>
+        <div class="collapse" id="dimConfigCollapse">
+            <div class="card-body">
+                <p class="text-muted small mb-3">选择生成角色状态时需要追踪的维度。勾选的维度将包含在 AI 提示词中。</p>
+                <div class="row">
+                    <template x-for="dim in characterStateDims" :key="dim.key">
+                        <div class="col-md-6 col-lg-4 mb-2">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox"
+                                       :id="'dim-' + dim.key"
+                                       :checked="dim.enabled"
+                                       @change="toggleDimConfig(dim.key, $event.target.checked)">
+                                <label class="form-check-label" :for="'dim-' + dim.key">
+                                    <span x-text="dim.displayName"></span>
+                                    <span x-show="dim.defaultEnabled" class="badge bg-info ms-1" style="font-size: 0.65em;">默认</span>
+                                </label>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+</body>
+</html>

@@ -2,12 +2,64 @@
 <html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('编辑模板', ~{::content})}">
 <body>
 <div th:fragment="content">
-    <h2 class="mb-4">编辑Prompt模板</h2>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <a th:href="@{/prompts}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> 返回
+            </a>
+            <h2 class="mb-0" th:text="${isBuiltin} ? '查看内置Prompt模板' : '编辑Prompt模板'">编辑Prompt模板</h2>
+        </div>
+        <button th:unless="${isBuiltin}" type="button" class="btn btn-outline-danger btn-sm" th:data-id="${template.id}" onclick="doDeleteTemplate(this)">
+            <i class="bi bi-trash"></i> 删除
+        </button>
+    </div>
 
-    <form th:action="@{/prompts/{id}(id=${template.id})}" method="post">
+    <!-- Builtin template view (read-only) -->
+    <div th:if="${isBuiltin}">
+        <div class="mb-3">
+            <label class="form-label">步骤</label>
+            <input type="text" class="form-control" th:value="${template.step().displayName}" disabled>
+        </div>
+        <div class="mb-3" th:if="${template.subStep() != null}">
+            <label class="form-label">子步骤</label>
+            <input type="text" class="form-control" th:value="${template.subStep().displayName}" disabled>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">题材</label>
+            <input type="text" class="form-control" th:value="${template.genre() != null ? template.genre().displayName : '通用'}" disabled>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">名称</label>
+            <input type="text" class="form-control" th:value="${template.name()}" readonly>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">System Prompt</label>
+            <textarea class="form-control" rows="3" th:text="${template.systemPrompt()}" readonly></textarea>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">模板内容</label>
+            <textarea class="form-control" rows="20" th:text="${template.template()}" readonly></textarea>
+            <div class="form-text" th:if="${variableHints != null}">
+                可用变量:
+                <span th:each="v,iter : ${variableHints}">
+                    <code th:text="'{{' + ${v} + '}}'"></code><span th:unless="${iter.last}">, </span>
+                </span>
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <a th:href="@{/prompts}" class="btn btn-outline-secondary">返回</a>
+        </div>
+    </div>
+
+    <!-- Custom template edit form -->
+    <form th:unless="${isBuiltin}" th:action="@{/prompts/{id}(id=${template.id})}" method="post">
         <div class="mb-3">
             <label class="form-label">步骤</label>
             <input type="text" class="form-control" th:value="${template.step.displayName}" disabled>
+        </div>
+        <div class="mb-3" th:if="${template.subStep != null}">
+            <label class="form-label">子步骤</label>
+            <input type="text" class="form-control" th:value="${template.subStep.displayName}" disabled>
         </div>
         <div class="mb-3">
             <label class="form-label">题材</label>
@@ -21,13 +73,19 @@
             <label class="form-label">System Prompt</label>
             <textarea class="form-control" name="systemPrompt" rows="3" th:text="${template.systemPrompt}"></textarea>
             <div class="form-text">
-                AI的角色设定提示词，会作为system消息发送。留空则使用代码中的默认值。
+                AI的角色设定提示词，会作为system消息发送。留空则使用内置默认值。
             </div>
         </div>
         <div class="mb-3">
             <label class="form-label">模板内容</label>
             <textarea class="form-control" name="template" rows="20" th:text="${template.template}" required></textarea>
-            <div class="form-text">
+            <div class="form-text" th:if="${variableHints != null}">
+                可用变量:
+                <span th:each="v,iter : ${variableHints}">
+                    <code th:text="'{{' + ${v} + '}}'"></code><span th:unless="${iter.last}">, </span>
+                </span>
+            </div>
+            <div class="form-text" th:if="${variableHints == null}">
                 可用变量: {{title}}, {{genre}}, {{description}}, {{worldSetting}}, {{characters}},
                 {{characterCards}}, {{outline}}, {{overallOutline}}, {{chapterNumber}}, {{totalChapters}},
                 {{chapterTitle}}, {{chapterSummary}}, {{nextChapterTitle}}, {{nextChapterSummary}},
@@ -40,12 +98,23 @@
         </div>
     </form>
 
-    <form th:action="@{/prompts/{id}/reset(id=${template.id})}" method="post" class="mt-3"
-          onsubmit="return confirm('确定要重置此模板为默认内容吗？当前修改将丢失。')">
-        <button type="submit" class="btn btn-outline-warning">
-            <i class="bi bi-arrow-counterclockwise"></i> 重置为默认
-        </button>
-    </form>
+    <script>
+        function doDeleteTemplate(btn) {
+            if (!confirm('确定要删除此模板吗？此操作不可恢复。')) return;
+            var id = btn.getAttribute('data-id');
+            fetch('/prompts/' + id + '/delete', { method: 'POST' })
+                .then(function(r) {
+                    if (!r.ok) throw new Error('删除失败');
+                    return r.json();
+                })
+                .then(function() {
+                    window.location.href = '/prompts';
+                })
+                .catch(function(err) {
+                    alert(err.message || '删除失败');
+                });
+        }
+    </script>
 </div>
 </body>
 </html>

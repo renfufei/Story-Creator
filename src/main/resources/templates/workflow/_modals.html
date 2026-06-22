@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<th:block th:fragment="modals">
+    <!-- Workflow State Setting Modal -->
+    <div class="modal fade" id="workflowStateModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-gear"></i> 设置工作流状态</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">设置各步骤状态以指导全自动工作流的起始位置。全自动创作从"当前步骤"开始执行。</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">当前步骤（自动创作起点）</label>
+                        <select class="form-select form-select-sm" x-model="wfStateCurrentStep"
+                                :disabled="fullAutoRunning">
+                            <template x-for="s in stepList" :key="s.name">
+                                <option :value="s.name" x-text="s.label"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <hr>
+                    <label class="form-label fw-bold">各步骤状态</label>
+                    <template x-for="s in stepList" :key="s.name">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="small" x-text="s.label" style="min-width:100px;"></span>
+                            <select class="form-select form-select-sm" style="max-width:180px;"
+                                    x-model="wfStateSteps[s.name]"
+                                    :disabled="fullAutoRunning">
+                                <template x-for="opt in (wfStateAllowedStatuses[s.name] || [{name:'NOT_STARTED',label:'未开始'},{name:'GENERATED',label:'已生成'},{name:'CONFIRMED',label:'已确认'}])" :key="opt.name">
+                                    <option :value="opt.name" x-text="opt.label"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </template>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary btn-sm" @click="saveWorkflowState()"
+                            :disabled="fullAutoRunning">
+                        <i class="bi bi-save"></i> 保存
+                    </button>
+                    <span x-show="fullAutoRunning" class="text-warning small ms-2">
+                        <i class="bi bi-exclamation-triangle"></i> 自动创作运行中，无法修改
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Polish Note Edit Modal -->
+    <div class="modal fade" id="polishNoteModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" x-text="'第' + polishNoteChapter + '章 - 修改意见'">修改意见</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <textarea class="form-control" rows="5" x-model="polishNoteText"
+                              placeholder="请输入对本章的修改意见，AI润色时会参考这些意见..."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" @click="savePolishNote()">保存意见</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Replace Modal -->
+    <div class="modal fade" id="globalReplaceModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-arrow-repeat"></i> 全局替换</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" :disabled="globalReplacing"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-2">替换将应用于：世界观、角色、大纲、章节等所有内容</p>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>查找文本</th>
+                                <th>替换为</th>
+                                <th style="width:40px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="(pair, idx) in replacePairs" :key="idx">
+                                <tr>
+                                    <td><input type="text" class="form-control form-control-sm" x-model="pair.oldText" placeholder="查找..." :disabled="globalReplacing"></td>
+                                    <td><input type="text" class="form-control form-control-sm" x-model="pair.newText" placeholder="替换为..." :disabled="globalReplacing"></td>
+                                    <td><button class="btn btn-sm btn-outline-danger" @click="replacePairs.splice(idx, 1)" :disabled="globalReplacing || replacePairs.length <= 1"><i class="bi bi-x"></i></button></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                    <button class="btn btn-sm btn-outline-secondary" @click="replacePairs.push({oldText:'',newText:''})" :disabled="globalReplacing">
+                        <i class="bi bi-plus"></i> 增加一行
+                    </button>
+
+                    <div x-show="globalReplaceLog.length > 0" class="mt-3">
+                        <strong class="small">执行进度：</strong>
+                        <div class="border rounded p-2 mt-1" style="max-height:200px; overflow-y:auto; font-size:0.85rem;">
+                            <template x-for="(msg, i) in globalReplaceLog" :key="i">
+                                <div x-text="msg"></div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" :disabled="globalReplacing">取消</button>
+                    <button type="button" class="btn btn-primary" @click="executeGlobalReplace()" :disabled="globalReplacing">
+                        <span x-show="!globalReplacing">执行替换</span>
+                        <span x-show="globalReplacing"><span class="spinner-border spinner-border-sm"></span> 替换中...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AutoRun Stream Modal -->
+    <div class="modal fade" id="autoRunStreamModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-reception-4"></i> 全自动创作 - 实时显示
+                        <span class="badge bg-info ms-2" x-text="autoRunStreamStep"></span>
+                        <span class="badge bg-secondary ms-1" x-show="autoRunStreamChapter > 0" x-text="'第' + autoRunStreamChapter + '章'"></span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" @click="closeAutoRunStream()"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <pre class="p-3 m-0 bg-light" style="max-height:60vh; overflow-y:auto; white-space:pre-wrap; word-break:break-all; font-size:0.85rem;" x-ref="autoRunStreamOutput" x-text="autoRunStreamContent"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</th:block>
+</body>
+</html>

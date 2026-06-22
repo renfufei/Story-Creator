@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<th:block th:fragment="proofreading">
+    <!-- Proofreading Section -->
+    <div th:if="${viewStep.name() == 'PROOFREADING'}" class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>
+                <strong>校对精修</strong>
+                <span class="badge bg-secondary ms-2" x-text="proofreadData.length + '章'"></span>
+                <span class="badge bg-success ms-1" x-text="proofreadCompletedCount() + '章已校对'"></span>
+            </span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" @click="openGlobalReplace()"
+                        :disabled="generating || fullAutoRunning">
+                    <i class="bi bi-arrow-repeat"></i> 全局替换
+                </button>
+                <button class="btn btn-sm btn-primary" @click="generate()"
+                        :disabled="generating || fullAutoRunning">
+                    <span x-show="!generating"><i class="bi bi-magic"></i> 开始校对</span>
+                    <span x-show="generating"><span class="spinner-border spinner-border-sm"></span> 校对中...</span>
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- Generating progress -->
+            <div x-show="generating && proofreadStreaming" class="alert alert-info mb-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                        正在校对第 <strong x-text="proofreadStreaming ? proofreadStreaming.chapterNumber : ''"></strong> 章 -
+                        <span x-text="proofreadStreaming ? getSubstepLabel(proofreadStreaming.substep) : ''"></span>
+                        <span class="ms-3"><i class="bi bi-clock"></i> <span x-text="generateElapsed"></span></span>
+                    </span>
+                    <button class="btn btn-sm btn-outline-danger" @click="stopAutoGenerate()">
+                        <i class="bi bi-stop-circle"></i> 停止
+                    </button>
+                </div>
+            </div>
+
+            <!-- Results list -->
+            <div x-show="proofreadData.length === 0 && !generating" class="text-center py-4 text-muted">
+                <i class="bi bi-search display-4"></i>
+                <p class="mt-2">点击"开始校对"对所有章节进行校对精修</p>
+            </div>
+
+            <div class="list-group">
+                <template x-for="item in proofreadData" :key="item.chapterNumber">
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>
+                                <span x-text="'第' + item.chapterNumber + '章'"></span>
+                                <span x-show="item.title" x-text="' - ' + item.title" class="fw-bold"></span>
+                                <span x-show="item.proofreadStatus === 'GENERATING'" class="badge bg-warning ms-1">校对中</span>
+                                <span x-show="item.proofreadStatus === 'GENERATED' || item.proofreadStatus === 'CONFIRMED'" class="badge bg-success ms-1">已校对</span>
+                                <span x-show="item.proofreadStatus === 'NOT_STARTED'" class="badge bg-secondary ms-1">未校对</span>
+                                <span x-show="item.proofreadFixStatus === 'GENERATING'" class="badge bg-warning ms-1">精修中</span>
+                                <span x-show="item.proofreadFixStatus === 'GENERATED' || item.proofreadFixStatus === 'CONFIRMED'" class="badge bg-info ms-1">已精修</span>
+                            </span>
+                            <div class="d-flex gap-1 align-items-center">
+                                <template x-if="item.proofreadStatus === 'GENERATED' || item.proofreadStatus === 'CONFIRMED'">
+                                    <span class="small text-muted me-2">
+                                        <span x-text="'角色:' + parseJson(item.characterIssues).length + '项'"></span>
+                                        <span class="ms-1" x-text="'一致性:' + parseJson(item.consistencyIssues).length + '项'"></span>
+                                        <span class="ms-1" x-text="'衔接:' + parseJson(item.continuityIssues).length + '项'"></span>
+                                    </span>
+                                </template>
+                                <!-- Proofread Fix status & buttons -->
+                                <template x-if="item.proofreadStatus === 'GENERATED' || item.proofreadStatus === 'CONFIRMED'">
+                                    <span class="d-flex gap-1 align-items-center">
+                                        <button x-show="item.proofreadFixStatus === 'GENERATED' || item.proofreadFixStatus === 'CONFIRMED'"
+                                                class="btn btn-sm btn-outline-success"
+                                                @click="previewProofreadFix(item.chapterNumber)"
+                                                :disabled="proofreadFixGenerating">
+                                            <i class="bi bi-eye"></i> 预览
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-warning"
+                                                @click="proofreadFixChapter(item.chapterNumber)"
+                                                :disabled="proofreadFixGenerating || generating || fullAutoRunning">
+                                            <i class="bi bi-wrench"></i>
+                                            <span x-text="(item.proofreadFixStatus === 'GENERATED' || item.proofreadFixStatus === 'CONFIRMED') ? '重新精修' : '精修'"></span>
+                                        </button>
+                                    </span>
+                                </template>
+                                <button x-show="item.proofreadStatus === 'GENERATED' || item.proofreadStatus === 'CONFIRMED'"
+                                        class="btn btn-sm btn-outline-info"
+                                        @click="proofreadExpandedChapter = (proofreadExpandedChapter === item.chapterNumber ? null : item.chapterNumber)">
+                                    <i class="bi" :class="proofreadExpandedChapter === item.chapterNumber ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+                                    <span x-text="proofreadExpandedChapter === item.chapterNumber ? '收起' : '校对报告'"></span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Expanded detail -->
+                        <div x-show="proofreadExpandedChapter === item.chapterNumber" class="mt-2 pt-2 border-top">
+                            <!-- Plot Summary -->
+                            <div class="mb-2">
+                                <small class="fw-bold text-muted"><i class="bi bi-file-text"></i> 情节摘要</small>
+                                <p class="mb-1 small" x-text="item.plotSummary || '（无）'"></p>
+                            </div>
+
+                            <!-- Character Issues -->
+                            <div class="mb-2">
+                                <small class="fw-bold text-muted"><i class="bi bi-people"></i> 角色校正</small>
+                                <template x-if="parseJson(item.characterIssues).length === 0">
+                                    <p class="mb-1 small text-success">无问题</p>
+                                </template>
+                                <template x-if="parseJson(item.characterIssues).length > 0">
+                                    <ul class="list-unstyled mb-1">
+                                        <template x-for="issue in parseJson(item.characterIssues)" :key="issue.found">
+                                            <li class="small text-warning">
+                                                "<span x-text="issue.found"></span>" → "<span x-text="issue.should_be"></span>"
+                                                <span x-show="issue.context" class="text-muted" x-text="'(' + issue.context + ')'"></span>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </template>
+                            </div>
+
+                            <!-- Consistency Issues -->
+                            <div class="mb-2">
+                                <small class="fw-bold text-muted"><i class="bi bi-exclamation-triangle"></i> 一致性问题</small>
+                                <template x-if="parseJson(item.consistencyIssues).length === 0">
+                                    <p class="mb-1 small text-success">无问题</p>
+                                </template>
+                                <template x-if="parseJson(item.consistencyIssues).length > 0">
+                                    <ul class="list-unstyled mb-1">
+                                        <template x-for="(issue, idx) in parseJson(item.consistencyIssues)" :key="idx">
+                                            <li class="small">
+                                                <span class="badge" :class="issue.severity === 'high' ? 'bg-danger' : (issue.severity === 'medium' ? 'bg-warning' : 'bg-info')" x-text="issue.type"></span>
+                                                <span x-text="issue.description"></span>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </template>
+                            </div>
+
+                            <!-- Continuity Issues -->
+                            <div class="mb-2">
+                                <small class="fw-bold text-muted"><i class="bi bi-link-45deg"></i> 章节衔接</small>
+                                <template x-if="parseJson(item.continuityIssues).length === 0">
+                                    <p class="mb-1 small text-success">衔接良好</p>
+                                </template>
+                                <template x-if="parseJson(item.continuityIssues).length > 0">
+                                    <ul class="list-unstyled mb-1">
+                                        <template x-for="(issue, idx) in parseJson(item.continuityIssues)" :key="idx">
+                                            <li class="small text-warning" x-text="issue.issue"></li>
+                                        </template>
+                                    </ul>
+                                </template>
+                            </div>
+
+                            <!-- Foreshadowing -->
+                            <div class="mb-2">
+                                <small class="fw-bold text-muted"><i class="bi bi-lightbulb"></i> 伏笔追踪</small>
+                                <template x-if="parseJson(item.foreshadowing).length === 0">
+                                    <p class="mb-1 small text-muted">无伏笔</p>
+                                </template>
+                                <template x-if="parseJson(item.foreshadowing).length > 0">
+                                    <ul class="list-unstyled mb-1">
+                                        <template x-for="(f, idx) in parseJson(item.foreshadowing)" :key="idx">
+                                            <li class="small">
+                                                <span class="badge" :class="f.type === 'planted' ? 'bg-primary' : 'bg-success'" x-text="f.type === 'planted' ? '新伏笔' : '已回收'"></span>
+                                                <span x-text="f.content"></span>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Inline: Proofread Fix Generating (shown for the chapter being fixed) -->
+                        <div x-show="proofreadFixGenerating && proofreadFixChapterNum === item.chapterNumber" class="mt-2 pt-2 border-top">
+                            <div class="d-flex align-items-center mb-2">
+                                <small class="text-muted">
+                                    <span class="spinner-border spinner-border-sm me-1"></span>
+                                    正在精修...
+                                </small>
+                            </div>
+                            <div class="split-view-container">
+                                <div class="split-view-panel">
+                                    <div class="split-view-header">精修前原文</div>
+                                    <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;" x-text="proofreadFixDraft"></pre>
+                                </div>
+                                <div class="split-view-panel">
+                                    <div class="split-view-header">精修中...</div>
+                                    <div class="streaming-output split-panel-content">
+                                        <span x-text="proofreadFixContent"></span>
+                                        <span class="cursor"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Inline: Proofread Fix Preview (each chapter independently) -->
+                        <div x-show="proofreadFixPreviews[item.chapterNumber]" class="mt-2 pt-2 border-top">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <small class="text-muted">精修对比预览</small>
+                                <button class="btn btn-sm btn-outline-secondary" @click="previewProofreadFix(item.chapterNumber)">
+                                    <i class="bi bi-x-lg"></i> 关闭
+                                </button>
+                            </div>
+                            <div class="split-view-container">
+                                <div class="split-view-panel">
+                                    <div class="split-view-header">精修前 (<span x-text="(proofreadFixPreviews[item.chapterNumber]?.draft || '').length"></span>字)</div>
+                                    <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;" x-text="proofreadFixPreviews[item.chapterNumber]?.draft || ''"></pre>
+                                </div>
+                                <div class="split-view-panel">
+                                    <div class="split-view-header">精修后 (<span x-text="(proofreadFixPreviews[item.chapterNumber]?.content || '').length"></span>字)</div>
+                                    <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;" x-text="proofreadFixPreviews[item.chapterNumber]?.content || ''"></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Confirm button -->
+            <div x-show="!generating && proofreadLoaded && proofreadCompletedCount() > 0" class="mt-3 text-end d-flex gap-2 justify-content-end">
+                <button th:if="${viewStep == project.currentStep}" type="button" class="btn btn-success"
+                        @click="confirmStep()" :disabled="fullAutoRunning || stepConfirmed">
+                    <i class="bi bi-check-lg"></i> <span x-text="stepConfirmed ? '已确认' : '确认'"></span>
+                </button>
+                <button th:if="${viewStep == project.currentStep && viewStep.next() != null}" type="button" class="btn btn-primary"
+                        @click="advanceStep()" :disabled="fullAutoRunning">
+                    <i class="bi bi-arrow-right"></i> 进入下一步
+                </button>
+            </div>
+        </div>
+    </div>
+</th:block>
+</body>
+</html>

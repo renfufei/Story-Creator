@@ -20,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import reactor.core.Disposable;
+import reactor.core.publisher.Sinks;
 
 import java.util.List;
 import java.util.Map;
@@ -27,6 +28,9 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 public class AutoRunService {
@@ -45,7 +49,30 @@ public class AutoRunService {
     private final GlobalSettingService globalSettingService;
     private final AutoRunStepConfigRepository autoRunStepConfigRepository;
     private final ConcurrentHashMap<Long, Boolean> stopSignals = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, Boolean> runningProjects = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, AutoRunObservation> observations = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+    private final ScheduledExecutorService observationCleanupScheduler = Executors.newSingleThreadScheduledExecutor();
+
+    public static class AutoRunObservation {
+        private final Sinks.Many<String> sink = Sinks.many().multicast().onBackpressureBuffer(4096, false);
+        private final StringBuffer tokenBuffer = new StringBuffer();
+        private volatile String currentStepName = "";
+        private volatile int currentChapter = 0;
+        private volatile boolean active = false;
+
+        public void reset(String step, int chapter) {
+            tokenBuffer.setLength(0);
+            currentStepName = step;
+            currentChapter = chapter;
+        }
+
+        public Sinks.Many<String> getSink() { return sink; }
+        public String getTokenBuffer() { return tokenBuffer.toString(); }
+        public String getCurrentStepName() { return currentStepName; }
+        public int getCurrentChapter() { return currentChapter; }
+        public boolean isActive() { return active; }
+    }
 
     public AutoRunService(ProjectRepository projectRepository,
                           ChapterRepository chapterRepository,
@@ -78,7 +105,8 @@ public class AutoRunService {
             throw new IllegalStateException("项目状态为「已废弃」，无法启动自动创作");
         }
 
-        if (project.getAutoRunStatus() == AutoRunStatus.RUNNING) {
+        // Atomic check-and-set to prevent double-start race condition
+        if (runningProjects.putIfAbsent(projectId, true) != null) {
             throw new IllegalStateException("自动创作已在运行中");
         }
 
@@ -88,6 +116,12 @@ public class AutoRunService {
         projectRepository.save(project);
 
         stopSignals.remove(projectId);
+
+        // Create observation for real-time streaming
+        AutoRunObservation obs = new AutoRunObservation();
+        obs.active = true;
+        observations.put(projectId, obs);
+
         executor.submit(() -> executeAutoRun(projectId));
     }
 
@@ -103,6 +137,10 @@ public class AutoRunService {
         project.setAutoRunStatus(AutoRunStatus.STOPPING);
         project.setAutoRunProgress("正在停止...");
         projectRepository.save(project);
+    }
+
+    public AutoRunObservation getObservation(Long projectId) {
+        return observations.get(projectId);
     }
 
     public Map<String, Object> getStatus(Long projectId) {
@@ -125,7 +163,20 @@ public class AutoRunService {
             log.error("Auto run failed for project {}", projectId, e);
             markFailed(projectId, e.getMessage());
         } finally {
+            runningProjects.remove(projectId);
             stopSignals.remove(projectId);
+            completeObservation(projectId);
+        }
+    }
+
+    private void completeObservation(Long projectId) {
+        AutoRunObservation obs = observations.get(projectId);
+        if (obs != null) {
+            obs.active = false;
+            obs.getSink().tryEmitComplete();
+            // Only remove if the observation in the map is still this same instance
+            // (a restart may have replaced it with a new active observation)
+            observationCleanupScheduler.schedule(() -> observations.remove(projectId, obs), 30, TimeUnit.SECONDS);
         }
     }
 
@@ -184,7 +235,17 @@ public class AutoRunService {
 
             switch (step) {
                 case CHARACTER_DESIGN -> {
-                    generateAndSave(projectId, step, 0);
+                    // Check if card generation is needed
+                    List<CharacterEntity> existingCards = characterRepository
+                            .findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
+                    ProjectEntity proj = projectRepository.findById(projectId).orElseThrow();
+                    long validCards = existingCards.stream()
+                            .filter(c -> c.getContent() != null && c.getContent().length() > CONTENT_MIN_LENGTH)
+                            .count();
+                    if (validCards < proj.getCharacterCount()) {
+                        // Cards not yet fully generated, run generation
+                        generateAndSave(projectId, step, 0);
+                    }
                     if (shouldStop(projectId)) { markStopped(projectId); return; }
                     // Auto-refine characters after generation
                     runCharacterRefine(projectId);
@@ -237,7 +298,9 @@ public class AutoRunService {
                 long validCards = cards.stream()
                         .filter(c -> c.getContent() != null && c.getContent().length() > CONTENT_MIN_LENGTH)
                         .count();
-                return validCards >= project.getCharacterCount();
+                if (validCards < project.getCharacterCount()) return false;
+                // All cards must be refined for step to be considered complete
+                return cards.stream().allMatch(c -> "REFINED".equals(c.getStatus()));
             }
             case OUTLINE_GENERATION -> {
                 var outline = storyOutlineRepository.findByProjectId(projectId).orElse(null);
@@ -245,10 +308,9 @@ public class AutoRunService {
                     return false;
                 }
                 List<ChapterOutlineEntity> chapterOutlines = chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId);
-                long validOutlines = chapterOutlines.stream()
-                        .filter(o -> o.getSummary() != null && !o.getSummary().isBlank())
-                        .count();
-                return validOutlines >= project.getTotalChapters();
+                if (chapterOutlines.size() < project.getTotalChapters()) return false;
+                // All chapters must be refined for the step to be fully complete
+                return chapterOutlines.stream().allMatch(o -> "REFINED".equals(o.getStatus()));
             }
             case CHAPTER_WRITING -> {
                 List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
@@ -280,13 +342,30 @@ public class AutoRunService {
     }
 
     private void generateAndSave(Long projectId, WorkflowStep step, int chapter) {
+        generateAndSave(projectId, step, chapter, null);
+    }
+
+    private void generateAndSave(Long projectId, WorkflowStep step, int chapter, String progressPrefix) {
         log.info("[P{}][AutoRun] generateAndSave START step={} chapter={}", projectId, step, chapter);
         long gsStart = System.currentTimeMillis();
         StringBuilder content = new StringBuilder();
-        Throwable[] error = {null};
+        AtomicReference<Throwable> error = new AtomicReference<>();
+
+        AutoRunObservation obs = observations.get(projectId);
+        if (obs != null) {
+            obs.reset(step.name(), chapter);
+            obs.getSink().tryEmitNext("[[AUTORUN_STEP:" + step.name() + ":" + chapter + "]]");
+        }
+
         var disposable = workflowEngine.generate(projectId, step, chapter)
-                .doOnNext(content::append)
-                .doOnError(e -> error[0] = e)
+                .doOnNext(token -> {
+                    content.append(token);
+                    if (obs != null && obs.active) {
+                        obs.tokenBuffer.append(token);
+                        obs.getSink().tryEmitNext(token);
+                    }
+                })
+                .doOnError(error::set)
                 .subscribe();
 
         // Poll: wait for completion or stop signal, with step-appropriate timeout
@@ -296,11 +375,12 @@ public class AutoRunService {
             case CHARACTER_DESIGN -> perStepTimeout * 8L * 1000L;
             case CHAPTER_WRITING -> perStepTimeout * 10L * 1000L;
             case POLISHING -> perStepTimeout * 10L * 1000L;
-            case PROOFREADING -> perStepTimeout * 30L * 1000L;
+            case PROOFREADING -> perStepTimeout * 8L * 1000L;
             default -> perStepTimeout * 1000L;
         };
         long deadline = System.currentTimeMillis() + totalTimeoutMs;
         int outlinePollCount = 0;
+        int progressPollCount = 0;
         while (!disposable.isDisposed()) {
             if (shouldStop(projectId)) {
                 disposable.dispose();
@@ -322,6 +402,10 @@ public class AutoRunService {
             if (step == WorkflowStep.OUTLINE_GENERATION && ++outlinePollCount % 4 == 0) {
                 updateOutlineProgress(projectId);
             }
+            if (progressPrefix != null && ++progressPollCount % 8 == 0) {
+                long elapsed = (System.currentTimeMillis() - gsStart) / 1000;
+                updateProgress(projectId, step.getDisplayName(), chapter, progressPrefix + " [" + elapsed + "s]...");
+            }
         }
 
         if (shouldStop(projectId)) {
@@ -330,11 +414,11 @@ public class AutoRunService {
         }
 
         // Check if generation failed (error or empty content)
-        if (error[0] != null) {
+        if (error.get() != null) {
             workflowEngine.resetGeneratingStatus(projectId, step, chapter);
             throw new RuntimeException("生成失败，步骤: " + step.getDisplayName()
                     + (chapter > 0 ? " 第" + chapter + "章" : "")
-                    + "，原因: " + error[0].getMessage(), error[0]);
+                    + "，原因: " + error.get().getMessage(), error.get());
         }
         if (content.isEmpty()) {
             workflowEngine.resetGeneratingStatus(projectId, step, chapter);
@@ -378,9 +462,9 @@ public class AutoRunService {
 
         for (int num = startNum; num <= totalChapters; num++) {
             if (shouldStop(projectId)) return;
-            updateProgress(projectId, WorkflowStep.CHAPTER_WRITING.getDisplayName(), num,
-                    "正在生成第 " + num + "/" + totalChapters + " 章...");
-            generateAndSave(projectId, WorkflowStep.CHAPTER_WRITING, num);
+            String prefix = "章节写作：第 " + num + "/" + totalChapters + " 章";
+            updateProgress(projectId, WorkflowStep.CHAPTER_WRITING.getDisplayName(), num, prefix + "...");
+            generateAndSave(projectId, WorkflowStep.CHAPTER_WRITING, num, prefix);
             // 同步生成角色状态，确保不与下一章 AI 请求并发
             try {
                 workflowEngine.generateCharacterStates(projectId, num);
@@ -401,42 +485,82 @@ public class AutoRunService {
         for (int i = 0; i < needsPolish.size(); i++) {
             if (shouldStop(projectId)) return;
             ChapterEntity ch = needsPolish.get(i);
-            updateProgress(projectId, WorkflowStep.POLISHING.getDisplayName(), ch.getChapterNumber(),
-                    "正在润色第 " + ch.getChapterNumber() + " 章（" + (i + 1) + "/" + needsPolish.size() + "）...");
-            generateAndSave(projectId, WorkflowStep.POLISHING, ch.getChapterNumber());
+            String prefix = "润色：第 " + ch.getChapterNumber() + " 章（" + (i + 1) + "/" + needsPolish.size() + "）";
+            updateProgress(projectId, WorkflowStep.POLISHING.getDisplayName(), ch.getChapterNumber(), prefix + "...");
+            generateAndSave(projectId, WorkflowStep.POLISHING, ch.getChapterNumber(), prefix);
         }
     }
 
     private void runProofreadingAuto(Long projectId) {
         List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
-        List<ChapterEntity> needsProofread = chapters.stream()
-                .filter(ch -> ch.getProofreadStatus() != StepStatus.CONFIRMED
-                        && ch.getProofreadStatus() != StepStatus.GENERATED)
+        List<ChapterEntity> chaptersWithContent = chapters.stream()
                 .filter(ch -> ch.getContent() != null && !ch.getContent().isBlank())
                 .toList();
 
-        for (int i = 0; i < needsProofread.size(); i++) {
+        for (int i = 0; i < chaptersWithContent.size(); i++) {
             if (shouldStop(projectId)) return;
-            ChapterEntity ch = needsProofread.get(i);
-            updateProgress(projectId, WorkflowStep.PROOFREADING.getDisplayName(), ch.getChapterNumber(),
-                    "正在校对第 " + ch.getChapterNumber() + " 章（" + (i + 1) + "/" + needsProofread.size() + "）...");
-            generateAndSave(projectId, WorkflowStep.PROOFREADING, ch.getChapterNumber());
+            ChapterEntity ch = chaptersWithContent.get(i);
+            int chNum = ch.getChapterNumber();
+            String progress = "（" + (i + 1) + "/" + chaptersWithContent.size() + "）";
+
+            // Step 1: Generate proofreading report (skip if already done)
+            if (ch.getProofreadStatus() != StepStatus.CONFIRMED
+                    && ch.getProofreadStatus() != StepStatus.GENERATED) {
+                String prefix = "校对报告：第 " + chNum + " 章" + progress;
+                updateProgress(projectId, "校对-生成报告", chNum, prefix + "...");
+                generateAndSave(projectId, WorkflowStep.PROOFREADING, chNum, prefix);
+            }
+
+            if (shouldStop(projectId)) return;
+
+            // Step 2: Fix based on proofreading report (skip if already done)
+            // Re-fetch chapter to get updated proofreadStatus
+            ch = chapterRepository.findByProjectIdAndChapterNumber(projectId, chNum).orElse(ch);
+            if ((ch.getProofreadStatus() == StepStatus.GENERATED || ch.getProofreadStatus() == StepStatus.CONFIRMED)
+                    && ch.getProofreadFixStatus() != StepStatus.GENERATED
+                    && ch.getProofreadFixStatus() != StepStatus.CONFIRMED) {
+                String prefix = "校对精修：第 " + chNum + " 章" + progress;
+                updateProgress(projectId, "校对-精修", chNum, prefix + "...");
+                proofreadFixWithProgress(projectId, chNum, "校对-精修", prefix);
+            }
+        }
+    }
+
+    private void proofreadFixWithProgress(Long projectId, int chapterNumber, String stepLabel, String progressPrefix) {
+        long start = System.currentTimeMillis();
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        var disposable = workflowEngine.proofreadFixSingleChapter(projectId, chapterNumber)
+                .doOnError(error::set)
+                .subscribe();
+
+        int perStepTimeout = globalSettingService.getAiTimeoutSeconds();
+        long deadline = System.currentTimeMillis() + perStepTimeout * 3L * 1000L;
+        int pollCount = 0;
+
+        while (!disposable.isDisposed()) {
+            if (shouldStop(projectId)) {
+                disposable.dispose();
+                return;
+            }
+            if (System.currentTimeMillis() > deadline) {
+                disposable.dispose();
+                throw new RuntimeException("校对精修超时 第" + chapterNumber + "章");
+            }
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                disposable.dispose();
+                Thread.currentThread().interrupt();
+                return;
+            }
+            if (++pollCount % 8 == 0) {
+                long elapsed = (System.currentTimeMillis() - start) / 1000;
+                updateProgress(projectId, stepLabel, chapterNumber, progressPrefix + " [" + elapsed + "s]...");
+            }
         }
 
-        // Phase 2: Fix based on proofreading results
-        chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
-        List<ChapterEntity> needsFix = chapters.stream()
-                .filter(ch -> ch.getProofreadStatus() == StepStatus.GENERATED || ch.getProofreadStatus() == StepStatus.CONFIRMED)
-                .filter(ch -> ch.getProofreadFixStatus() != StepStatus.GENERATED && ch.getProofreadFixStatus() != StepStatus.CONFIRMED)
-                .filter(ch -> ch.getContent() != null && !ch.getContent().isBlank())
-                .toList();
-
-        for (int i = 0; i < needsFix.size(); i++) {
-            if (shouldStop(projectId)) return;
-            ChapterEntity ch = needsFix.get(i);
-            updateProgress(projectId, WorkflowStep.PROOFREADING.getDisplayName(), ch.getChapterNumber(),
-                    "正在精修第 " + ch.getChapterNumber() + " 章（" + (i + 1) + "/" + needsFix.size() + "）...");
-            workflowEngine.proofreadFixSingleChapterSync(projectId, ch.getChapterNumber());
+        if (error.get() != null) {
+            throw new RuntimeException("校对精修失败 第" + chapterNumber + "章: " + error.get().getMessage(), error.get());
         }
     }
 
@@ -453,9 +577,9 @@ public class AutoRunService {
         updateProgress(projectId, "角色精修", 0, "正在自动精修角色卡...");
         log.info("[P{}][AutoRun] Starting character refine", projectId);
 
-        Throwable[] error = {null};
+        AtomicReference<Throwable> error = new AtomicReference<>();
         var disposable = workflowEngine.refineAllCharacters(projectId)
-                .doOnError(e -> error[0] = e)
+                .doOnError(error::set)
                 .subscribe();
 
         int perStepTimeout = globalSettingService.getAiTimeoutSeconds();
@@ -480,8 +604,8 @@ public class AutoRunService {
             }
         }
 
-        if (error[0] != null) {
-            throw new RuntimeException("角色精修失败: " + error[0].getMessage(), error[0]);
+        if (error.get() != null) {
+            throw new RuntimeException("角色精修失败: " + error.get().getMessage(), error.get());
         }
 
         log.info("[P{}][AutoRun] Character refine completed", projectId);

@@ -44,6 +44,9 @@ public class ProjectEntity {
     @Column(name = "character_count", nullable = false)
     private int characterCount = 5;
 
+    @Column(name = "chapters_per_volume", nullable = false)
+    private int chaptersPerVolume = 10;
+
     @Column(name = "default_model_config_id")
     private Long defaultModelConfigId;
 
@@ -123,6 +126,9 @@ public class ProjectEntity {
 
     public int getCharacterCount() { return characterCount; }
     public void setCharacterCount(int characterCount) { this.characterCount = characterCount; }
+
+    public int getChaptersPerVolume() { return chaptersPerVolume; }
+    public void setChaptersPerVolume(int chaptersPerVolume) { this.chaptersPerVolume = chaptersPerVolume; }
 
     public Long getDefaultModelConfigId() { return defaultModelConfigId; }
     public void setDefaultModelConfigId(Long defaultModelConfigId) { this.defaultModelConfigId = defaultModelConfigId; }

@@ -25,6 +25,7 @@ public record ProjectJsonDto(
         int chapterWordCountMin,
         int chapterWordCountMax,
         int characterCount,
+        int chaptersPerVolume,
         boolean autoMode
     ) {}
 

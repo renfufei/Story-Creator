@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<th:block th:fragment="header">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h4 class="mb-0"><a th:href="@{/projects/{id}(id=${project.id})}" class="text-decoration-none text-dark" th:text="${project.title}">项目名</a></h4>
+        <div class="d-flex gap-2">
+            <a th:href="@{/projects/{id}/read(id=${project.id})}" class="btn btn-sm btn-outline-success" target="_blank">
+                <i class="bi bi-book"></i> 全文阅读
+            </a>
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-download"></i> 导出
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=markdown(id=${project.id})}"><i class="bi bi-filetype-md me-2"></i>Markdown (.md)</a></li>
+                    <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=txt(id=${project.id})}"><i class="bi bi-file-text me-2"></i>纯文本 (.txt)</a></li>
+                    <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=pdf(id=${project.id})}"><i class="bi bi-filetype-pdf me-2"></i>PDF (.pdf)</a></li>
+                    <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=epub(id=${project.id})}"><i class="bi bi-book me-2"></i>电子书 (.epub)</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=json(id=${project.id})}"><i class="bi bi-filetype-json me-2"></i>完整备份 (.json)</a></li>
+                </ul>
+            </div>
+            <a th:href="@{/projects/{id}/edit(id=${project.id})}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-pencil-square"></i> 编辑项目
+            </a>
+        </div>
+    </div>
+
+    <!-- Step Navigation (clickable, reactive) -->
+    <div class="workflow-steps mb-0">
+        <template x-for="(s, idx) in stepList" :key="s.name">
+            <a class="workflow-step text-decoration-none"
+               :class="s.name === autoRunActiveStep ? 'active' : (s.order < autoRunActiveOrder ? 'completed' : '')"
+               :href="'/projects/' + projectId + '/workflow?step=' + s.name">
+                <div class="step-number" x-text="idx + 1"></div>
+                <div class="small" x-text="s.label"></div>
+            </a>
+        </template>
+    </div>
+
+    <!-- Full Auto Mode Control Bar -->
+    <template x-if="autoMode">
+        <div class="alert mb-0 mt-2 py-2"
+             :class="fullAutoRunning ? 'alert-info' : (fullAutoError ? 'alert-danger' : 'alert-secondary')">
+            <div class="d-flex justify-content-between align-items-center">
+                <span>
+                    <template x-if="!fullAutoRunning && !fullAutoError">
+                        <span><i class="bi bi-lightning"></i> 全自动模式已开启</span>
+                    </template>
+                    <template x-if="fullAutoRunning">
+                        <span><span class="spinner-border spinner-border-sm me-1"></span> <span x-text="fullAutoStatus"></span></span>
+                    </template>
+                    <template x-if="!fullAutoRunning && fullAutoError">
+                        <span><i class="bi bi-exclamation-triangle"></i> 出错: <span x-text="fullAutoError"></span></span>
+                    </template>
+                </span>
+                <div class="d-flex gap-2">
+                    <button x-show="!fullAutoRunning" class="btn btn-sm btn-outline-secondary" @click="openWorkflowStateModal()">
+                        <i class="bi bi-gear"></i> 设置工作流状态
+                    </button>
+                    <button x-show="!fullAutoRunning" class="btn btn-sm btn-primary" @click="startFullAuto()">
+                        <i class="bi bi-play-fill"></i> 开始全自动创作
+                    </button>
+                    <button x-show="fullAutoRunning" class="btn btn-sm btn-outline-info" @click="openAutoRunStream()">
+                        <i class="bi bi-reception-4"></i> 实时显示
+                    </button>
+                    <button x-show="fullAutoRunning" class="btn btn-sm btn-outline-danger" @click="stopFullAuto()">
+                        <i class="bi bi-stop-fill"></i> 停止
+                    </button>
+                </div>
+            </div>
+            <div x-show="!fullAutoRunning" class="mt-2 d-flex align-items-center flex-wrap gap-2" style="font-size:0.85rem;">
+                <span class="text-muted me-1">步骤:</span>
+                <template x-for="s in stepList" :key="s.name">
+                    <label class="form-check form-check-inline form-switch mb-0" style="min-height:auto;">
+                        <input class="form-check-input" type="checkbox"
+                               :checked="autoRunStepConfigs[s.name] !== false"
+                               @change="toggleStepConfig(s.name, $event.target.checked)">
+                        <span class="form-check-label" x-text="s.label"></span>
+                    </label>
+                </template>
+            </div>
+        </div>
+    </template>
+</th:block>
+</body>
+</html>

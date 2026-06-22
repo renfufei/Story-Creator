@@ -26,9 +26,6 @@ public class ChapterWritingHandler implements WorkflowStepHandler {
         String prompt = promptRegistry.resolveTemplate(template, context.toTemplateVariables());
 
         String systemPrompt = promptRegistry.getSystemPrompt(WorkflowStep.CHAPTER_WRITING, context.getGenre());
-        if (systemPrompt == null || systemPrompt.isBlank()) {
-            systemPrompt = "你是一位文笔出色的网络小说作家，擅长创作引人入胜的故事内容，文风流畅，描写生动。";
-        }
 
         // Estimate tokens needed: Chinese ~2 tokens/char, add buffer
         int estimatedTokens = Math.max(8192, context.getChapterWordCountMax() * 2 + 2000);

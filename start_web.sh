@@ -23,7 +23,7 @@ fi
 echo "Starting Story Creator in background..."
 echo "数据库路径: ${DB_PATH}/story-creator"
 echo "  (设置环境变量 STORY_DB_PATH 可自定义，例如: STORY_DB_PATH=/var/data ./start_web.sh)"
-nohup mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=$PORT --spring.datasource.url=jdbc:h2:file:${DB_PATH}/story-creator" > "$LOG_FILE" 2>&1 &
+nohup mvn clean spring-boot:run -Dspring-boot.run.arguments="--server.port=$PORT --spring.datasource.url=jdbc:h2:file:${DB_PATH}/story-creator" > "$LOG_FILE" 2>&1 &
 APP_PID=$!
 echo "进程 PID: $APP_PID"
 

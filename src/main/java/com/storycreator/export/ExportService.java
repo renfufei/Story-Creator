@@ -235,6 +235,7 @@ public class ExportService {
                 project.getChapterWordCountMin(),
                 project.getChapterWordCountMax(),
                 project.getCharacterCount(),
+                project.getChaptersPerVolume(),
                 project.isAutoMode()
         );
 

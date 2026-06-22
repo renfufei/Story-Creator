@@ -5,7 +5,12 @@
     <div class="row justify-content-center">
         <div class="col-md-8" x-data="projectFormHelper()">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h2 class="mb-0" th:text="${projectId != null} ? '编辑项目' : '新建创作项目'">新建项目</h2>
+                <div class="d-flex align-items-center gap-2">
+                    <a th:if="${projectId != null}" th:href="@{/projects/{id}(id=${projectId})}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> 返回
+                    </a>
+                    <h2 class="mb-0" th:text="${projectId != null} ? '编辑项目' : '新建创作项目'">新建项目</h2>
+                </div>
                 <button type="button" class="btn btn-outline-info btn-sm" @click="showRefModal = true"
                         th:if="${projectId == null && allProjects != null && !allProjects.isEmpty()}">
                     <i class="bi bi-clipboard-data"></i> 参考已有项目
@@ -86,8 +91,15 @@
                 <div class="mb-3">
                     <label for="totalChapters" class="form-label">章节数</label>
                     <input type="number" class="form-control" id="totalChapters" th:field="*{totalChapters}"
-                           min="1" max="200" placeholder="10">
-                    <div class="form-text">计划写多少章，默认10章</div>
+                           min="5" max="1000" placeholder="10">
+                    <div class="form-text">计划写多少章（5~1000章），默认10章</div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="chaptersPerVolume" class="form-label">每卷章节数</label>
+                    <input type="number" class="form-control" id="chaptersPerVolume" th:field="*{chaptersPerVolume}"
+                           min="5" max="50" placeholder="10">
+                    <div class="form-text">每卷包含多少章（5~50章），用于大纲分卷生成，默认10章</div>
                 </div>
 
                 <div class="mb-3">
@@ -181,7 +193,7 @@
                         <i class="bi bi-check-lg"></i>
                         <span th:text="${projectId != null} ? '保存修改' : '创建并开始创作'">提交</span>
                     </button>
-                    <a th:href="@{/}" class="btn btn-outline-secondary">取消</a>
+                    <a th:href="${projectId != null} ? @{/projects/{id}(id=${projectId})} : @{/}" class="btn btn-outline-secondary">取消</a>
                     <button type="button" class="btn btn-danger ms-auto"
                             th:if="${projectId != null && form.projectStatus != null && form.projectStatus.name() == 'ABANDONED'}"
                             data-bs-toggle="modal" data-bs-target="#deleteProjectModal">
@@ -228,6 +240,7 @@
                         if (data.genre) form.querySelector('#genre').value = data.genre;
                         if (data.description) form.querySelector('#description').value = data.description;
                         form.querySelector('#totalChapters').value = data.totalChapters || 10;
+                        form.querySelector('#chaptersPerVolume').value = data.chaptersPerVolume || 10;
                         form.querySelector('#characterCount').value = data.characterCount || 5;
                         form.querySelector('[name="chapterWordCount"]').value = data.chapterWordCount || 5000;
                         form.querySelector('[name="chapterWordCountMin"]').value = data.chapterWordCountMin || 4000;

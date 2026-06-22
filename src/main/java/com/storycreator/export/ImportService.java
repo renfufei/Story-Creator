@@ -88,6 +88,7 @@ public class ImportService {
         project.setChapterWordCountMin(dto.project().chapterWordCountMin());
         project.setChapterWordCountMax(dto.project().chapterWordCountMax());
         project.setCharacterCount(dto.project().characterCount());
+        project.setChaptersPerVolume(dto.project().chaptersPerVolume() > 0 ? dto.project().chaptersPerVolume() : 10);
         project.setAutoMode(dto.project().autoMode());
         project.setAutoRunStatus(AutoRunStatus.IDLE);
         project = projectRepository.save(project);

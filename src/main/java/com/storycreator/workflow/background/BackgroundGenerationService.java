@@ -15,20 +15,40 @@ import java.util.concurrent.*;
 public class BackgroundGenerationService {
 
     private static final Logger log = LoggerFactory.getLogger(BackgroundGenerationService.class);
+    private static final int DISPLAY_BUFFER_MAX = 20_000;
+    private static final int DISPLAY_BUFFER_TRIM_TO = 10_000;
 
     public record GenerationKey(Long projectId, WorkflowStep step, int chapter) {}
 
     public static class GenerationTask {
         final Sinks.Many<String> sink = Sinks.many().multicast().onBackpressureBuffer(4096, false);
-        final StringBuilder contentBuffer = new StringBuilder();
+        final StringBuffer contentBuffer = new StringBuffer();
+        final StringBuffer displayBuffer = new StringBuffer();
+        final boolean cappedDisplay;
         volatile Disposable disposable;
         volatile boolean stopRequested;
         volatile boolean completed;
         volatile boolean errored;
         volatile String errorMessage;
 
+        public GenerationTask() {
+            this(false);
+        }
+
+        public GenerationTask(boolean cappedDisplay) {
+            this.cappedDisplay = cappedDisplay;
+        }
+
         public Sinks.Many<String> getSink() { return sink; }
-        public String getContentBuffer() { return contentBuffer.toString(); }
+        public String getContentBuffer() {
+            if (cappedDisplay) {
+                synchronized (displayBuffer) {
+                    return displayBuffer.toString();
+                }
+            }
+            return contentBuffer.toString();
+        }
+        public String getFullContent() { return contentBuffer.toString(); }
         public boolean isCompleted() { return completed; }
         public boolean isErrored() { return errored; }
         public String getErrorMessage() { return errorMessage; }
@@ -44,6 +64,10 @@ public class BackgroundGenerationService {
     }
 
     public void startGeneration(Long projectId, WorkflowStep step, int chapter) {
+        startGeneration(projectId, step, chapter, null);
+    }
+
+    public void startGeneration(Long projectId, WorkflowStep step, int chapter, Runnable postCompletionHook) {
         GenerationKey key = new GenerationKey(projectId, step, chapter);
 
         GenerationTask existing = activeTasks.get(key);
@@ -51,7 +75,7 @@ public class BackgroundGenerationService {
             throw new IllegalStateException("该步骤已有后台任务在运行中");
         }
 
-        GenerationTask task = new GenerationTask();
+        GenerationTask task = new GenerationTask(isCappedStep(step));
         activeTasks.put(key, task);
 
         executor.submit(() -> {
@@ -60,12 +84,30 @@ public class BackgroundGenerationService {
                 task.disposable = workflowEngine.generate(projectId, step, chapter)
                         .doOnNext(token -> {
                             task.contentBuffer.append(token);
+                            if (task.cappedDisplay) {
+                                synchronized (task.displayBuffer) {
+                                    task.displayBuffer.append(token);
+                                    if (task.displayBuffer.length() > DISPLAY_BUFFER_MAX) {
+                                        int start = task.displayBuffer.length() - DISPLAY_BUFFER_TRIM_TO;
+                                        String tail = task.displayBuffer.substring(start);
+                                        task.displayBuffer.setLength(0);
+                                        task.displayBuffer.append(tail);
+                                    }
+                                }
+                            }
                             task.sink.tryEmitNext(token);
                         })
                         .doOnComplete(() -> {
                             task.completed = true;
                             log.info("[P{}] Background generation completed step={}", projectId, step);
-                            workflowEngine.saveGeneratedContent(projectId, step, task.contentBuffer.toString(), chapter);
+                            workflowEngine.saveGeneratedContent(projectId, step, task.getFullContent(), chapter);
+                            if (postCompletionHook != null) {
+                                try {
+                                    postCompletionHook.run();
+                                } catch (Exception e) {
+                                    log.warn("[P{}] Post-completion hook failed step={}: {}", projectId, step, e.getMessage());
+                                }
+                            }
                             task.sink.tryEmitComplete();
                             scheduleCleanup(key);
                         })
@@ -127,6 +169,27 @@ public class BackgroundGenerationService {
         GenerationKey key = new GenerationKey(projectId, step, chapter);
         GenerationTask task = activeTasks.get(key);
         return task != null && !task.completed && !task.errored && !task.stopRequested;
+    }
+
+    /**
+     * Find the active chapter number for a given project+step combination.
+     * Useful for CHAPTER_WRITING/POLISHING where the chapter number varies.
+     */
+    public java.util.Optional<Integer> getActiveChapterForStep(Long projectId, WorkflowStep step) {
+        return activeTasks.entrySet().stream()
+                .filter(e -> e.getKey().projectId().equals(projectId)
+                        && e.getKey().step() == step
+                        && !e.getValue().completed
+                        && !e.getValue().errored
+                        && !e.getValue().stopRequested)
+                .map(e -> e.getKey().chapter())
+                .findFirst();
+    }
+
+    private static boolean isCappedStep(WorkflowStep step) {
+        return step == WorkflowStep.CHAPTER_WRITING
+                || step == WorkflowStep.POLISHING
+                || step == WorkflowStep.PROOFREADING;
     }
 
     private void scheduleCleanup(GenerationKey key) {

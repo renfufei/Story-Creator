@@ -1,7 +1,9 @@
 package com.storycreator.web;
 
+import com.storycreator.core.domain.CharacterStateDimension;
 import com.storycreator.core.domain.StepStatus;
 import com.storycreator.core.domain.WorkflowStep;
+import com.storycreator.core.service.CharacterStateDimensionService;
 import com.storycreator.core.service.GlobalSettingService;
 import com.storycreator.persistence.entity.*;
 import com.storycreator.persistence.repository.*;
@@ -44,6 +46,7 @@ public class WorkflowController {
     private final GlobalSettingService globalSettingService;
     private final BackgroundGenerationService backgroundGenerationService;
     private final AutoRunStepConfigRepository autoRunStepConfigRepository;
+    private final CharacterStateDimensionService characterStateDimensionService;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     public WorkflowController(WorkflowEngine workflowEngine,
@@ -60,7 +63,8 @@ public class WorkflowController {
                              WorldSettingRepository worldSettingRepository,
                              GlobalSettingService globalSettingService,
                              BackgroundGenerationService backgroundGenerationService,
-                             AutoRunStepConfigRepository autoRunStepConfigRepository) {
+                             AutoRunStepConfigRepository autoRunStepConfigRepository,
+                             CharacterStateDimensionService characterStateDimensionService) {
         this.workflowEngine = workflowEngine;
         this.projectRepository = projectRepository;
         this.workflowStateRepository = workflowStateRepository;
@@ -76,6 +80,7 @@ public class WorkflowController {
         this.globalSettingService = globalSettingService;
         this.backgroundGenerationService = backgroundGenerationService;
         this.autoRunStepConfigRepository = autoRunStepConfigRepository;
+        this.characterStateDimensionService = characterStateDimensionService;
     }
 
     @GetMapping("/workflow")
@@ -150,6 +155,19 @@ public class WorkflowController {
         } else {
             model.addAttribute("autoRunStepConfigs", new LinkedHashMap<>());
         }
+
+        // Character state dimension configs
+        var dimEntities = characterStateDimensionService.ensureAndGet(projectId);
+        List<Map<String, Object>> dimConfigs = new ArrayList<>();
+        for (var dimEntity : dimEntities) {
+            Map<String, Object> dimMap = new LinkedHashMap<>();
+            dimMap.put("key", dimEntity.getDimKey().name());
+            dimMap.put("displayName", dimEntity.getDimKey().getDisplayName());
+            dimMap.put("enabled", dimEntity.isEnabled());
+            dimMap.put("defaultEnabled", dimEntity.getDimKey().isDefaultEnabled());
+            dimConfigs.add(dimMap);
+        }
+        model.addAttribute("characterStateDimConfigs", dimConfigs);
 
         return "workflow";
     }
@@ -535,6 +553,23 @@ public class WorkflowController {
     }
 
     /**
+     * Get character overview (sort_order=0) for a project
+     */
+    @GetMapping("/characters/overview")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> getCharacterOverview(@PathVariable Long projectId) {
+        return characterRepository.findByProjectIdOrderBySortOrder(projectId).stream()
+                .filter(c -> c.getSortOrder() == 0)
+                .findFirst()
+                .map(overview -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("content", overview.getContent());
+                    return ResponseEntity.ok(map);
+                })
+                .orElse(ResponseEntity.ok(Map.of("content", "")));
+    }
+
+    /**
      * SSE endpoint to refine all character cards via AI
      */
     @GetMapping(value = "/characters/refine-all", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -659,6 +694,11 @@ public class WorkflowController {
     @ResponseBody
     public ResponseEntity<Map<String, String>> deleteCharacter(@PathVariable Long projectId,
                                                                @PathVariable Long id) {
+        CharacterEntity character = characterRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Character not found: " + id));
+        if (!character.getProjectId().equals(projectId)) {
+            return ResponseEntity.status(403).body(Map.of("status", "error", "message", "角色不属于该项目"));
+        }
         characterRepository.deleteById(id);
         return ResponseEntity.ok(Map.of("status", "ok"));
     }
@@ -682,7 +722,7 @@ public class WorkflowController {
                     String titlePrompt = "请为以下小说章节内容生成一个简短的章节标题，要求：4-12个字，不要带第X章前缀，只输出标题文字，不要标点符号。\n\n"
                             + contentPreview;
 
-                    var resolved = workflowEngine.resolveModelForProject(projectId);
+                    var resolved = workflowEngine.resolveModelForProject(projectId, com.storycreator.core.domain.WorkflowStep.CHAPTER_WRITING);
                     var request = com.storycreator.core.port.ai.AiRequest.builder()
                             .systemPrompt("你是一位小说编辑，擅长给章节起标题。要求每个标题控制在4-12个字，风格统一，长度尽量一致（建议6-8字）。只输出标题文字，不要任何额外内容。")
                             .userPrompt(titlePrompt)
@@ -1147,12 +1187,15 @@ public class WorkflowController {
                 }
                 emitter.send(SseEmitter.event().name("progress").data("分章大纲替换完成 (" + chapterOutlines.size() + "章)"));
 
-                // 6. Replace in chapters
+                // 6. Replace in chapters (including derived fields)
                 List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
                 for (ChapterEntity ch : chapters) {
                     ch.setTitle(applyReplace.apply(ch.getTitle()));
                     ch.setContent(applyReplace.apply(ch.getContent()));
                     ch.setContentDraft(applyReplace.apply(ch.getContentDraft()));
+                    ch.setPlotSummary(applyReplace.apply(ch.getPlotSummary()));
+                    ch.setCharacterStates(applyReplace.apply(ch.getCharacterStates()));
+                    ch.setContentBeforeFix(applyReplace.apply(ch.getContentBeforeFix()));
                     // Update word count
                     if (ch.getContent() != null) {
                         ch.setWordCount(ch.getContent().length());
@@ -1160,6 +1203,18 @@ public class WorkflowController {
                     chapterRepository.save(ch);
                 }
                 emitter.send(SseEmitter.event().name("progress").data("章节内容替换完成 (" + chapters.size() + "章)"));
+
+                // 7. Replace in proofreading reports
+                List<ProofreadingReportEntity> reports = proofreadingReportRepository.findByProjectIdOrderByChapterNumber(projectId);
+                for (ProofreadingReportEntity report : reports) {
+                    report.setPlotSummary(applyReplace.apply(report.getPlotSummary()));
+                    report.setCharacterIssues(applyReplace.apply(report.getCharacterIssues()));
+                    report.setConsistencyIssues(applyReplace.apply(report.getConsistencyIssues()));
+                    report.setContinuityIssues(applyReplace.apply(report.getContinuityIssues()));
+                    report.setForeshadowing(applyReplace.apply(report.getForeshadowing()));
+                    proofreadingReportRepository.save(report);
+                }
+                emitter.send(SseEmitter.event().name("progress").data("校对报告替换完成 (" + reports.size() + "份)"));
 
                 // Done
                 emitter.send(SseEmitter.event().name("done").data("全局替换完成"));
@@ -1174,5 +1229,40 @@ public class WorkflowController {
         });
 
         return emitter;
+    }
+
+    @GetMapping("/character-state-dims")
+    @ResponseBody
+    public ResponseEntity<List<Map<String, Object>>> getCharacterStateDims(@PathVariable Long projectId) {
+        var dimEntities = characterStateDimensionService.ensureAndGet(projectId);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (var dimEntity : dimEntities) {
+            Map<String, Object> dimMap = new LinkedHashMap<>();
+            dimMap.put("key", dimEntity.getDimKey().name());
+            dimMap.put("displayName", dimEntity.getDimKey().getDisplayName());
+            dimMap.put("enabled", dimEntity.isEnabled());
+            dimMap.put("defaultEnabled", dimEntity.getDimKey().isDefaultEnabled());
+            result.add(dimMap);
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    @PutMapping("/character-state-dims")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> toggleCharacterStateDim(
+            @PathVariable Long projectId,
+            @RequestBody Map<String, Object> body) {
+        String dimKey = (String) body.get("dimKey");
+        Boolean enabled = (Boolean) body.get("enabled");
+        if (dimKey == null || enabled == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "dimKey and enabled are required"));
+        }
+        try {
+            CharacterStateDimension dim = CharacterStateDimension.valueOf(dimKey);
+            characterStateDimensionService.setEnabled(projectId, dim, enabled);
+            return ResponseEntity.ok(Map.of("success", true));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid dimension key: " + dimKey));
+        }
     }
 }

@@ -56,7 +56,7 @@ public class ClaudeAiProvider implements AiProvider {
 
     @Override
     public String generateText(AiRequest request) {
-        String body = buildRequestBody(request);
+        String body = buildRequestBody(request, false);
         WebClient client = buildWebClient(request);
 
         String response = client.post()
@@ -81,7 +81,7 @@ public class ClaudeAiProvider implements AiProvider {
 
     @Override
     public Flux<String> streamText(AiRequest request) {
-        String body = buildRequestBody(request);
+        String body = buildRequestBody(request, true);
         WebClient client = buildWebClient(request);
         log.info("Claude streamText: model={} baseUrl={} promptLen={}",
                 request.getModel(), request.getBaseUrl(),
@@ -183,13 +183,13 @@ public class ClaudeAiProvider implements AiProvider {
         }
     }
 
-    private String buildRequestBody(AiRequest request) {
+    private String buildRequestBody(AiRequest request, boolean stream) {
         try {
             ObjectNode root = objectMapper.createObjectNode();
             root.put("model", request.getModel() != null ? request.getModel() : getDefaultModel());
             root.put("max_tokens", request.getMaxTokens());
             root.put("temperature", request.getTemperature());
-            root.put("stream", true);
+            root.put("stream", stream);
 
             if (request.getSystemPrompt() != null && !request.getSystemPrompt().isEmpty()) {
                 root.put("system", request.getSystemPrompt());

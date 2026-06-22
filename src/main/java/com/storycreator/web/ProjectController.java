@@ -115,6 +115,7 @@ public class ProjectController {
         project.setChapterWordCountMin(form.getChapterWordCountMin() > 0 ? form.getChapterWordCountMin() : 4000);
         project.setChapterWordCountMax(form.getChapterWordCountMax() > 0 ? form.getChapterWordCountMax() : 6000);
         project.setCharacterCount(form.getCharacterCount() > 0 ? form.getCharacterCount() : 5);
+        project.setChaptersPerVolume(form.getChaptersPerVolume() > 0 ? form.getChaptersPerVolume() : 10);
         project.setDefaultModelConfigId(form.getDefaultModelConfigId());
         project.setAutoMode(form.isAutoMode());
         project.setCurrentStep(WorkflowStep.WORLD_BUILDING);
@@ -159,6 +160,7 @@ public class ProjectController {
         form.setChapterWordCountMin(project.getChapterWordCountMin());
         form.setChapterWordCountMax(project.getChapterWordCountMax());
         form.setCharacterCount(project.getCharacterCount());
+        form.setChaptersPerVolume(project.getChaptersPerVolume());
         form.setDefaultModelConfigId(project.getDefaultModelConfigId());
         form.setAutoMode(project.isAutoMode());
         form.setProjectStatus(project.getStatus());
@@ -205,6 +207,7 @@ public class ProjectController {
         project.setChapterWordCountMin(form.getChapterWordCountMin() > 0 ? form.getChapterWordCountMin() : 4000);
         project.setChapterWordCountMax(form.getChapterWordCountMax() > 0 ? form.getChapterWordCountMax() : 6000);
         project.setCharacterCount(form.getCharacterCount() > 0 ? form.getCharacterCount() : 5);
+        project.setChaptersPerVolume(form.getChaptersPerVolume() > 0 ? form.getChaptersPerVolume() : 10);
         project.setDefaultModelConfigId(form.getDefaultModelConfigId());
         project.setAutoMode(form.isAutoMode());
         if (form.getProjectStatus() != null) {
@@ -234,6 +237,7 @@ public class ProjectController {
         data.put("chapterWordCountMin", project.getChapterWordCountMin());
         data.put("chapterWordCountMax", project.getChapterWordCountMax());
         data.put("characterCount", project.getCharacterCount());
+        data.put("chaptersPerVolume", project.getChaptersPerVolume());
         data.put("defaultModelConfigId", project.getDefaultModelConfigId());
         data.put("autoMode", project.isAutoMode());
 
@@ -320,6 +324,8 @@ public class ProjectController {
 
         private int characterCount = 5;
 
+        private int chaptersPerVolume = 10;
+
         private Long defaultModelConfigId;
 
         private boolean autoMode = true;
@@ -351,6 +357,9 @@ public class ProjectController {
 
         public int getCharacterCount() { return characterCount; }
         public void setCharacterCount(int characterCount) { this.characterCount = characterCount; }
+
+        public int getChaptersPerVolume() { return chaptersPerVolume; }
+        public void setChaptersPerVolume(int chaptersPerVolume) { this.chaptersPerVolume = chaptersPerVolume; }
 
         public Long getDefaultModelConfigId() { return defaultModelConfigId; }
         public void setDefaultModelConfigId(Long defaultModelConfigId) { this.defaultModelConfigId = defaultModelConfigId; }
