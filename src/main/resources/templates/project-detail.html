@@ -26,6 +26,8 @@
                     <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=epub(id=${project.id})}"><i class="bi bi-book me-2"></i>电子书 (.epub)</a></li>
                     <li><hr class="dropdown-divider"></li>
                     <li><a class="dropdown-item" th:href="@{/projects/{id}/export?format=json(id=${project.id})}"><i class="bi bi-filetype-json me-2"></i>完整备份 (.json)</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" th:href="@{/tts-export(projectId=${project.id})}"><i class="bi bi-music-note-beamed me-2"></i>导出MP3</a></li>
                 </ul>
             </div>
             <a th:href="@{/projects/{id}/edit(id=${project.id})}" class="btn btn-outline-secondary">

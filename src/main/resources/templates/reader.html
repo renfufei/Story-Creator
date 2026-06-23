@@ -65,6 +65,19 @@
             background: #e9ecef;
             color: #000;
         }
+        .tts-toolbar {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+        }
+        .tts-chapter-btn {
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+        .tts-chapter-btn:hover, .tts-chapter-btn.active {
+            opacity: 1;
+        }
         @media (max-width: 768px) {
             .reader-sidebar { transform: translateX(-100%); }
             .reader-sidebar.show-mobile { transform: translateX(0); }
@@ -73,7 +86,7 @@
         }
     </style>
 </head>
-<body x-data="{ sidebarOpen: window.innerWidth > 768 }">
+<body x-data="readerApp()" x-init="initTts()">
 
     <button class="btn btn-sm btn-outline-dark toggle-btn"
             :class="{ 'shifted': sidebarOpen && window.innerWidth > 768 }"
@@ -103,12 +116,79 @@
     <main class="reader-main" :class="{ 'expanded': !sidebarOpen }">
         <h2 class="mb-4" th:text="${project.title}">书名</h2>
 
+        <!-- TTS Controls -->
+        <div class="tts-toolbar mb-4" x-show="tts.configs.length > 0" x-cloak>
+            <div class="d-flex flex-wrap align-items-center gap-3">
+                <span class="fw-bold small"><i class="bi bi-volume-up"></i> TTS</span>
+
+                <!-- Config selector (when multiple) -->
+                <select class="form-select form-select-sm" style="max-width: 160px;"
+                        x-show="tts.configs.length > 1"
+                        x-model="tts.selectedConfigId" @change="onConfigChange()">
+                    <template x-for="cfg in tts.configs" :key="cfg.id">
+                        <option :value="cfg.id" x-text="cfg.displayName"></option>
+                    </template>
+                </select>
+
+                <!-- Voice -->
+                <select class="form-select form-select-sm" style="max-width: 140px;"
+                        x-model="tts.voice" @change="saveTtsPrefs()">
+                    <template x-for="v in getVoiceOptions()" :key="v">
+                        <option :value="v" x-text="v"></option>
+                    </template>
+                </select>
+
+                <!-- Speed -->
+                <div class="d-flex align-items-center gap-1">
+                    <input type="range" class="form-range" style="width: 80px;"
+                           min="0.25" max="4.0" step="0.25"
+                           x-model="tts.speed" @change="saveTtsPrefs()">
+                    <span class="small text-muted" x-text="tts.speed + 'x'" style="min-width: 35px;"></span>
+                </div>
+
+                <!-- Chunk size -->
+                <div class="d-flex align-items-center gap-1">
+                    <span class="small text-muted">段落:</span>
+                    <input type="number" class="form-control form-control-sm" style="width: 55px;"
+                           min="1" max="500" x-model.number="tts.minLen" @change="saveTtsPrefs()">
+                    <span class="small text-muted">-</span>
+                    <input type="number" class="form-control form-control-sm" style="width: 55px;"
+                           min="10" max="4000" x-model.number="tts.maxLen" @change="saveTtsPrefs()">
+                    <span class="small text-muted">字</span>
+                </div>
+
+                <!-- Export button -->
+                <a class="btn btn-sm btn-outline-dark ms-auto"
+                   th:href="@{/tts-export(projectId=${project.id})}">
+                    <i class="bi bi-download"></i> 导出MP3
+                </a>
+            </div>
+        </div>
+
         <div th:each="chapter, iter : ${chapters}">
             <hr th:if="${!iter.first}" class="chapter-divider">
-            <h3 th:id="'chapter-' + ${chapter.chapterNumber}"
-                th:text="'第' + ${chapter.chapterNumber} + '章 ' + (${chapter.title} ?: '')">
-                章节标题
-            </h3>
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <h3 th:id="'chapter-' + ${chapter.chapterNumber}" class="mb-0"
+                    th:text="'第' + ${chapter.chapterNumber} + '章 ' + (${chapter.title} ?: '')">
+                    章节标题
+                </h3>
+                <!-- Per-chapter TTS button -->
+                <span x-show="tts.configs.length > 0" x-cloak
+                      th:with="cn=${chapter.chapterNumber}"
+                      th:x-data="'{ cn: ' + ${chapter.chapterNumber} + ' }'">
+                    <button class="btn btn-sm tts-chapter-btn"
+                            :class="tts.playing === cn ? 'btn-danger' : 'btn-outline-secondary'"
+                            @click="toggleChapter(cn)"
+                            :disabled="tts.loading === cn">
+                        <span x-show="tts.loading === cn">
+                            <span class="spinner-border spinner-border-sm"></span>
+                        </span>
+                        <span x-show="tts.loading !== cn">
+                            <i :class="tts.playing === cn ? 'bi bi-stop-fill' : 'bi bi-play-fill'"></i>
+                        </span>
+                    </button>
+                </span>
+            </div>
             <div class="chapter-content mt-3" th:text="${chapter.content ?: '（暂无内容）'}">
                 章节内容
             </div>
@@ -121,5 +201,246 @@
     </main>
 
     <script src="https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js" defer></script>
+    <script th:inline="javascript">
+    function readerApp() {
+        const projectId = /*[[${project.id}]]*/ 0;
+        return {
+            sidebarOpen: window.innerWidth > 768,
+            tts: {
+                configs: [],
+                selectedConfigId: null,
+                voice: 'alloy',
+                speed: 1.0,
+                minLen: 10,
+                maxLen: 200,
+                playing: null,
+                loading: null,
+                audio: null,
+                abortController: null,
+                preGeneratedFiles: {}
+            },
+            async initTts() {
+                try {
+                    const res = await fetch(`/projects/${projectId}/tts/configs`);
+                    if (res.ok) {
+                        this.tts.configs = await res.json();
+                        if (this.tts.configs.length > 0) {
+                            const defaultConfig = this.tts.configs.find(c => c.isDefault);
+                            this.tts.selectedConfigId = defaultConfig ? defaultConfig.id : this.tts.configs[0].id;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Failed to load TTS configs', e);
+                }
+                this.loadTtsPrefs();
+                // Ensure voice is valid for selected config
+                const voices = this.getVoiceOptions();
+                if (voices.length > 0 && !voices.includes(this.tts.voice)) {
+                    this.tts.voice = voices[0];
+                }
+                // Load pre-generated files
+                try {
+                    const filesRes = await fetch(`/api/tts-export/projects/${projectId}/completed-files`);
+                    if (filesRes.ok) {
+                        this.tts.preGeneratedFiles = await filesRes.json();
+                    }
+                } catch (e) {}
+            },
+            loadTtsPrefs() {
+                try {
+                    const saved = localStorage.getItem('tts_prefs_' + projectId);
+                    if (saved) {
+                        const prefs = JSON.parse(saved);
+                        if (prefs.voice) this.tts.voice = prefs.voice;
+                        if (prefs.speed) this.tts.speed = prefs.speed;
+                        if (prefs.minLen) this.tts.minLen = prefs.minLen;
+                        if (prefs.maxLen) this.tts.maxLen = prefs.maxLen;
+                        if (prefs.configId && this.tts.configs.some(c => c.id == prefs.configId)) {
+                            this.tts.selectedConfigId = prefs.configId;
+                        }
+                    }
+                } catch (e) {}
+            },
+            saveTtsPrefs() {
+                try {
+                    localStorage.setItem('tts_prefs_' + projectId, JSON.stringify({
+                        voice: this.tts.voice,
+                        speed: this.tts.speed,
+                        minLen: this.tts.minLen,
+                        maxLen: this.tts.maxLen,
+                        configId: this.tts.selectedConfigId
+                    }));
+                } catch (e) {}
+            },
+            toggleChapter(num) {
+                if (this.tts.playing === num) {
+                    this.stopAudio();
+                } else {
+                    this.playChapter(num);
+                }
+            },
+            async playChapter(num) {
+                this.stopAudio();
+                // Check for pre-generated file first
+                if (this.tts.preGeneratedFiles && this.tts.preGeneratedFiles[num]) {
+                    const abortController = new AbortController();
+                    this.tts.abortController = abortController;
+                    this.tts.playing = num;
+                    const audio = new Audio(this.tts.preGeneratedFiles[num]);
+                    this.tts.audio = audio;
+                    audio.onended = () => { this.tts.playing = null; this.tts.audio = null; };
+                    audio.onerror = () => { this.tts.playing = null; this.tts.audio = null; };
+                    abortController.signal.addEventListener('abort', () => audio.pause(), { once: true });
+                    audio.play().catch(() => { this.tts.playing = null; this.tts.audio = null; });
+                    return;
+                }
+                const abortController = new AbortController();
+                this.tts.abortController = abortController;
+                this.tts.loading = num;
+                try {
+                    // 1. Fetch chunk list
+                    const chunksRes = await fetch(`/projects/${projectId}/tts/chapter/${num}/chunks?minLen=${this.tts.minLen}&maxLen=${this.tts.maxLen}`, {
+                        signal: abortController.signal
+                    });
+                    if (!chunksRes.ok) throw new Error('Failed to get chunks');
+                    const chunks = await chunksRes.json();
+
+                    // 2. Enter playing state
+                    this.tts.loading = null;
+                    this.tts.playing = num;
+
+                    // 3. Sequential fetch queue + playback with sliding window
+                    const PREFETCH_AHEAD = 15;
+                    const audioBlobs = new Map(); // index -> Promise<Blob>
+                    const fetchQueue = [];        // indices waiting to be fetched
+                    let fetching = false;
+
+                    // Sequential fetcher: processes queue one at a time
+                    const processFetchQueue = async () => {
+                        if (fetching) return;
+                        fetching = true;
+                        while (fetchQueue.length > 0) {
+                            if (abortController.signal.aborted) break;
+                            const idx = fetchQueue.shift();
+                            if (audioBlobs.has(idx)) continue;
+                            let resolve;
+                            const promise = new Promise(r => { resolve = r; });
+                            audioBlobs.set(idx, promise);
+                            try {
+                                const res = await fetch(`/projects/${projectId}/tts/chunk`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        configId: Number(this.tts.selectedConfigId),
+                                        text: chunks[idx],
+                                        voice: this.tts.voice,
+                                        format: this.getSelectedFormat(),
+                                        speed: Number(this.tts.speed)
+                                    }),
+                                    signal: abortController.signal
+                                });
+                                if (!res.ok) throw new Error('TTS chunk failed');
+                                resolve(await res.blob());
+                            } catch (e) {
+                                resolve(null);
+                                if (e.name !== 'AbortError') throw e;
+                            }
+                        }
+                        fetching = false;
+                    };
+
+                    // Enqueue a chunk index for fetching (if not already fetched/queued)
+                    const enqueueFetch = (idx) => {
+                        if (idx >= chunks.length || audioBlobs.has(idx) || fetchQueue.includes(idx)) return;
+                        fetchQueue.push(idx);
+                        processFetchQueue();
+                    };
+
+                    // Seed initial fetch queue: first PREFETCH_AHEAD+1 chunks
+                    for (let p = 0; p < Math.min(PREFETCH_AHEAD + 1, chunks.length); p++) {
+                        enqueueFetch(p);
+                    }
+
+                    // 4. Play chunks sequentially
+                    for (let i = 0; i < chunks.length; i++) {
+                        if (abortController.signal.aborted) break;
+
+                        // Wait for this chunk's audio to be fetched
+                        const blob = await audioBlobs.get(i);
+                        if (!blob || abortController.signal.aborted) break;
+                        audioBlobs.delete(i);
+
+                        const audioUrl = URL.createObjectURL(blob);
+                        const audio = new Audio(audioUrl);
+                        this.tts.audio = audio;
+
+                        await new Promise((resolve, reject) => {
+                            audio.onended = () => { URL.revokeObjectURL(audioUrl); resolve(); };
+                            audio.onerror = () => { URL.revokeObjectURL(audioUrl); reject(new Error('Audio playback error')); };
+                            const onAbort = () => {
+                                audio.pause();
+                                URL.revokeObjectURL(audioUrl);
+                                resolve();
+                            };
+                            abortController.signal.addEventListener('abort', onAbort, { once: true });
+                            audio.play().catch(reject);
+                        });
+
+                        // After playback finishes, enqueue the next chunk beyond the window
+                        enqueueFetch(i + PREFETCH_AHEAD + 1);
+                    }
+                } catch (e) {
+                    if (e.name === 'AbortError') {
+                        // User cancelled - not an error
+                    } else {
+                        console.error('TTS playback failed', e);
+                        alert('语音合成失败: ' + e.message);
+                    }
+                } finally {
+                    this.tts.loading = null;
+                    this.tts.playing = null;
+                    this.tts.audio = null;
+                    this.tts.abortController = null;
+                }
+            },
+            stopAudio() {
+                if (this.tts.abortController) {
+                    this.tts.abortController.abort();
+                    this.tts.abortController = null;
+                }
+                if (this.tts.audio) {
+                    this.tts.audio.pause();
+                    this.tts.audio = null;
+                }
+                this.tts.playing = null;
+            },
+            onConfigChange() {
+                // Reset voice to first available from new config
+                const voices = this.getVoiceOptions();
+                if (voices.length > 0 && !voices.includes(this.tts.voice)) {
+                    this.tts.voice = voices[0];
+                }
+                this.saveTtsPrefs();
+            },
+            getVoiceOptions() {
+                const defaultVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+                if (!this.tts.selectedConfigId) return defaultVoices;
+                const cfg = this.tts.configs.find(c => c.id == this.tts.selectedConfigId);
+                if (cfg && cfg.voices) {
+                    return cfg.voices.split(',').map(v => v.trim()).filter(v => v);
+                }
+                return defaultVoices;
+            },
+            getSelectedFormat() {
+                if (!this.tts.selectedConfigId) return 'mp3';
+                const cfg = this.tts.configs.find(c => c.id == this.tts.selectedConfigId);
+                return (cfg && cfg.format) ? cfg.format : 'mp3';
+            },
+            exportUrl() {
+                return `/tts-export?projectId=${projectId}`;
+            }
+        };
+    }
+    </script>
 </body>
 </html>

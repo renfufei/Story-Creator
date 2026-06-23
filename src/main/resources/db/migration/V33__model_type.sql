@@ -1,0 +1,1 @@
+ALTER TABLE ai_model_configs ADD COLUMN model_type VARCHAR(20) NOT NULL DEFAULT 'TEXT';

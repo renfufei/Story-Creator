@@ -14,6 +14,9 @@ public interface ChapterRepository extends JpaRepository<ChapterEntity, Long> {
     Optional<ChapterEntity> findByProjectIdAndChapterNumber(Long projectId, int chapterNumber);
     List<ChapterEntity> findByStatus(StepStatus status);
 
+    @Query("SELECT c.projectId, COUNT(c), COALESCE(SUM(LENGTH(c.content)), 0) FROM ChapterEntity c WHERE c.content IS NOT NULL AND c.content <> '' GROUP BY c.projectId")
+    List<Object[]> countAndWordCountByProject();
+
     @Modifying
     @Query("UPDATE ChapterEntity c SET c.status = :newStatus WHERE c.status = :oldStatus")
     int updateStatusByStatus(StepStatus oldStatus, StepStatus newStatus);

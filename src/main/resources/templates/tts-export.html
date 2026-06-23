@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('TTS语音导出', ~{::content})}">
+<body>
+<div th:fragment="content">
+<div x-data="ttsExportApp()" x-init="init()">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3><i class="bi bi-music-note-beamed"></i> TTS 语音导出管理</h3>
+        <button class="btn btn-primary" @click="openWizard()">
+            <i class="bi bi-plus-lg"></i> 新增导出任务
+        </button>
+    </div>
+
+    <!-- Task List -->
+    <div class="card">
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0" x-show="tasks.length > 0">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>项目</th>
+                        <th>章节数</th>
+                        <th>语音</th>
+                        <th>速度</th>
+                        <th>状态</th>
+                        <th>进度</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <template x-for="task in tasks" :key="task.id">
+                    <tbody>
+                        <tr>
+                            <td x-text="task.id"></td>
+                            <td x-text="task.projectName || ('项目#' + task.projectId)"></td>
+                            <td x-text="task.progressTotalChapters"></td>
+                            <td x-text="task.voice"></td>
+                            <td x-text="task.speed + 'x'"></td>
+                            <td>
+                                <span class="badge" :class="statusClass(task.status)" x-text="statusLabel(task.status)"></span>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress flex-grow-1" style="height: 20px; min-width: 100px;">
+                                        <div class="progress-bar" :class="task.status === 'RUNNING' ? 'progress-bar-striped progress-bar-animated' : ''"
+                                             :style="'width: ' + progressPercent(task) + '%'">
+                                        </div>
+                                    </div>
+                                    <small class="text-muted text-nowrap" x-text="task.progressChapter + '/' + task.progressTotalChapters"></small>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <!-- Start/Resume -->
+                                    <button class="btn btn-outline-success" x-show="task.status === 'PENDING' || task.status === 'PAUSED' || task.status === 'FAILED'"
+                                            @click="startTask(task.id)" :title="task.status === 'PAUSED' ? '继续' : '开始'">
+                                        <i class="bi bi-play-fill"></i> <span x-text="task.status === 'PAUSED' ? '继续' : '开始'"></span>
+                                    </button>
+                                    <!-- Pause -->
+                                    <button class="btn btn-outline-warning" x-show="task.status === 'RUNNING'"
+                                            @click="pauseTask(task.id)" title="暂停">
+                                        <i class="bi bi-pause-fill"></i> 暂停
+                                    </button>
+                                    <!-- Stop -->
+                                    <button class="btn btn-outline-danger" x-show="task.status === 'RUNNING' || task.status === 'PAUSED'"
+                                            @click="stopTask(task.id)" title="停止">
+                                        <i class="bi bi-stop-fill"></i> 停止
+                                    </button>
+                                    <!-- Details -->
+                                    <button class="btn btn-outline-info" @click="toggleDetails(task.id)" title="详情">
+                                        <i class="bi bi-list-ul"></i> 详情
+                                    </button>
+                                    <!-- Delete -->
+                                    <button class="btn btn-outline-danger" @click="deleteTask(task.id)" title="删除">
+                                        <i class="bi bi-trash"></i> 删除
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <!-- Inline Chapter Details -->
+                        <tr x-show="expandedTaskId === task.id" x-cloak>
+                            <td colspan="8" class="p-0">
+                                <div class="bg-light px-3 py-2">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <strong>任务 #<span x-text="task.id"></span> — 章节详情</strong>
+                                        <button class="btn btn-sm btn-outline-secondary" @click="expandedTaskId = null">关闭</button>
+                                    </div>
+                                    <div style="max-height: 300px; overflow-y: auto;">
+                                        <table class="table table-sm table-bordered mb-0 bg-white">
+                                            <thead class="table-light sticky-top">
+                                                <tr>
+                                                    <th>章节</th>
+                                                    <th>状态</th>
+                                                    <th>文件大小</th>
+                                                    <th>操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <template x-for="ch in expandedChapters" :key="ch.chapterNumber">
+                                                    <tr>
+                                                        <td x-text="'第' + ch.chapterNumber + '章'"></td>
+                                                        <td>
+                                                            <span class="badge" :class="chapterStatusClass(ch.status)" x-text="chapterStatusLabel(ch.status)"></span>
+                                                            <small class="text-danger" x-show="ch.errorMessage" x-text="ch.errorMessage"></small>
+                                                        </td>
+                                                        <td x-text="ch.fileSize ? formatSize(ch.fileSize) : '-'"></td>
+                                                        <td>
+                                                            <a class="btn btn-sm btn-outline-primary" x-show="ch.status === 'COMPLETED'"
+                                                               :href="'/api/tts-export/tasks/' + expandedTaskId + '/chapters/' + ch.chapterNumber + '/file'"
+                                                               target="_blank">
+                                                                <i class="bi bi-download"></i> 下载
+                                                            </a>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </template>
+            </table>
+            <div class="text-center text-muted py-5" x-show="tasks.length === 0">
+                <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                <p class="mt-2">暂无导出任务，点击右上角"新增导出任务"开始</p>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Wizard Modal -->
+    <div class="modal fade" id="wizardModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">新增 TTS 导出任务</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Step indicators -->
+                    <div class="d-flex justify-content-center mb-4">
+                        <template x-for="(label, idx) in ['选择项目', '选择章节', 'TTS配置', '高级选项']" :key="idx">
+                            <div class="d-flex align-items-center">
+                                <span class="badge rounded-pill"
+                                      :class="wizardStep > idx ? 'bg-success' : (wizardStep === idx ? 'bg-primary' : 'bg-secondary')"
+                                      x-text="idx + 1"></span>
+                                <small class="ms-1 me-3" :class="wizardStep === idx ? 'fw-bold' : 'text-muted'" x-text="label"></small>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Step 1: Select Project -->
+                    <div x-show="wizardStep === 0">
+                        <label class="form-label fw-bold">选择项目</label>
+                        <select class="form-select" x-model="wizard.projectId" @change="onProjectSelected()">
+                            <option value="">-- 请选择 --</option>
+                            <template x-for="p in projects" :key="p.id">
+                                <option :value="p.id" x-text="p.title + ' | ' + p.chapterCount + '章 | ' + (p.wordCount >= 10000 ? (p.wordCount / 10000).toFixed(1) + '万字' : p.wordCount + '字')"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <!-- Step 2: Select Chapters -->
+                    <div x-show="wizardStep === 1">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-bold mb-0">选择章节</label>
+                            <div>
+                                <button class="btn btn-sm btn-outline-primary" @click="selectAllChapters()">全选</button>
+                                <button class="btn btn-sm btn-outline-secondary" @click="deselectAllChapters()">取消全选</button>
+                            </div>
+                        </div>
+                        <div style="max-height: 300px; overflow-y: auto;" class="border rounded p-2">
+                            <template x-for="ch in wizardChapters" :key="ch.chapterNumber">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox"
+                                           :id="'ch-' + ch.chapterNumber" :value="ch.chapterNumber"
+                                           x-model="wizard.selectedChapters">
+                                    <label class="form-check-label" :for="'ch-' + ch.chapterNumber"
+                                           x-text="'第' + ch.chapterNumber + '章 ' + (ch.title || '')"></label>
+                                </div>
+                            </template>
+                        </div>
+                        <small class="text-muted mt-1 d-block">已选 <span x-text="wizard.selectedChapters.length"></span> 章</small>
+                    </div>
+
+                    <!-- Step 3: TTS Config -->
+                    <div x-show="wizardStep === 2">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">TTS 模型配置</label>
+                                <select class="form-select" x-model="wizard.configId" @change="onConfigSelected()">
+                                    <option value="">-- 请选择 --</option>
+                                    <template x-for="cfg in ttsConfigs" :key="cfg.id">
+                                        <option :value="cfg.id" x-text="cfg.displayName"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">语音</label>
+                                <select class="form-select" x-model="wizard.voice">
+                                    <template x-for="v in wizardVoices" :key="v">
+                                        <option :value="v" x-text="v"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">速度</label>
+                                <div class="d-flex align-items-center gap-2">
+                                    <input type="range" class="form-range" min="0.25" max="4.0" step="0.25"
+                                           x-model="wizard.speed">
+                                    <span class="badge bg-secondary" x-text="wizard.speed + 'x'" style="min-width: 40px;"></span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">段落分割</label>
+                                <div class="d-flex align-items-center gap-2">
+                                    <input type="number" class="form-control form-control-sm" style="width: 70px;"
+                                           min="1" max="500" x-model.number="wizard.minLen">
+                                    <span class="text-muted">-</span>
+                                    <input type="number" class="form-control form-control-sm" style="width: 70px;"
+                                           min="10" max="4000" x-model.number="wizard.maxLen">
+                                    <span class="text-muted small">字</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Advanced Options -->
+                    <div x-show="wizardStep === 3">
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="useFfmpeg"
+                                       x-model="wizard.useFfmpeg" :disabled="!ffmpegAvailable">
+                                <label class="form-check-label" for="useFfmpeg">
+                                    使用 ffmpeg 压缩音频
+                                    <span class="badge" :class="ffmpegAvailable ? 'bg-success' : 'bg-warning'"
+                                          x-text="ffmpegAvailable ? '可用' : '不可用'"></span>
+                                </label>
+                                <span class="ms-1" data-bs-toggle="tooltip" title="ffmpeg 用于音频压缩。Mac: brew install ffmpeg，Linux: apt install ffmpeg">
+                                    <i class="bi bi-question-circle text-muted"></i>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="mb-3" x-show="wizard.useFfmpeg">
+                            <label class="form-label fw-bold">输出比特率</label>
+                            <select class="form-select" style="max-width: 200px;" x-model="wizard.bitrate">
+                                <option value="64k">64k (小文件)</option>
+                                <option value="96k">96k (平衡)</option>
+                                <option value="128k">128k (高质量)</option>
+                            </select>
+                        </div>
+                        <div class="alert alert-info">
+                            <strong>任务摘要:</strong>
+                            将为 <span x-text="wizard.selectedChapters.length"></span> 章生成语音，
+                            使用 <span x-text="wizard.voice"></span> 语音，
+                            速度 <span x-text="wizard.speed"></span>x
+                            <span x-show="wizard.useFfmpeg">，ffmpeg 压缩至 <span x-text="wizard.bitrate"></span></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" x-show="wizardStep > 0" @click="wizardStep--">上一步</button>
+                    <button class="btn btn-primary" x-show="wizardStep < 3" @click="nextWizardStep()"
+                            :disabled="!canAdvanceWizard()">
+                        下一步
+                    </button>
+                    <button class="btn btn-success" x-show="wizardStep === 3" @click="submitWizard()"
+                            :disabled="wizard.selectedChapters.length === 0">
+                        <i class="bi bi-check-lg"></i> 创建任务
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script th:inline="javascript">
+function ttsExportApp() {
+    const preselectedProjectId = /*[[${preselectedProjectId}]]*/ null;
+    const allProjects = /*[[${projects}]]*/ [];
+
+    return {
+        tasks: [],
+        projects: allProjects.map(p => ({ id: p.id, title: p.title, chapterCount: p.chapterCount || 0, wordCount: p.wordCount || 0 })),
+        expandedTaskId: null,
+        expandedChapters: [],
+        pollInterval: null,
+
+        // Wizard state
+        wizardStep: 0,
+        wizardChapters: [],
+        wizardVoices: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
+        ttsConfigs: [],
+        ffmpegAvailable: false,
+        wizard: {
+            projectId: preselectedProjectId || '',
+            selectedChapters: [],
+            configId: '',
+            voice: 'alloy',
+            speed: 1.0,
+            minLen: 30,
+            maxLen: 200,
+            useFfmpeg: false,
+            bitrate: '128k'
+        },
+
+        async init() {
+            await this.loadTasks();
+            this.startPolling();
+            // Pre-load TTS configs
+            await this.loadTtsConfigs();
+            // Check ffmpeg
+            try {
+                const res = await fetch('/api/tts-export/ffmpeg-status');
+                if (res.ok) {
+                    const data = await res.json();
+                    this.ffmpegAvailable = data.available;
+                    this.wizard.useFfmpeg = data.available;
+                }
+            } catch (e) {}
+            // If preselected project, load chapters
+            if (preselectedProjectId) {
+                await this.loadChaptersForProject(preselectedProjectId);
+            }
+        },
+
+        async loadTasks() {
+            try {
+                const res = await fetch('/api/tts-export/tasks');
+                if (res.ok) this.tasks = await res.json();
+            } catch (e) { console.warn('Failed to load tasks', e); }
+        },
+
+        async loadTtsConfigs() {
+            try {
+                const res = await fetch(`/projects/0/tts/configs`);
+                // Fallback: try to get from any project - use first project
+                if (!res.ok && this.projects.length > 0) {
+                    const res2 = await fetch(`/projects/${this.projects[0].id}/tts/configs`);
+                    if (res2.ok) this.ttsConfigs = await res2.json();
+                } else if (res.ok) {
+                    this.ttsConfigs = await res.json();
+                }
+            } catch (e) {
+                // Try alternate approach - just use first project
+                if (this.projects.length > 0) {
+                    try {
+                        const res = await fetch(`/projects/${this.projects[0].id}/tts/configs`);
+                        if (res.ok) this.ttsConfigs = await res.json();
+                    } catch (e2) {}
+                }
+            }
+        },
+
+        startPolling() {
+            this.pollInterval = setInterval(async () => {
+                const hasRunning = this.tasks.some(t => t.status === 'RUNNING');
+                if (hasRunning || this.expandedTaskId) {
+                    await this.loadTasks();
+                    if (this.expandedTaskId) await this.loadDetails(this.expandedTaskId);
+                }
+            }, 2000);
+        },
+
+        // Wizard methods
+        openWizard() {
+            this.wizardStep = 0;
+            this.wizard.selectedChapters = [];
+            if (preselectedProjectId) {
+                this.wizard.projectId = preselectedProjectId;
+            }
+            const modal = new bootstrap.Modal(document.getElementById('wizardModal'));
+            modal.show();
+        },
+
+        async onProjectSelected() {
+            if (this.wizard.projectId) {
+                await this.loadChaptersForProject(this.wizard.projectId);
+            } else {
+                this.wizardChapters = [];
+            }
+            this.wizard.selectedChapters = [];
+        },
+
+        async loadChaptersForProject(projectId) {
+            try {
+                const res = await fetch(`/api/tts-export/projects/${projectId}/chapters`);
+                if (res.ok) this.wizardChapters = await res.json();
+            } catch (e) { this.wizardChapters = []; }
+        },
+
+        async onConfigSelected() {
+            if (!this.wizard.configId) return;
+            try {
+                const res = await fetch(`/api/tts-export/configs/${this.wizard.configId}/voices`);
+                if (res.ok) {
+                    const data = await res.json();
+                    this.wizardVoices = data.voices || ['alloy'];
+                    if (!this.wizardVoices.includes(this.wizard.voice)) {
+                        this.wizard.voice = this.wizardVoices[0];
+                    }
+                }
+            } catch (e) {}
+        },
+
+        selectAllChapters() {
+            this.wizard.selectedChapters = this.wizardChapters.map(ch => ch.chapterNumber);
+        },
+        deselectAllChapters() {
+            this.wizard.selectedChapters = [];
+        },
+
+        canAdvanceWizard() {
+            if (this.wizardStep === 0) return !!this.wizard.projectId;
+            if (this.wizardStep === 1) return this.wizard.selectedChapters.length > 0;
+            if (this.wizardStep === 2) return !!this.wizard.configId;
+            return true;
+        },
+
+        nextWizardStep() {
+            if (this.canAdvanceWizard()) this.wizardStep++;
+        },
+
+        async submitWizard() {
+            const body = {
+                projectId: Number(this.wizard.projectId),
+                configId: Number(this.wizard.configId),
+                voice: this.wizard.voice,
+                speed: Number(this.wizard.speed),
+                minLen: this.wizard.minLen,
+                maxLen: this.wizard.maxLen,
+                useFfmpeg: this.wizard.useFfmpeg,
+                bitrate: this.wizard.bitrate,
+                chapterNumbers: this.wizard.selectedChapters.map(Number).sort((a, b) => a - b)
+            };
+            try {
+                const res = await fetch('/api/tts-export/tasks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (res.ok) {
+                    bootstrap.Modal.getInstance(document.getElementById('wizardModal')).hide();
+                    await this.loadTasks();
+                } else {
+                    alert('创建失败');
+                }
+            } catch (e) { alert('创建失败: ' + e.message); }
+        },
+
+        // Task actions
+        async startTask(id) {
+            await fetch(`/api/tts-export/tasks/${id}/start`, { method: 'POST' });
+            await this.loadTasks();
+        },
+        async pauseTask(id) {
+            await fetch(`/api/tts-export/tasks/${id}/pause`, { method: 'POST' });
+            await this.loadTasks();
+        },
+        async stopTask(id) {
+            await fetch(`/api/tts-export/tasks/${id}/stop`, { method: 'POST' });
+            await this.loadTasks();
+        },
+        async deleteTask(id) {
+            if (!confirm('确定删除此任务及所有已生成文件?')) return;
+            await fetch(`/api/tts-export/tasks/${id}`, { method: 'DELETE' });
+            if (this.expandedTaskId === id) this.expandedTaskId = null;
+            await this.loadTasks();
+        },
+
+        async toggleDetails(id) {
+            if (this.expandedTaskId === id) {
+                this.expandedTaskId = null;
+                return;
+            }
+            await this.loadDetails(id);
+        },
+
+        async loadDetails(id) {
+            try {
+                const res = await fetch(`/api/tts-export/tasks/${id}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    this.expandedTaskId = id;
+                    this.expandedChapters = data.chapters || [];
+                }
+            } catch (e) {}
+        },
+
+        // Display helpers
+        statusClass(status) {
+            const map = { PENDING: 'bg-secondary', RUNNING: 'bg-primary', PAUSED: 'bg-warning text-dark', STOPPED: 'bg-dark', COMPLETED: 'bg-success', FAILED: 'bg-danger' };
+            return map[status] || 'bg-secondary';
+        },
+        statusLabel(status) {
+            const map = { PENDING: '待开始', RUNNING: '运行中', PAUSED: '已暂停', STOPPED: '已停止', COMPLETED: '已完成', FAILED: '失败' };
+            return map[status] || status;
+        },
+        chapterStatusClass(status) {
+            const map = { PENDING: 'bg-secondary', RUNNING: 'bg-primary', COMPLETED: 'bg-success', FAILED: 'bg-danger' };
+            return map[status] || 'bg-secondary';
+        },
+        chapterStatusLabel(status) {
+            const map = { PENDING: '待处理', RUNNING: '生成中', COMPLETED: '完成', FAILED: '失败' };
+            return map[status] || status;
+        },
+        progressPercent(task) {
+            if (task.progressTotalChapters === 0) return 0;
+            return Math.round((task.progressChapter / task.progressTotalChapters) * 100);
+        },
+        formatSize(bytes) {
+            if (!bytes) return '-';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+    };
+}
+</script>
+</div>
+</body>
+</html>

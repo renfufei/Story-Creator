@@ -1,5 +1,6 @@
 package com.storycreator.persistence.entity;
 
+import com.storycreator.core.domain.ModelType;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -28,6 +29,10 @@ public class AiModelConfigEntity {
 
     @Column(name = "extra_params", columnDefinition = "TEXT")
     private String extraParams;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "model_type", nullable = false, length = 20)
+    private ModelType modelType = ModelType.TEXT;
 
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
@@ -69,6 +74,9 @@ public class AiModelConfigEntity {
 
     public String getExtraParams() { return extraParams; }
     public void setExtraParams(String extraParams) { this.extraParams = extraParams; }
+
+    public ModelType getModelType() { return modelType; }
+    public void setModelType(ModelType modelType) { this.modelType = modelType; }
 
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }

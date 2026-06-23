@@ -6,6 +6,8 @@ LOG_FILE="app.log"
 PID_FILE="app.pid"
 DB_PATH="${STORY_DB_PATH:-./data}"
 
+echo `date`
+
 # 检查端口是否已被占用，如果是则杀掉旧进程
 if lsof -i :$PORT -sTCP:LISTEN >/dev/null 2>&1; then
     OLD_PID=$(lsof -ti :$PORT -sTCP:LISTEN)

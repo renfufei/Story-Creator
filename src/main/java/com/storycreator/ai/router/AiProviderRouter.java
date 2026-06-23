@@ -1,5 +1,6 @@
 package com.storycreator.ai.router;
 
+import com.storycreator.core.domain.ModelType;
 import com.storycreator.core.port.ai.AiProvider;
 import com.storycreator.persistence.entity.AiModelConfigEntity;
 import com.storycreator.persistence.entity.GlobalSettingEntity;
@@ -21,6 +22,7 @@ import java.util.stream.Collectors;
 public class AiProviderRouter {
 
     private static final String GLOBAL_DEFAULT_KEY = "default_model_config_id";
+    private static final String GLOBAL_DEFAULT_TTS_KEY = "default_tts_config_id";
 
     private final Map<String, AiProvider> providers;
     private final AiModelConfigRepository configRepository;
@@ -77,8 +79,8 @@ public class AiProviderRouter {
             } catch (NumberFormatException ignored) {}
         }
 
-        // Ultimate fallback: first active config with API key
-        List<AiModelConfigEntity> activeConfigs = configRepository.findByActiveTrue();
+        // Ultimate fallback: first active TEXT config with API key
+        List<AiModelConfigEntity> activeConfigs = configRepository.findByActiveTrueAndModelType(ModelType.TEXT);
         for (AiModelConfigEntity config : activeConfigs) {
             if (config.getApiKey() != null && !config.getApiKey().isBlank()) {
                 AiProvider provider = providers.get(config.getProvider());
@@ -99,7 +101,7 @@ public class AiProviderRouter {
 
     private ResolvedModel fromConfigId(Long configId) {
         AiModelConfigEntity config = configRepository.findById(configId).orElse(null);
-        if (config != null && config.isActive()) {
+        if (config != null && config.isActive() && config.getModelType() == ModelType.TEXT) {
             AiProvider provider = providers.get(config.getProvider());
             if (provider != null) {
                 return new ResolvedModel(provider, config.getModelId(), config.getBaseUrl(), config.getApiKey(), config.getExtraParams());
@@ -124,6 +126,22 @@ public class AiProviderRouter {
     public void setGlobalDefaultConfigId(Long configId) {
         GlobalSettingEntity setting = globalSettingRepository.findById(GLOBAL_DEFAULT_KEY)
                 .orElse(new GlobalSettingEntity(GLOBAL_DEFAULT_KEY, ""));
+        setting.setValue(configId != null ? configId.toString() : "");
+        globalSettingRepository.save(setting);
+    }
+
+    public Long getGlobalDefaultTtsConfigId() {
+        return globalSettingRepository.findById(GLOBAL_DEFAULT_TTS_KEY)
+                .map(s -> {
+                    try { return Long.parseLong(s.getValue()); }
+                    catch (Exception e) { return null; }
+                })
+                .orElse(null);
+    }
+
+    public void setGlobalDefaultTtsConfigId(Long configId) {
+        GlobalSettingEntity setting = globalSettingRepository.findById(GLOBAL_DEFAULT_TTS_KEY)
+                .orElse(new GlobalSettingEntity(GLOBAL_DEFAULT_TTS_KEY, ""));
         setting.setValue(configId != null ? configId.toString() : "");
         globalSettingRepository.save(setting);
     }
