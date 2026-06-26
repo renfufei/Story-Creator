@@ -1,6 +1,7 @@
 package com.storycreator.web;
 
 import com.storycreator.core.domain.CharacterStateDimension;
+import com.storycreator.core.domain.ModelType;
 import com.storycreator.core.domain.StepStatus;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.core.service.CharacterStateDimensionService;
@@ -41,6 +42,7 @@ public class WorkflowController {
     private final VolumeOutlineRepository volumeOutlineRepository;
     private final AiModelConfigRepository modelConfigRepository;
     private final StepGuidanceRepository stepGuidanceRepository;
+    private final StepModelConfigRepository stepModelConfigRepository;
     private final ProofreadingReportRepository proofreadingReportRepository;
     private final WorldSettingRepository worldSettingRepository;
     private final GlobalSettingService globalSettingService;
@@ -59,6 +61,7 @@ public class WorkflowController {
                              VolumeOutlineRepository volumeOutlineRepository,
                              AiModelConfigRepository modelConfigRepository,
                              StepGuidanceRepository stepGuidanceRepository,
+                             StepModelConfigRepository stepModelConfigRepository,
                              ProofreadingReportRepository proofreadingReportRepository,
                              WorldSettingRepository worldSettingRepository,
                              GlobalSettingService globalSettingService,
@@ -75,6 +78,7 @@ public class WorkflowController {
         this.volumeOutlineRepository = volumeOutlineRepository;
         this.modelConfigRepository = modelConfigRepository;
         this.stepGuidanceRepository = stepGuidanceRepository;
+        this.stepModelConfigRepository = stepModelConfigRepository;
         this.proofreadingReportRepository = proofreadingReportRepository;
         this.worldSettingRepository = worldSettingRepository;
         this.globalSettingService = globalSettingService;
@@ -114,12 +118,12 @@ public class WorkflowController {
                 .orElse(false);
         model.addAttribute("stepConfirmed", stepConfirmed);
 
-        // Model configs for step-level selection
-        model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrue());
+        // Model configs for step-level selection (text models only)
+        model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrueAndModelType(ModelType.TEXT));
 
-        // Viewed step's model config id
-        workflowStateRepository.findByProjectIdAndStep(projectId, viewStep)
-                .ifPresent(state -> model.addAttribute("stepModelConfigId", state.getModelConfigId()));
+        // Viewed step's model config id (from step_model_configs table)
+        stepModelConfigRepository.findByProjectIdAndStep(projectId, viewStep)
+                .ifPresent(smc -> model.addAttribute("stepModelConfigId", smc.getModelConfigId()));
 
         // Load step guidance
         String stepGuidance = stepGuidanceRepository.findByProjectIdAndStep(projectId, viewStep)
@@ -176,17 +180,22 @@ public class WorkflowController {
     public String setStepModel(@PathVariable Long projectId,
                               @RequestParam WorkflowStep step,
                               @RequestParam(required = false) Long modelConfigId) {
-        WorkflowStateEntity state = workflowStateRepository
-                .findByProjectIdAndStep(projectId, step)
-                .orElseGet(() -> {
-                    WorkflowStateEntity s = new WorkflowStateEntity();
-                    s.setProjectId(projectId);
-                    s.setStep(step);
-                    s.setStatus(StepStatus.NOT_STARTED);
-                    return s;
-                });
-        state.setModelConfigId(modelConfigId);
-        workflowStateRepository.save(state);
+        if (modelConfigId == null || modelConfigId == 0) {
+            // Remove step model config if clearing
+            stepModelConfigRepository.findByProjectIdAndStep(projectId, step)
+                    .ifPresent(entity -> stepModelConfigRepository.delete(entity));
+        } else {
+            StepModelConfigEntity entity = stepModelConfigRepository
+                    .findByProjectIdAndStep(projectId, step)
+                    .orElseGet(() -> {
+                        StepModelConfigEntity e = new StepModelConfigEntity();
+                        e.setProjectId(projectId);
+                        e.setStep(step);
+                        return e;
+                    });
+            entity.setModelConfigId(modelConfigId);
+            stepModelConfigRepository.save(entity);
+        }
         return "redirect:/projects/" + projectId + "/workflow";
     }
 
@@ -567,6 +576,20 @@ public class WorkflowController {
                     return ResponseEntity.ok(map);
                 })
                 .orElse(ResponseEntity.ok(Map.of("content", "")));
+    }
+
+    @PostMapping("/characters/overview")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> saveCharacterOverview(@PathVariable Long projectId,
+                                                                      @RequestParam String content) {
+        characterRepository.findByProjectIdOrderBySortOrder(projectId).stream()
+                .filter(c -> c.getSortOrder() == 0)
+                .findFirst()
+                .ifPresent(overview -> {
+                    overview.setContent(content);
+                    characterRepository.save(overview);
+                });
+        return ResponseEntity.ok(Map.of("success", true));
     }
 
     /**

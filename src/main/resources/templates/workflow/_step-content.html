@@ -273,8 +273,8 @@
                         </div>
                     </div>
 
-                    <!-- === DEFAULT: Has content, not generating (not POLISHING, not CHAPTER_WRITING) === -->
-                    <div x-show="!generating && currentStep !== 'POLISHING' && currentStep !== 'CHAPTER_WRITING' && (generatedContent || existingContent)" class="mb-3">
+                    <!-- === DEFAULT: Has content, not generating (not POLISHING, not CHAPTER_WRITING, not CHARACTER_DESIGN) === -->
+                    <div x-show="!generating && currentStep !== 'POLISHING' && currentStep !== 'CHAPTER_WRITING' && currentStep !== 'CHARACTER_DESIGN' && (generatedContent || existingContent)" class="mb-3">
                         <!-- Read-only view -->
                         <div x-show="!editing">
                             <pre class="streaming-output mb-0" style="max-height: 50vh; overflow-y: auto; white-space:pre-wrap; font-family:inherit;" x-text="editableContent"></pre>
@@ -323,7 +323,7 @@
                     </div>
 
                     <!-- State 3: Empty -->
-                    <div x-show="!generating && !generatedContent && !existingContent && currentStep !== 'CHAPTER_WRITING' && currentStep !== 'POLISHING'" class="text-center py-4 text-muted">
+                    <div x-show="!generating && !generatedContent && !existingContent && currentStep !== 'CHAPTER_WRITING' && currentStep !== 'POLISHING' && currentStep !== 'CHARACTER_DESIGN'" class="text-center py-4 text-muted">
                         <i class="bi bi-robot display-4"></i>
                         <p class="mt-2">点击"AI生成"开始创作此步骤的内容</p>
                     </div>

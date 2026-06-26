@@ -1,0 +1,24 @@
+id: symbols
+name: "特殊符号清理"
+description: "移除装饰性符号，规范化逗号"
+rules:
+  - pattern: ","
+    replacement: "，"
+    isRegex: false
+    description: "英文逗号替换为中文逗号"
+  - pattern: "+"
+    replacement: "加"
+    isRegex: false
+    description: "加号替换为汉字加"
+  - pattern: "-"
+    replacement: "减"
+    isRegex: false
+    description: "减号替换为汉字减"
+  - pattern: "x"
+    replacement: "乘"
+    isRegex: false
+    description: "小写x替换为汉字乘"
+  - pattern: "[※★☆◆◇■□▲△▼▽○●\\u2192\\u2190\\u2191\\u2193\\uFF0A*\\uFE4F_\\u2502\\u2503\\u00B7\\u2022]"
+    replacement: ""
+    isRegex: true
+    description: "移除装饰性符号（星号、箭头、项目符号等）"

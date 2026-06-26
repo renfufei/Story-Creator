@@ -1,0 +1,8 @@
+id: control-chars
+name: "不可见/控制字符清理"
+description: "将不可见字符、控制字符（保留换行）替换为中文逗号"
+rules:
+  - pattern: "[\\p{Cc}\\p{Cf}\\p{Zs}\\p{Zl}\\p{Zp}&&[^\\n]]"
+    replacement: "，"
+    isRegex: true
+    description: "替换不可见/控制字符为中文逗号（保留换行符）"

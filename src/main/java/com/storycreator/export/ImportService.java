@@ -2,6 +2,7 @@ package com.storycreator.export;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.storycreator.core.domain.Genre;
+import com.storycreator.core.domain.ModelType;
 import com.storycreator.core.domain.StepStatus;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.persistence.entity.*;
@@ -9,6 +10,9 @@ import com.storycreator.persistence.repository.*;
 import com.storycreator.workflow.autorun.AutoRunStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class ImportService {
@@ -23,6 +27,8 @@ public class ImportService {
     private final ChapterRepository chapterRepository;
     private final WorkflowStateRepository workflowStateRepository;
     private final StepGuidanceRepository stepGuidanceRepository;
+    private final StepModelConfigRepository stepModelConfigRepository;
+    private final AiModelConfigRepository aiModelConfigRepository;
     private final ProofreadingReportRepository proofreadingReportRepository;
 
     public ImportService(ObjectMapper objectMapper,
@@ -35,6 +41,8 @@ public class ImportService {
                         ChapterRepository chapterRepository,
                         WorkflowStateRepository workflowStateRepository,
                         StepGuidanceRepository stepGuidanceRepository,
+                        StepModelConfigRepository stepModelConfigRepository,
+                        AiModelConfigRepository aiModelConfigRepository,
                         ProofreadingReportRepository proofreadingReportRepository) {
         this.objectMapper = objectMapper;
         this.projectRepository = projectRepository;
@@ -46,6 +54,8 @@ public class ImportService {
         this.chapterRepository = chapterRepository;
         this.workflowStateRepository = workflowStateRepository;
         this.stepGuidanceRepository = stepGuidanceRepository;
+        this.stepModelConfigRepository = stepModelConfigRepository;
+        this.aiModelConfigRepository = aiModelConfigRepository;
         this.proofreadingReportRepository = proofreadingReportRepository;
     }
 
@@ -207,6 +217,27 @@ public class ImportService {
             }
         }
 
+        // Step model configs
+        if (dto.stepModelConfigs() != null && !dto.stepModelConfigs().isEmpty()) {
+            // Build lookup: "provider:modelId" -> configId for active TEXT configs
+            Map<String, Long> codeToConfigId = aiModelConfigRepository.findByActiveTrueAndModelType(ModelType.TEXT)
+                    .stream()
+                    .collect(Collectors.toMap(
+                            c -> c.getProvider() + ":" + c.getModelId(),
+                            AiModelConfigEntity::getId,
+                            (a, b) -> a));
+            for (var smcd : dto.stepModelConfigs()) {
+                Long configId = codeToConfigId.get(smcd.modelCode());
+                if (configId != null) {
+                    var smc = new StepModelConfigEntity();
+                    smc.setProjectId(projectId);
+                    smc.setStep(WorkflowStep.valueOf(smcd.step()));
+                    smc.setModelConfigId(configId);
+                    stepModelConfigRepository.save(smc);
+                }
+            }
+        }
+
         // Proofreading reports
         if (dto.proofreadingReports() != null) {
             for (var prd : dto.proofreadingReports()) {
@@ -228,6 +259,7 @@ public class ImportService {
     @Transactional
     public void deleteAllProjectData(Long projectId) {
         proofreadingReportRepository.deleteByProjectId(projectId);
+        stepModelConfigRepository.deleteByProjectId(projectId);
         stepGuidanceRepository.deleteByProjectId(projectId);
         workflowStateRepository.deleteByProjectId(projectId);
         chapterRepository.deleteByProjectId(projectId);

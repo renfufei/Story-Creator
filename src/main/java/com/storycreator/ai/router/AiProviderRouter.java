@@ -5,11 +5,11 @@ import com.storycreator.core.port.ai.AiProvider;
 import com.storycreator.persistence.entity.AiModelConfigEntity;
 import com.storycreator.persistence.entity.GlobalSettingEntity;
 import com.storycreator.persistence.entity.ProjectEntity;
-import com.storycreator.persistence.entity.WorkflowStateEntity;
+import com.storycreator.persistence.entity.StepModelConfigEntity;
 import com.storycreator.persistence.repository.AiModelConfigRepository;
 import com.storycreator.persistence.repository.GlobalSettingRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
-import com.storycreator.persistence.repository.WorkflowStateRepository;
+import com.storycreator.persistence.repository.StepModelConfigRepository;
 import com.storycreator.core.domain.WorkflowStep;
 import org.springframework.stereotype.Component;
 
@@ -28,19 +28,19 @@ public class AiProviderRouter {
     private final AiModelConfigRepository configRepository;
     private final GlobalSettingRepository globalSettingRepository;
     private final ProjectRepository projectRepository;
-    private final WorkflowStateRepository workflowStateRepository;
+    private final StepModelConfigRepository stepModelConfigRepository;
 
     public AiProviderRouter(List<AiProvider> providerList,
                            AiModelConfigRepository configRepository,
                            GlobalSettingRepository globalSettingRepository,
                            ProjectRepository projectRepository,
-                           WorkflowStateRepository workflowStateRepository) {
+                           StepModelConfigRepository stepModelConfigRepository) {
         this.providers = providerList.stream()
                 .collect(Collectors.toMap(AiProvider::getProviderName, Function.identity()));
         this.configRepository = configRepository;
         this.globalSettingRepository = globalSettingRepository;
         this.projectRepository = projectRepository;
-        this.workflowStateRepository = workflowStateRepository;
+        this.stepModelConfigRepository = stepModelConfigRepository;
     }
 
     /**
@@ -50,12 +50,12 @@ public class AiProviderRouter {
      * 3. Global default (global_settings)
      */
     public ResolvedModel resolveModel(Long projectId, WorkflowStep step) {
-        // Level 1: step-level override
+        // Level 1: step-level override (from step_model_configs table)
         if (projectId != null && step != null) {
-            WorkflowStateEntity state = workflowStateRepository
+            StepModelConfigEntity stepConfig = stepModelConfigRepository
                     .findByProjectIdAndStep(projectId, step).orElse(null);
-            if (state != null && state.getModelConfigId() != null) {
-                ResolvedModel resolved = fromConfigId(state.getModelConfigId());
+            if (stepConfig != null && stepConfig.getModelConfigId() != null) {
+                ResolvedModel resolved = fromConfigId(stepConfig.getModelConfigId());
                 if (resolved != null) return resolved;
             }
         }

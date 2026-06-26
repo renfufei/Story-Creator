@@ -165,20 +165,27 @@
                     </select>
                 </div>
 
-                <!-- Step Guidance Section -->
+                <!-- Step Config Section -->
                 <div class="mb-3">
                     <div class="d-flex align-items-center mb-2">
-                        <label class="form-label mb-0">创作指导</label>
+                        <label class="form-label mb-0">步骤配置</label>
                         <button type="button" class="btn btn-sm btn-link text-decoration-none" data-bs-toggle="collapse" data-bs-target="#guidanceCollapse">
                             <i class="bi bi-chevron-down"></i> 展开/收起
                         </button>
                     </div>
-                    <div class="form-text mb-2">为每个创作环节配置AI生成时的指导信息（可选），例如文风要求、情节偏好等</div>
+                    <div class="form-text mb-2">为每个创作环节配置模型和AI生成时的指导信息（可选）</div>
                     <div class="collapse" id="guidanceCollapse"
-                         th:classappend="${form.stepGuidances != null && !form.stepGuidances.isEmpty()} ? 'show'">
+                         th:classappend="${(form.stepGuidances != null && !form.stepGuidances.isEmpty()) || (form.stepModelConfigs != null && !form.stepModelConfigs.isEmpty())} ? 'show'">
                         <div class="border rounded p-3 bg-light">
                             <div th:each="step : ${workflowSteps}" class="mb-3">
                                 <label class="form-label small fw-bold" th:text="${step.displayName}">步骤名</label>
+                                <select class="form-select form-select-sm mb-1"
+                                        th:name="'stepModelConfigs[' + ${step.name()} + ']'">
+                                    <option value="0">-- 使用项目/全局默认模型 --</option>
+                                    <option th:each="mc : ${modelConfigs}" th:value="${mc.id}"
+                                            th:selected="${form.stepModelConfigs != null && form.stepModelConfigs[step.name()] != null && form.stepModelConfigs[step.name()] == mc.id}"
+                                            th:text="${mc.displayName} + ' (' + ${mc.provider} + '/' + ${mc.modelId} + ')'">模型</option>
+                                </select>
                                 <textarea class="form-control form-control-sm" rows="2"
                                           th:name="'stepGuidances[' + ${step.name()} + ']'"
                                           th:text="${form.stepGuidances != null} ? ${form.stepGuidances[step.name()]} : ''"
@@ -249,16 +256,25 @@
                             form.querySelector('#defaultModelConfigId').value = data.defaultModelConfigId;
                         }
                         form.querySelector('#autoMode').checked = data.autoMode;
+                        if (data.stepModelConfigs) {
+                            for (const [step, configId] of Object.entries(data.stepModelConfigs)) {
+                                const select = form.querySelector('[name="stepModelConfigs[' + step + ']"]');
+                                if (select) select.value = configId || '0';
+                            }
+                        }
                         if (data.stepGuidances) {
                             for (const [step, guidance] of Object.entries(data.stepGuidances)) {
                                 const textarea = form.querySelector('[name="stepGuidances[' + step + ']"]');
                                 if (textarea) textarea.value = guidance || '';
                             }
-                            if (Object.values(data.stepGuidances).some(v => v && v.trim())) {
-                                const collapse = document.getElementById('guidanceCollapse');
-                                if (collapse && !collapse.classList.contains('show')) {
-                                    new bootstrap.Collapse(collapse, {toggle: true});
-                                }
+                        }
+                        // Auto-expand if any step config is set
+                        const hasGuidances = data.stepGuidances && Object.values(data.stepGuidances).some(v => v && v.trim());
+                        const hasModelConfigs = data.stepModelConfigs && Object.values(data.stepModelConfigs).some(v => v && v > 0);
+                        if (hasGuidances || hasModelConfigs) {
+                            const collapse = document.getElementById('guidanceCollapse');
+                            if (collapse && !collapse.classList.contains('show')) {
+                                new bootstrap.Collapse(collapse, {toggle: true});
                             }
                         }
                     });

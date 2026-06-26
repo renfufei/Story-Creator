@@ -16,6 +16,9 @@
             </a>
             <ul class="navbar-nav ms-auto">
                 <li class="nav-item">
+                    <a class="nav-link" th:href="@{/tts-export}">语音导出</a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" th:href="@{/}">项目列表</a>
                 </li>
                 <li class="nav-item dropdown">
@@ -23,6 +26,7 @@
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" th:href="@{/settings}">AI模型配置</a></li>
                         <li><a class="dropdown-item" th:href="@{/prompts}">流程模板配置</a></li>
+                        <li><a class="dropdown-item" th:href="@{/settings/tts-templates}">TTS替换模板</a></li>
                     </ul>
                 </li>
             </ul>

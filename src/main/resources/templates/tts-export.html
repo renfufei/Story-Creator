@@ -2,7 +2,7 @@
 <html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('TTS语音导出', ~{::content})}">
 <body>
 <div th:fragment="content">
-<div x-data="ttsExportApp()" x-init="init()">
+<div x-data="ttsExportApp()">
 
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3><i class="bi bi-music-note-beamed"></i> TTS 语音导出管理</h3>
@@ -82,7 +82,34 @@
                                 <div class="bg-light px-3 py-2">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
                                         <strong>任务 #<span x-text="task.id"></span> — 章节详情</strong>
-                                        <button class="btn btn-sm btn-outline-secondary" @click="expandedTaskId = null">关闭</button>
+                                        <div class="d-flex gap-2">
+                                            <a class="btn btn-sm btn-outline-success"
+                                               :href="'/tts-fullplay?taskId=' + task.id"
+                                               target="_blank"
+                                               x-show="expandedChapters.some(ch => ch.status === 'COMPLETED')">
+                                                <i class="bi bi-play-circle"></i> 全文收听
+                                            </a>
+                                            <button class="btn btn-sm btn-outline-dark" @click="toggleProgress(task.id)" title="实时进度">
+                                                <i class="bi bi-terminal"></i> 进度
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-secondary" @click="expandedTaskId = null">关闭</button>
+                                        </div>
+                                    </div>
+                                    <!-- Progress Log (inside details) -->
+                                    <div x-show="showProgressTaskId === task.id" class="mb-2">
+                                        <div class="bg-dark text-light px-3 py-2 rounded">
+                                            <div class="mb-2">
+                                                <strong><i class="bi bi-terminal"></i> 实时进度 — 任务 #<span x-text="task.id"></span></strong>
+                                            </div>
+                                            <div :id="'progress-log-' + task.id"
+                                                 style="max-height: 150px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; line-height: 1.6;">
+                                                <template x-for="(line, idx) in (progressLogs[task.id] || [])" :key="idx">
+                                                    <div x-text="line" class="text-success"></div>
+                                                </template>
+                                                <div x-show="!progressLogs[task.id] || progressLogs[task.id].length === 0"
+                                                     class="text-muted">等待进度消息...</div>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div style="max-height: 300px; overflow-y: auto;">
                                         <table class="table table-sm table-bordered mb-0 bg-white">
@@ -156,7 +183,7 @@
                         <select class="form-select" x-model="wizard.projectId" @change="onProjectSelected()">
                             <option value="">-- 请选择 --</option>
                             <template x-for="p in projects" :key="p.id">
-                                <option :value="p.id" x-text="p.title + ' | ' + p.chapterCount + '章 | ' + (p.wordCount >= 10000 ? (p.wordCount / 10000).toFixed(1) + '万字' : p.wordCount + '字')"></option>
+                                <option :value="String(p.id)" x-text="p.title + ' | ' + p.chapterCount + '章 | ' + (p.wordCount >= 10000 ? (p.wordCount / 10000).toFixed(1) + '万字' : p.wordCount + '字')"></option>
                             </template>
                         </select>
                     </div>
@@ -223,6 +250,16 @@
                                     <span class="text-muted small">字</span>
                                 </div>
                             </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">音频格式</label>
+                                <select class="form-select" x-model="wizard.audioFormat">
+                                    <option value="mp3">MP3</option>
+                                    <option value="wav">WAV</option>
+                                    <option value="opus">Opus</option>
+                                    <option value="aac">AAC</option>
+                                    <option value="flac">FLAC</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
@@ -250,11 +287,29 @@
                                 <option value="128k">128k (高质量)</option>
                             </select>
                         </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">语音间隔设置</label>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small text-muted">句间间隔 (秒)</label>
+                                    <input type="number" class="form-control" min="0" max="1.0" step="0.05"
+                                           x-model.number="wizard.chunkGapSeconds">
+                                    <small class="text-muted">正常段落之间的静音停顿</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small text-muted">跳过间隔 (秒)</label>
+                                    <input type="number" class="form-control" min="0" max="2.0" step="0.1"
+                                           x-model.number="wizard.skipGapSeconds">
+                                    <small class="text-muted">丢弃/截断段落处的较长停顿</small>
+                                </div>
+                            </div>
+                        </div>
                         <div class="alert alert-info">
                             <strong>任务摘要:</strong>
                             将为 <span x-text="wizard.selectedChapters.length"></span> 章生成语音，
                             使用 <span x-text="wizard.voice"></span> 语音，
-                            速度 <span x-text="wizard.speed"></span>x
+                            速度 <span x-text="wizard.speed"></span>x，
+                            格式 <span x-text="wizard.audioFormat.toUpperCase()"></span>
                             <span x-show="wizard.useFfmpeg">，ffmpeg 压缩至 <span x-text="wizard.bitrate"></span></span>
                         </div>
                     </div>
@@ -283,10 +338,15 @@ function ttsExportApp() {
 
     return {
         tasks: [],
-        projects: allProjects.map(p => ({ id: p.id, title: p.title, chapterCount: p.chapterCount || 0, wordCount: p.wordCount || 0 })),
+        projects: allProjects.map(p => ({ id: String(p.id), title: p.title, chapterCount: p.chapterCount || 0, wordCount: p.wordCount || 0 })),
         expandedTaskId: null,
         expandedChapters: [],
+        progressLogs: {},
+        progressEventSources: {},
+        showProgressTaskId: null,
         pollInterval: null,
+        _loadingTasks: false,
+        _loadingDetails: false,
 
         // Wizard state
         wizardStep: 0,
@@ -295,15 +355,18 @@ function ttsExportApp() {
         ttsConfigs: [],
         ffmpegAvailable: false,
         wizard: {
-            projectId: preselectedProjectId || '',
+            projectId: '',
             selectedChapters: [],
             configId: '',
             voice: 'alloy',
             speed: 1.0,
-            minLen: 30,
-            maxLen: 200,
+            minLen: 20,
+            maxLen: 50,
             useFfmpeg: false,
-            bitrate: '128k'
+            bitrate: '128k',
+            audioFormat: 'mp3',
+            chunkGapSeconds: 0.1,
+            skipGapSeconds: 0.3
         },
 
         async init() {
@@ -320,17 +383,21 @@ function ttsExportApp() {
                     this.wizard.useFfmpeg = data.available;
                 }
             } catch (e) {}
-            // If preselected project, load chapters
+            // If preselected project, load chapters and auto-open wizard
             if (preselectedProjectId) {
                 await this.loadChaptersForProject(preselectedProjectId);
+                this.openWizard();
             }
         },
 
         async loadTasks() {
+            if (this._loadingTasks) return;
+            this._loadingTasks = true;
             try {
                 const res = await fetch('/api/tts-export/tasks');
                 if (res.ok) this.tasks = await res.json();
             } catch (e) { console.warn('Failed to load tasks', e); }
+            finally { this._loadingTasks = false; }
         },
 
         async loadTtsConfigs() {
@@ -356,10 +423,15 @@ function ttsExportApp() {
 
         startPolling() {
             this.pollInterval = setInterval(async () => {
-                const hasRunning = this.tasks.some(t => t.status === 'RUNNING');
-                if (hasRunning || this.expandedTaskId) {
+                const hasActive = this.tasks.some(t => t.status === 'RUNNING' || t.status === 'PENDING');
+                if (hasActive) {
                     await this.loadTasks();
-                    if (this.expandedTaskId) await this.loadDetails(this.expandedTaskId);
+                }
+                if (this.expandedTaskId) {
+                    const expandedTask = this.tasks.find(t => t.id === this.expandedTaskId);
+                    if (expandedTask && (expandedTask.status === 'RUNNING' || expandedTask.status === 'PENDING')) {
+                        await this.loadDetails(this.expandedTaskId);
+                    }
                 }
             }, 2000);
         },
@@ -368,11 +440,16 @@ function ttsExportApp() {
         openWizard() {
             this.wizardStep = 0;
             this.wizard.selectedChapters = [];
-            if (preselectedProjectId) {
-                this.wizard.projectId = preselectedProjectId;
-            }
-            const modal = new bootstrap.Modal(document.getElementById('wizardModal'));
+            const modalEl = document.getElementById('wizardModal');
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
             modal.show();
+            // Set projectId after modal is fully shown so x-for options are rendered
+            if (preselectedProjectId) {
+                const setProject = () => {
+                    this.wizard.projectId = String(preselectedProjectId);
+                };
+                modalEl.addEventListener('shown.bs.modal', setProject, { once: true });
+            }
         },
 
         async onProjectSelected() {
@@ -433,7 +510,10 @@ function ttsExportApp() {
                 maxLen: this.wizard.maxLen,
                 useFfmpeg: this.wizard.useFfmpeg,
                 bitrate: this.wizard.bitrate,
-                chapterNumbers: this.wizard.selectedChapters.map(Number).sort((a, b) => a - b)
+                audioFormat: this.wizard.audioFormat,
+                chapterNumbers: this.wizard.selectedChapters.map(Number).sort((a, b) => a - b),
+                chunkGapSeconds: Number(this.wizard.chunkGapSeconds),
+                skipGapSeconds: Number(this.wizard.skipGapSeconds)
             };
             try {
                 const res = await fetch('/api/tts-export/tasks', {
@@ -442,7 +522,7 @@ function ttsExportApp() {
                     body: JSON.stringify(body)
                 });
                 if (res.ok) {
-                    bootstrap.Modal.getInstance(document.getElementById('wizardModal')).hide();
+                    bootstrap.Modal.getOrCreateInstance(document.getElementById('wizardModal')).hide();
                     await this.loadTasks();
                 } else {
                     alert('创建失败');
@@ -465,9 +545,95 @@ function ttsExportApp() {
         },
         async deleteTask(id) {
             if (!confirm('确定删除此任务及所有已生成文件?')) return;
+            this.closeProgress(id);
+            delete this.progressLogs[id];
             await fetch(`/api/tts-export/tasks/${id}`, { method: 'DELETE' });
             if (this.expandedTaskId === id) this.expandedTaskId = null;
             await this.loadTasks();
+        },
+
+        toggleProgress(taskId) {
+            if (this.showProgressTaskId === taskId) {
+                this.closeProgress(taskId);
+            } else {
+                this.showProgressTaskId = taskId;
+                this.connectProgress(taskId);
+            }
+        },
+
+        connectProgress(taskId) {
+            // Close existing connection if any
+            if (this.progressEventSources[taskId]) {
+                this.progressEventSources[taskId].close();
+                delete this.progressEventSources[taskId];
+            }
+
+            const es = new EventSource(`/api/tts-export/tasks/${taskId}/progress-stream`);
+            this.progressEventSources[taskId] = es;
+
+            // Inactivity timeout for reconnection
+            let inactivityTimer = null;
+            const resetInactivityTimer = () => {
+                if (inactivityTimer) clearTimeout(inactivityTimer);
+                inactivityTimer = setTimeout(() => {
+                    const task = this.tasks.find(t => t.id === taskId);
+                    if (task && (task.status === 'RUNNING' || task.status === 'PENDING')) {
+                        es.close();
+                        delete this.progressEventSources[taskId];
+                        this.connectProgress(taskId);
+                    }
+                }, 30000);
+            };
+            resetInactivityTimer();
+
+            es.addEventListener('replay', (event) => {
+                resetInactivityTimer();
+                try {
+                    this.progressLogs[taskId] = JSON.parse(event.data);
+                } catch (e) {
+                    this.progressLogs[taskId] = [];
+                }
+                this.$nextTick(() => this.scrollProgressLog(taskId));
+            });
+
+            es.addEventListener('log', (event) => {
+                resetInactivityTimer();
+                if (!this.progressLogs[taskId]) this.progressLogs[taskId] = [];
+                this.progressLogs[taskId].push(event.data);
+                this.$nextTick(() => this.scrollProgressLog(taskId));
+            });
+
+            es.addEventListener('done', () => {
+                if (inactivityTimer) clearTimeout(inactivityTimer);
+                es.close();
+                delete this.progressEventSources[taskId];
+            });
+
+            es.onerror = () => {
+                if (inactivityTimer) clearTimeout(inactivityTimer);
+                es.close();
+                delete this.progressEventSources[taskId];
+                // Reconnect after 2s if task still active
+                const task = this.tasks.find(t => t.id === taskId);
+                if (task && (task.status === 'RUNNING' || task.status === 'PENDING') && this.showProgressTaskId === taskId) {
+                    setTimeout(() => this.connectProgress(taskId), 2000);
+                }
+            };
+        },
+
+        closeProgress(taskId) {
+            if (this.progressEventSources[taskId]) {
+                this.progressEventSources[taskId].close();
+                delete this.progressEventSources[taskId];
+            }
+            if (this.showProgressTaskId === taskId) {
+                this.showProgressTaskId = null;
+            }
+        },
+
+        scrollProgressLog(taskId) {
+            const el = document.getElementById('progress-log-' + taskId);
+            if (el) el.scrollTop = el.scrollHeight;
         },
 
         async toggleDetails(id) {
@@ -479,6 +645,8 @@ function ttsExportApp() {
         },
 
         async loadDetails(id) {
+            if (this._loadingDetails) return;
+            this._loadingDetails = true;
             try {
                 const res = await fetch(`/api/tts-export/tasks/${id}`);
                 if (res.ok) {
@@ -487,6 +655,7 @@ function ttsExportApp() {
                     this.expandedChapters = data.chapters || [];
                 }
             } catch (e) {}
+            finally { this._loadingDetails = false; }
         },
 
         // Display helpers

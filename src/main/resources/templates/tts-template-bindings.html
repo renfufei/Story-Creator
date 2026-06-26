@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('模板绑定', ~{::content})}">
+<body>
+<div th:fragment="content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0">模板绑定管理</h2>
+            <small class="text-muted" th:if="${currentConfig != null}"
+                   th:text="'TTS模型: ' + ${currentConfig.displayName} + ' (' + ${currentConfig.modelId} + ')'">模型名</small>
+        </div>
+        <a th:href="@{/settings}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> 返回设置
+        </a>
+    </div>
+
+    <div class="row">
+        <!-- Current Bindings -->
+        <div class="col-md-7">
+            <div class="card">
+                <div class="card-header"><strong>已绑定模板</strong>
+                    <small class="text-muted ms-2">按排序顺序依次应用</small>
+                </div>
+                <div class="card-body p-0">
+                    <div th:if="${bindings.isEmpty()}" class="p-3">
+                        <p class="text-muted small mb-0">
+                            未绑定任何模板。此模型将使用所有内置模板作为默认替换规则。
+                        </p>
+                    </div>
+                    <table th:if="${!bindings.isEmpty()}" class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 60px;">排序</th>
+                                <th>模板引用</th>
+                                <th style="width: 80px;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr th:each="b : ${bindings}">
+                                <td th:text="${b.sortOrder}">0</td>
+                                <td>
+                                    <span th:if="${b.templateRef.startsWith('builtin:')}" class="badge bg-success me-1">内置</span>
+                                    <span th:if="${b.templateRef.startsWith('user:')}" class="badge bg-primary me-1">自定义</span>
+                                    <span th:text="${templateNameMap.getOrDefault(b.templateRef, b.templateRef)}">name</span>
+                                </td>
+                                <td>
+                                    <form th:action="@{/settings/tts-templates/bindings/{id}/delete(id=${configId})}" method="post" class="d-inline">
+                                        <input type="hidden" name="templateRef" th:value="${b.templateRef}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="移除绑定">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Binding -->
+        <div class="col-md-5">
+            <div class="card">
+                <div class="card-header"><strong>添加绑定</strong></div>
+                <div class="card-body">
+                    <form th:action="@{/settings/tts-templates/bindings/{id}/add(id=${configId})}" method="post">
+                        <div class="mb-3">
+                            <label class="form-label small">选择模板</label>
+                            <select class="form-select form-select-sm" name="templateRef" required>
+                                <option value="">-- 请选择 --</option>
+                                <optgroup label="内置模板">
+                                    <option th:each="opt : ${allOptions}" th:if="${opt.type() == '内置'}"
+                                            th:value="${opt.ref()}" th:text="${opt.name()}">选项</option>
+                                </optgroup>
+                                <optgroup label="自定义模板">
+                                    <option th:each="opt : ${allOptions}" th:if="${opt.type() == '自定义'}"
+                                            th:value="${opt.ref()}"
+                                            th:text="${opt.name() + (opt.enabled() ? '' : ' (已禁用)')}">选项</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">排序（越小越先执行）</label>
+                            <input type="number" class="form-control form-control-sm" name="sortOrder" value="0">
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-primary">添加绑定</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

@@ -34,6 +34,10 @@
                               th:text="${project.status.displayName}">状态</span>
                         <span class="badge bg-secondary mb-2" th:text="${project.currentStep.displayName}">当前步骤</span>
                         <p class="card-text text-muted small" th:text="${#strings.abbreviate(project.description, 80)}">描述</p>
+                        <div class="mt-2" th:with="stats=${chapterStats.get(project.id)}">
+                            <small class="text-muted me-3"><i class="bi bi-journal-text"></i> <span th:text="${stats != null ? stats[0] : '0'}">0</span> 章</small>
+                            <small class="text-muted"><i class="bi bi-fonts"></i> <span th:text="${stats != null ? stats[1] : '0'}">0</span> 字</small>
+                        </div>
                     </div>
                     <div class="card-footer bg-transparent">
                         <div class="d-flex justify-content-between align-items-center">

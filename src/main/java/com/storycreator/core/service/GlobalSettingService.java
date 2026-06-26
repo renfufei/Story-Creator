@@ -9,6 +9,7 @@ public class GlobalSettingService {
 
     private static final String AI_TIMEOUT_KEY = "ai_timeout_seconds";
     private static final int DEFAULT_TIMEOUT_SECONDS = 300;
+    private static final String TTS_DEBUG_MODE_KEY = "tts_debug_mode";
 
     private final GlobalSettingRepository globalSettingRepository;
 
@@ -29,6 +30,19 @@ public class GlobalSettingService {
         GlobalSettingEntity setting = globalSettingRepository.findById(AI_TIMEOUT_KEY)
                 .orElse(new GlobalSettingEntity(AI_TIMEOUT_KEY, ""));
         setting.setValue(String.valueOf(seconds));
+        globalSettingRepository.save(setting);
+    }
+
+    public boolean isTtsDebugMode() {
+        return globalSettingRepository.findById(TTS_DEBUG_MODE_KEY)
+                .map(s -> "true".equalsIgnoreCase(s.getValue()))
+                .orElse(false);
+    }
+
+    public void setTtsDebugMode(boolean enabled) {
+        GlobalSettingEntity setting = globalSettingRepository.findById(TTS_DEBUG_MODE_KEY)
+                .orElse(new GlobalSettingEntity(TTS_DEBUG_MODE_KEY, ""));
+        setting.setValue(String.valueOf(enabled));
         globalSettingRepository.save(setting);
     }
 }

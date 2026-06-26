@@ -37,6 +37,9 @@ public class TtsExportTaskEntity {
     @Column(length = 10)
     private String bitrate = "128k";
 
+    @Column(name = "audio_format", nullable = false, length = 10)
+    private String audioFormat = "mp3";
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private TtsExportStatus status = TtsExportStatus.PENDING;
@@ -46,6 +49,12 @@ public class TtsExportTaskEntity {
 
     @Column(name = "progress_total_chapters", nullable = false)
     private int progressTotalChapters = 0;
+
+    @Column(name = "chunk_gap_seconds")
+    private double chunkGapSeconds = 0.1;
+
+    @Column(name = "skip_gap_seconds")
+    private double skipGapSeconds = 0.3;
 
     @Column(name = "error_message", length = 500)
     private String errorMessage;
@@ -94,6 +103,9 @@ public class TtsExportTaskEntity {
     public String getBitrate() { return bitrate; }
     public void setBitrate(String bitrate) { this.bitrate = bitrate; }
 
+    public String getAudioFormat() { return audioFormat; }
+    public void setAudioFormat(String audioFormat) { this.audioFormat = audioFormat; }
+
     public TtsExportStatus getStatus() { return status; }
     public void setStatus(TtsExportStatus status) { this.status = status; }
 
@@ -102,6 +114,12 @@ public class TtsExportTaskEntity {
 
     public int getProgressTotalChapters() { return progressTotalChapters; }
     public void setProgressTotalChapters(int progressTotalChapters) { this.progressTotalChapters = progressTotalChapters; }
+
+    public double getChunkGapSeconds() { return chunkGapSeconds; }
+    public void setChunkGapSeconds(double chunkGapSeconds) { this.chunkGapSeconds = chunkGapSeconds; }
+
+    public double getSkipGapSeconds() { return skipGapSeconds; }
+    public void setSkipGapSeconds(double skipGapSeconds) { this.skipGapSeconds = skipGapSeconds; }
 
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }

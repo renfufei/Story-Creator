@@ -50,11 +50,25 @@
             <!-- Character overview panel -->
             <div x-show="characterOverview && !generating" class="mb-3">
                 <div class="card border-info">
-                    <div class="card-header py-1 bg-info bg-opacity-10 d-flex justify-content-between align-items-center" @click="showOverview = !showOverview" style="cursor: pointer;">
-                        <small class="fw-bold">角色总览</small>
-                        <i class="bi" :class="showOverview ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+                    <div class="card-header py-1 bg-info bg-opacity-10 d-flex justify-content-between align-items-center">
+                        <div @click="showOverview = !showOverview" style="cursor: pointer;" class="flex-grow-1">
+                            <small class="fw-bold">角色总览</small>
+                            <i class="bi" :class="showOverview ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary py-0 px-1 ms-2" x-show="showOverview && !editingOverview"
+                                @click.stop="editingOverview = true; editOverviewContent = characterOverview" :disabled="fullAutoRunning">
+                            <i class="bi bi-pencil"></i>
+                        </button>
                     </div>
-                    <div class="card-body py-2" x-show="showOverview" style="max-height: 300px; overflow-y: auto; font-size: 0.85rem; white-space: pre-wrap;" x-text="characterOverview"></div>
+                    <div class="card-body py-2" x-show="showOverview && !editingOverview" style="max-height: 300px; overflow-y: auto; font-size: 0.85rem; white-space: pre-wrap;" x-text="characterOverview"></div>
+                    <div class="card-body py-2" x-show="showOverview && editingOverview">
+                        <textarea class="form-control form-control-sm" rows="10" x-model="editOverviewContent"
+                                  style="font-size: 0.85rem; white-space: pre-wrap;"></textarea>
+                        <div class="d-flex gap-1 justify-content-end mt-2">
+                            <button class="btn btn-sm btn-outline-secondary" @click="editingOverview = false">取消</button>
+                            <button class="btn btn-sm btn-primary" @click="saveCharacterOverview()">保存</button>
+                        </div>
+                    </div>
                 </div>
             </div>
 

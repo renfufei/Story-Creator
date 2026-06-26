@@ -57,6 +57,21 @@
         </div>
     </div>
 
+    <div class="card mb-4">
+        <div class="card-header"><strong>TTS 调试模式</strong></div>
+        <div class="card-body">
+            <form th:action="@{/settings/tts-debug-mode}" method="post" class="d-flex gap-2 align-items-center">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="enabled" value="true"
+                           th:checked="${ttsDebugMode}" id="ttsDebugSwitch">
+                    <label class="form-check-label" for="ttsDebugSwitch">启用</label>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">保存</button>
+            </form>
+            <small class="text-muted mt-1 d-block">开启后，TTS导出MP3时保留中间chunk文件（位于导出任务目录下的 chapter_N/ 子目录），便于逐段调试校对语音问题</small>
+        </div>
+    </div>
+
     <!-- Text Models Section -->
     <h5 class="mb-3"><i class="bi bi-chat-text"></i> 文本生成模型</h5>
     <div class="row g-3 mb-3">
@@ -176,6 +191,41 @@
         </div>
     </div>
 
+    <!-- TTS Replacement Templates Link -->
+    <div class="card mb-4 mt-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong><i class="bi bi-arrow-left-right"></i> TTS 文字替换模板</strong>
+            <a th:href="@{/settings/tts-templates}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-gear"></i> 管理模板
+            </a>
+        </div>
+        <div class="card-body">
+            <small class="text-muted d-block mb-2">TTS 生成前会按模板中的规则顺序执行文字替换。每个 TTS 模型可绑定不同的模板组合。</small>
+            <div th:if="${!ttsConfigs.isEmpty()}">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>TTS 模型</th>
+                            <th style="width: 120px;">绑定管理</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="config : ${ttsConfigs}">
+                            <td th:text="${config.displayName} + ' (' + ${config.modelId} + ')'">模型</td>
+                            <td>
+                                <a th:href="@{/settings/tts-templates/bindings/{id}(id=${config.id})}"
+                                   class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-link-45deg"></i> 绑定
+                                </a>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p th:if="${ttsConfigs.isEmpty()}" class="text-muted small mb-0">暂无 TTS 模型配置</p>
+        </div>
+    </div>
+
     <!-- Edit/Add Modal -->
     <div class="modal fade" id="configModal" tabindex="-1">
         <div class="modal-dialog">
@@ -268,6 +318,15 @@
                                       :placeholder="form.modelType === 'TTS' ? '例: {&quot;voice&quot;: &quot;alloy&quot;, &quot;voices&quot;: &quot;alloy,echo,nova&quot;}' : '例: {&quot;enable_thinking&quot;: false}'"></textarea>
                             <small class="text-muted" x-show="form.modelType === 'TEXT'">合并到API请求体</small>
                             <small class="text-muted" x-show="form.modelType === 'TTS'">voice: 默认测试音色; voices: 可用音色列表(逗号分隔)</small>
+                            <div x-show="form.modelType === 'TEXT'" class="mt-1">
+                                <span class="badge bg-secondary" role="button" style="cursor:pointer"
+                                      @click="
+                                        let obj = {};
+                                        try { obj = JSON.parse(form.extraParams || '{}'); } catch(e) { obj = {}; }
+                                        obj['chat_template_kwargs'] = {enable_thinking: false};
+                                        form.extraParams = JSON.stringify(obj);
+                                      ">+ 禁用思考 (vLLM)</span>
+                            </div>
                         </div>
 
                         <!-- Probe Voices (TTS edit mode only) -->

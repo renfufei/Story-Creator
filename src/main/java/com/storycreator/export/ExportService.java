@@ -19,6 +19,8 @@ public class ExportService {
     private final ChapterOutlineRepository chapterOutlineRepository;
     private final WorkflowStateRepository workflowStateRepository;
     private final StepGuidanceRepository stepGuidanceRepository;
+    private final StepModelConfigRepository stepModelConfigRepository;
+    private final AiModelConfigRepository aiModelConfigRepository;
     private final ProofreadingReportRepository proofreadingReportRepository;
     private final ObjectMapper objectMapper;
 
@@ -31,6 +33,8 @@ public class ExportService {
                         ChapterOutlineRepository chapterOutlineRepository,
                         WorkflowStateRepository workflowStateRepository,
                         StepGuidanceRepository stepGuidanceRepository,
+                        StepModelConfigRepository stepModelConfigRepository,
+                        AiModelConfigRepository aiModelConfigRepository,
                         ProofreadingReportRepository proofreadingReportRepository,
                         ObjectMapper objectMapper) {
         this.projectRepository = projectRepository;
@@ -42,6 +46,8 @@ public class ExportService {
         this.chapterOutlineRepository = chapterOutlineRepository;
         this.workflowStateRepository = workflowStateRepository;
         this.stepGuidanceRepository = stepGuidanceRepository;
+        this.stepModelConfigRepository = stepModelConfigRepository;
+        this.aiModelConfigRepository = aiModelConfigRepository;
         this.proofreadingReportRepository = proofreadingReportRepository;
         this.objectMapper = objectMapper;
     }
@@ -286,6 +292,17 @@ public class ExportService {
                 .map(sg -> new ProjectJsonDto.StepGuidanceData(sg.getStep().name(), sg.getGuidance()))
                 .toList();
 
+        var stepModelConfigs = stepModelConfigRepository.findByProjectId(projectId).stream()
+                .filter(smc -> smc.getModelConfigId() != null)
+                .map(smc -> {
+                    var config = aiModelConfigRepository.findById(smc.getModelConfigId()).orElse(null);
+                    if (config == null) return null;
+                    String modelCode = config.getProvider() + ":" + config.getModelId();
+                    return new ProjectJsonDto.StepModelConfigData(smc.getStep().name(), modelCode);
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
+
         var proofreadingReports = proofreadingReportRepository.findByProjectIdOrderByChapterNumber(projectId).stream()
                 .map(pr -> new ProjectJsonDto.ProofreadingReportData(
                         pr.getChapterNumber(), pr.getPlotSummary(),
@@ -294,7 +311,7 @@ public class ExportService {
                 .toList();
 
         var dto = new ProjectJsonDto(1, projectData, worldSetting, characters, storyOutline,
-                volumeOutlines, chapterOutlines, chapters, workflowStates, stepGuidances, proofreadingReports);
+                volumeOutlines, chapterOutlines, chapters, workflowStates, stepGuidances, stepModelConfigs, proofreadingReports);
 
         try {
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(dto);

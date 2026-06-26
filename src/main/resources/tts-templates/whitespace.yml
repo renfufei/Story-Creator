@@ -1,0 +1,16 @@
+id: whitespace
+name: "空白规范化"
+description: "规范化空格、制表符和连续逗号"
+rules:
+  - pattern: "[ \\t]+"
+    replacement: "，"
+    isRegex: true
+    description: "将空格和制表符替换为中文逗号"
+  - pattern: "\\n{3,}"
+    replacement: "\n\n"
+    isRegex: true
+    description: "将3个以上连续换行合并为2个"
+  - pattern: "，{2,}"
+    replacement: "，"
+    isRegex: true
+    description: "将连续多个中文逗号合并为1个"

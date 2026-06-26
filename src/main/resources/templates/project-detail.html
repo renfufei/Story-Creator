@@ -7,6 +7,8 @@
             <h2 th:text="${project.title}">项目名</h2>
             <span class="badge bg-info" th:text="${project.genre.displayName}">题材</span>
             <span class="badge bg-secondary" th:text="${project.currentStep.displayName}">当前步骤</span>
+            <span class="text-muted ms-3"><i class="bi bi-journal-text"></i> <span th:text="${chapterCount}">0</span> 章</span>
+            <span class="text-muted ms-2"><i class="bi bi-fonts"></i> <span th:text="${wordCount}">0</span> 字</span>
         </div>
         <div class="d-flex gap-2">
             <a th:href="@{/projects/{id}/workflow(id=${project.id})}" class="btn btn-primary">

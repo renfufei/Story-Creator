@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('全文收听', ~{::content})}">
+<body>
+<div th:fragment="content">
+<div x-data="fullPlayApp()" x-init="init()">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3><i class="bi bi-play-circle"></i> 全文收听</h3>
+        <a href="/tts-export" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> 返回导出管理
+        </a>
+    </div>
+
+    <!-- Resume Banner -->
+    <div x-show="resumeOffer" x-cloak class="alert alert-info alert-dismissible mb-3">
+        <i class="bi bi-arrow-clockwise"></i>
+        上次播放到第 <strong x-text="resumeChapterDisplay"></strong> 章
+        <button @click="acceptResume()" class="btn btn-sm btn-primary ms-2">继续播放</button>
+        <button @click="dismissResume()" class="btn btn-sm btn-secondary ms-1">从头开始</button>
+    </div>
+
+    <!-- Loading -->
+    <div x-show="loading" class="text-center py-5">
+        <div class="spinner-border"></div>
+        <p class="mt-2">加载任务信息...</p>
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" class="alert alert-danger" x-text="error"></div>
+
+    <!-- Main Content -->
+    <div x-show="!loading && !error" x-cloak class="row">
+        <!-- Left: Chapter List -->
+        <div class="col-md-4 col-lg-3">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-bold small">播放列表</span>
+                    <span class="badge bg-secondary" x-text="playableChapters.length + ' 章'"></span>
+                </div>
+                <div class="list-group list-group-flush" style="max-height: 60vh; overflow-y: auto;">
+                    <template x-for="(ch, idx) in playableChapters" :key="ch.chapterNumber">
+                        <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2"
+                                :class="{ 'active': currentIndex === idx }"
+                                @click="playIndex(idx)">
+                            <span class="small" x-text="'第' + ch.chapterNumber + '章'"></span>
+                            <span x-show="currentIndex === idx && !paused">
+                                <i class="bi bi-volume-up-fill"></i>
+                            </span>
+                            <span x-show="currentIndex === idx && paused">
+                                <i class="bi bi-pause-circle"></i>
+                            </span>
+                        </button>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Player Controls -->
+        <div class="col-md-8 col-lg-9">
+            <div class="card">
+                <div class="card-body">
+                    <!-- Now Playing -->
+                    <div class="text-center mb-4">
+                        <div x-show="currentIndex === -1" class="text-muted py-4">
+                            <i class="bi bi-music-note-beamed" style="font-size: 3rem;"></i>
+                            <p class="mt-2">点击播放列表中的章节或按下方按钮开始</p>
+                        </div>
+                        <div x-show="currentIndex >= 0">
+                            <h5 class="mb-1" x-text="'正在播放：第' + (currentChapter ? currentChapter.chapterNumber : '') + '章'"></h5>
+                            <p class="text-muted small mb-3" x-text="'进度: ' + (currentIndex + 1) + ' / ' + playableChapters.length + ' 章'"></p>
+                            <!-- Progress bar -->
+                            <div class="progress mb-3" style="height: 6px;">
+                                <div class="progress-bar bg-success" :style="'width: ' + overallProgress + '%'"></div>
+                            </div>
+                            <!-- Audio progress -->
+                            <div class="progress mb-2" style="height: 4px;">
+                                <div class="progress-bar" :style="'width: ' + audioProgress + '%'"></div>
+                            </div>
+                            <small class="text-muted" x-text="audioTimeDisplay"></small>
+                        </div>
+                    </div>
+
+                    <!-- Controls -->
+                    <div class="d-flex justify-content-center gap-3">
+                        <button class="btn btn-outline-secondary" @click="playPrev()" :disabled="currentIndex <= 0">
+                            <i class="bi bi-skip-backward-fill"></i> 上一章
+                        </button>
+                        <button class="btn btn-primary btn-lg" @click="togglePlayPause()" x-show="currentIndex >= 0">
+                            <i :class="paused ? 'bi bi-play-fill' : 'bi bi-pause-fill'"></i>
+                            <span x-text="paused ? '继续' : '暂停'"></span>
+                        </button>
+                        <button class="btn btn-success btn-lg" @click="playIndex(0)" x-show="currentIndex === -1">
+                            <i class="bi bi-play-fill"></i> 开始播放
+                        </button>
+                        <button class="btn btn-outline-secondary" @click="playNext()" :disabled="currentIndex >= playableChapters.length - 1">
+                            <i class="bi bi-skip-forward-fill"></i> 下一章
+                        </button>
+                        <button class="btn btn-outline-danger" @click="stopPlay()" x-show="currentIndex >= 0">
+                            <i class="bi bi-stop-fill"></i> 停止
+                        </button>
+                    </div>
+
+                    <!-- Error messages -->
+                    <div x-show="playError" class="alert alert-warning mt-3 small" x-text="playError"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script th:inline="javascript">
+function fullPlayApp() {
+    const taskId = /*[[${taskId}]]*/ 0;
+    const storageKey = 'tts_fullplay_' + taskId;
+
+    return {
+        loading: true,
+        error: null,
+        taskInfo: null,
+        allChapters: [],
+        playableChapters: [],
+        currentIndex: -1,
+        paused: false,
+        audio: null,
+        audioProgress: 0,
+        audioTimeDisplay: '',
+        playError: null,
+        resumeOffer: false,
+        resumeChapterDisplay: '',
+        resumeIndex: -1,
+        progressTimer: null,
+
+        get currentChapter() {
+            return this.currentIndex >= 0 ? this.playableChapters[this.currentIndex] : null;
+        },
+        get overallProgress() {
+            if (this.playableChapters.length === 0) return 0;
+            return Math.round(((this.currentIndex + 1) / this.playableChapters.length) * 100);
+        },
+
+        async init() {
+            try {
+                const res = await fetch(`/api/tts-export/tasks/${taskId}`);
+                if (!res.ok) throw new Error('任务不存在或加载失败');
+                const data = await res.json();
+                this.taskInfo = data.task;
+                this.allChapters = data.chapters || [];
+                this.playableChapters = this.allChapters.filter(ch => ch.status === 'COMPLETED');
+                if (this.playableChapters.length === 0) {
+                    this.error = '该任务暂无已完成的章节音频';
+                }
+            } catch (e) {
+                this.error = e.message;
+            } finally {
+                this.loading = false;
+            }
+            this.checkResume();
+        },
+
+        checkResume() {
+            try {
+                const saved = localStorage.getItem(storageKey);
+                if (saved) {
+                    const state = JSON.parse(saved);
+                    if (state.currentIndex >= 0 && state.currentIndex < this.playableChapters.length) {
+                        this.resumeIndex = state.currentIndex;
+                        this.resumeChapterDisplay = this.playableChapters[state.currentIndex].chapterNumber;
+                        this.resumeOffer = true;
+                    }
+                }
+            } catch (e) {}
+        },
+
+        acceptResume() {
+            this.resumeOffer = false;
+            this.playIndex(this.resumeIndex);
+        },
+
+        dismissResume() {
+            this.resumeOffer = false;
+            localStorage.removeItem(storageKey);
+        },
+
+        playIndex(idx) {
+            if (idx < 0 || idx >= this.playableChapters.length) return;
+            this.stopCurrentAudio();
+            this.currentIndex = idx;
+            this.paused = false;
+            this.playError = null;
+            this.saveState();
+            this.startAudio();
+        },
+
+        startAudio() {
+            const ch = this.playableChapters[this.currentIndex];
+            const url = `/api/tts-export/tasks/${taskId}/chapters/${ch.chapterNumber}/file`;
+            this.audio = new Audio(url);
+            this.audio.onended = () => this.onAudioEnded();
+            this.audio.onerror = () => this.onAudioError();
+            this.audio.onloadedmetadata = () => this.startProgressTimer();
+            this.audio.play().catch(e => {
+                this.playError = '播放失败: ' + e.message;
+            });
+        },
+
+        onAudioEnded() {
+            this.stopProgressTimer();
+            if (this.currentIndex < this.playableChapters.length - 1) {
+                this.currentIndex++;
+                this.saveState();
+                this.startAudio();
+            } else {
+                // Finished all chapters
+                this.currentIndex = -1;
+                this.audioProgress = 0;
+                this.audioTimeDisplay = '';
+                localStorage.removeItem(storageKey);
+            }
+        },
+
+        onAudioError() {
+            this.stopProgressTimer();
+            const ch = this.playableChapters[this.currentIndex];
+            this.playError = `第${ch.chapterNumber}章播放出错，跳过...`;
+            setTimeout(() => {
+                if (this.currentIndex < this.playableChapters.length - 1) {
+                    this.currentIndex++;
+                    this.saveState();
+                    this.playError = null;
+                    this.startAudio();
+                } else {
+                    this.currentIndex = -1;
+                    localStorage.removeItem(storageKey);
+                }
+            }, 1500);
+        },
+
+        togglePlayPause() {
+            if (!this.audio) return;
+            if (this.paused) {
+                this.audio.play();
+                this.paused = false;
+                this.startProgressTimer();
+            } else {
+                this.audio.pause();
+                this.paused = true;
+                this.stopProgressTimer();
+            }
+            this.saveState();
+        },
+
+        playPrev() {
+            if (this.currentIndex > 0) {
+                this.playIndex(this.currentIndex - 1);
+            }
+        },
+
+        playNext() {
+            if (this.currentIndex < this.playableChapters.length - 1) {
+                this.playIndex(this.currentIndex + 1);
+            }
+        },
+
+        stopPlay() {
+            this.stopCurrentAudio();
+            this.currentIndex = -1;
+            this.paused = false;
+            this.audioProgress = 0;
+            this.audioTimeDisplay = '';
+            localStorage.removeItem(storageKey);
+        },
+
+        stopCurrentAudio() {
+            this.stopProgressTimer();
+            if (this.audio) {
+                this.audio.pause();
+                this.audio.onended = null;
+                this.audio.onerror = null;
+                this.audio = null;
+            }
+        },
+
+        startProgressTimer() {
+            this.stopProgressTimer();
+            this.progressTimer = setInterval(() => {
+                if (this.audio && this.audio.duration) {
+                    this.audioProgress = (this.audio.currentTime / this.audio.duration) * 100;
+                    this.audioTimeDisplay = this.formatTime(this.audio.currentTime) + ' / ' + this.formatTime(this.audio.duration);
+                }
+            }, 500);
+        },
+
+        stopProgressTimer() {
+            if (this.progressTimer) {
+                clearInterval(this.progressTimer);
+                this.progressTimer = null;
+            }
+        },
+
+        formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return m + ':' + (s < 10 ? '0' : '') + s;
+        },
+
+        saveState() {
+            try {
+                localStorage.setItem(storageKey, JSON.stringify({
+                    currentIndex: this.currentIndex,
+                    paused: this.paused
+                }));
+            } catch (e) {}
+        }
+    };
+}
+</script>
+</div>
+</body>
+</html>

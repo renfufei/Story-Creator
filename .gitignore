@@ -18,3 +18,4 @@ buildNumber.properties
 app.log
 app.pid
 data/
+.DS_Store

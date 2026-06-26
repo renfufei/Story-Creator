@@ -1,0 +1,24 @@
+id: punctuation
+name: "引号/括号/书名号处理"
+description: "移除或替换引号、括号、书名号和破折号等标点"
+rules:
+  - pattern: "[\"'\\u2018\\u2019\\u201C\\u201D\\u300C\\u300D\\u300E\\u300F]"
+    replacement: ""
+    isRegex: true
+    description: "移除各类引号（中英日）"
+  - pattern: "[\\u3010\\u3011\\u3016\\u3017\\uFF08\\uFF09()\\[\\]\\u3008\\u3009]"
+    replacement: " "
+    isRegex: true
+    description: "将各类括号替换为空格"
+  - pattern: "[\\u300A\\u300B]"
+    replacement: ""
+    isRegex: true
+    description: "移除书名号《》"
+  - pattern: "[\\u2014\\u2013\\u2026\\uFF5E~]+"
+    replacement: "，"
+    isRegex: true
+    description: "将破折号、省略号、波浪号替换为中文逗号"
+  - pattern: "\\uFF1A"
+    replacement: ""
+    isRegex: true
+    description: "移除中文冒号"

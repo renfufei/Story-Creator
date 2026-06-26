@@ -1,0 +1,8 @@
+id: tts-artifacts
+name: "TTS卡音字符替换"
+description: "替换导致TTS产生重复/卡顿音频的拟声词和语气词"
+rules:
+  - pattern: "[啊哎唉哦噢喔哟嗯唔呃嗝咦嗨哈嘻噗咳啐唾呼吁咝嘶咄嗬嚄唏咿呜哇嘟咕噜咯咚咣当叮咛铃嗖嗡嗒嘭嘣砰啪噼嘎嘠嘞汪咩哞嗷啾咴嗳嗽嚏啜咂吧咀咽呷啖]"
+    replacement: ""
+    isRegex: true
+    description: "替换导致TTS卡音的拟声词/语气词字符"

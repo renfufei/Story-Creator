@@ -24,12 +24,12 @@ public class TtsProviderRegistry {
         if (config == null || !config.isActive() || config.getModelType() != ModelType.TTS) {
             return null;
         }
-        return new ResolvedTtsConfig(ttsProvider, config.getModelId(), config.getBaseUrl(), config.getApiKey());
+        return new ResolvedTtsConfig(configId, ttsProvider, config.getModelId(), config.getBaseUrl(), config.getApiKey());
     }
 
     public List<AiModelConfigEntity> getActiveTtsConfigs() {
         return configRepository.findByActiveTrueAndModelType(ModelType.TTS);
     }
 
-    public record ResolvedTtsConfig(TtsProvider provider, String modelId, String baseUrl, String apiKey) {}
+    public record ResolvedTtsConfig(Long configId, TtsProvider provider, String modelId, String baseUrl, String apiKey) {}
 }

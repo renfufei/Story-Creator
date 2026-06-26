@@ -163,6 +163,46 @@
                     <i class="bi bi-download"></i> 导出MP3
                 </a>
             </div>
+
+            <!-- Resume Banner -->
+            <div x-show="playlistResumeOffer" x-cloak class="alert alert-info alert-dismissible mt-2 mb-0 py-2 small">
+                <i class="bi bi-arrow-clockwise"></i>
+                上次全文收听到第 <strong x-text="playlistResumeChapter"></strong> 章
+                <button @click="acceptResume()" class="btn btn-sm btn-primary ms-2">继续</button>
+                <button @click="dismissResume()" class="btn btn-sm btn-secondary ms-1">取消</button>
+            </div>
+
+            <!-- Full Listen Controls -->
+            <div class="mt-2 border-top pt-2">
+                <!-- Not active: show start button -->
+                <div x-show="!playlist.isActive">
+                    <button class="btn btn-sm btn-outline-success" @click="startFullListen()">
+                        <i class="bi bi-play-circle"></i> 全文收听
+                    </button>
+                </div>
+                <!-- Active: show controls -->
+                <div x-show="playlist.isActive" class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="badge bg-success">
+                        <i class="bi bi-music-note-list"></i> 全文收听中
+                    </span>
+                    <span class="small text-muted" x-text="'第' + (playlist.chapters[playlist.currentIndex] || '') + '章 (' + (playlist.currentIndex + 1) + '/' + playlist.chapters.length + ')'"></span>
+                    <div class="btn-group btn-group-sm ms-auto">
+                        <button class="btn btn-outline-secondary" @click="playlistPrev()" :disabled="playlist.currentIndex <= 0">
+                            <i class="bi bi-skip-backward-fill"></i>
+                        </button>
+                        <button class="btn btn-outline-primary" @click="playlist.paused ? playlistResume() : playlistPause()">
+                            <i :class="playlist.paused ? 'bi bi-play-fill' : 'bi bi-pause-fill'"></i>
+                            <span x-text="playlist.paused ? '继续' : '暂停'"></span>
+                        </button>
+                        <button class="btn btn-outline-secondary" @click="playlistNext()" :disabled="playlist.currentIndex >= playlist.chapters.length - 1">
+                            <i class="bi bi-skip-forward-fill"></i>
+                        </button>
+                        <button class="btn btn-outline-danger" @click="stopFullListen()">
+                            <i class="bi bi-stop-fill"></i> 停止
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div th:each="chapter, iter : ${chapters}">
@@ -217,8 +257,17 @@
                 loading: null,
                 audio: null,
                 abortController: null,
-                preGeneratedFiles: {}
+                preGeneratedFiles: {},
+                onChapterEndedCallback: null
             },
+            playlist: {
+                isActive: false,
+                chapters: [],
+                currentIndex: -1,
+                paused: false
+            },
+            playlistResumeOffer: false,
+            playlistResumeChapter: '',
             async initTts() {
                 try {
                     const res = await fetch(`/projects/${projectId}/tts/configs`);
@@ -245,6 +294,8 @@
                         this.tts.preGeneratedFiles = await filesRes.json();
                     }
                 } catch (e) {}
+                // Check for saved playlist state
+                this.loadPlaylistState();
             },
             loadTtsPrefs() {
                 try {
@@ -273,6 +324,9 @@
                 } catch (e) {}
             },
             toggleChapter(num) {
+                if (this.playlist.isActive) {
+                    this.stopFullListen();
+                }
                 if (this.tts.playing === num) {
                     this.stopAudio();
                 } else {
@@ -288,8 +342,14 @@
                     this.tts.playing = num;
                     const audio = new Audio(this.tts.preGeneratedFiles[num]);
                     this.tts.audio = audio;
-                    audio.onended = () => { this.tts.playing = null; this.tts.audio = null; };
-                    audio.onerror = () => { this.tts.playing = null; this.tts.audio = null; };
+                    audio.onended = () => {
+                        this.tts.playing = null; this.tts.audio = null;
+                        if (this.tts.onChapterEndedCallback) this.tts.onChapterEndedCallback();
+                    };
+                    audio.onerror = () => {
+                        this.tts.playing = null; this.tts.audio = null;
+                        if (this.tts.onChapterEndedCallback) this.tts.onChapterEndedCallback();
+                    };
                     abortController.signal.addEventListener('abort', () => audio.pause(), { once: true });
                     audio.play().catch(() => { this.tts.playing = null; this.tts.audio = null; });
                     return;
@@ -394,14 +454,135 @@
                         // User cancelled - not an error
                     } else {
                         console.error('TTS playback failed', e);
-                        alert('语音合成失败: ' + e.message);
+                        if (this.playlist.isActive && this.tts.onChapterEndedCallback) {
+                            this.tts.onChapterEndedCallback();
+                        } else {
+                            alert('语音合成失败: ' + e.message);
+                        }
                     }
                 } finally {
                     this.tts.loading = null;
                     this.tts.playing = null;
                     this.tts.audio = null;
                     this.tts.abortController = null;
+                    // Call callback for non-abort completion of streaming path
+                    if (!abortController.signal.aborted && this.tts.onChapterEndedCallback) {
+                        this.tts.onChapterEndedCallback();
+                    }
                 }
+            },
+            // ===== Full Listen (Playlist) =====
+            startFullListen() {
+                // Build playlist from chapters with content
+                const chapterElements = document.querySelectorAll('[id^="chapter-"]');
+                const chapters = [];
+                chapterElements.forEach(el => {
+                    const num = parseInt(el.id.replace('chapter-', ''));
+                    if (!isNaN(num)) chapters.push(num);
+                });
+                if (chapters.length === 0) return;
+                this.stopAudio();
+                this.playlist.chapters = chapters;
+                this.playlist.currentIndex = 0;
+                this.playlist.isActive = true;
+                this.playlist.paused = false;
+                this.tts.onChapterEndedCallback = () => this.onPlaylistChapterEnded();
+                this.savePlaylistState();
+                this.playChapter(this.playlist.chapters[0]);
+            },
+            onPlaylistChapterEnded() {
+                if (!this.playlist.isActive) return;
+                if (this.playlist.currentIndex < this.playlist.chapters.length - 1) {
+                    this.playlist.currentIndex++;
+                    this.savePlaylistState();
+                    this.playChapter(this.playlist.chapters[this.playlist.currentIndex]);
+                } else {
+                    // Finished all chapters
+                    this.stopFullListen();
+                }
+            },
+            playlistPause() {
+                if (this.tts.audio) {
+                    this.tts.audio.pause();
+                }
+                this.playlist.paused = true;
+                this.savePlaylistState();
+            },
+            playlistResume() {
+                if (this.tts.audio) {
+                    this.tts.audio.play();
+                    this.playlist.paused = false;
+                } else {
+                    // Audio lost, restart current chapter
+                    this.playlist.paused = false;
+                    this.playChapter(this.playlist.chapters[this.playlist.currentIndex]);
+                }
+                this.savePlaylistState();
+            },
+            playlistPrev() {
+                if (!this.playlist.isActive || this.playlist.currentIndex <= 0) return;
+                this.stopAudio();
+                this.playlist.currentIndex--;
+                this.playlist.paused = false;
+                this.savePlaylistState();
+                this.playChapter(this.playlist.chapters[this.playlist.currentIndex]);
+            },
+            playlistNext() {
+                if (!this.playlist.isActive || this.playlist.currentIndex >= this.playlist.chapters.length - 1) return;
+                this.stopAudio();
+                this.playlist.currentIndex++;
+                this.playlist.paused = false;
+                this.savePlaylistState();
+                this.playChapter(this.playlist.chapters[this.playlist.currentIndex]);
+            },
+            stopFullListen() {
+                this.stopAudio();
+                this.playlist.isActive = false;
+                this.playlist.chapters = [];
+                this.playlist.currentIndex = -1;
+                this.playlist.paused = false;
+                this.tts.onChapterEndedCallback = null;
+                localStorage.removeItem('tts_playlist_' + projectId);
+            },
+            savePlaylistState() {
+                try {
+                    localStorage.setItem('tts_playlist_' + projectId, JSON.stringify({
+                        chapters: this.playlist.chapters,
+                        currentIndex: this.playlist.currentIndex,
+                        currentChapter: this.playlist.chapters[this.playlist.currentIndex],
+                        isActive: true
+                    }));
+                } catch (e) {}
+            },
+            loadPlaylistState() {
+                try {
+                    const saved = localStorage.getItem('tts_playlist_' + projectId);
+                    if (saved) {
+                        const state = JSON.parse(saved);
+                        if (state.isActive && state.chapters && state.chapters.length > 0) {
+                            this.playlistResumeOffer = true;
+                            this.playlistResumeChapter = state.currentChapter || state.chapters[state.currentIndex];
+                        }
+                    }
+                } catch (e) {}
+            },
+            acceptResume() {
+                this.playlistResumeOffer = false;
+                try {
+                    const saved = JSON.parse(localStorage.getItem('tts_playlist_' + projectId));
+                    this.playlist.chapters = saved.chapters;
+                    this.playlist.currentIndex = saved.currentIndex;
+                    this.playlist.isActive = true;
+                    this.playlist.paused = false;
+                    this.tts.onChapterEndedCallback = () => this.onPlaylistChapterEnded();
+                    this.playChapter(this.playlist.chapters[this.playlist.currentIndex]);
+                } catch (e) {
+                    this.stopFullListen();
+                }
+            },
+            dismissResume() {
+                this.playlistResumeOffer = false;
+                localStorage.removeItem('tts_playlist_' + projectId);
             },
             stopAudio() {
                 if (this.tts.abortController) {

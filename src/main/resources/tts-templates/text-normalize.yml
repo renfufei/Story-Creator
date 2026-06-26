@@ -1,0 +1,24 @@
+id: text-normalize
+name: "文本规范化"
+description: "修正繁简混杂、连续标点、拟声词顿号等TTS不友好的文本模式"
+rules:
+  - pattern: "，。"
+    replacement: "。"
+    isRegex: false
+    description: "修正逗号紧接句号"
+  - pattern: "。，"
+    replacement: "。"
+    isRegex: false
+    description: "修正句号紧接逗号"
+  - pattern: "氣"
+    replacement: "气"
+    isRegex: false
+    description: "修正繁体'氣'为简体"
+  - pattern: "裏"
+    replacement: "里"
+    isRegex: false
+    description: "修正繁体'裏'为简体"
+  - pattern: "([\u4e00-\u9fff])、([\u4e00-\u9fff])、"
+    replacement: "$1$2"
+    isRegex: true
+    description: "移除单字间顿号（拟声词如'哒、哒、'→'哒哒'）"

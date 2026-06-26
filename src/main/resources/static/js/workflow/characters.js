@@ -9,6 +9,8 @@ function workflowCharactersMixin() {
         refineProgress: '',
         characterOverview: '',
         showOverview: true,
+        editingOverview: false,
+        editOverviewContent: '',
         refineStreamContent: '',
 
         setupCharacterStreamEvents(eventSource) {
@@ -69,6 +71,21 @@ function workflowCharactersMixin() {
                 .then(r => r.json())
                 .then(data => { this.characterOverview = data.content || ''; })
                 .catch(err => console.error('Failed to load character overview:', err));
+        },
+
+        saveCharacterOverview() {
+            const formData = new FormData();
+            formData.append('content', this.editOverviewContent);
+            fetch(`/projects/${this.projectId}/characters/overview`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(() => {
+                this.characterOverview = this.editOverviewContent;
+                this.editingOverview = false;
+            })
+            .catch(err => alert('保存失败: ' + err));
         },
 
         editCharacter(ch) {

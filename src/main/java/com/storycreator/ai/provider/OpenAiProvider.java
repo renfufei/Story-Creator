@@ -255,11 +255,6 @@ public class OpenAiProvider implements AiProvider {
             root.put("temperature", request.getTemperature());
             root.put("stream", stream);
 
-            // Disable thinking mode by default (for models like Qwen that support it)
-            ObjectNode chatTemplateKwargs = objectMapper.createObjectNode();
-            chatTemplateKwargs.put("enable_thinking", false);
-            root.set("chat_template_kwargs", chatTemplateKwargs);
-
             ArrayNode messages = root.putArray("messages");
 
             if (request.getSystemPrompt() != null && !request.getSystemPrompt().isEmpty()) {

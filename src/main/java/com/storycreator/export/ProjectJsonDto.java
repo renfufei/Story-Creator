@@ -13,6 +13,7 @@ public record ProjectJsonDto(
     List<ChapterData> chapters,
     List<WorkflowStateData> workflowStates,
     List<StepGuidanceData> stepGuidances,
+    List<StepModelConfigData> stepModelConfigs,
     List<ProofreadingReportData> proofreadingReports
 ) {
     public record ProjectData(
@@ -96,6 +97,11 @@ public record ProjectJsonDto(
     public record StepGuidanceData(
         String step,
         String guidance
+    ) {}
+
+    public record StepModelConfigData(
+        String step,
+        String modelCode
     ) {}
 
     public record ProofreadingReportData(

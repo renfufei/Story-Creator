@@ -11,6 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Sinks;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -18,12 +20,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class TtsExportService {
@@ -35,11 +40,42 @@ public class TtsExportService {
     private final ChapterRepository storyChapterRepository;
     private final TtsService ttsService;
     private final Mp3ProcessingService mp3ProcessingService;
+    private final com.storycreator.core.service.GlobalSettingService globalSettingService;
 
     private final ConcurrentHashMap<Long, Boolean> stopSignals = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Boolean> pauseSignals = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Boolean> runningTasks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, TaskProgressSink> progressSinks = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+    private final ScheduledExecutorService cleanupScheduler = Executors.newSingleThreadScheduledExecutor();
+
+    public static class TaskProgressSink {
+        private final Sinks.Many<String> sink = Sinks.many().multicast().onBackpressureBuffer(512, false);
+        private final List<String> buffer = Collections.synchronizedList(new ArrayList<>());
+        private volatile boolean completed = false;
+
+        public void emit(String message) {
+            buffer.add(message);
+            sink.tryEmitNext(message);
+        }
+
+        public void complete() {
+            completed = true;
+            sink.tryEmitComplete();
+        }
+
+        public Flux<String> asFlux() {
+            return sink.asFlux();
+        }
+
+        public List<String> getBuffer() {
+            return buffer;
+        }
+
+        public boolean isCompleted() {
+            return completed;
+        }
+    }
 
     private final Path storageBaseDir;
 
@@ -48,12 +84,14 @@ public class TtsExportService {
                             ChapterRepository storyChapterRepository,
                             TtsService ttsService,
                             Mp3ProcessingService mp3ProcessingService,
+                            com.storycreator.core.service.GlobalSettingService globalSettingService,
                             @Value("${STORY_DB_PATH:./data}") String dbPath) {
         this.taskRepository = taskRepository;
         this.chapterRepository = chapterRepository;
         this.storyChapterRepository = storyChapterRepository;
         this.ttsService = ttsService;
         this.mp3ProcessingService = mp3ProcessingService;
+        this.globalSettingService = globalSettingService;
         this.storageBaseDir = Paths.get(dbPath, "tts-export");
     }
 
@@ -75,7 +113,10 @@ public class TtsExportService {
             int maxLen,
             boolean useFfmpeg,
             String bitrate,
-            List<Integer> chapterNumbers
+            String audioFormat,
+            List<Integer> chapterNumbers,
+            double chunkGapSeconds,
+            double skipGapSeconds
     ) {}
 
     public TtsExportTaskEntity createTask(CreateTaskRequest request) {
@@ -88,6 +129,9 @@ public class TtsExportService {
         task.setMaxLen(request.maxLen() > 0 ? request.maxLen() : 200);
         task.setUseFfmpeg(request.useFfmpeg());
         task.setBitrate(request.bitrate() != null ? request.bitrate() : "128k");
+        task.setAudioFormat(request.audioFormat() != null ? request.audioFormat() : "mp3");
+        task.setChunkGapSeconds(request.chunkGapSeconds() > 0 ? request.chunkGapSeconds() : 0.1);
+        task.setSkipGapSeconds(request.skipGapSeconds() > 0 ? request.skipGapSeconds() : 0.3);
         task.setProgressTotalChapters(request.chapterNumbers().size());
         task = taskRepository.save(task);
 
@@ -103,6 +147,10 @@ public class TtsExportService {
         return task;
     }
 
+    public TaskProgressSink getProgressSink(Long taskId) {
+        return progressSinks.get(taskId);
+    }
+
     public void startTask(Long taskId) {
         if (runningTasks.putIfAbsent(taskId, true) != null) {
             throw new IllegalStateException("任务已在运行中");
@@ -113,6 +161,9 @@ public class TtsExportService {
 
         stopSignals.remove(taskId);
         pauseSignals.remove(taskId);
+
+        // Create progress sink (or reuse existing for resume)
+        progressSinks.computeIfAbsent(taskId, k -> new TaskProgressSink());
 
         task.setStatus(TtsExportStatus.RUNNING);
         task.setErrorMessage(null);
@@ -165,6 +216,9 @@ public class TtsExportService {
 
         stopSignals.remove(taskId);
         runningTasks.remove(taskId);
+        // Clean up progress sink
+        TaskProgressSink sink = progressSinks.remove(taskId);
+        if (sink != null && !sink.isCompleted()) sink.complete();
     }
 
     public TtsExportTaskEntity getTask(Long taskId) {
@@ -212,6 +266,7 @@ public class TtsExportService {
     private void executeTask(Long taskId) {
         List<TtsExportChapterEntity> chapters = chapterRepository.findByTaskIdOrderByChapterNumber(taskId);
         TtsExportTaskEntity task = taskRepository.findById(taskId).orElseThrow();
+        TaskProgressSink progressSink = progressSinks.get(taskId);
 
         Path taskDir = storageBaseDir.resolve(String.valueOf(task.getProjectId()))
                 .resolve(String.valueOf(taskId));
@@ -222,7 +277,15 @@ public class TtsExportService {
             return;
         }
 
+        // Emit task start
+        long pendingCount = chapters.stream()
+                .filter(ch -> ch.getStatus() != TtsExportChapterStatus.COMPLETED).count();
+        if (progressSink != null) {
+            progressSink.emit("━━━ 任务开始 ━━━ 共" + pendingCount + "章待处理");
+        }
+
         int completed = 0;
+        int failed = 0;
         for (TtsExportChapterEntity chapter : chapters) {
             // Check signals
             if (Boolean.TRUE.equals(stopSignals.get(taskId))) {
@@ -244,20 +307,38 @@ public class TtsExportService {
             chapter.setStatus(TtsExportChapterStatus.RUNNING);
             chapterRepository.save(chapter);
 
+            // Emit progress: chapter starting
+            if (progressSink != null) {
+                int chapterNum = chapter.getChapterNumber();
+                ChapterEntity storyChapter = storyChapterRepository
+                        .findByProjectIdAndChapterNumber(task.getProjectId(), chapterNum).orElse(null);
+                String title = storyChapter != null && storyChapter.getTitle() != null ? storyChapter.getTitle() : "";
+                int wordCount = storyChapter != null && storyChapter.getContent() != null ? storyChapter.getContent().length() : 0;
+                progressSink.emit("▶ 第" + chapterNum + "章【" + title + "】开始（" + wordCount + "字）");
+            }
+
             try {
-                Path chapterFile = generateChapterAudio(task, chapter, taskDir);
+                Path chapterFile = generateChapterAudio(task, chapter, taskDir, progressSink);
                 chapter.setStatus(TtsExportChapterStatus.COMPLETED);
                 chapter.setFilePath(storageBaseDir.relativize(chapterFile).toString());
                 chapter.setFileSize(Files.size(chapterFile));
                 chapter.setErrorMessage(null);
                 chapterRepository.save(chapter);
                 completed++;
+                // Emit progress: chapter completed
+                if (progressSink != null) {
+                    progressSink.emit("第" + chapter.getChapterNumber() + "章 完成 ✓");
+                }
             } catch (Exception e) {
                 log.error("TTS export chapter {} failed for task {}", chapter.getChapterNumber(), taskId, e);
                 chapter.setStatus(TtsExportChapterStatus.FAILED);
                 chapter.setErrorMessage(truncate(e.getMessage(), 290));
                 chapterRepository.save(chapter);
-                // Continue to next chapter instead of failing the whole task
+                failed++;
+                // Emit progress: chapter failed
+                if (progressSink != null) {
+                    progressSink.emit("第" + chapter.getChapterNumber() + "章 失败: " + truncate(e.getMessage(), 100));
+                }
             }
 
             // Update progress
@@ -280,18 +361,37 @@ public class TtsExportService {
         }
         task.setProgressChapter(completed);
         taskRepository.save(task);
+
+        // Emit task completion and schedule cleanup
+        if (progressSink != null) {
+            progressSink.emit("━━━ 任务完成 ━━━ 成功" + completed + "章，失败" + failed + "章");
+            progressSink.complete();
+            scheduleProgressSinkCleanup(taskId);
+        }
     }
 
-    private Path generateChapterAudio(TtsExportTaskEntity task, TtsExportChapterEntity chapter, Path taskDir) throws IOException {
+    private Path generateChapterAudio(TtsExportTaskEntity task, TtsExportChapterEntity chapter,
+                                       Path taskDir, TaskProgressSink progressSink) throws IOException {
         // Get text chunks
         List<String> chunks = ttsService.getChapterChunks(
-                task.getProjectId(), chapter.getChapterNumber(), task.getMinLen(), task.getMaxLen());
+                task.getProjectId(), chapter.getChapterNumber(), task.getMinLen(), task.getMaxLen(), task.getConfigId());
+
+        // Emit chunk count info
+        if (progressSink != null) {
+            progressSink.emit("  共" + chunks.size() + "个批次");
+        }
 
         // Create chunk directory
         Path chunkDir = taskDir.resolve("chapter_" + chapter.getChapterNumber());
         Files.createDirectories(chunkDir);
 
+        String fmt = task.getAudioFormat() != null ? task.getAudioFormat() : "mp3";
+        double chunkGap = task.getChunkGapSeconds();
+        double skipGap = task.getSkipGapSeconds();
+
         List<Path> chunkFiles = new ArrayList<>();
+        Path reusableChunkGapFile = null;  // reused for normal inter-chunk gap
+        Path reusableSkipGapFile = null;   // reused for skip gap (quality failure)
         try {
             // Generate audio for each chunk
             for (int i = 0; i < chunks.size(); i++) {
@@ -300,17 +400,51 @@ public class TtsExportService {
                     throw new IOException("任务被停止");
                 }
 
-                byte[] audio = ttsService.generateAudioForChunk(
-                        task.getConfigId(), chunks.get(i), task.getVoice(), "mp3", task.getSpeed());
+                // Emit batch start with text content
+                if (progressSink != null) {
+                    progressSink.emit("  [批次 " + (i + 1) + "/" + chunks.size() + "] " + chunks.get(i));
+                }
 
-                Path chunkFile = chunkDir.resolve("chunk_" + i + ".mp3");
+                byte[] audio = ttsService.generateAudioForChunk(
+                        task.getConfigId(), chunks.get(i), task.getVoice(), fmt, task.getSpeed());
+
+                if (audio == null) {
+                    // Insert longer skip gap for discarded chunk
+                    log.warn("Skipping chunk {}/{} for chapter {} due to quality failure",
+                            i + 1, chunks.size(), chapter.getChapterNumber());
+                    if (progressSink != null) {
+                        progressSink.emit("  [批次 " + (i + 1) + "/" + chunks.size() + "] 跳过（质量检测未通过）");
+                    }
+                    if (!chunkFiles.isEmpty() && skipGap > 0) {
+                        if (reusableSkipGapFile == null) {
+                            reusableSkipGapFile = writeSilenceFile(chunkDir, fmt, skipGap, chunkFiles.get(0), "skip_gap");
+                        }
+                        if (reusableSkipGapFile != null) chunkFiles.add(reusableSkipGapFile);
+                    }
+                    continue;
+                }
+
+                // Insert normal gap between chunks
+                if (!chunkFiles.isEmpty() && chunkGap > 0) {
+                    if (reusableChunkGapFile == null) {
+                        reusableChunkGapFile = writeSilenceFile(chunkDir, fmt, chunkGap, chunkFiles.get(0), "chunk_gap");
+                    }
+                    if (reusableChunkGapFile != null) chunkFiles.add(reusableChunkGapFile);
+                }
+
+                Path chunkFile = chunkDir.resolve("chunk_" + i + "." + fmt);
                 Files.write(chunkFile, audio);
                 chunkFiles.add(chunkFile);
+
+                // Emit batch complete
+                if (progressSink != null) {
+                    progressSink.emit("  [批次 " + (i + 1) + "/" + chunks.size() + "] 完成");
+                }
             }
 
             // Concatenate chunks into final chapter file
-            Path outputFile = taskDir.resolve("chapter_" + chapter.getChapterNumber() + ".mp3");
-            if (task.isUseFfmpeg() && mp3ProcessingService.isFfmpegAvailable()) {
+            Path outputFile = taskDir.resolve("chapter_" + chapter.getChapterNumber() + "." + fmt);
+            if (task.isUseFfmpeg() && mp3ProcessingService.isFfmpegAvailable() && "mp3".equals(fmt)) {
                 mp3ProcessingService.concatenateAndCompress(chunkFiles, outputFile, task.getBitrate());
             } else {
                 mp3ProcessingService.concatenateMp3(chunkFiles, outputFile);
@@ -318,9 +452,21 @@ public class TtsExportService {
 
             return outputFile;
         } finally {
-            // Clean up chunk files
-            deleteDirectoryRecursively(chunkDir);
+            // Clean up chunk files unless debug mode is enabled
+            if (globalSettingService.isTtsDebugMode()) {
+                log.info("TTS debug mode enabled, keeping chunk files at: {}", chunkDir);
+            } else {
+                deleteDirectoryRecursively(chunkDir);
+            }
         }
+    }
+
+    /**
+     * Write a silence audio file to the chunk directory.
+     */
+    private Path writeSilenceFile(Path chunkDir, String format, double seconds, Path referenceFile, String name) {
+        Path gapFile = chunkDir.resolve(name + "." + format);
+        return mp3ProcessingService.generateSilenceFile(seconds, format, referenceFile, gapFile);
     }
 
     private void markFailed(Long taskId, String message) {
@@ -329,6 +475,12 @@ public class TtsExportService {
             task.setErrorMessage(truncate(message, 490));
             taskRepository.save(task);
         });
+        TaskProgressSink sink = progressSinks.get(taskId);
+        if (sink != null) {
+            sink.emit("任务失败: " + truncate(message, 100));
+            sink.complete();
+            scheduleProgressSinkCleanup(taskId);
+        }
     }
 
     private void markStopped(Long taskId) {
@@ -337,6 +489,12 @@ public class TtsExportService {
             taskRepository.save(task);
         });
         stopSignals.remove(taskId);
+        TaskProgressSink sink = progressSinks.get(taskId);
+        if (sink != null) {
+            sink.emit("任务已停止");
+            sink.complete();
+            scheduleProgressSinkCleanup(taskId);
+        }
     }
 
     private void markPaused(Long taskId) {
@@ -344,6 +502,16 @@ public class TtsExportService {
             task.setStatus(TtsExportStatus.PAUSED);
             taskRepository.save(task);
         });
+        TaskProgressSink sink = progressSinks.get(taskId);
+        if (sink != null) {
+            sink.emit("任务已暂停");
+            sink.complete();
+            scheduleProgressSinkCleanup(taskId);
+        }
+    }
+
+    private void scheduleProgressSinkCleanup(Long taskId) {
+        cleanupScheduler.schedule(() -> progressSinks.remove(taskId), 60, TimeUnit.SECONDS);
     }
 
     private void deleteDirectoryRecursively(Path dir) {

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('TTS替换模板', ~{::content})}">
+<body>
+<div th:fragment="content" x-data="{ showAdd: false }">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">TTS 文字替换模板</h2>
+        <div>
+            <a th:href="@{/settings}" class="btn btn-outline-secondary btn-sm me-2">
+                <i class="bi bi-arrow-left"></i> 返回设置
+            </a>
+            <button class="btn btn-primary btn-sm" @click="showAdd = true">
+                <i class="bi bi-plus"></i> 新建模板
+            </button>
+        </div>
+    </div>
+
+    <!-- Add Template Form -->
+    <div class="card mb-4" x-show="showAdd" x-cloak>
+        <div class="card-body">
+            <form th:action="@{/settings/tts-templates}" method="post" class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">模板名称</label>
+                    <input type="text" class="form-control form-control-sm" name="name" required placeholder="例: 自定义替换规则">
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small mb-1">描述</label>
+                    <input type="text" class="form-control form-control-sm" name="description" placeholder="可选描述">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-sm btn-primary">创建</button>
+                    <button type="button" class="btn btn-sm btn-secondary" @click="showAdd = false">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Builtin Templates -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <strong><i class="bi bi-lock"></i> 内置模板</strong>
+            <small class="text-muted ms-2">不可编辑，可复制为自定义模板</small>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-sm table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>名称</th>
+                        <th>描述</th>
+                        <th style="width: 80px;">规则数</th>
+                        <th style="width: 160px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="t : ${builtinTemplates}">
+                        <td>
+                            <i class="bi bi-shield-check text-success me-1"></i>
+                            <strong th:text="${t.name()}">模板名</strong>
+                        </td>
+                        <td class="text-muted small" th:text="${t.description()}">描述</td>
+                        <td><span class="badge bg-secondary" th:text="${t.rules().size()}">0</span></td>
+                        <td>
+                            <a th:href="@{/settings/tts-templates/builtin/{id}/view(id=${t.id()})}"
+                               class="btn btn-sm btn-outline-secondary me-1" title="查看规则">
+                                <i class="bi bi-eye"></i> 查看
+                            </a>
+                            <form th:action="@{/settings/tts-templates/builtin/{id}/copy(id=${t.id()})}" method="post" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-outline-primary" title="复制为自定义模板">
+                                    <i class="bi bi-copy"></i> 复制
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- User Templates -->
+    <div class="card">
+        <div class="card-header">
+            <strong><i class="bi bi-pencil-square"></i> 自定义模板</strong>
+            <small class="text-muted ms-2">可编辑、启用/禁用或删除</small>
+        </div>
+        <div class="card-body p-0">
+            <div th:if="${userTemplates.isEmpty()}" class="p-3">
+                <p class="text-muted small mb-0">暂无自定义模板。可从内置模板复制，或点击"新建模板"创建。</p>
+            </div>
+            <table th:if="${!userTemplates.isEmpty()}" class="table table-sm table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>名称</th>
+                        <th>描述</th>
+                        <th style="width: 80px;">规则数</th>
+                        <th style="width: 80px;">状态</th>
+                        <th style="width: 200px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="t : ${userTemplates}">
+                        <td><strong th:text="${t.name}">模板名</strong></td>
+                        <td class="text-muted small" th:text="${t.description}">描述</td>
+                        <td><span class="badge bg-secondary" th:text="${t.rules.size()}">0</span></td>
+                        <td>
+                            <span class="badge" th:classappend="${t.enabled} ? 'bg-success' : 'bg-secondary'"
+                                  th:text="${t.enabled} ? '启用' : '禁用'">状态</span>
+                        </td>
+                        <td>
+                            <a th:href="@{/settings/tts-templates/{id}/edit(id=${t.id})}"
+                               class="btn btn-sm btn-outline-primary me-1" title="编辑规则">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <form th:action="@{/settings/tts-templates/{id}/toggle(id=${t.id})}" method="post" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-outline-secondary me-1"
+                                        th:text="${t.enabled} ? '禁用' : '启用'">切换</button>
+                            </form>
+                            <form th:action="@{/settings/tts-templates/{id}/delete(id=${t.id})}" method="post" class="d-inline"
+                                  onsubmit="return confirm('确定删除此模板及其所有规则？')">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>

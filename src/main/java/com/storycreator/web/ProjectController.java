@@ -1,11 +1,13 @@
 package com.storycreator.web;
 
 import com.storycreator.core.domain.Genre;
+import com.storycreator.core.domain.ModelType;
 import com.storycreator.core.domain.ProjectStatus;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.persistence.entity.ProjectEntity;
 import com.storycreator.persistence.entity.ChapterEntity;
 import com.storycreator.persistence.entity.StepGuidanceEntity;
+import com.storycreator.persistence.entity.StepModelConfigEntity;
 import com.storycreator.persistence.repository.AiModelConfigRepository;
 import com.storycreator.persistence.repository.AiUsageStatRepository;
 import com.storycreator.persistence.repository.AutoRunStepConfigRepository;
@@ -15,6 +17,7 @@ import com.storycreator.persistence.repository.CharacterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.ProofreadingReportRepository;
 import com.storycreator.persistence.repository.StepGuidanceRepository;
+import com.storycreator.persistence.repository.StepModelConfigRepository;
 import com.storycreator.persistence.repository.StoryOutlineRepository;
 import com.storycreator.persistence.repository.VolumeOutlineRepository;
 import com.storycreator.persistence.repository.WorkflowStateRepository;
@@ -41,6 +44,7 @@ public class ProjectController {
     private final AiUsageStatRepository aiUsageStatRepository;
     private final ChapterRepository chapterRepository;
     private final StepGuidanceRepository stepGuidanceRepository;
+    private final StepModelConfigRepository stepModelConfigRepository;
     private final CharacterRepository characterRepository;
     private final ChapterOutlineRepository chapterOutlineRepository;
     private final StoryOutlineRepository storyOutlineRepository;
@@ -55,6 +59,7 @@ public class ProjectController {
                            AiUsageStatRepository aiUsageStatRepository,
                            ChapterRepository chapterRepository,
                            StepGuidanceRepository stepGuidanceRepository,
+                           StepModelConfigRepository stepModelConfigRepository,
                            CharacterRepository characterRepository,
                            ChapterOutlineRepository chapterOutlineRepository,
                            StoryOutlineRepository storyOutlineRepository,
@@ -68,6 +73,7 @@ public class ProjectController {
         this.aiUsageStatRepository = aiUsageStatRepository;
         this.chapterRepository = chapterRepository;
         this.stepGuidanceRepository = stepGuidanceRepository;
+        this.stepModelConfigRepository = stepModelConfigRepository;
         this.characterRepository = characterRepository;
         this.chapterOutlineRepository = chapterOutlineRepository;
         this.storyOutlineRepository = storyOutlineRepository;
@@ -80,7 +86,26 @@ public class ProjectController {
     @GetMapping("/")
     public String dashboard(Model model) {
         model.addAttribute("projects", projectRepository.findAllByOrderByUpdatedAtDesc());
+        Map<Long, String[]> chapterStats = new HashMap<>();
+        for (Object[] row : chapterRepository.countAndWordCountByProject()) {
+            Long pid = (Long) row[0];
+            long count = (Long) row[1];
+            long wordCount = (Long) row[2];
+            chapterStats.put(pid, new String[]{String.valueOf(count), formatWordCount(wordCount)});
+        }
+        model.addAttribute("chapterStats", chapterStats);
         return "dashboard";
+    }
+
+    private String formatWordCount(long wordCount) {
+        if (wordCount >= 10000) {
+            double wan = wordCount / 10000.0;
+            if (wordCount % 10000 == 0) {
+                return (long) wan + "万";
+            }
+            return String.format("%.1f万", wan);
+        }
+        return String.valueOf(wordCount);
     }
 
     @GetMapping("/projects/new")
@@ -88,7 +113,7 @@ public class ProjectController {
         model.addAttribute("form", new ProjectForm());
         model.addAttribute("genres", Genre.values());
         model.addAttribute("projectStatuses", ProjectStatus.values());
-        model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrue());
+        model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrueAndModelType(ModelType.TEXT));
         model.addAttribute("workflowSteps", WorkflowStep.values());
         model.addAttribute("allProjects", projectRepository.findAllByOrderByUpdatedAtDesc());
         return "project-form";
@@ -100,7 +125,7 @@ public class ProjectController {
         if (result.hasErrors()) {
             model.addAttribute("genres", Genre.values());
             model.addAttribute("projectStatuses", ProjectStatus.values());
-            model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrue());
+            model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrueAndModelType(ModelType.TEXT));
             model.addAttribute("workflowSteps", WorkflowStep.values());
             model.addAttribute("allProjects", projectRepository.findAllByOrderByUpdatedAtDesc());
             return "project-form";
@@ -124,6 +149,9 @@ public class ProjectController {
         // Save step guidances
         saveStepGuidances(project.getId(), form.getStepGuidances());
 
+        // Save step model configs
+        saveStepModelConfigs(project.getId(), form.getStepModelConfigs());
+
         return "redirect:/projects/" + project.getId() + "/workflow";
     }
 
@@ -134,6 +162,18 @@ public class ProjectController {
         model.addAttribute("project", project);
         model.addAttribute("workflowStates", workflowStateRepository.findByProjectId(id));
         model.addAttribute("usageStats", aiUsageStatRepository.findByProjectIdOrderByTotalDurationMsDesc(id));
+        // Chapter stats for this project
+        long chapterCount = 0;
+        long wordCount = 0;
+        for (Object[] row : chapterRepository.countAndWordCountByProject()) {
+            if (id.equals(row[0])) {
+                chapterCount = (Long) row[1];
+                wordCount = (Long) row[2];
+                break;
+            }
+        }
+        model.addAttribute("chapterCount", chapterCount);
+        model.addAttribute("wordCount", formatWordCount(wordCount));
         return "project-detail";
     }
 
@@ -173,11 +213,19 @@ public class ProjectController {
         }
         form.setStepGuidances(guidanceMap);
 
+        // Load step model configs
+        List<StepModelConfigEntity> stepModelConfigs = stepModelConfigRepository.findByProjectId(id);
+        Map<String, Long> stepModelConfigMap = new HashMap<>();
+        for (StepModelConfigEntity smc : stepModelConfigs) {
+            stepModelConfigMap.put(smc.getStep().name(), smc.getModelConfigId());
+        }
+        form.setStepModelConfigs(stepModelConfigMap);
+
         model.addAttribute("form", form);
         model.addAttribute("projectId", id);
         model.addAttribute("genres", Genre.values());
         model.addAttribute("projectStatuses", ProjectStatus.values());
-        model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrue());
+        model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrueAndModelType(ModelType.TEXT));
         model.addAttribute("workflowSteps", WorkflowStep.values());
         model.addAttribute("allProjects", projectRepository.findAllByOrderByUpdatedAtDesc());
         return "project-form";
@@ -191,7 +239,7 @@ public class ProjectController {
             model.addAttribute("projectId", id);
             model.addAttribute("genres", Genre.values());
             model.addAttribute("projectStatuses", ProjectStatus.values());
-            model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrue());
+            model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrueAndModelType(ModelType.TEXT));
             model.addAttribute("workflowSteps", WorkflowStep.values());
             model.addAttribute("allProjects", projectRepository.findAllByOrderByUpdatedAtDesc());
             return "project-form";
@@ -217,6 +265,9 @@ public class ProjectController {
 
         // Save step guidances
         saveStepGuidances(id, form.getStepGuidances());
+
+        // Save step model configs
+        saveStepModelConfigs(id, form.getStepModelConfigs());
 
         return "redirect:/projects/" + id;
     }
@@ -249,6 +300,14 @@ public class ProjectController {
         }
         data.put("stepGuidances", guidanceMap);
 
+        // Load step model configs
+        List<StepModelConfigEntity> stepModelConfigs = stepModelConfigRepository.findByProjectId(id);
+        Map<String, Long> stepModelConfigMap = new HashMap<>();
+        for (StepModelConfigEntity smc : stepModelConfigs) {
+            stepModelConfigMap.put(smc.getStep().name(), smc.getModelConfigId());
+        }
+        data.put("stepModelConfigs", stepModelConfigMap);
+
         return ResponseEntity.ok(data);
     }
 
@@ -269,6 +328,7 @@ public class ProjectController {
         volumeOutlineRepository.deleteByProjectId(id);
         proofreadingReportRepository.deleteByProjectId(id);
         stepGuidanceRepository.deleteByProjectId(id);
+        stepModelConfigRepository.deleteByProjectId(id);
         aiUsageStatRepository.deleteByProjectId(id);
         autoRunStepConfigRepository.deleteByProjectId(id);
         worldSettingRepository.deleteByProjectId(id);
@@ -307,6 +367,36 @@ public class ProjectController {
         }
     }
 
+    private void saveStepModelConfigs(Long projectId, Map<String, Long> configs) {
+        if (configs == null) return;
+        for (Map.Entry<String, Long> entry : configs.entrySet()) {
+            String stepName = entry.getKey();
+            Long modelConfigId = entry.getValue();
+            WorkflowStep step;
+            try {
+                step = WorkflowStep.valueOf(stepName);
+            } catch (IllegalArgumentException e) {
+                continue;
+            }
+            if (modelConfigId == null || modelConfigId == 0) {
+                // Remove config if cleared
+                stepModelConfigRepository.findByProjectIdAndStep(projectId, step)
+                        .ifPresent(entity -> stepModelConfigRepository.delete(entity));
+            } else {
+                StepModelConfigEntity entity = stepModelConfigRepository
+                        .findByProjectIdAndStep(projectId, step)
+                        .orElseGet(() -> {
+                            StepModelConfigEntity e = new StepModelConfigEntity();
+                            e.setProjectId(projectId);
+                            e.setStep(step);
+                            return e;
+                        });
+                entity.setModelConfigId(modelConfigId);
+                stepModelConfigRepository.save(entity);
+            }
+        }
+    }
+
     public static class ProjectForm {
         @NotBlank(message = "标题不能为空")
         private String title;
@@ -333,6 +423,8 @@ public class ProjectController {
         private ProjectStatus projectStatus;
 
         private Map<String, String> stepGuidances = new HashMap<>();
+
+        private Map<String, Long> stepModelConfigs = new HashMap<>();
 
         public String getTitle() { return title; }
         public void setTitle(String title) { this.title = title; }
@@ -372,5 +464,8 @@ public class ProjectController {
 
         public Map<String, String> getStepGuidances() { return stepGuidances; }
         public void setStepGuidances(Map<String, String> stepGuidances) { this.stepGuidances = stepGuidances; }
+
+        public Map<String, Long> getStepModelConfigs() { return stepModelConfigs; }
+        public void setStepModelConfigs(Map<String, Long> stepModelConfigs) { this.stepModelConfigs = stepModelConfigs; }
     }
 }

@@ -1,5 +1,6 @@
 package com.storycreator.web;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.storycreator.ai.router.TtsProviderRegistry;
 import com.storycreator.persistence.entity.AiModelConfigEntity;
 import com.storycreator.persistence.entity.ChapterEntity;
@@ -20,12 +21,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Controller
 public class TtsExportController {
@@ -36,6 +40,8 @@ public class TtsExportController {
     private final TtsProviderRegistry ttsProviderRegistry;
     private final AiModelConfigRepository configRepository;
     private final Mp3ProcessingService mp3ProcessingService;
+    private final ExecutorService sseExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public TtsExportController(TtsExportService ttsExportService,
                                ProjectRepository projectRepository,
@@ -76,6 +82,12 @@ public class TtsExportController {
         model.addAttribute("projects", projectList);
         model.addAttribute("preselectedProjectId", projectId);
         return "tts-export";
+    }
+
+    @GetMapping("/tts-fullplay")
+    public String fullPlayPage(@RequestParam Long taskId, Model model) {
+        model.addAttribute("taskId", taskId);
+        return "tts-fullplay";
     }
 
     // ==================== REST API ====================
@@ -148,10 +160,19 @@ public class TtsExportController {
         if (file == null || !Files.exists(file)) {
             return ResponseEntity.notFound().build();
         }
+        TtsExportTaskEntity task = ttsExportService.getTask(id);
+        String fmt = (task != null && task.getAudioFormat() != null) ? task.getAudioFormat() : "mp3";
+        String contentType = switch (fmt) {
+            case "wav" -> "audio/wav";
+            case "opus" -> "audio/opus";
+            case "aac" -> "audio/aac";
+            case "flac" -> "audio/flac";
+            default -> "audio/mpeg";
+        };
         Resource resource = new FileSystemResource(file);
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("audio/mpeg"))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"chapter_" + num + ".mp3\"")
+                .contentType(MediaType.parseMediaType(contentType))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"chapter_" + num + "." + fmt + "\"")
                 .body(resource);
     }
 
@@ -203,6 +224,68 @@ public class TtsExportController {
         return ttsExportService.getCompletedFiles(projectId);
     }
 
+    // ==================== SSE Progress Stream ====================
+
+    @GetMapping("/api/tts-export/tasks/{id}/progress-stream")
+    public SseEmitter progressStream(@PathVariable Long id) {
+        SseEmitter emitter = new SseEmitter(60_000L);
+
+        sseExecutor.submit(() -> {
+            try {
+                TtsExportService.TaskProgressSink sink = ttsExportService.getProgressSink(id);
+
+                if (sink == null) {
+                    // No sink — send empty replay and done
+                    emitter.send(SseEmitter.event().name("replay").data("[]"));
+                    emitter.send(SseEmitter.event().name("done").data(""));
+                    emitter.complete();
+                    return;
+                }
+
+                // Send buffered messages as replay
+                String replayJson = objectMapper.writeValueAsString(sink.getBuffer());
+                emitter.send(SseEmitter.event().name("replay").data(replayJson));
+
+                if (sink.isCompleted()) {
+                    emitter.send(SseEmitter.event().name("done").data(""));
+                    emitter.complete();
+                    return;
+                }
+
+                // Subscribe to live messages
+                var disposable = sink.asFlux().subscribe(
+                        message -> {
+                            try {
+                                emitter.send(SseEmitter.event().name("log").data(message));
+                            } catch (Exception e) {
+                                // Client disconnected
+                            }
+                        },
+                        error -> {
+                            try { emitter.completeWithError(error); } catch (Exception ignored) {}
+                        },
+                        () -> {
+                            try {
+                                emitter.send(SseEmitter.event().name("done").data(""));
+                                emitter.complete();
+                            } catch (Exception ignored) {}
+                        }
+                );
+
+                emitter.onTimeout(() -> {
+                    disposable.dispose();
+                    emitter.complete();
+                });
+                emitter.onCompletion(disposable::dispose);
+
+            } catch (Exception e) {
+                try { emitter.completeWithError(e); } catch (Exception ignored) {}
+            }
+        });
+
+        return emitter;
+    }
+
     // ==================== Helpers ====================
 
     private Map<String, Object> taskToMap(TtsExportTaskEntity task) {
@@ -216,6 +299,7 @@ public class TtsExportController {
         m.put("maxLen", task.getMaxLen());
         m.put("useFfmpeg", task.isUseFfmpeg());
         m.put("bitrate", task.getBitrate());
+        m.put("audioFormat", task.getAudioFormat());
         m.put("status", task.getStatus().name());
         m.put("progressChapter", task.getProgressChapter());
         m.put("progressTotalChapters", task.getProgressTotalChapters());

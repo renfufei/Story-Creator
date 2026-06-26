@@ -399,8 +399,13 @@ public class OutlineGenerationService {
         if (volumeArc != null && !volumeArc.isBlank()) {
             contextInfo.append("\n【本卷故事弧线】").append(wrapContent(truncate(volumeArc, 500)));
         }
+        boolean hasAdjacentContext = (previousOutlines != null && !previousOutlines.isEmpty())
+                || (nextOutlines != null && !nextOutlines.isEmpty());
+        if (hasAdjacentContext) {
+            contextInfo.append("\n===== 以下为相邻章节大纲（仅供了解前后脉络，严禁照搬内容） =====\n");
+        }
         if (previousOutlines != null && !previousOutlines.isEmpty()) {
-            contextInfo.append("\n【前文章节大纲】\n");
+            contextInfo.append("【前文章节大纲】\n");
             int startChapter = chapterNum - previousOutlines.size();
             for (int i = 0; i < previousOutlines.size(); i++) {
                 String outline = previousOutlines.get(i);
@@ -411,7 +416,7 @@ public class OutlineGenerationService {
             }
         }
         if (nextOutlines != null && !nextOutlines.isEmpty()) {
-            contextInfo.append("\n【后续章节大纲】\n");
+            contextInfo.append("【后续章节大纲】\n");
             for (int i = 0; i < nextOutlines.size(); i++) {
                 String outline = nextOutlines.get(i);
                 if (outline != null && !outline.isBlank()) {
@@ -419,6 +424,9 @@ public class OutlineGenerationService {
                             .append(truncate(outline, 300)).append("\n");
                 }
             }
+        }
+        if (hasAdjacentContext) {
+            contextInfo.append("===== 相邻章节大纲结束（以上仅供参考，你必须生成全新的独特内容） =====\n");
         }
 
         Genre genre = baseContext.getGenre();
@@ -466,8 +474,13 @@ public class OutlineGenerationService {
         if (volumeArc != null && !volumeArc.isBlank()) {
             contextInfo.append("\n【本卷故事弧线】").append(wrapContent(truncate(volumeArc, 500)));
         }
+        boolean hasAdjacentContext = (previousOutlines != null && !previousOutlines.isEmpty())
+                || (nextOutlines != null && !nextOutlines.isEmpty());
+        if (hasAdjacentContext) {
+            contextInfo.append("\n===== 以下为相邻章节大纲（仅供了解前后脉络，严禁照搬内容） =====\n");
+        }
         if (previousOutlines != null && !previousOutlines.isEmpty()) {
-            contextInfo.append("\n【前文章节大纲】\n");
+            contextInfo.append("【前文章节大纲】\n");
             int startChapter = chapterNum - previousOutlines.size();
             for (int i = 0; i < previousOutlines.size(); i++) {
                 String outline = previousOutlines.get(i);
@@ -478,7 +491,7 @@ public class OutlineGenerationService {
             }
         }
         if (nextOutlines != null && !nextOutlines.isEmpty()) {
-            contextInfo.append("\n【后续章节大纲】\n");
+            contextInfo.append("【后续章节大纲】\n");
             for (int i = 0; i < nextOutlines.size(); i++) {
                 String outline = nextOutlines.get(i);
                 if (outline != null && !outline.isBlank()) {
@@ -486,6 +499,9 @@ public class OutlineGenerationService {
                             .append(truncate(outline, 300)).append("\n");
                 }
             }
+        }
+        if (hasAdjacentContext) {
+            contextInfo.append("===== 相邻章节大纲结束（以上仅供参考，你必须生成全新的独特内容） =====\n");
         }
 
         Genre genre = baseContext.getGenre();

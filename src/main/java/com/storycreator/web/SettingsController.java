@@ -9,6 +9,8 @@ import com.storycreator.core.port.tts.TtsRequest;
 import com.storycreator.core.service.GlobalSettingService;
 import com.storycreator.persistence.entity.AiModelConfigEntity;
 import com.storycreator.persistence.repository.AiModelConfigRepository;
+import com.storycreator.tts.template.TtsReplacementBuiltinLoader;
+import com.storycreator.tts.template.TtsReplacementTemplateService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -29,15 +31,21 @@ public class SettingsController {
     private final AiProviderRouter providerRouter;
     private final TtsProviderRegistry ttsProviderRegistry;
     private final GlobalSettingService globalSettingService;
+    private final TtsReplacementBuiltinLoader builtinLoader;
+    private final TtsReplacementTemplateService ttsReplacementTemplateService;
 
     public SettingsController(AiModelConfigRepository configRepository,
                              AiProviderRouter providerRouter,
                              TtsProviderRegistry ttsProviderRegistry,
-                             GlobalSettingService globalSettingService) {
+                             GlobalSettingService globalSettingService,
+                             TtsReplacementBuiltinLoader builtinLoader,
+                             TtsReplacementTemplateService ttsReplacementTemplateService) {
         this.configRepository = configRepository;
         this.providerRouter = providerRouter;
         this.ttsProviderRegistry = ttsProviderRegistry;
         this.globalSettingService = globalSettingService;
+        this.builtinLoader = builtinLoader;
+        this.ttsReplacementTemplateService = ttsReplacementTemplateService;
     }
 
     @GetMapping
@@ -55,6 +63,7 @@ public class SettingsController {
         model.addAttribute("globalDefaultId", providerRouter.getGlobalDefaultConfigId());
         model.addAttribute("globalDefaultTtsId", providerRouter.getGlobalDefaultTtsConfigId());
         model.addAttribute("aiTimeoutSeconds", globalSettingService.getAiTimeoutSeconds());
+        model.addAttribute("ttsDebugMode", globalSettingService.isTtsDebugMode());
         return "settings";
     }
 
@@ -75,6 +84,12 @@ public class SettingsController {
         if (timeoutSeconds < 30) timeoutSeconds = 30;
         if (timeoutSeconds > 3600) timeoutSeconds = 3600;
         globalSettingService.setAiTimeoutSeconds(timeoutSeconds);
+        return "redirect:/settings";
+    }
+
+    @PostMapping("/tts-debug-mode")
+    public String setTtsDebugMode(@RequestParam(defaultValue = "false") boolean enabled) {
+        globalSettingService.setTtsDebugMode(enabled);
         return "redirect:/settings";
     }
 
@@ -128,7 +143,15 @@ public class SettingsController {
         config.setExtraParams(extraParams != null && !extraParams.isBlank() ? extraParams.trim() : null);
         config.setModelType(ModelType.valueOf(modelType));
         config.setActive(true);
-        configRepository.save(config);
+        config = configRepository.save(config);
+
+        if (config.getModelType() == ModelType.TTS) {
+            var builtinTemplates = builtinLoader.getAll();
+            for (int i = 0; i < builtinTemplates.size(); i++) {
+                ttsReplacementTemplateService.bindTemplateToConfig(
+                        config.getId(), "builtin:" + builtinTemplates.get(i).id(), i);
+            }
+        }
 
         return "redirect:/settings";
     }
@@ -282,6 +305,7 @@ public class SettingsController {
             return ResponseEntity.ok(Map.of("success", false, "message", "探测失败: " + msg));
         }
     }
+
 
     private String parseVoicesFromError(String errorMsg) {
         if (errorMsg == null) return null;
