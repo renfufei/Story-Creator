@@ -20,6 +20,7 @@ import reactor.core.publisher.Flux;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -260,6 +261,10 @@ public class WorkflowEngine {
         characterStateService.generateCharacterStates(projectId, chapterNumber);
     }
 
+    public void generateCharacterStates(Long projectId, int chapterNumber, Consumer<String> tokenSink) {
+        characterStateService.generateCharacterStates(projectId, chapterNumber, tokenSink);
+    }
+
     // --- Title generation ---
 
     public void generateAndSaveTitles(Long projectId) {
@@ -268,6 +273,10 @@ public class WorkflowEngine {
 
     public void generateAndSaveTitles(Long projectId, BooleanSupplier shouldStop) {
         titleGenerationService.generateAndSaveTitles(projectId, shouldStop);
+    }
+
+    public void generateAndSaveTitles(Long projectId, BooleanSupplier shouldStop, Consumer<String> tokenSink) {
+        titleGenerationService.generateAndSaveTitles(projectId, shouldStop, tokenSink);
     }
 
     // --- Character refinement ---

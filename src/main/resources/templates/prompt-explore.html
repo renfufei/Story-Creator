@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('提示词探索', ~{::content})}">
+<body>
+<div th:fragment="content">
+    <div x-data="exploreApp()" x-init="init()">
+        <!-- Section A: Header + Template Info -->
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <a href="/prompts" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> 返回
+            </a>
+            <h4 class="mb-0" th:text="${templateName}">模板名称</h4>
+            <span class="badge bg-primary" th:if="${step}" th:text="${step.displayName}">步骤</span>
+            <span class="badge bg-warning text-dark" th:if="${subStep}" th:text="${subStep.displayName}">子步骤</span>
+        </div>
+
+        <!-- Template content preview -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>模板原文</span>
+                <button class="btn btn-sm btn-outline-secondary" @click="showTemplate = !showTemplate"
+                        x-text="showTemplate ? '收起' : '展开'">展开</button>
+            </div>
+            <div class="card-body" x-show="showTemplate" x-transition>
+                <div class="mb-2">
+                    <span th:each="v : ${variableNames}" class="badge bg-info me-1" th:text="'{{' + ${v} + '}}'">var</span>
+                </div>
+                <pre class="bg-light p-2 rounded" style="max-height:300px;overflow-y:auto;white-space:pre-wrap;font-size:0.85rem;" th:text="${templateContent}"></pre>
+            </div>
+        </div>
+
+        <!-- Section B: Context Parameters -->
+        <div class="card mb-3">
+            <div class="card-header">上下文参数</div>
+            <div class="card-body">
+                <div class="row g-2 align-items-end">
+                    <!-- Project selector (always shown) -->
+                    <div class="col-md-3">
+                        <label class="form-label">项目</label>
+                        <select class="form-select form-select-sm" x-model="projectId" @change="onProjectChange()">
+                            <option value="">-- 选择项目 --</option>
+                            <th:block th:each="p : ${projects}">
+                                <option th:value="${p.id}" th:text="${p.title}">项目</option>
+                            </th:block>
+                        </select>
+                    </div>
+
+                    <!-- Chapter selector -->
+                    <div class="col-md-3" x-show="needsChapter">
+                        <label class="form-label">章节</label>
+                        <select class="form-select form-select-sm" x-model="chapterNumber">
+                            <option value="">-- 选择章节 --</option>
+                            <template x-for="ch in chapters" :key="ch.chapterNumber">
+                                <option :value="ch.chapterNumber" x-text="'第' + ch.chapterNumber + '章 ' + ch.title"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <!-- Character selector -->
+                    <div class="col-md-3" x-show="needsCharacter">
+                        <label class="form-label">角色</label>
+                        <select class="form-select form-select-sm" x-model="characterId">
+                            <option value="">-- 选择角色 --</option>
+                            <template x-for="c in characters" :key="c.id">
+                                <option :value="c.id" x-text="c.name"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <!-- Card number (CHARACTER_CARD) -->
+                    <div class="col-md-2" x-show="needsCardNumber">
+                        <label class="form-label">卡序号</label>
+                        <input type="number" class="form-control form-control-sm" x-model.number="cardNumber" min="1" max="20">
+                    </div>
+                    <div class="col-md-2" x-show="needsCardNumber">
+                        <label class="form-label">总卡数</label>
+                        <input type="number" class="form-control form-control-sm" x-model.number="totalCards" min="1" max="20">
+                    </div>
+
+                    <!-- Volume number (VOLUME_ARC) -->
+                    <div class="col-md-2" x-show="needsVolume">
+                        <label class="form-label">卷号</label>
+                        <input type="number" class="form-control form-control-sm" x-model.number="volumeNumber" min="1" max="50">
+                    </div>
+
+                    <!-- Resolve button -->
+                    <div class="col-md-2">
+                        <button class="btn btn-success btn-sm w-100" @click="resolvePrompt()" :disabled="resolving || !projectId">
+                            <span x-show="!resolving"><i class="bi bi-compass"></i> 探索提示词</span>
+                            <span x-show="resolving" x-cloak><span class="spinner-border spinner-border-sm"></span> 解析中...</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section C: Rendered Result -->
+        <div class="card mb-3" x-show="resolved" x-transition>
+            <div class="card-header">渲染结果</div>
+            <div class="card-body">
+                <!-- System Prompt -->
+                <div class="mb-3" x-show="resolvedSystemPrompt">
+                    <label class="form-label fw-bold">System Prompt</label>
+                    <pre class="bg-light p-2 rounded" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;font-size:0.85rem;" x-text="resolvedSystemPrompt"></pre>
+                </div>
+                <!-- User Prompt -->
+                <div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label fw-bold mb-0">User Prompt</label>
+                        <button class="btn btn-sm btn-outline-secondary" @click="editingPrompt = !editingPrompt"
+                                x-text="editingPrompt ? '只读' : '编辑'">编辑</button>
+                    </div>
+                    <pre x-show="!editingPrompt" class="bg-light p-2 rounded" style="max-height:400px;overflow-y:auto;white-space:pre-wrap;font-size:0.85rem;" x-text="renderedPrompt"></pre>
+                    <textarea x-show="editingPrompt" class="form-control" rows="12" x-model="renderedPrompt" style="font-size:0.85rem;"></textarea>
+                </div>
+                <div class="text-muted small mt-2" x-show="resolved">
+                    【字数统计】System: <span x-text="(resolvedSystemPrompt||'').length"></span> 字 | User: <span x-text="(renderedPrompt||'').length"></span> 字 | 合计: <span x-text="(resolvedSystemPrompt||'').length + (renderedPrompt||'').length"></span> 字
+                </div>
+            </div>
+        </div>
+
+        <!-- Section D: Call AI -->
+        <div class="card mb-3" x-show="resolved" x-transition>
+            <div class="card-header">调用模型</div>
+            <div class="card-body">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label">选择模型</label>
+                        <select class="form-select form-select-sm" x-model="selectedConfigId">
+                            <option value="">-- 选择模型 --</option>
+                            <th:block th:each="c : ${modelConfigs}">
+                                <option th:if="${c.modelType.name() == 'TEXT'}" th:value="${c.id}" th:text="${c.displayName + ' (' + c.modelId + ')'}">模型</option>
+                            </th:block>
+                        </select>
+                    </div>
+
+                    <div class="col-md-2">
+                        <button class="btn btn-primary btn-sm w-100" @click="callAi()" :disabled="calling || !selectedConfigId">
+                            <span x-show="!calling"><i class="bi bi-play-fill"></i> 实际调用</span>
+                            <span x-show="calling"><span class="spinner-border spinner-border-sm"></span> 调用中...</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Result display -->
+                <div class="mt-3" x-show="aiResult !== null">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label fw-bold mb-0">AI 输出</label>
+                        <button class="btn btn-sm btn-outline-secondary" @click="copyResult()">
+                            <i class="bi bi-clipboard"></i> 复制
+                        </button>
+                    </div>
+                    <pre x-ref="aiOutput" class="bg-light p-2 rounded" style="min-height:8em;max-height:30em;overflow-y:auto;white-space:pre-wrap;font-size:0.85rem;" x-text="aiResult"></pre>
+                </div>
+
+                <!-- Error display -->
+                <div class="alert alert-danger mt-3" x-show="aiError" x-text="aiError"></div>
+            </div>
+        </div>
+
+        <!-- Resolve error -->
+        <div class="alert alert-danger" x-show="resolveError" x-text="resolveError"></div>
+    </div>
+
+    <script th:inline="javascript">
+        var pageStep = /*[[${step}]]*/ null;
+        var pageSubStep = /*[[${subStep}]]*/ null;
+        var pageTemplateKey = /*[[${templateKey}]]*/ null;
+        var pageTemplateId = /*[[${templateId}]]*/ null;
+
+        function exploreApp() {
+            return {
+                showTemplate: false,
+                projectId: '',
+                chapterNumber: '',
+                characterId: '',
+                cardNumber: 1,
+                totalCards: 5,
+                volumeNumber: 1,
+                chapters: [],
+                characters: [],
+                resolving: false,
+                resolved: false,
+                renderedPrompt: '',
+                resolvedSystemPrompt: '',
+                editingPrompt: false,
+                resolveError: '',
+                selectedConfigId: '',
+                calling: false,
+                aiResult: null,
+                aiError: '',
+
+                get needsChapter() {
+                    var ss = pageSubStep;
+                    if (!ss) return pageStep === 'CHAPTER_WRITING' || pageStep === 'POLISHING';
+                    return ['CHAPTER_OUTLINE', 'CHAPTER_OUTLINE_REFINE', 'CHAPTER_TITLE', 'CHARACTER_STATES',
+                            'PROOFREAD_PLOT_SUMMARY', 'PROOFREAD_CHARACTER_CHECK', 'PROOFREAD_CONSISTENCY',
+                            'PROOFREAD_CONTINUITY', 'PROOFREAD_FORESHADOWING', 'PROOFREAD_FIX'].includes(ss);
+                },
+                get needsCharacter() {
+                    var ss = pageSubStep;
+                    return ss && ['CHARACTER_REFINE', 'IMAGE_PROMPT_AVATAR', 'IMAGE_PROMPT_PORTRAIT'].includes(ss);
+                },
+                get needsCardNumber() {
+                    return pageSubStep === 'CHARACTER_CARD';
+                },
+                get needsVolume() {
+                    return pageSubStep === 'VOLUME_ARC';
+                },
+
+                init() {},
+
+                onProjectChange() {
+                    this.chapters = [];
+                    this.characters = [];
+                    this.chapterNumber = '';
+                    this.characterId = '';
+                    this.resolved = false;
+                    this.resolveError = '';
+                    this.aiResult = null;
+                    this.aiError = '';
+                    if (!this.projectId) return;
+
+                    fetch('/prompts/explore/chapters?projectId=' + this.projectId)
+                        .then(r => r.json())
+                        .then(data => { this.chapters = data; });
+                    fetch('/prompts/explore/characters?projectId=' + this.projectId)
+                        .then(r => r.json())
+                        .then(data => { this.characters = data; });
+                },
+
+                resolvePrompt() {
+                    this.resolving = true;
+                    this.resolveError = '';
+                    this.resolved = false;
+                    this.aiResult = null;
+                    this.aiError = '';
+
+                    var payload = {
+                        step: pageStep,
+                        subStep: pageSubStep || '',
+                        projectId: this.projectId,
+                        chapterNumber: this.chapterNumber || null,
+                        characterId: this.characterId || null,
+                        cardNumber: this.cardNumber,
+                        totalCards: this.totalCards,
+                        volumeNumber: this.volumeNumber
+                    };
+
+                    fetch('/prompts/explore/resolve', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        this.resolving = false;
+                        if (data.success) {
+                            this.resolved = true;
+                            this.renderedPrompt = data.renderedPrompt || '';
+                            this.resolvedSystemPrompt = data.systemPrompt || '';
+                        } else {
+                            this.resolveError = data.error || '解析失败';
+                        }
+                    })
+                    .catch(err => {
+                        this.resolving = false;
+                        this.resolveError = '请求失败: ' + err.message;
+                    });
+                },
+
+                callAi() {
+                    this.calling = true;
+                    this.aiResult = '';
+                    this.aiError = '';
+
+                    var payload = {
+                        renderedPrompt: this.renderedPrompt,
+                        systemPrompt: this.resolvedSystemPrompt,
+                        configId: this.selectedConfigId
+                    };
+                    var self = this;
+
+                    fetch('/prompts/explore/call-ai-stream', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    }).then(function(response) {
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+                        var reader = response.body.getReader();
+                        var decoder = new TextDecoder();
+                        var buffer = '';
+
+                        function pump() {
+                            return reader.read().then(function(result) {
+                                if (result.done) { self.calling = false; return; }
+                                buffer += decoder.decode(result.value, {stream: true});
+                                var parts = buffer.split('\n\n');
+                                buffer = parts.pop();
+                                for (var i = 0; i < parts.length; i++) {
+                                    var block = parts[i].trim();
+                                    if (!block) continue;
+                                    var eventName = '';
+                                    var data = '';
+                                    var lines = block.split('\n');
+                                    for (var j = 0; j < lines.length; j++) {
+                                        if (lines[j].startsWith('event:')) {
+                                            eventName = lines[j].substring(6).trim();
+                                        } else if (lines[j].startsWith('data:')) {
+                                            data = lines[j].substring(5);
+                                        }
+                                    }
+                                    if (eventName === 'token') {
+                                        self.aiResult += data;
+                                        var el = self.$refs.aiOutput;
+                                        if (el) self.$nextTick(function() { el.scrollTop = el.scrollHeight; });
+                                    } else if (eventName === 'done') {
+                                        self.calling = false;
+                                        return;
+                                    } else if (eventName === 'error') {
+                                        self.aiError = data || '调用失败';
+                                        self.calling = false;
+                                        return;
+                                    }
+                                }
+                                return pump();
+                            });
+                        }
+                        return pump();
+                    }).catch(function(err) {
+                        self.calling = false;
+                        self.aiError = '请求失败: ' + err.message;
+                    });
+                },
+
+                copyResult() {
+                    if (this.aiResult) {
+                        navigator.clipboard.writeText(this.aiResult);
+                    }
+                }
+            };
+        }
+    </script>
+</div>
+</body>
+</html>

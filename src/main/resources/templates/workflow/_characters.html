@@ -91,6 +91,10 @@
                                     }" x-text="ch.status === 'PENDING' ? '待生成' : ch.status === 'GENERATED' ? '已生成' : ch.status === 'REFINING' ? '精修中' : ch.status === 'REFINED' ? '已精修' : ''" style="font-size: 0.7rem;"></span>
                                 </span>
                                 <div class="d-flex gap-1">
+                                    <button class="btn btn-sm btn-outline-info py-0 px-1" title="生成图片"
+                                            @click="openImageModal(ch)" :disabled="fullAutoRunning">
+                                        <i class="bi bi-image"></i>
+                                    </button>
                                     <button class="btn btn-sm btn-outline-primary py-0 px-1"
                                             @click="editCharacter(ch)" :disabled="fullAutoRunning">
                                         <i class="bi bi-pencil"></i>
@@ -168,6 +172,172 @@
                         </div>
                     </div>
                 </template>
+            </div>
+        </div>
+    </div>
+    <!-- Character Image Modal -->
+    <div class="modal fade" id="characterImageModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-image"></i> 角色图片 - <span x-text="imageModalCharName"></span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Control Area -->
+                    <div class="border rounded p-3 mb-3 bg-light">
+                        <!-- Row 1: Model selectors -->
+                        <div class="d-flex gap-2 align-items-center mb-2 flex-wrap">
+                            <div class="d-flex align-items-center gap-1">
+                                <label class="form-label mb-0 small text-nowrap">文字模型:</label>
+                                <select class="form-select form-select-sm" x-model="selectedTextConfigId" style="max-width: 180px;">
+                                    <template x-for="cfg in textConfigs" :key="cfg.id">
+                                        <option :value="cfg.id" x-text="cfg.displayName"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                                <label class="form-label mb-0 small text-nowrap">图像模型:</label>
+                                <select class="form-select form-select-sm" x-model="selectedImageConfigId" style="max-width: 180px;">
+                                    <template x-for="cfg in imageConfigs" :key="cfg.id">
+                                        <option :value="cfg.id" x-text="cfg.displayName"></option>
+                                    </template>
+                                </select>
+                            </div>
+                        </div>
+                        <!-- Row 2: Step checkboxes + type -->
+                        <div class="d-flex gap-3 align-items-center mb-2 flex-wrap">
+                            <div class="form-check form-check-inline mb-0">
+                                <input class="form-check-input" type="checkbox" id="chkGenPrompt" x-model="autoGenSteps.prompt">
+                                <label class="form-check-label small" for="chkGenPrompt">生成提示词</label>
+                            </div>
+                            <div class="form-check form-check-inline mb-0">
+                                <input class="form-check-input" type="checkbox" id="chkGenImage" x-model="autoGenSteps.image">
+                                <label class="form-check-label small" for="chkGenImage">生成图片</label>
+                            </div>
+                            <span class="text-muted">|</span>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="small text-muted">类型:</span>
+                                <div class="form-check form-check-inline mb-0">
+                                    <input class="form-check-input" type="radio" name="imgTypeRadio" id="imgTypeAvatar" value="AVATAR" x-model="selectedImageType" @change="onImageTypeChange()">
+                                    <label class="form-check-label small" for="imgTypeAvatar">头像</label>
+                                </div>
+                                <div class="form-check form-check-inline mb-0">
+                                    <input class="form-check-input" type="radio" name="imgTypeRadio" id="imgTypePortrait" value="PORTRAIT" x-model="selectedImageType" @change="onImageTypeChange()">
+                                    <label class="form-check-label small" for="imgTypePortrait">写真</label>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Row 2.5: Resolution selection -->
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="small text-muted">分辨率:</span>
+                            <input type="number" class="form-control form-control-sm" style="width: 70px;" x-model.number="imageWidth" min="256" max="4096" step="64">
+                            <span class="small text-muted">&times;</span>
+                            <input type="number" class="form-control form-control-sm" style="width: 70px;" x-model.number="imageHeight" min="256" max="4096" step="64">
+                            <button class="btn btn-sm btn-outline-secondary py-0 px-1" @click="let t = imageWidth; imageWidth = imageHeight; imageHeight = t;" title="互换宽高">
+                                <i class="bi bi-arrow-repeat"></i>
+                            </button>
+                            <span class="text-muted">|</span>
+                            <span class="badge bg-light text-dark border" role="button" @click="setResolution(1024, 1024)" style="cursor:pointer;">1024&times;1024</span>
+                            <span class="badge bg-light text-dark border" role="button" @click="setResolution(1024, 1792)" style="cursor:pointer;">1024&times;1792</span>
+                            <span class="badge bg-light text-dark border" role="button" @click="setResolution(1792, 1024)" style="cursor:pointer;">1792&times;1024</span>
+                            <span class="badge bg-light text-dark border" role="button" @click="setResolution(512, 512)" style="cursor:pointer;">512&times;512</span>
+                            <span class="badge bg-light text-dark border" role="button" @click="setResolution(768, 1024)" style="cursor:pointer;">768&times;1024</span>
+                        </div>
+                        <!-- Row 3: Auto-generate button -->
+                        <button class="btn btn-sm btn-primary mt-2" @click="createAndAutoGenerate()"
+                                :disabled="autoGenerating || imageConfigs.length === 0">
+                            <span x-show="!autoGenerating"><i class="bi bi-magic"></i> 自动生成提示词和图片</span>
+                            <span x-show="autoGenerating"><span class="spinner-border spinner-border-sm"></span> 生成中...</span>
+                        </button>
+                    </div>
+
+                    <div x-show="imageConfigs.length === 0 && !imageLoading" class="alert alert-warning py-2">
+                        <small>未配置图像生成模型，请先在 <a href="/settings" target="_blank">设置</a> 中添加 IMAGE 类型模型</small>
+                    </div>
+
+                    <!-- Loading -->
+                    <div x-show="imageLoading" class="text-center py-3">
+                        <span class="spinner-border spinner-border-sm"></span> 加载中...
+                    </div>
+                    <div x-show="!imageLoading && characterImages.length === 0" class="text-center py-3 text-muted">
+                        <p class="mb-0">暂无图片记录，点击"自动生成"开始</p>
+                    </div>
+
+                    <!-- Image Cards (mini-workflow) -->
+                    <div class="d-flex flex-column gap-3" x-show="!imageLoading && characterImages.length > 0">
+                        <template x-for="img in characterImages" :key="img.id">
+                            <div class="card">
+                                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge" :class="img.imageType === 'AVATAR' ? 'bg-info' : 'bg-primary'"
+                                              x-text="img.imageType === 'AVATAR' ? '头像' : '写真'" style="font-size: 0.7rem;"></span>
+                                        <span class="badge" :class="{
+                                            'bg-secondary': img.status === 'PROMPT_PENDING',
+                                            'bg-warning text-dark': img.status === 'PROMPT_READY',
+                                            'bg-info': img.status === 'IMAGE_GENERATING',
+                                            'bg-success': img.status === 'READY',
+                                            'bg-danger': img.status === 'ERROR'
+                                        }" x-text="img.status === 'PROMPT_PENDING' ? '待生成提示词' : img.status === 'PROMPT_READY' ? '提示词就绪' : img.status === 'IMAGE_GENERATING' ? '图片生成中' : img.status === 'READY' ? '完成' : img.status === 'ERROR' ? '错误' : img.status" style="font-size: 0.7rem;"></span>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-danger py-0 px-1" @click="deleteImage(img.id)">
+                                        <i class="bi bi-trash" style="font-size: 0.75rem;"></i>
+                                    </button>
+                                </div>
+                                <div class="card-body py-2">
+                                    <div class="row g-3">
+                                        <!-- Left: Prompt area -->
+                                        <div class="col-md-6">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <small class="fw-bold text-muted">步骤1: 提示词</small>
+                                                <div class="d-flex gap-1">
+                                                    <button class="btn btn-sm btn-outline-primary py-0 px-2"
+                                                            @click="generatePromptForCard(img.id)"
+                                                            :disabled="promptGenerating[img.id]">
+                                                        <span x-show="!promptGenerating[img.id]"><i class="bi bi-arrow-repeat"></i> 重新生成提示词</span>
+                                                        <span x-show="promptGenerating[img.id]"><span class="spinner-border spinner-border-sm"></span></span>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-outline-success py-0 px-2"
+                                                            @click="savePrompt(img.id)"
+                                                            :disabled="!editingPrompts[img.id]">
+                                                        <i class="bi bi-check-lg"></i> 保存
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <textarea class="form-control form-control-sm" rows="6"
+                                                      :value="editingPrompts[img.id] || ''"
+                                                      @input="editingPrompts[img.id] = $event.target.value"
+                                                      placeholder="提示词将在此显示..."
+                                                      style="font-size: 0.8rem;"></textarea>
+                                        </div>
+                                        <!-- Right: Image area -->
+                                        <div class="col-md-6">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <small class="fw-bold text-muted">步骤2: 图片</small>
+                                                <button class="btn btn-sm btn-outline-primary py-0 px-2"
+                                                        @click="generateImageForCard(img.id)"
+                                                        :disabled="imgGenerating[img.id] || (!editingPrompts[img.id] && !img.imagePrompt)">
+                                                    <span x-show="!imgGenerating[img.id]"><i class="bi bi-image"></i> 重新生成图片</span>
+                                                    <span x-show="imgGenerating[img.id]"><span class="spinner-border spinner-border-sm"></span> 生成中...</span>
+                                                </button>
+                                            </div>
+                                            <div x-show="img.hasImage">
+                                                <img :src="'/projects/' + projectId + '/images/' + img.id"
+                                                     class="img-fluid rounded" style="max-height: 200px; cursor: pointer; object-fit: contain;"
+                                                     @click="window.open('/projects/' + projectId + '/images/' + img.id, '_blank')">
+                                            </div>
+                                            <div x-show="!img.hasImage" class="border rounded d-flex align-items-center justify-content-center" style="height: 120px; background: #f8f9fa;">
+                                                <span class="text-muted small">未生成图片</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

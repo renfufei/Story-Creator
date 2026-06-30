@@ -3,6 +3,8 @@ package com.storycreator.web;
 import com.storycreator.ai.prompt.BuiltinTemplate;
 import com.storycreator.ai.prompt.BuiltinTemplateLoader;
 import com.storycreator.ai.prompt.PromptTemplateRegistry;
+import com.storycreator.ai.prompt.TemplateWorkflowTag;
+import com.storycreator.ai.prompt.TemplateWorkflowUsage;
 import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.PromptSubStep;
 import com.storycreator.core.domain.WorkflowStep;
@@ -46,8 +48,15 @@ public class PromptController {
         String name,
         boolean builtin,
         boolean isDefault,      // true for builtin (always active), or custom with isDefault=true
-        String updatedAt
-    ) {}
+        String updatedAt,
+        int sortOrder,
+        Set<TemplateWorkflowTag> workflowTags
+    ) {
+        public String workflowTagNamesCsv() {
+            if (workflowTags == null || workflowTags.isEmpty()) return "";
+            return workflowTags.stream().map(Enum::name).collect(java.util.stream.Collectors.joining(","));
+        }
+    }
 
     @GetMapping
     public String list(Model model) {
@@ -59,18 +68,27 @@ public class PromptController {
             boolean hasCustomOverride = hasCustomDefault(bt.step(), bt.subStep(), bt.genre());
             items.add(new TemplateListItem(
                 null, bt.key(), bt.step(), bt.subStep(), bt.genre(),
-                bt.name(), true, !hasCustomOverride, null
+                bt.name(), true, !hasCustomOverride, null,
+                bt.sortOrder(), bt.workflowTags()
             ));
         }
 
         // Add custom templates from DB
         for (PromptTemplateEntity t : repository.findAll()) {
+            int order = t.getSubStep() != null ? t.getSubStep().getSortOrder() : (t.getStep().getOrder() * 10);
+            Set<TemplateWorkflowTag> tags = t.getSubStep() != null
+                    ? TemplateWorkflowUsage.getTagsFor(t.getSubStep()) : Set.of();
             items.add(new TemplateListItem(
                 t.getId(), null, t.getStep(), t.getSubStep(), t.getGenre(),
                 t.getName(), false, t.isDefault(),
-                t.getUpdatedAt() != null ? t.getUpdatedAt().toString().substring(0, 16).replace('T', ' ') : null
+                t.getUpdatedAt() != null ? t.getUpdatedAt().toString().substring(0, 16).replace('T', ' ') : null,
+                order, tags
             ));
         }
+
+        // Sort: by sortOrder, then builtin before custom (so custom overrides appear right after their builtin)
+        items.sort(Comparator.comparingInt(TemplateListItem::sortOrder)
+                .thenComparing(t -> t.builtin() ? 0 : 1));
 
         model.addAttribute("templates", items);
         model.addAttribute("steps", WorkflowStep.values());
@@ -80,8 +98,9 @@ public class PromptController {
     }
 
     private boolean hasCustomDefault(WorkflowStep step, PromptSubStep subStep, Genre genre) {
-        // Check if a DB (custom) template is set as default for the same step+subStep+genre
-        if (subStep == null) {
+        // Check if a DB (custom) template is set as default for the same step+subStep+genre.
+        // For PRIMARY sub-steps, DB overrides use subStep=null (main-step override convention).
+        if (subStep == null || subStep.isPrimary()) {
             if (genre != null) {
                 return repository.findByStepAndGenreAndIsDefaultTrue(step, genre).isPresent();
             }

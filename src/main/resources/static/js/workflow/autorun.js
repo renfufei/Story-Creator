@@ -1,3 +1,26 @@
+const AUTO_RUN_STEP_LABELS = {
+    'WORLD_BUILDING': '世界观设定',
+    'CHARACTER_DESIGN': '角色设计',
+    'CHARACTER_REFINE': '角色精修',
+    'OUTLINE_GENERATION': '大纲生成',
+    'CHAPTER_WRITING': '章节写作',
+    'CHARACTER_STATES': '角色状态',
+    'TITLE_GENERATION': '标题生成',
+    'POLISHING': '润色修改',
+    'PROOFREADING': '校对报告',
+    'PROOFREAD_FIX': '校对精修',
+    'WRITING_RULES': '写作规则',
+    'STYLE_FINGERPRINT': '风格指纹',
+    'BEHAVIOR_BOUNDARIES': '行为边界',
+    'EVENT_PLAN': '事件计划',
+    'CONTEXT_BRIEFING': '前文梳理',
+    'PLOT_REASONING': '剧情推演',
+    'INSTANT_REVIEW': '即时审查',
+    'CONTENT_OPTIMIZATION': '内容优化',
+    'STORYLINE_UPDATE': '故事线更新',
+    'DEEP_REVIEW': '深度审查',
+};
+
 function workflowAutorunMixin() {
     return {
         autoMode: false,
@@ -60,7 +83,8 @@ function workflowAutorunMixin() {
                         return;
                     }
                     this.autoRunStreamContent = '';
-                    this.autoRunStreamStep = data.step || '';
+                    const initStep = data.step || '';
+                    this.autoRunStreamStep = AUTO_RUN_STEP_LABELS[initStep] || initStep;
                     this.autoRunStreamChapter = data.chapter || 0;
                     this.autoRunStreamOpen = true;
                     const modal = new bootstrap.Modal(document.getElementById('autoRunStreamModal'));
@@ -70,15 +94,19 @@ function workflowAutorunMixin() {
                     this.autoRunStreamEventSource = es;
 
                     es.addEventListener('step-info', (e) => {
+                        let rawStep = '';
+                        let chapter = 0;
                         const parts = e.data.split('|');
                         if (parts.length >= 2) {
-                            this.autoRunStreamStep = parts[0];
-                            this.autoRunStreamChapter = parseInt(parts[1]) || 0;
+                            rawStep = parts[0];
+                            chapter = parseInt(parts[1]) || 0;
                         } else {
                             const colonParts = e.data.split(':');
-                            this.autoRunStreamStep = colonParts[0] || '';
-                            this.autoRunStreamChapter = parseInt(colonParts[1]) || 0;
+                            rawStep = colonParts[0] || '';
+                            chapter = parseInt(colonParts[1]) || 0;
                         }
+                        this.autoRunStreamStep = AUTO_RUN_STEP_LABELS[rawStep] || rawStep;
+                        this.autoRunStreamChapter = chapter;
                         this.autoRunStreamContent = '';
                     });
 

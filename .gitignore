@@ -19,3 +19,4 @@ app.log
 app.pid
 data/
 .DS_Store
+error_words.log

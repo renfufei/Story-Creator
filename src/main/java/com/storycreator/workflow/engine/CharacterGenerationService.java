@@ -235,6 +235,116 @@ public class CharacterGenerationService {
                 .concatWith(Flux.just("[[CHAR:REFINE:DONE]]"));
     }
 
+    // --- Public variable builders (for prompt explore) ---
+
+    public Map<String, String> buildCharacterCardVariables(Long projectId, int cardNumber, int totalCards) {
+        WorkflowContext baseContext = contextBuilder.build(projectId, 0);
+        String guidanceSuffix = stepGuidanceRepository.findByProjectIdAndStep(projectId, WorkflowStep.CHARACTER_DESIGN)
+                .filter(sg -> sg.getGuidance() != null && !sg.getGuidance().isBlank())
+                .map(sg -> "\n\n【创作指导】\n" + sg.getGuidance() + "\n请在生成时参考以上指导意见。")
+                .orElse("");
+
+        List<CharacterEntity> existingCards = characterRepository
+                .findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
+        List<String> previousSummaries = new ArrayList<>();
+        for (int i = 1; i < cardNumber; i++) {
+            int idx = i;
+            existingCards.stream()
+                .filter(c -> c.getSortOrder() == idx)
+                .findFirst()
+                .map(c -> extractCharacterSummary(c.getContent()))
+                .ifPresent(previousSummaries::add);
+        }
+
+        StringBuilder previousContext = new StringBuilder();
+        if (!previousSummaries.isEmpty()) {
+            previousContext.append("\n\n【已设计角色】\n");
+            for (int i = 0; i < previousSummaries.size(); i++) {
+                previousContext.append(i + 1).append(". ").append(previousSummaries.get(i)).append("\n");
+            }
+            previousContext.append("\n【差异化要求】新角色必须满足：\n");
+            previousContext.append("- 身份/职业不能与以上任何角色相同或近似\n");
+            previousContext.append("- 性格特质至少有一个核心维度与已有角色形成对比\n");
+            previousContext.append("- 能力体系不能重复（如已有剑修，不要再出剑修）\n");
+            previousContext.append("- 动机和背景应开辟新的叙事方向\n");
+            previousContext.append("- 与已有角色建立具体的关系纽带（师徒/对手/盟友等）\n");
+        }
+
+        Genre genre = baseContext.getGenre();
+        return Map.of(
+                "title", baseContext.getTitle() != null ? baseContext.getTitle() : "",
+                "genre", genre != null ? genre.getDisplayName() : "",
+                "description", baseContext.getDescription() != null ? baseContext.getDescription() : "",
+                "worldSetting", wrapContent(truncate(baseContext.getWorldSetting(), 400)),
+                "previousContext", previousContext.toString(),
+                "cardNumber", String.valueOf(cardNumber),
+                "totalCards", String.valueOf(totalCards),
+                "stepGuidance", guidanceSuffix
+        );
+    }
+
+    public Map<String, String> buildCharacterOverviewVariables(Long projectId) {
+        WorkflowContext baseContext = contextBuilder.build(projectId, 0);
+        String guidanceSuffix = stepGuidanceRepository.findByProjectIdAndStep(projectId, WorkflowStep.CHARACTER_DESIGN)
+                .filter(sg -> sg.getGuidance() != null && !sg.getGuidance().isBlank())
+                .map(sg -> "\n\n【创作指导】\n" + sg.getGuidance() + "\n请在生成时参考以上指导意见。")
+                .orElse("");
+
+        List<CharacterEntity> existingCards = characterRepository
+                .findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
+        List<String> summaries = new ArrayList<>();
+        for (CharacterEntity c : existingCards) {
+            if (c.getContent() != null && !c.getContent().isBlank()) {
+                summaries.add(extractCharacterSummary(c.getContent()));
+            }
+        }
+
+        Genre genre = baseContext.getGenre();
+        StringBuilder summariesText = new StringBuilder();
+        for (int i = 0; i < summaries.size(); i++) {
+            summariesText.append(i + 1).append(". ").append(summaries.get(i)).append("\n");
+        }
+        return Map.of(
+                "title", baseContext.getTitle() != null ? baseContext.getTitle() : "",
+                "genre", genre != null ? genre.getDisplayName() : "",
+                "description", baseContext.getDescription() != null ? baseContext.getDescription() : "",
+                "previousSummaries", summariesText.toString(),
+                "stepGuidance", guidanceSuffix
+        );
+    }
+
+    public Map<String, String> buildCharacterRefineVariables(Long projectId, Long characterId) {
+        WorkflowContext ctx = contextBuilder.build(projectId, 0);
+        String guidanceSuffix = stepGuidanceRepository.findByProjectIdAndStep(projectId, WorkflowStep.CHARACTER_DESIGN)
+                .filter(sg -> sg.getGuidance() != null && !sg.getGuidance().isBlank())
+                .map(sg -> "\n\n【创作指导】\n" + sg.getGuidance() + "\n请在生成时参考以上指导意见。")
+                .orElse("");
+
+        List<CharacterEntity> allCards = characterRepository
+                .findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
+        CharacterEntity card = allCards.stream()
+                .filter(c -> c.getId().equals(characterId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Character not found: " + characterId));
+
+        List<String> allSummaries = new ArrayList<>();
+        for (int i = 0; i < allCards.size(); i++) {
+            allSummaries.add(buildCharacterRefineEntry(allCards.get(i), i + 1));
+        }
+        String summariesText = String.join("\n", allSummaries);
+
+        Genre genre = ctx.getGenre();
+        return Map.of(
+                "title", ctx.getTitle() != null ? ctx.getTitle() : "",
+                "genre", genre != null ? genre.getDisplayName() : "",
+                "description", ctx.getDescription() != null ? ctx.getDescription() : "",
+                "worldSetting", truncate(ctx.getWorldSetting(), 600),
+                "allSummaries", summariesText,
+                "cardContent", card.getContent() != null ? card.getContent() : "(无内容)",
+                "stepGuidance", guidanceSuffix
+        );
+    }
+
     // --- Private helpers ---
 
     private void saveSingleCharacter(Long projectId, int sortOrder, String content) {

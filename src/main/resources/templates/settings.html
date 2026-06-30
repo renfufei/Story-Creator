@@ -25,7 +25,7 @@
                 <small class="text-muted mt-1 d-block">所有项目和步骤默认使用此模型（除非单独配置）</small>
             </div>
             <!-- TTS Default -->
-            <div>
+            <div class="mb-3">
                 <label class="form-label fw-semibold mb-1">TTS 语音合成模型</label>
                 <form th:action="@{/settings/global-default-tts}" method="post" class="d-flex gap-2 align-items-center">
                     <select class="form-select form-select-sm" name="modelConfigId" style="max-width: 300px;">
@@ -39,6 +39,22 @@
                     <button type="submit" class="btn btn-sm btn-primary">保存</button>
                 </form>
                 <small class="text-muted mt-1 d-block">Reader 页面 TTS 播放时默认使用此配置</small>
+            </div>
+            <!-- Image Default -->
+            <div>
+                <label class="form-label fw-semibold mb-1">图像生成模型</label>
+                <form th:action="@{/settings/global-default-image}" method="post" class="d-flex gap-2 align-items-center">
+                    <select class="form-select form-select-sm" name="modelConfigId" style="max-width: 300px;">
+                        <option value="" th:selected="${globalDefaultImageId == null}">-- 未指定 --</option>
+                        <option th:each="config : ${imageConfigs}"
+                                th:if="${config.active}"
+                                th:value="${config.id}"
+                                th:selected="${config.id == globalDefaultImageId}"
+                                th:text="${config.displayName} + ' (' + ${config.provider} + '/' + ${config.modelId} + ')'">模型</option>
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-primary">保存</button>
+                </form>
+                <small class="text-muted mt-1 d-block">角色图片生成时默认使用此配置</small>
             </div>
         </div>
     </div>
@@ -72,157 +88,470 @@
         </div>
     </div>
 
-    <!-- Text Models Section -->
-    <h5 class="mb-3"><i class="bi bi-chat-text"></i> 文本生成模型</h5>
-    <div class="row g-3 mb-3">
-        <div class="col-md-4 col-lg-3" th:each="config : ${textConfigs}">
-            <div class="card h-100">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h6 class="card-title mb-0 text-truncate" th:text="${config.displayName}" style="max-width: 140px;">名称</h6>
-                        <span class="badge" th:classappend="${config.active} ? 'bg-success' : 'bg-secondary'"
-                              th:text="${config.active} ? '启用' : '禁用'">状态</span>
-                    </div>
-                    <p class="card-text small text-muted mb-1" th:text="${config.provider} + ' / ' + ${config.modelId}">provider/model</p>
-                    <p class="card-text small mb-2">
-                        <span class="text-muted">API Key: </span>
-                        <code th:if="${config.apiKey != null && config.apiKey.length() > 6}"
-                              th:text="${config.apiKey.substring(0, 3)} + '...' + ${config.apiKey.substring(config.apiKey.length() - 4)}">sk-...xxxx</code>
-                        <code th:if="${config.apiKey != null && config.apiKey.length() <= 6 && !config.apiKey.isEmpty()}"
-                              th:text="'***'">***</code>
-                        <span th:if="${config.apiKey == null || config.apiKey.isEmpty()}" class="text-warning">未设置</span>
-                    </p>
-                </div>
-                <div class="card-footer bg-transparent border-top-0 p-2 d-flex gap-1">
-                    <button type="button" class="btn btn-sm btn-outline-success flex-grow-0"
-                            th:attr="onclick='testConnection(' + ${config.id} + ', this)'">
-                        <i class="bi bi-plug"></i> 测试
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-primary flex-grow-1"
-                            th:attr="data-id=${config.id},
-                                     data-provider=${config.provider},
-                                     data-model-id=${config.modelId},
-                                     data-display-name=${config.displayName},
-                                     data-base-url=${config.baseUrl},
-                                     data-extra-params=${config.extraParams},
-                                     data-active=${config.active},
-                                     data-model-type='TEXT'"
-                            @click="openEditModal($event.currentTarget)">
-                        <i class="bi bi-pencil"></i> 编辑
-                    </button>
-                    <form th:action="@{/settings/ai-models/{id}/delete(id=${config.id})}" method="post"
-                          onsubmit="return confirm('确定要删除此模型配置吗？')" class="d-inline">
-                        <button type="submit" class="btn btn-sm btn-outline-danger">
-                            <i class="bi bi-trash"></i> 删除
+    <!-- Nav Tabs -->
+    <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab-all-btn" data-bs-toggle="tab" data-bs-target="#tab-all" type="button" role="tab">全部模型</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-text-btn" data-bs-toggle="tab" data-bs-target="#tab-text" type="button" role="tab">文本生成</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-tts-btn" data-bs-toggle="tab" data-bs-target="#tab-tts" type="button" role="tab">语音合成</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-image-btn" data-bs-toggle="tab" data-bs-target="#tab-image" type="button" role="tab">图像生成</button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- Tab: All Models -->
+        <div class="tab-pane fade show active" id="tab-all" role="tabpanel">
+            <!-- Text Models -->
+            <h5 class="mb-3"><i class="bi bi-chat-text"></i> 文本生成模型</h5>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4 col-lg-3" th:if="${#lists.isEmpty(textConfigs)}">
+                    <form th:action="@{/settings/ai-models/add-mock}" method="post" class="h-100">
+                        <button type="submit" class="btn btn-outline-warning w-100 h-100 d-flex flex-column align-items-center justify-content-center"
+                                style="min-height: 120px; border-style: dashed !important;">
+                            <i class="bi bi-robot" style="font-size: 2rem;"></i>
+                            <span class="mt-2">接入Mock模型</span>
+                            <small class="text-muted mt-1">快速体验，无需API Key</small>
                         </button>
                     </form>
                 </div>
-            </div>
-        </div>
-        <!-- Add Text Model Card -->
-        <div class="col-md-4 col-lg-3">
-            <div class="card h-100 border-dashed" style="border-style: dashed !important; cursor: pointer;"
-                 @click="openAddModal('TEXT')">
-                <div class="card-body d-flex flex-column align-items-center justify-content-center text-muted">
-                    <i class="bi bi-plus-circle" style="font-size: 2rem;"></i>
-                    <span class="mt-2 small">添加文本模型</span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- TTS Models Section -->
-    <h5 class="mb-3 mt-4"><i class="bi bi-volume-up"></i> 语音合成（TTS）模型</h5>
-    <div class="row g-3 mb-3">
-        <div class="col-md-4 col-lg-3" th:each="config : ${ttsConfigs}">
-            <div class="card h-100">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h6 class="card-title mb-0 text-truncate" th:text="${config.displayName}" style="max-width: 140px;">名称</h6>
-                        <span class="badge" th:classappend="${config.active} ? 'bg-success' : 'bg-secondary'"
-                              th:text="${config.active} ? '启用' : '禁用'">状态</span>
+                <div class="col-md-4 col-lg-3" th:each="config : ${textConfigs}">
+                    <div class="card h-100">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="card-title mb-0 text-truncate" th:text="${config.displayName}" style="max-width: 140px;">名称</h6>
+                                <span class="badge" th:classappend="${config.active} ? 'bg-success' : 'bg-secondary'"
+                                      th:text="${config.active} ? '启用' : '禁用'">状态</span>
+                            </div>
+                            <p class="card-text small text-muted mb-1" th:text="${config.provider} + ' / ' + ${config.modelId}">provider/model</p>
+                            <p class="card-text small mb-2">
+                                <span class="text-muted">API Key: </span>
+                                <code th:if="${config.apiKey != null && config.apiKey.length() > 6}"
+                                      th:text="${config.apiKey.substring(0, 3)} + '...' + ${config.apiKey.substring(config.apiKey.length() - 4)}">sk-...xxxx</code>
+                                <code th:if="${config.apiKey != null && config.apiKey.length() <= 6 && !config.apiKey.isEmpty()}"
+                                      th:text="'***'">***</code>
+                                <span th:if="${config.apiKey == null || config.apiKey.isEmpty()}" class="text-warning">未设置</span>
+                            </p>
+                        </div>
+                        <div class="card-footer bg-transparent border-top-0 p-2 d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-success flex-grow-0"
+                                    th:attr="onclick='testConnection(' + ${config.id} + ', this)'">
+                                <i class="bi bi-plug"></i> 测试
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary flex-grow-1"
+                                    th:attr="data-id=${config.id},
+                                             data-provider=${config.provider},
+                                             data-model-id=${config.modelId},
+                                             data-display-name=${config.displayName},
+                                             data-base-url=${config.baseUrl},
+                                             data-extra-params=${config.extraParams},
+                                             data-active=${config.active},
+                                             data-model-type='TEXT'"
+                                    @click="openEditModal($event.currentTarget)">
+                                <i class="bi bi-pencil"></i> 编辑
+                            </button>
+                            <form th:action="@{/settings/ai-models/{id}/delete(id=${config.id})}" method="post"
+                                  onsubmit="return confirm('确定要删除此模型配置吗？')" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-trash"></i> 删除
+                                </button>
+                            </form>
+                        </div>
                     </div>
-                    <p class="card-text small text-muted mb-1" th:text="${config.provider} + ' / ' + ${config.modelId}">provider/model</p>
-                    <p class="card-text small mb-2">
-                        <span class="text-muted">API Key: </span>
-                        <code th:if="${config.apiKey != null && config.apiKey.length() > 6}"
-                              th:text="${config.apiKey.substring(0, 3)} + '...' + ${config.apiKey.substring(config.apiKey.length() - 4)}">sk-...xxxx</code>
-                        <code th:if="${config.apiKey != null && config.apiKey.length() <= 6 && !config.apiKey.isEmpty()}"
-                              th:text="'***'">***</code>
-                        <span th:if="${config.apiKey == null || config.apiKey.isEmpty()}" class="text-warning">未设置</span>
-                    </p>
                 </div>
-                <div class="card-footer bg-transparent border-top-0 p-2 d-flex gap-1">
-                    <button type="button" class="btn btn-sm btn-outline-success flex-grow-0"
-                            th:attr="onclick='testTtsConnection(' + ${config.id} + ', this)'"
-                            th:data-extra-params="${config.extraParams}">
-                        <i class="bi bi-plug"></i> 测试
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-primary flex-grow-1"
-                            th:attr="data-id=${config.id},
-                                     data-provider=${config.provider},
-                                     data-model-id=${config.modelId},
-                                     data-display-name=${config.displayName},
-                                     data-base-url=${config.baseUrl},
-                                     data-extra-params=${config.extraParams},
-                                     data-active=${config.active},
-                                     data-model-type='TTS'"
-                            @click="openEditModal($event.currentTarget)">
-                        <i class="bi bi-pencil"></i> 编辑
-                    </button>
-                    <form th:action="@{/settings/ai-models/{id}/delete(id=${config.id})}" method="post"
-                          onsubmit="return confirm('确定要删除此模型配置吗？')" class="d-inline">
-                        <button type="submit" class="btn btn-sm btn-outline-danger">
-                            <i class="bi bi-trash"></i> 删除
+                <div class="col-md-4 col-lg-3">
+                    <div class="card h-100 border-dashed" style="border-style: dashed !important; cursor: pointer;"
+                         @click="openAddModal('TEXT')">
+                        <div class="card-body d-flex flex-column align-items-center justify-content-center text-muted">
+                            <i class="bi bi-plus-circle" style="font-size: 2rem;"></i>
+                            <span class="mt-2 small">添加文本模型</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TTS Models -->
+            <h5 class="mb-3 mt-4"><i class="bi bi-volume-up"></i> 语音合成（TTS）模型</h5>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4 col-lg-3" th:each="config : ${ttsConfigs}">
+                    <div class="card h-100">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="card-title mb-0 text-truncate" th:text="${config.displayName}" style="max-width: 140px;">名称</h6>
+                                <span class="badge" th:classappend="${config.active} ? 'bg-success' : 'bg-secondary'"
+                                      th:text="${config.active} ? '启用' : '禁用'">状态</span>
+                            </div>
+                            <p class="card-text small text-muted mb-1" th:text="${config.provider} + ' / ' + ${config.modelId}">provider/model</p>
+                            <p class="card-text small mb-2">
+                                <span class="text-muted">API Key: </span>
+                                <code th:if="${config.apiKey != null && config.apiKey.length() > 6}"
+                                      th:text="${config.apiKey.substring(0, 3)} + '...' + ${config.apiKey.substring(config.apiKey.length() - 4)}">sk-...xxxx</code>
+                                <code th:if="${config.apiKey != null && config.apiKey.length() <= 6 && !config.apiKey.isEmpty()}"
+                                      th:text="'***'">***</code>
+                                <span th:if="${config.apiKey == null || config.apiKey.isEmpty()}" class="text-warning">未设置</span>
+                            </p>
+                        </div>
+                        <div class="card-footer bg-transparent border-top-0 p-2 d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-success flex-grow-0"
+                                    th:attr="onclick='testTtsConnection(' + ${config.id} + ', this)'"
+                                    th:data-extra-params="${config.extraParams}">
+                                <i class="bi bi-plug"></i> 测试
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary flex-grow-1"
+                                    th:attr="data-id=${config.id},
+                                             data-provider=${config.provider},
+                                             data-model-id=${config.modelId},
+                                             data-display-name=${config.displayName},
+                                             data-base-url=${config.baseUrl},
+                                             data-extra-params=${config.extraParams},
+                                             data-active=${config.active},
+                                             data-model-type='TTS'"
+                                    @click="openEditModal($event.currentTarget)">
+                                <i class="bi bi-pencil"></i> 编辑
+                            </button>
+                            <form th:action="@{/settings/ai-models/{id}/delete(id=${config.id})}" method="post"
+                                  onsubmit="return confirm('确定要删除此模型配置吗？')" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-trash"></i> 删除
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 col-lg-3">
+                    <div class="card h-100 border-dashed" style="border-style: dashed !important; cursor: pointer;"
+                         @click="openAddModal('TTS')">
+                        <div class="card-body d-flex flex-column align-items-center justify-content-center text-muted">
+                            <i class="bi bi-plus-circle" style="font-size: 2rem;"></i>
+                            <span class="mt-2 small">添加TTS模型</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Image Models -->
+            <h5 class="mb-3 mt-4"><i class="bi bi-image"></i> 图像生成模型</h5>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4 col-lg-3" th:each="config : ${imageConfigs}">
+                    <div class="card h-100">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="card-title mb-0 text-truncate" th:text="${config.displayName}" style="max-width: 140px;">名称</h6>
+                                <span class="badge" th:classappend="${config.active} ? 'bg-success' : 'bg-secondary'"
+                                      th:text="${config.active} ? '启用' : '禁用'">状态</span>
+                            </div>
+                            <p class="card-text small text-muted mb-1" th:text="${config.provider} + ' / ' + ${config.modelId}">provider/model</p>
+                            <p class="card-text small mb-2">
+                                <span class="text-muted">API Key: </span>
+                                <code th:if="${config.apiKey != null && config.apiKey.length() > 6}"
+                                      th:text="${config.apiKey.substring(0, 3)} + '...' + ${config.apiKey.substring(config.apiKey.length() - 4)}">sk-...xxxx</code>
+                                <code th:if="${config.apiKey != null && config.apiKey.length() <= 6 && !config.apiKey.isEmpty()}"
+                                      th:text="'***'">***</code>
+                                <span th:if="${config.apiKey == null || config.apiKey.isEmpty()}" class="text-warning">未设置</span>
+                            </p>
+                        </div>
+                        <div class="card-footer bg-transparent border-top-0 p-2 d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-success flex-grow-0"
+                                    th:attr="onclick='testImageConnection(' + ${config.id} + ', this)'">
+                                <i class="bi bi-plug"></i> 测试
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary flex-grow-1"
+                                    th:attr="data-id=${config.id},
+                                             data-provider=${config.provider},
+                                             data-model-id=${config.modelId},
+                                             data-display-name=${config.displayName},
+                                             data-base-url=${config.baseUrl},
+                                             data-extra-params=${config.extraParams},
+                                             data-active=${config.active},
+                                             data-model-type='IMAGE'"
+                                    @click="openEditModal($event.currentTarget)">
+                                <i class="bi bi-pencil"></i> 编辑
+                            </button>
+                            <form th:action="@{/settings/ai-models/{id}/delete(id=${config.id})}" method="post"
+                                  onsubmit="return confirm('确定要删除此模型配置吗？')" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-trash"></i> 删除
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 col-lg-3">
+                    <div class="card h-100 border-dashed" style="border-style: dashed !important; cursor: pointer;"
+                         @click="openAddModal('IMAGE')">
+                        <div class="card-body d-flex flex-column align-items-center justify-content-center text-muted">
+                            <i class="bi bi-plus-circle" style="font-size: 2rem;"></i>
+                            <span class="mt-2 small">添加图像模型</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TTS Replacement Templates -->
+            <div class="card mb-4 mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <strong><i class="bi bi-arrow-left-right"></i> TTS 文字替换模板</strong>
+                    <a th:href="@{/settings/tts-templates}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-gear"></i> 管理模板
+                    </a>
+                </div>
+                <div class="card-body">
+                    <small class="text-muted d-block mb-2">TTS 生成前会按模板中的规则顺序执行文字替换。每个 TTS 模型可绑定不同的模板组合。</small>
+                    <div th:if="${!ttsConfigs.isEmpty()}">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>TTS 模型</th>
+                                    <th style="width: 120px;">绑定管理</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="config : ${ttsConfigs}">
+                                    <td th:text="${config.displayName} + ' (' + ${config.modelId} + ')'">模型</td>
+                                    <td>
+                                        <a th:href="@{/settings/tts-templates/bindings/{id}(id=${config.id})}"
+                                           class="btn btn-sm btn-outline-secondary">
+                                            <i class="bi bi-link-45deg"></i> 绑定
+                                        </a>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p th:if="${ttsConfigs.isEmpty()}" class="text-muted small mb-0">暂无 TTS 模型配置</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Text Models Only -->
+        <div class="tab-pane fade" id="tab-text" role="tabpanel">
+            <h5 class="mb-3"><i class="bi bi-chat-text"></i> 文本生成模型</h5>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4 col-lg-3" th:if="${#lists.isEmpty(textConfigs)}">
+                    <form th:action="@{/settings/ai-models/add-mock}" method="post" class="h-100">
+                        <button type="submit" class="btn btn-outline-warning w-100 h-100 d-flex flex-column align-items-center justify-content-center"
+                                style="min-height: 120px; border-style: dashed !important;">
+                            <i class="bi bi-robot" style="font-size: 2rem;"></i>
+                            <span class="mt-2">接入Mock模型</span>
+                            <small class="text-muted mt-1">快速体验，无需API Key</small>
                         </button>
                     </form>
                 </div>
-            </div>
-        </div>
-        <!-- Add TTS Model Card -->
-        <div class="col-md-4 col-lg-3">
-            <div class="card h-100 border-dashed" style="border-style: dashed !important; cursor: pointer;"
-                 @click="openAddModal('TTS')">
-                <div class="card-body d-flex flex-column align-items-center justify-content-center text-muted">
-                    <i class="bi bi-plus-circle" style="font-size: 2rem;"></i>
-                    <span class="mt-2 small">添加TTS模型</span>
+                <div class="col-md-4 col-lg-3" th:each="config : ${textConfigs}">
+                    <div class="card h-100">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="card-title mb-0 text-truncate" th:text="${config.displayName}" style="max-width: 140px;">名称</h6>
+                                <span class="badge" th:classappend="${config.active} ? 'bg-success' : 'bg-secondary'"
+                                      th:text="${config.active} ? '启用' : '禁用'">状态</span>
+                            </div>
+                            <p class="card-text small text-muted mb-1" th:text="${config.provider} + ' / ' + ${config.modelId}">provider/model</p>
+                            <p class="card-text small mb-2">
+                                <span class="text-muted">API Key: </span>
+                                <code th:if="${config.apiKey != null && config.apiKey.length() > 6}"
+                                      th:text="${config.apiKey.substring(0, 3)} + '...' + ${config.apiKey.substring(config.apiKey.length() - 4)}">sk-...xxxx</code>
+                                <code th:if="${config.apiKey != null && config.apiKey.length() <= 6 && !config.apiKey.isEmpty()}"
+                                      th:text="'***'">***</code>
+                                <span th:if="${config.apiKey == null || config.apiKey.isEmpty()}" class="text-warning">未设置</span>
+                            </p>
+                        </div>
+                        <div class="card-footer bg-transparent border-top-0 p-2 d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-success flex-grow-0"
+                                    th:attr="onclick='testConnection(' + ${config.id} + ', this)'">
+                                <i class="bi bi-plug"></i> 测试
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary flex-grow-1"
+                                    th:attr="data-id=${config.id},
+                                             data-provider=${config.provider},
+                                             data-model-id=${config.modelId},
+                                             data-display-name=${config.displayName},
+                                             data-base-url=${config.baseUrl},
+                                             data-extra-params=${config.extraParams},
+                                             data-active=${config.active},
+                                             data-model-type='TEXT'"
+                                    @click="openEditModal($event.currentTarget)">
+                                <i class="bi bi-pencil"></i> 编辑
+                            </button>
+                            <form th:action="@{/settings/ai-models/{id}/delete(id=${config.id})}" method="post"
+                                  onsubmit="return confirm('确定要删除此模型配置吗？')" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-trash"></i> 删除
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 col-lg-3">
+                    <div class="card h-100 border-dashed" style="border-style: dashed !important; cursor: pointer;"
+                         @click="openAddModal('TEXT')">
+                        <div class="card-body d-flex flex-column align-items-center justify-content-center text-muted">
+                            <i class="bi bi-plus-circle" style="font-size: 2rem;"></i>
+                            <span class="mt-2 small">添加文本模型</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- TTS Replacement Templates Link -->
-    <div class="card mb-4 mt-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <strong><i class="bi bi-arrow-left-right"></i> TTS 文字替换模板</strong>
-            <a th:href="@{/settings/tts-templates}" class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-gear"></i> 管理模板
-            </a>
-        </div>
-        <div class="card-body">
-            <small class="text-muted d-block mb-2">TTS 生成前会按模板中的规则顺序执行文字替换。每个 TTS 模型可绑定不同的模板组合。</small>
-            <div th:if="${!ttsConfigs.isEmpty()}">
-                <table class="table table-sm mb-0">
-                    <thead>
-                        <tr>
-                            <th>TTS 模型</th>
-                            <th style="width: 120px;">绑定管理</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr th:each="config : ${ttsConfigs}">
-                            <td th:text="${config.displayName} + ' (' + ${config.modelId} + ')'">模型</td>
-                            <td>
-                                <a th:href="@{/settings/tts-templates/bindings/{id}(id=${config.id})}"
-                                   class="btn btn-sm btn-outline-secondary">
-                                    <i class="bi bi-link-45deg"></i> 绑定
-                                </a>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+        <!-- Tab: TTS Models Only -->
+        <div class="tab-pane fade" id="tab-tts" role="tabpanel">
+            <h5 class="mb-3"><i class="bi bi-volume-up"></i> 语音合成（TTS）模型</h5>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4 col-lg-3" th:each="config : ${ttsConfigs}">
+                    <div class="card h-100">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="card-title mb-0 text-truncate" th:text="${config.displayName}" style="max-width: 140px;">名称</h6>
+                                <span class="badge" th:classappend="${config.active} ? 'bg-success' : 'bg-secondary'"
+                                      th:text="${config.active} ? '启用' : '禁用'">状态</span>
+                            </div>
+                            <p class="card-text small text-muted mb-1" th:text="${config.provider} + ' / ' + ${config.modelId}">provider/model</p>
+                            <p class="card-text small mb-2">
+                                <span class="text-muted">API Key: </span>
+                                <code th:if="${config.apiKey != null && config.apiKey.length() > 6}"
+                                      th:text="${config.apiKey.substring(0, 3)} + '...' + ${config.apiKey.substring(config.apiKey.length() - 4)}">sk-...xxxx</code>
+                                <code th:if="${config.apiKey != null && config.apiKey.length() <= 6 && !config.apiKey.isEmpty()}"
+                                      th:text="'***'">***</code>
+                                <span th:if="${config.apiKey == null || config.apiKey.isEmpty()}" class="text-warning">未设置</span>
+                            </p>
+                        </div>
+                        <div class="card-footer bg-transparent border-top-0 p-2 d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-success flex-grow-0"
+                                    th:attr="onclick='testTtsConnection(' + ${config.id} + ', this)'"
+                                    th:data-extra-params="${config.extraParams}">
+                                <i class="bi bi-plug"></i> 测试
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary flex-grow-1"
+                                    th:attr="data-id=${config.id},
+                                             data-provider=${config.provider},
+                                             data-model-id=${config.modelId},
+                                             data-display-name=${config.displayName},
+                                             data-base-url=${config.baseUrl},
+                                             data-extra-params=${config.extraParams},
+                                             data-active=${config.active},
+                                             data-model-type='TTS'"
+                                    @click="openEditModal($event.currentTarget)">
+                                <i class="bi bi-pencil"></i> 编辑
+                            </button>
+                            <form th:action="@{/settings/ai-models/{id}/delete(id=${config.id})}" method="post"
+                                  onsubmit="return confirm('确定要删除此模型配置吗？')" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-trash"></i> 删除
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 col-lg-3">
+                    <div class="card h-100 border-dashed" style="border-style: dashed !important; cursor: pointer;"
+                         @click="openAddModal('TTS')">
+                        <div class="card-body d-flex flex-column align-items-center justify-content-center text-muted">
+                            <i class="bi bi-plus-circle" style="font-size: 2rem;"></i>
+                            <span class="mt-2 small">添加TTS模型</span>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <p th:if="${ttsConfigs.isEmpty()}" class="text-muted small mb-0">暂无 TTS 模型配置</p>
+
+            <!-- TTS Replacement Templates -->
+            <div class="card mb-4 mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <strong><i class="bi bi-arrow-left-right"></i> TTS 文字替换模板</strong>
+                    <a th:href="@{/settings/tts-templates}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-gear"></i> 管理模板
+                    </a>
+                </div>
+                <div class="card-body">
+                    <small class="text-muted d-block mb-2">TTS 生成前会按模板中的规则顺序执行文字替换。每个 TTS 模型可绑定不同的模板组合。</small>
+                    <div th:if="${!ttsConfigs.isEmpty()}">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>TTS 模型</th>
+                                    <th style="width: 120px;">绑定管理</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr th:each="config : ${ttsConfigs}">
+                                    <td th:text="${config.displayName} + ' (' + ${config.modelId} + ')'">模型</td>
+                                    <td>
+                                        <a th:href="@{/settings/tts-templates/bindings/{id}(id=${config.id})}"
+                                           class="btn btn-sm btn-outline-secondary">
+                                            <i class="bi bi-link-45deg"></i> 绑定
+                                        </a>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p th:if="${ttsConfigs.isEmpty()}" class="text-muted small mb-0">暂无 TTS 模型配置</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Image Models Only -->
+        <div class="tab-pane fade" id="tab-image" role="tabpanel">
+            <h5 class="mb-3"><i class="bi bi-image"></i> 图像生成模型</h5>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4 col-lg-3" th:each="config : ${imageConfigs}">
+                    <div class="card h-100">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h6 class="card-title mb-0 text-truncate" th:text="${config.displayName}" style="max-width: 140px;">名称</h6>
+                                <span class="badge" th:classappend="${config.active} ? 'bg-success' : 'bg-secondary'"
+                                      th:text="${config.active} ? '启用' : '禁用'">状态</span>
+                            </div>
+                            <p class="card-text small text-muted mb-1" th:text="${config.provider} + ' / ' + ${config.modelId}">provider/model</p>
+                            <p class="card-text small mb-2">
+                                <span class="text-muted">API Key: </span>
+                                <code th:if="${config.apiKey != null && config.apiKey.length() > 6}"
+                                      th:text="${config.apiKey.substring(0, 3)} + '...' + ${config.apiKey.substring(config.apiKey.length() - 4)}">sk-...xxxx</code>
+                                <code th:if="${config.apiKey != null && config.apiKey.length() <= 6 && !config.apiKey.isEmpty()}"
+                                      th:text="'***'">***</code>
+                                <span th:if="${config.apiKey == null || config.apiKey.isEmpty()}" class="text-warning">未设置</span>
+                            </p>
+                        </div>
+                        <div class="card-footer bg-transparent border-top-0 p-2 d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-success flex-grow-0"
+                                    th:attr="onclick='testImageConnection(' + ${config.id} + ', this)'">
+                                <i class="bi bi-plug"></i> 测试
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary flex-grow-1"
+                                    th:attr="data-id=${config.id},
+                                             data-provider=${config.provider},
+                                             data-model-id=${config.modelId},
+                                             data-display-name=${config.displayName},
+                                             data-base-url=${config.baseUrl},
+                                             data-extra-params=${config.extraParams},
+                                             data-active=${config.active},
+                                             data-model-type='IMAGE'"
+                                    @click="openEditModal($event.currentTarget)">
+                                <i class="bi bi-pencil"></i> 编辑
+                            </button>
+                            <form th:action="@{/settings/ai-models/{id}/delete(id=${config.id})}" method="post"
+                                  onsubmit="return confirm('确定要删除此模型配置吗？')" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-trash"></i> 删除
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 col-lg-3">
+                    <div class="card h-100 border-dashed" style="border-style: dashed !important; cursor: pointer;"
+                         @click="openAddModal('IMAGE')">
+                        <div class="card-body d-flex flex-column align-items-center justify-content-center text-muted">
+                            <i class="bi bi-plus-circle" style="font-size: 2rem;"></i>
+                            <span class="mt-2 small">添加图像模型</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -250,6 +579,11 @@
                                            x-model="form.modelType" :disabled="modalMode === 'edit'" id="typeTts">
                                     <label class="form-check-label" for="typeTts">语音合成(TTS)</label>
                                 </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="modelType" value="IMAGE"
+                                           x-model="form.modelType" :disabled="modalMode === 'edit'" id="typeImage">
+                                    <label class="form-check-label" for="typeImage">图像生成</label>
+                                </div>
                             </div>
                         </div>
 
@@ -259,8 +593,9 @@
                             <select class="form-select form-select-sm" name="provider"
                                     x-model="form.provider" :disabled="modalMode === 'edit'">
                                 <option value="openai">OpenAI</option>
-                                <option value="claude">Claude</option>
-                                <option value="ollama">Ollama</option>
+                                <option value="claude" x-show="form.modelType !== 'IMAGE'">Claude</option>
+                                <option value="ollama" x-show="form.modelType !== 'IMAGE'">Ollama</option>
+                                <option value="sd-webui" x-show="form.modelType === 'IMAGE'">Stable Diffusion WebUI</option>
                             </select>
                         </div>
 
@@ -269,16 +604,20 @@
                             <label class="form-label">Model ID</label>
                             <input type="text" class="form-control form-control-sm" name="modelId"
                                    x-model="form.modelId" :disabled="modalMode === 'edit'" required
-                                   :placeholder="form.modelType === 'TTS' ? '例: tts-1, tts-1-hd' : '例: gpt-4o, claude-3-opus'">
+                                   :placeholder="form.modelType === 'TTS' ? '例: tts-1, tts-1-hd' : form.modelType === 'IMAGE' ? '例: dall-e-3, sdxl-1.0' : '例: gpt-4o, claude-3-opus'">
                             <div class="mt-1" x-show="modalMode === 'add'">
                                 <small class="text-muted">推荐: </small>
                                 <template x-if="form.modelType === 'TTS'">
                                     <a href="#" class="badge bg-secondary text-decoration-none"
                                        @click.prevent="form.modelId = 'Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit'">Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit</a>
                                 </template>
-                                <template x-if="form.modelType !== 'TTS'">
+                                <template x-if="form.modelType === 'TEXT'">
                                     <a href="#" class="badge bg-secondary text-decoration-none"
                                        @click.prevent="form.modelId = 'Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-8bit'">Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-8bit</a>
+                                </template>
+                                <template x-if="form.modelType === 'IMAGE'">
+                                    <a href="#" class="badge bg-secondary text-decoration-none"
+                                       @click.prevent="form.modelId = 'agnes-image-2.1-flash'; form.displayName = form.displayName || 'Agnes Image 2.1 Flash'; form.baseUrl = form.baseUrl || 'https://apihub.agnes-ai.com'; form.extraParams = form.extraParams || '{&quot;return_base64&quot;: true}'">agnes-image-2.1-flash</a>
                                 </template>
                             </div>
                         </div>
@@ -315,9 +654,10 @@
                             <label class="form-label">额外参数 (JSON)</label>
                             <textarea class="form-control form-control-sm" name="extraParams" rows="2"
                                       x-model="form.extraParams"
-                                      :placeholder="form.modelType === 'TTS' ? '例: {&quot;voice&quot;: &quot;alloy&quot;, &quot;voices&quot;: &quot;alloy,echo,nova&quot;}' : '例: {&quot;enable_thinking&quot;: false}'"></textarea>
+                                      :placeholder="form.modelType === 'TTS' ? '例: {&quot;voice&quot;: &quot;alloy&quot;, &quot;voices&quot;: &quot;alloy,echo,nova&quot;}' : form.modelType === 'IMAGE' ? '例: {&quot;quality&quot;: &quot;hd&quot;, &quot;style&quot;: &quot;vivid&quot;}' : '例: {&quot;enable_thinking&quot;: false}'"></textarea>
                             <small class="text-muted" x-show="form.modelType === 'TEXT'">合并到API请求体</small>
                             <small class="text-muted" x-show="form.modelType === 'TTS'">voice: 默认测试音色; voices: 可用音色列表(逗号分隔)</small>
+                            <small class="text-muted" x-show="form.modelType === 'IMAGE'">OpenAI: quality/style; SD WebUI: steps/cfg_scale/sampler_name/negative_prompt; 输出格式: return_base64/response_format</small>
                             <div x-show="form.modelType === 'TEXT'" class="mt-1">
                                 <span class="badge bg-secondary" role="button" style="cursor:pointer"
                                       @click="
@@ -400,6 +740,12 @@
                             <i class="bi bi-stop-fill"></i> 停止
                         </button>
                     </div>
+                    <div id="testImageArea" class="mt-3" style="display:none;">
+                        <label class="form-label fw-semibold">生成的图片</label>
+                        <div class="border rounded p-2 text-center">
+                            <img id="testImagePreview" src="" alt="生成的测试图片" style="max-width: 100%; max-height: 300px;">
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
@@ -412,6 +758,20 @@
     </div>
 
     <script>
+    // Tab persistence via URL hash
+    document.addEventListener('DOMContentLoaded', function() {
+        const hash = window.location.hash;
+        if (hash) {
+            const tab = document.querySelector('[data-bs-target="' + hash + '"]');
+            if (tab) new bootstrap.Tab(tab).show();
+        }
+    });
+    document.querySelectorAll('[data-bs-toggle="tab"]').forEach(function(tab) {
+        tab.addEventListener('shown.bs.tab', function(e) {
+            history.replaceState(null, null, e.target.dataset.bsTarget);
+        });
+    });
+
     function settingsApp() {
         return {
             modalMode: 'add',
@@ -513,9 +873,11 @@
         document.getElementById('testModalTitle').textContent = '测试文本模型连接';
         document.getElementById('testParamsInput').value = JSON.stringify(params, null, 2);
         document.getElementById('testVoiceSelectArea').style.display = 'none';
+        document.getElementById('testFormatSelectArea').style.display = 'none';
         document.getElementById('testResultArea').style.display = 'none';
         document.getElementById('testResultContent').textContent = '';
         document.getElementById('testAudioArea').style.display = 'none';
+        document.getElementById('testImageArea').style.display = 'none';
         _testAudioData = null;
         stopTestAudio();
         document.getElementById('testStartBtn').disabled = false;
@@ -585,6 +947,31 @@
         document.getElementById('testResultArea').style.display = 'none';
         document.getElementById('testResultContent').textContent = '';
         document.getElementById('testAudioArea').style.display = 'none';
+        document.getElementById('testImageArea').style.display = 'none';
+        _testAudioData = null;
+        stopTestAudio();
+        document.getElementById('testStartBtn').disabled = false;
+        document.getElementById('testStartBtn').innerHTML = '<i class="bi bi-play-fill"></i> 开始测试';
+        _testModal = new bootstrap.Modal(document.getElementById('testModal'));
+        _testModal.show();
+    }
+
+    function testImageConnection(configId, btn) {
+        _testConfigId = configId;
+        _testType = 'image';
+        const params = {
+            prompt: "A red circle on a white background",
+            width: 1024,
+            height: 1024
+        };
+        document.getElementById('testModalTitle').textContent = '测试图像生成模型';
+        document.getElementById('testParamsInput').value = JSON.stringify(params, null, 2);
+        document.getElementById('testVoiceSelectArea').style.display = 'none';
+        document.getElementById('testFormatSelectArea').style.display = 'none';
+        document.getElementById('testResultArea').style.display = 'none';
+        document.getElementById('testResultContent').textContent = '';
+        document.getElementById('testAudioArea').style.display = 'none';
+        document.getElementById('testImageArea').style.display = 'none';
         _testAudioData = null;
         stopTestAudio();
         document.getElementById('testStartBtn').disabled = false;
@@ -636,6 +1023,8 @@
 
         const url = _testType === 'tts'
             ? '/settings/ai-models/' + _testConfigId + '/test-tts'
+            : _testType === 'image'
+            ? '/settings/ai-models/' + _testConfigId + '/test-image'
             : '/settings/ai-models/' + _testConfigId + '/test';
 
         fetch(url, {
@@ -655,11 +1044,19 @@
                 document.getElementById('testAudioArea').style.display = 'none';
                 _testAudioData = null;
             }
+            // Show image preview for IMAGE success
+            if (_testType === 'image' && data.success && data.imageBase64) {
+                document.getElementById('testImagePreview').src = 'data:image/png;base64,' + data.imageBase64;
+                document.getElementById('testImageArea').style.display = 'block';
+            } else {
+                document.getElementById('testImageArea').style.display = 'none';
+            }
         })
         .catch(err => {
             resultContent.textContent = '请求失败: ' + err.message;
             resultContent.className = 'border rounded p-2 small text-danger';
             document.getElementById('testAudioArea').style.display = 'none';
+            document.getElementById('testImageArea').style.display = 'none';
             _testAudioData = null;
         })
         .finally(() => {

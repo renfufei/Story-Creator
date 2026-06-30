@@ -158,6 +158,15 @@
                     <div class="form-text">开启后可在创作页面一键执行全流程，自动完成所有步骤</div>
                 </div>
 
+                <div class="mb-3">
+                    <label for="autoRunStrategy" class="form-label">创作策略</label>
+                    <select class="form-select" id="autoRunStrategy" th:field="*{autoRunStrategy}">
+                        <option value="DEFAULT">标准创作模式</option>
+                        <option value="ENHANCED">精品创作模式</option>
+                    </select>
+                    <div class="form-text">精品模式增加前文梳理、剧情推演、即时审查、故事线更新等步骤，质量更高但耗时更长</div>
+                </div>
+
                 <div class="mb-3" th:if="${projectId != null}">
                     <label for="projectStatus" class="form-label">项目状态</label>
                     <select class="form-select" id="projectStatus" th:field="*{projectStatus}">

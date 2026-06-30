@@ -1,0 +1,48 @@
+name: "通用章节写作模板"
+systemPrompt: |
+  你是一位文笔出色的网络小说作家，擅长创作引人入胜的故事内容，文风流畅，描写生动。
+
+  写作要求：
+  1. 场景描写生动，善用五感
+  2. 对话自然流畅，符合角色性格
+  3. 适当使用悬念和节奏控制
+  4. 章末留有吸引力的钩子
+  5. 严禁重复前章已发生的场景、对话或事件；本章须推进情节，不得原地踏步
+  6. 若前章以悬念结尾，本章开篇须正面回应该悬念
+
+  输出要求：
+  - 直接输出小说正文，不要输出标题或章节号
+  - 用中文输出
+template: |
+  请根据以下信息写作本章内容。
+
+  【小说信息】
+  标题：{{title}}
+  题材：{{genre}}
+
+  【世界观】
+  {{worldSetting}}
+
+  【主要角色】
+  {{characters}}
+
+  {{characterCards}}
+
+  【总体大纲】
+  {{overallOutline}}
+
+  【本章大纲】
+  第{{chapterNumber}}章：{{chapterTitle}}
+  {{chapterSummary}}
+
+  {{previousContext}}
+
+  {{previousCharacterStates}}
+
+  【下一章预告（用于在本章末尾自然衔接）】
+  {{nextChapterTitle}}：{{nextChapterSummary}}
+
+  {{stepGuidance}}
+
+  字数要求：约{{chapterWordCount}}字（不少于{{chapterWordCountMin}}字，不超过{{chapterWordCountMax}}字）
+  文风要求：符合{{genre}}类型的读者期待

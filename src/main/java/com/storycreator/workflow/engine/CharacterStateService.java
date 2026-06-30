@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import static com.storycreator.workflow.engine.TextProcessingUtils.*;
 
@@ -45,7 +46,47 @@ public class CharacterStateService {
         this.characterStateDimensionService = characterStateDimensionService;
     }
 
+    public Map<String, String> buildCharacterStateVariables(Long projectId, int chapterNumber) {
+        ChapterEntity chapter = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
+                .orElseThrow(() -> new IllegalArgumentException("Chapter not found: " + chapterNumber));
+
+        String content = chapter.getContent() != null ? chapter.getContent() : "";
+        String excerpt;
+        if (content.length() > 3000) {
+            excerpt = content.substring(0, 2000) + "\n...\n" + content.substring(content.length() - 1000);
+        } else {
+            excerpt = content;
+        }
+
+        String prevStates = "";
+        if (chapterNumber > 1) {
+            prevStates = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber - 1)
+                    .map(ChapterEntity::getCharacterStates)
+                    .filter(s -> s != null && !s.isBlank())
+                    .orElse("");
+        }
+
+        String charNames = chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
+                .map(ChapterOutlineEntity::getCharacterNames)
+                .filter(s -> s != null && !s.isBlank())
+                .orElse("");
+
+        List<String> dims = characterStateDimensionService.getEnabledDisplayNames(projectId);
+        String dimList = dims.isEmpty() ? "角色状态" : String.join("、", dims);
+
+        return Map.of(
+                "dimList", dimList,
+                "charNames", charNames.isBlank() ? "" : "【本章出场角色】\n" + charNames + "\n",
+                "prevStates", prevStates.isBlank() ? "" : "【前章角色状态（参考）】\n" + prevStates + "\n",
+                "chapterExcerpt", excerpt
+        );
+    }
+
     public void generateCharacterStates(Long projectId, int chapterNumber) {
+        generateCharacterStates(projectId, chapterNumber, null);
+    }
+
+    public void generateCharacterStates(Long projectId, int chapterNumber, Consumer<String> tokenSink) {
         ChapterEntity chapter = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber).orElse(null);
         if (chapter == null || chapter.getContent() == null || chapter.getContent().isBlank()) return;
 
@@ -100,7 +141,10 @@ public class CharacterStateService {
         StringBuilder result = new StringBuilder();
         long start = System.currentTimeMillis();
         resolved.provider().streamText(request)
-                .doOnNext(result::append)
+                .doOnNext(token -> {
+                    result.append(token);
+                    if (tokenSink != null) tokenSink.accept(token);
+                })
                 .blockLast();
         aiUsageTracker.record(projectId, resolved.modelId(), resolved.provider().getProviderName(), System.currentTimeMillis() - start);
 

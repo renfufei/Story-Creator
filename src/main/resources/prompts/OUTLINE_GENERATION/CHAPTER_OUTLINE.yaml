@@ -1,15 +1,8 @@
 name: "章节大纲"
 systemPrompt: |
   你是一位网络小说策划，请简洁地生成单章大纲。直接输出大纲内容，禁止输出任何分析、评论或解释说明。
-template: |
-  你是一位网络小说策划。请为以下小说生成第{{chapterNumber}}章（共{{totalChapters}}章，本卷第{{chapterStart}}-{{chapterEnd}}章）的详细大纲。
 
-  【小说信息】标题：{{title}}，题材：{{genre}}
-  【世界观摘要】{{worldSetting}}
-  【主要角色】{{characters}}
-  【当前阶段】{{phaseHint}}（第{{chapterNumber}}/{{totalChapters}}章）
-  {{contextInfo}}
-  请严格按以下格式输出本章大纲，不要改变格式，不要输出任何分析、解释、策划笔记、前言或总结：
+  输出格式（严格遵守，不要改变格式）：
 
   **标题：**（4-10字的章节标题，需与相邻章节标题有明显区分）
 
@@ -17,10 +10,18 @@ template: |
 
   （用2-4句话描述本章核心事件、涉及角色、情绪基调和章末悬念，100-200字。注意与前后章节的连贯性和本卷弧线的一致性。）
 
-  {{stepGuidance}}
-
   重要约束：
   - 前后章节大纲仅供了解故事脉络，严禁照搬其中的事件描述或角色行动
   - 本章核心事件必须是独有的新内容，不能是相邻章节事件的重述、同义改写或平行重复
   - 本章应在前一章基础上有明确的情节推进（新事件、新信息、关系变化）
   - 直接输出上述格式内容即可，不要添加任何其他文字
+template: |
+  请为以下小说生成第{{chapterNumber}}章（共{{totalChapters}}章，本卷第{{chapterStart}}-{{chapterEnd}}章）的详细大纲。
+
+  【小说信息】标题：{{title}}，题材：{{genre}}
+  【世界观摘要】{{worldSetting}}
+  【主要角色】{{characters}}
+  【当前阶段】{{phaseHint}}（第{{chapterNumber}}/{{totalChapters}}章）
+  {{contextInfo}}
+
+  {{stepGuidance}}

@@ -26,42 +26,24 @@ class PromptTemplateRepositoryTest {
 
     @Test
     void flywayMigrationsRunSuccessfully() {
-        // If we get here without exception, all V1-V29 migrations succeeded
+        // If we get here without exception, all migrations succeeded.
+        // V31 removes builtin templates from DB (now served from YAML),
+        // so an empty table is the expected state.
         long count = repository.count();
-        assertThat(count).isGreaterThan(0);
+        assertThat(count).isGreaterThanOrEqualTo(0);
     }
 
     @Test
-    void v29SubStepTemplatesExist() {
-        // V29 inserts 15 sub-step templates
-        for (PromptSubStep subStep : PromptSubStep.values()) {
-            WorkflowStep parentStep = subStep.getParentStep();
-            Optional<PromptTemplateEntity> template = repository
-                    .findByStepAndSubStepAndGenreIsNullAndIsDefaultTrue(parentStep, subStep);
-            assertThat(template)
-                    .as("Default template should exist for sub-step %s", subStep.name())
-                    .isPresent();
-            assertThat(template.get().isDefault()).isTrue();
-            assertThat(template.get().getSubStep()).isEqualTo(subStep);
-        }
-    }
-
-    @Test
-    void findByStepAndSubStepAndGenreIsNullAndIsDefaultTrue_returnsCorrectTemplate() {
-        Optional<PromptTemplateEntity> result = repository
-                .findByStepAndSubStepAndGenreIsNullAndIsDefaultTrue(
-                        WorkflowStep.CHARACTER_DESIGN, PromptSubStep.CHARACTER_CARD);
-
-        assertThat(result).isPresent();
-        assertThat(result.get().getStep()).isEqualTo(WorkflowStep.CHARACTER_DESIGN);
-        assertThat(result.get().getSubStep()).isEqualTo(PromptSubStep.CHARACTER_CARD);
-        assertThat(result.get().getGenre()).isNull();
-        assertThat(result.get().getTemplate()).contains("{{cardNumber}}");
+    void builtinTemplatesRemovedByV31() {
+        // V31 deletes all default_template IS NOT NULL rows.
+        // DB should be empty after migrations since builtins are served from YAML files.
+        long count = repository.count();
+        assertThat(count).isEqualTo(0);
     }
 
     @Test
     void findByStepAndSubStepAndGenreAndIsDefaultTrue_returnsEmptyWhenNoGenreSpecificTemplate() {
-        // V29 only inserts genre=NULL templates, so genre-specific query should return empty
+        // No templates in DB after V31, so genre-specific query should return empty
         Optional<PromptTemplateEntity> result = repository
                 .findByStepAndSubStepAndGenreAndIsDefaultTrue(
                         WorkflowStep.CHARACTER_DESIGN, PromptSubStep.CHARACTER_CARD, Genre.XUANHUAN);
@@ -91,15 +73,25 @@ class PromptTemplateRepositoryTest {
     }
 
     @Test
-    void subStepTemplatesHaveNonEmptyContent() {
-        Optional<PromptTemplateEntity> template = repository
+    void customTemplatesSurviveV31Migration() {
+        // Insert a custom template (no default_template) — these survive V31
+        PromptTemplateEntity custom = new PromptTemplateEntity();
+        custom.setStep(WorkflowStep.PROOFREADING);
+        custom.setSubStep(PromptSubStep.PROOFREAD_FIX);
+        custom.setName("自定义校对模板");
+        custom.setTemplate("自定义模板内容 {{reportSummary}} {{originalContent}}");
+        custom.setSystemPrompt("自定义系统提示词");
+        custom.setDefault(true);
+        // defaultTemplate left null — simulating a user-created template
+        repository.save(custom);
+
+        Optional<PromptTemplateEntity> result = repository
                 .findByStepAndSubStepAndGenreIsNullAndIsDefaultTrue(
                         WorkflowStep.PROOFREADING, PromptSubStep.PROOFREAD_FIX);
 
-        assertThat(template).isPresent();
-        assertThat(template.get().getTemplate()).isNotEmpty();
-        assertThat(template.get().getSystemPrompt()).isNotEmpty();
-        assertThat(template.get().getTemplate()).contains("{{reportSummary}}");
-        assertThat(template.get().getTemplate()).contains("{{originalContent}}");
+        assertThat(result).isPresent();
+        assertThat(result.get().getTemplate()).contains("{{reportSummary}}");
+        assertThat(result.get().getTemplate()).contains("{{originalContent}}");
+        assertThat(result.get().getSystemPrompt()).isNotEmpty();
     }
 }

@@ -56,6 +56,12 @@ public class CharacterEntity {
     @Column(length = 20)
     private String status;
 
+    @Column(name = "behavior_boundaries", columnDefinition = "TEXT")
+    private String behaviorBoundaries;
+
+    @Column(name = "image_prompt_template", length = 2000)
+    private String imagePromptTemplate;
+
     @Column(name = "sort_order")
     private int sortOrder;
 
@@ -123,6 +129,12 @@ public class CharacterEntity {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getBehaviorBoundaries() { return behaviorBoundaries; }
+    public void setBehaviorBoundaries(String behaviorBoundaries) { this.behaviorBoundaries = behaviorBoundaries; }
+
+    public String getImagePromptTemplate() { return imagePromptTemplate; }
+    public void setImagePromptTemplate(String imagePromptTemplate) { this.imagePromptTemplate = imagePromptTemplate; }
 
     public int getSortOrder() { return sortOrder; }
     public void setSortOrder(int sortOrder) { this.sortOrder = sortOrder; }

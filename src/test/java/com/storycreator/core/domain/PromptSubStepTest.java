@@ -26,8 +26,8 @@ class PromptSubStepTest {
     }
 
     @Test
-    void totalSubStepCountIs15() {
-        assertThat(PromptSubStep.values()).hasSize(15);
+    void totalSubStepCountIs27() {
+        assertThat(PromptSubStep.values()).hasSize(32);
     }
 
     @Test
@@ -35,6 +35,9 @@ class PromptSubStepTest {
         assertThat(PromptSubStep.CHARACTER_CARD.getParentStep()).isEqualTo(WorkflowStep.CHARACTER_DESIGN);
         assertThat(PromptSubStep.CHARACTER_OVERVIEW.getParentStep()).isEqualTo(WorkflowStep.CHARACTER_DESIGN);
         assertThat(PromptSubStep.CHARACTER_REFINE.getParentStep()).isEqualTo(WorkflowStep.CHARACTER_DESIGN);
+        assertThat(PromptSubStep.IMAGE_PROMPT_AVATAR.getParentStep()).isEqualTo(WorkflowStep.CHARACTER_DESIGN);
+        assertThat(PromptSubStep.IMAGE_PROMPT_PORTRAIT.getParentStep()).isEqualTo(WorkflowStep.CHARACTER_DESIGN);
+        assertThat(PromptSubStep.CHARACTER_BEHAVIOR_BOUNDARIES.getParentStep()).isEqualTo(WorkflowStep.CHARACTER_DESIGN);
     }
 
     @Test
@@ -43,6 +46,23 @@ class PromptSubStepTest {
         assertThat(PromptSubStep.CHAPTER_OUTLINE.getParentStep()).isEqualTo(WorkflowStep.OUTLINE_GENERATION);
         assertThat(PromptSubStep.CHAPTER_OUTLINE_REFINE.getParentStep()).isEqualTo(WorkflowStep.OUTLINE_GENERATION);
         assertThat(PromptSubStep.STORY_SUMMARY.getParentStep()).isEqualTo(WorkflowStep.OUTLINE_GENERATION);
+        assertThat(PromptSubStep.CHAPTER_EVENT_PLAN.getParentStep()).isEqualTo(WorkflowStep.OUTLINE_GENERATION);
+    }
+
+    @Test
+    void worldBuildingSubStepsMapCorrectly() {
+        assertThat(PromptSubStep.WRITING_RULES.getParentStep()).isEqualTo(WorkflowStep.WORLD_BUILDING);
+        assertThat(PromptSubStep.STYLE_FINGERPRINT.getParentStep()).isEqualTo(WorkflowStep.WORLD_BUILDING);
+    }
+
+    @Test
+    void chapterWritingSubStepsMapCorrectly() {
+        assertThat(PromptSubStep.CHAPTER_CONTEXT_BRIEFING.getParentStep()).isEqualTo(WorkflowStep.CHAPTER_WRITING);
+        assertThat(PromptSubStep.CHAPTER_PLOT_REASONING.getParentStep()).isEqualTo(WorkflowStep.CHAPTER_WRITING);
+        assertThat(PromptSubStep.CHAPTER_INSTANT_REVIEW.getParentStep()).isEqualTo(WorkflowStep.CHAPTER_WRITING);
+        assertThat(PromptSubStep.CHAPTER_CONTENT_OPTIMIZATION.getParentStep()).isEqualTo(WorkflowStep.CHAPTER_WRITING);
+        assertThat(PromptSubStep.CHAPTER_STORYLINE_UPDATE.getParentStep()).isEqualTo(WorkflowStep.CHAPTER_WRITING);
+        assertThat(PromptSubStep.CHAPTER_DEEP_REVIEW.getParentStep()).isEqualTo(WorkflowStep.CHAPTER_WRITING);
     }
 
     @Test

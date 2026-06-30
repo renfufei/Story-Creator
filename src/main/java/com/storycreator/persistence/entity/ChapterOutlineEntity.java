@@ -32,6 +32,9 @@ public class ChapterOutlineEntity {
     @Column(length = 20)
     private String status = "PENDING";
 
+    @Column(name = "event_plan", columnDefinition = "TEXT")
+    private String eventPlan;
+
     @Column(name = "refined", nullable = false)
     private boolean refined = false;
 
@@ -75,6 +78,9 @@ public class ChapterOutlineEntity {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getEventPlan() { return eventPlan; }
+    public void setEventPlan(String eventPlan) { this.eventPlan = eventPlan; }
 
     public boolean isRefined() { return refined; }
     public void setRefined(boolean refined) { this.refined = refined; }

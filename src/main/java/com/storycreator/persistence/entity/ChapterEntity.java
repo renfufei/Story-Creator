@@ -61,6 +61,24 @@ public class ChapterEntity {
     @Column(name = "content_summary", columnDefinition = "TEXT")
     private String contentSummary;
 
+    @Column(name = "writing_briefing", columnDefinition = "TEXT")
+    private String writingBriefing;
+
+    @Column(name = "writing_reasoning", columnDefinition = "TEXT")
+    private String writingReasoning;
+
+    @Column(name = "instant_review", columnDefinition = "TEXT")
+    private String instantReview;
+
+    @Column(name = "storyline_snapshot", columnDefinition = "TEXT")
+    private String storylineSnapshot;
+
+    @Column(name = "deep_review", columnDefinition = "TEXT")
+    private String deepReview;
+
+    @Column(name = "writing_cycle_status", nullable = false, length = 30)
+    private String writingCycleStatus = "NOT_STARTED";
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -125,6 +143,24 @@ public class ChapterEntity {
 
     public String getContentSummary() { return contentSummary; }
     public void setContentSummary(String contentSummary) { this.contentSummary = contentSummary; }
+
+    public String getWritingBriefing() { return writingBriefing; }
+    public void setWritingBriefing(String writingBriefing) { this.writingBriefing = writingBriefing; }
+
+    public String getWritingReasoning() { return writingReasoning; }
+    public void setWritingReasoning(String writingReasoning) { this.writingReasoning = writingReasoning; }
+
+    public String getInstantReview() { return instantReview; }
+    public void setInstantReview(String instantReview) { this.instantReview = instantReview; }
+
+    public String getStorylineSnapshot() { return storylineSnapshot; }
+    public void setStorylineSnapshot(String storylineSnapshot) { this.storylineSnapshot = storylineSnapshot; }
+
+    public String getDeepReview() { return deepReview; }
+    public void setDeepReview(String deepReview) { this.deepReview = deepReview; }
+
+    public String getWritingCycleStatus() { return writingCycleStatus; }
+    public void setWritingCycleStatus(String writingCycleStatus) { this.writingCycleStatus = writingCycleStatus; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

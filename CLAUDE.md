@@ -167,3 +167,10 @@ AI model configs are primarily managed through the Settings UI (`/settings`) and
 | 30 | 无 dev/prod 配置分离 | `application.yml` | H2 console、关闭模板缓存对生产不安全 |
 | 31 | `refineAllCharacters` SSE 连接未存入 `currentEventSource` | `workflow.html` | 无法从 UI 取消精修 |
 | 32 | 多处 fetch 未检查 `r.ok` | `workflow.html` | 服务器返回 HTML 错误页时 JSON 解析异常 |
+
+### Phase 5 — 新功能需求
+
+| # | 功能 | 说明 |
+|---|------|------|
+| 33 | 项目蒸馏（备选库） | 项目列表增加【蒸馏】按钮，可选择已有项目，将创意、角色、技能等信息加入【备选库】，方便后期其他项目参考创意 |
+| 34 | 通用创作指导复用 | 每个部分的创作指导可加入通用创作指导（根据步骤和说明信息），其他项目可以引入/拷贝 |

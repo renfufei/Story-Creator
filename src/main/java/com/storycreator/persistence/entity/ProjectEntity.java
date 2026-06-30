@@ -73,6 +73,9 @@ public class ProjectEntity {
     @Column(name = "auto_run_progress", length = 200)
     private String autoRunProgress;
 
+    @Column(name = "auto_run_strategy", nullable = false, length = 50)
+    private String autoRunStrategy = "DEFAULT";
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -153,4 +156,7 @@ public class ProjectEntity {
 
     public String getAutoRunProgress() { return autoRunProgress; }
     public void setAutoRunProgress(String autoRunProgress) { this.autoRunProgress = autoRunProgress; }
+
+    public String getAutoRunStrategy() { return autoRunStrategy; }
+    public void setAutoRunStrategy(String autoRunStrategy) { this.autoRunStrategy = autoRunStrategy; }
 }

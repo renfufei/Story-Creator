@@ -1,10 +1,13 @@
 package com.storycreator.web;
 
 import com.storycreator.ai.router.AiProviderRouter;
+import com.storycreator.ai.router.ImageProviderRegistry;
 import com.storycreator.ai.router.TtsProviderRegistry;
 import com.storycreator.core.domain.ModelType;
 import com.storycreator.core.port.ai.AiProvider;
 import com.storycreator.core.port.ai.AiRequest;
+import com.storycreator.core.port.image.ImageRequest;
+import com.storycreator.core.port.image.ImageResult;
 import com.storycreator.core.port.tts.TtsRequest;
 import com.storycreator.core.service.GlobalSettingService;
 import com.storycreator.persistence.entity.AiModelConfigEntity;
@@ -13,6 +16,7 @@ import com.storycreator.tts.template.TtsReplacementBuiltinLoader;
 import com.storycreator.tts.template.TtsReplacementTemplateService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -30,22 +34,28 @@ public class SettingsController {
     private final AiModelConfigRepository configRepository;
     private final AiProviderRouter providerRouter;
     private final TtsProviderRegistry ttsProviderRegistry;
+    private final ImageProviderRegistry imageProviderRegistry;
     private final GlobalSettingService globalSettingService;
     private final TtsReplacementBuiltinLoader builtinLoader;
     private final TtsReplacementTemplateService ttsReplacementTemplateService;
+    private final Environment environment;
 
     public SettingsController(AiModelConfigRepository configRepository,
                              AiProviderRouter providerRouter,
                              TtsProviderRegistry ttsProviderRegistry,
+                             ImageProviderRegistry imageProviderRegistry,
                              GlobalSettingService globalSettingService,
                              TtsReplacementBuiltinLoader builtinLoader,
-                             TtsReplacementTemplateService ttsReplacementTemplateService) {
+                             TtsReplacementTemplateService ttsReplacementTemplateService,
+                             Environment environment) {
         this.configRepository = configRepository;
         this.providerRouter = providerRouter;
         this.ttsProviderRegistry = ttsProviderRegistry;
+        this.imageProviderRegistry = imageProviderRegistry;
         this.globalSettingService = globalSettingService;
         this.builtinLoader = builtinLoader;
         this.ttsReplacementTemplateService = ttsReplacementTemplateService;
+        this.environment = environment;
     }
 
     @GetMapping
@@ -58,10 +68,16 @@ public class SettingsController {
                 .filter(c -> c.getModelType() == ModelType.TTS)
                 .toList();
 
+        List<AiModelConfigEntity> imageConfigs = allConfigs.stream()
+                .filter(c -> c.getModelType() == ModelType.IMAGE)
+                .toList();
+
         model.addAttribute("textConfigs", textConfigs);
         model.addAttribute("ttsConfigs", ttsConfigs);
+        model.addAttribute("imageConfigs", imageConfigs);
         model.addAttribute("globalDefaultId", providerRouter.getGlobalDefaultConfigId());
         model.addAttribute("globalDefaultTtsId", providerRouter.getGlobalDefaultTtsConfigId());
+        model.addAttribute("globalDefaultImageId", imageProviderRegistry.getGlobalDefaultImageConfigId());
         model.addAttribute("aiTimeoutSeconds", globalSettingService.getAiTimeoutSeconds());
         model.addAttribute("ttsDebugMode", globalSettingService.isTtsDebugMode());
         return "settings";
@@ -76,6 +92,12 @@ public class SettingsController {
     @PostMapping("/global-default-tts")
     public String setGlobalDefaultTts(@RequestParam Long modelConfigId) {
         providerRouter.setGlobalDefaultTtsConfigId(modelConfigId);
+        return "redirect:/settings";
+    }
+
+    @PostMapping("/global-default-image")
+    public String setGlobalDefaultImage(@RequestParam Long modelConfigId) {
+        imageProviderRegistry.setGlobalDefaultImageConfigId(modelConfigId);
         return "redirect:/settings";
     }
 
@@ -253,6 +275,56 @@ public class SettingsController {
         }
     }
 
+    @PostMapping("/ai-models/{id}/test-image")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> testImageConnection(@PathVariable Long id,
+                                                                    @RequestBody(required = false) Map<String, Object> body) {
+        AiModelConfigEntity config = configRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Config not found: " + id));
+
+        if (config.getModelType() != ModelType.IMAGE) {
+            return ResponseEntity.ok(Map.of("success", false, "message", "该配置不是IMAGE类型"));
+        }
+
+        try {
+            var resolved = imageProviderRegistry.resolve(id);
+            if (resolved == null) {
+                return ResponseEntity.ok(Map.of("success", false, "message", "无法解析图像配置"));
+            }
+
+            String prompt = "A red circle on a white background";
+            int width = 1024;
+            int height = 1024;
+
+            if (body != null) {
+                if (body.containsKey("prompt")) prompt = (String) body.get("prompt");
+                if (body.containsKey("width")) width = ((Number) body.get("width")).intValue();
+                if (body.containsKey("height")) height = ((Number) body.get("height")).intValue();
+            }
+
+            ImageRequest request = ImageRequest.builder()
+                    .model(resolved.modelId())
+                    .prompt(prompt)
+                    .width(width)
+                    .height(height)
+                    .baseUrl(resolved.baseUrl())
+                    .apiKey(resolved.apiKey())
+                    .extraParams(resolved.extraParams())
+                    .build();
+
+            ImageResult result = resolved.provider().generateImage(request);
+            String imageBase64 = java.util.Base64.getEncoder().encodeToString(result.imageBytes());
+            return ResponseEntity.ok(Map.of("success", true,
+                    "message", "生成成功, " + result.imageBytes().length + " bytes",
+                    "imageBase64", imageBase64));
+        } catch (Exception e) {
+            log.error("Image connection test failed for config {}", id, e);
+            String msg = e.getMessage();
+            if (msg != null && msg.length() > 500) msg = msg.substring(0, 500);
+            return ResponseEntity.ok(Map.of("success", false, "message", "连接失败: " + msg));
+        }
+    }
+
     @PostMapping("/ai-models/{id}/probe-voices")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> probeVoices(@PathVariable Long id) {
@@ -306,6 +378,21 @@ public class SettingsController {
         }
     }
 
+
+    @PostMapping("/ai-models/add-mock")
+    public String addMockModel() {
+        String port = environment.getProperty("local.server.port", "8080");
+        AiModelConfigEntity config = new AiModelConfigEntity();
+        config.setProvider("openai");
+        config.setModelId("mock-model");
+        config.setDisplayName("Mock模型（内置）");
+        config.setApiKey("mock-key");
+        config.setBaseUrl("http://localhost:" + port + "/mock");
+        config.setModelType(ModelType.TEXT);
+        config.setActive(true);
+        configRepository.save(config);
+        return "redirect:/settings";
+    }
 
     private String parseVoicesFromError(String errorMsg) {
         if (errorMsg == null) return null;

@@ -30,8 +30,7 @@ public final class TextProcessingUtils {
 
     public static String wrapContent(String content) {
         if (content == null || content.isBlank()) return "";
-        String sanitized = content.replace('`', '\uff40');
-        return "\n```\n" + sanitized + "\n```\n";
+        return "\n" + content + "\n";
     }
 
     public static String cleanMarkdownForParsing(String text) {

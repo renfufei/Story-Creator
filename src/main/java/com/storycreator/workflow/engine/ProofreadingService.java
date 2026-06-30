@@ -8,10 +8,8 @@ import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.core.port.ai.AiRequest;
 import com.storycreator.core.service.GlobalSettingService;
 import com.storycreator.persistence.entity.ChapterEntity;
-import com.storycreator.persistence.entity.ChapterOutlineEntity;
 import com.storycreator.persistence.entity.CharacterEntity;
 import com.storycreator.persistence.entity.ProofreadingReportEntity;
-import com.storycreator.persistence.repository.ChapterOutlineRepository;
 import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.CharacterRepository;
 import com.storycreator.persistence.repository.ProofreadingReportRepository;
@@ -33,7 +31,6 @@ public class ProofreadingService {
     private static final Logger log = LoggerFactory.getLogger(ProofreadingService.class);
 
     private final ChapterRepository chapterRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
     private final CharacterRepository characterRepository;
     private final ProofreadingReportRepository proofreadingReportRepository;
     private final AiProviderRouter providerRouter;
@@ -42,7 +39,6 @@ public class ProofreadingService {
     private final GlobalSettingService globalSettingService;
 
     public ProofreadingService(ChapterRepository chapterRepository,
-                               ChapterOutlineRepository chapterOutlineRepository,
                                CharacterRepository characterRepository,
                                ProofreadingReportRepository proofreadingReportRepository,
                                AiProviderRouter providerRouter,
@@ -50,7 +46,6 @@ public class ProofreadingService {
                                AiUsageTracker aiUsageTracker,
                                GlobalSettingService globalSettingService) {
         this.chapterRepository = chapterRepository;
-        this.chapterOutlineRepository = chapterOutlineRepository;
         this.characterRepository = characterRepository;
         this.proofreadingReportRepository = proofreadingReportRepository;
         this.providerRouter = providerRouter;
@@ -218,6 +213,114 @@ public class ProofreadingService {
                             }
                             return proofreadFixSingleChapter(projectId, ch.getChapterNumber());
                         })));
+    }
+
+    // --- Public variable builders (for prompt explore) ---
+
+    public Map<String, String> buildProofreadPlotSummaryVariables(Long projectId, int chapterNumber) {
+        ChapterEntity chapter = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
+                .orElseThrow(() -> new IllegalArgumentException("Chapter not found: " + chapterNumber));
+        String content = chapter.getContent() != null ? chapter.getContent() : "";
+        return Map.of("chapterContent", wrapContent(truncate(content, 6000)));
+    }
+
+    public Map<String, String> buildProofreadCharacterCheckVariables(Long projectId, int chapterNumber) {
+        ChapterEntity chapter = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
+                .orElseThrow(() -> new IllegalArgumentException("Chapter not found: " + chapterNumber));
+        List<CharacterEntity> characters = characterRepository.findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
+        String nameList = String.join("、", characters.stream().map(CharacterEntity::getName).toList());
+        String content = chapter.getContent() != null ? chapter.getContent() : "";
+        return Map.of(
+                "characterNames", nameList,
+                "chapterContent", wrapContent(truncate(content, 6000)));
+    }
+
+    public Map<String, String> buildProofreadConsistencyVariables(Long projectId, int chapterNumber) {
+        ChapterEntity chapter = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
+                .orElseThrow(() -> new IllegalArgumentException("Chapter not found: " + chapterNumber));
+        List<CharacterEntity> characters = characterRepository.findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
+        StringBuilder charSummary = new StringBuilder();
+        for (CharacterEntity c : characters) {
+            if (c.getContent() != null) {
+                charSummary.append(c.getName()).append(": ")
+                        .append(truncate(c.getContent(), 200)).append("\n");
+            }
+        }
+        String prevChapterSummary = "";
+        if (chapterNumber > 1) {
+            prevChapterSummary = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber - 1)
+                    .map(ChapterEntity::getPlotSummary)
+                    .filter(s -> s != null && !s.isBlank())
+                    .orElse("");
+        }
+        String content = chapter.getContent() != null ? chapter.getContent() : "";
+        return Map.of(
+                "characterSummaries", wrapContent(charSummary.toString()),
+                "previousPlotSummary", prevChapterSummary,
+                "chapterContent", wrapContent(truncate(content, 5000)));
+    }
+
+    public Map<String, String> buildProofreadContinuityVariables(Long projectId, int chapterNumber) {
+        ChapterEntity chapter = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
+                .orElseThrow(() -> new IllegalArgumentException("Chapter not found: " + chapterNumber));
+        String prevEnd = "";
+        if (chapterNumber > 1) {
+            prevEnd = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber - 1)
+                    .map(ChapterEntity::getContent)
+                    .map(pc -> pc.length() > 200 ? pc.substring(pc.length() - 200) : pc)
+                    .orElse("");
+        }
+        String content = chapter.getContent() != null ? chapter.getContent() : "";
+        String currStart = content.length() > 200 ? content.substring(0, 200) : content;
+        return Map.of(
+                "previousEnd", wrapContent(prevEnd),
+                "currentStart", wrapContent(currStart));
+    }
+
+    public Map<String, String> buildProofreadForeshadowingVariables(Long projectId, int chapterNumber) {
+        ChapterEntity chapter = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
+                .orElseThrow(() -> new IllegalArgumentException("Chapter not found: " + chapterNumber));
+        List<String> accumulatedForeshadowing = new ArrayList<>();
+        List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
+        for (ChapterEntity ch : chapters) {
+            if (ch.getChapterNumber() >= chapterNumber) break;
+            proofreadingReportRepository.findByProjectIdAndChapterNumber(projectId, ch.getChapterNumber())
+                    .ifPresent(report -> {
+                        if (report.getForeshadowing() != null && !report.getForeshadowing().equals("[]")) {
+                            accumulatedForeshadowing.add(report.getForeshadowing());
+                        }
+                    });
+        }
+        String prevForeshadowing = accumulatedForeshadowing.isEmpty() ? "无"
+                : String.join("\n", accumulatedForeshadowing);
+        String content = chapter.getContent() != null ? chapter.getContent() : "";
+        return Map.of(
+                "accumulatedForeshadowing", prevForeshadowing,
+                "chapterNumber", String.valueOf(chapterNumber),
+                "chapterContent", wrapContent(truncate(content, 5000)));
+    }
+
+    public Map<String, String> buildProofreadFixVariables(Long projectId, int chapterNumber) {
+        ChapterEntity chapter = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
+                .orElseThrow(() -> new IllegalArgumentException("Chapter not found: " + chapterNumber));
+        ProofreadingReportEntity report = proofreadingReportRepository
+                .findByProjectIdAndChapterNumber(projectId, chapterNumber)
+                .orElseThrow(() -> new IllegalArgumentException("Proofreading report not found for chapter: " + chapterNumber));
+
+        String originalContent = chapter.getContent() != null ? chapter.getContent() : "";
+        StringBuilder reportSummary = new StringBuilder();
+        if (report.getCharacterIssues() != null && !report.getCharacterIssues().equals("[]")) {
+            reportSummary.append("【角色校正问题】\n").append(report.getCharacterIssues()).append("\n\n");
+        }
+        if (report.getConsistencyIssues() != null && !report.getConsistencyIssues().equals("[]")) {
+            reportSummary.append("【一致性问题】\n").append(report.getConsistencyIssues()).append("\n\n");
+        }
+        if (report.getContinuityIssues() != null && !report.getContinuityIssues().equals("[]")) {
+            reportSummary.append("【衔接问题】\n").append(report.getContinuityIssues()).append("\n\n");
+        }
+        return Map.of(
+                "reportSummary", reportSummary.toString(),
+                "originalContent", originalContent);
     }
 
     // --- Private helpers ---
@@ -448,12 +551,6 @@ public class ProofreadingService {
         chapter.setPlotSummary(cleanPlotSummary != null && cleanPlotSummary.length() > 500 ? cleanPlotSummary.substring(0, 500) : cleanPlotSummary);
         chapter.setProofreadStatus(StepStatus.GENERATED);
         chapterRepository.save(chapter);
-
-        chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, chNum)
-                .ifPresent(outline -> {
-                    outline.setSummary(cleanPlotSummary);
-                    chapterOutlineRepository.save(outline);
-                });
 
         log.info("Saved proofreading results for project {} chapter {}", projectId, chNum);
     }

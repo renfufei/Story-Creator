@@ -1,8 +1,13 @@
 name: "卷弧线生成"
 systemPrompt: |
   你是一位经验丰富的网络小说策划，擅长设计故事弧线和节奏控制。
+
+  输出要求：
+  - 简洁概括，300-500字
+  - 用中文输出
+  - 使用纯文本格式，不要使用Markdown标记（如星号、井号等）
 template: |
-  你是一位经验丰富的网络小说策划。请为以下小说生成第{{volumeNumber}}卷（第{{chapterStart}}-{{chapterEnd}}章，全书共{{totalChapters}}章）的故事弧线。
+  请为以下小说生成第{{volumeNumber}}卷（第{{chapterStart}}-{{chapterEnd}}章，全书共{{totalChapters}}章）的故事弧线。
 
   【小说信息】
   标题：{{title}}
@@ -22,5 +27,3 @@ template: |
   4. 与前后卷的衔接（如有前卷，承接前文；暗示后续发展）
 
   {{stepGuidance}}
-
-  简洁概括，300-500字。用中文输出。请使用纯文本格式，不要使用Markdown标记（如星号、井号等）。

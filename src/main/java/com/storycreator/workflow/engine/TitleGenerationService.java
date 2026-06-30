@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 import static com.storycreator.workflow.engine.TextProcessingUtils.*;
 
@@ -37,11 +38,23 @@ public class TitleGenerationService {
         this.aiUsageTracker = aiUsageTracker;
     }
 
+    public Map<String, String> buildChapterTitleVariables(Long projectId, int chapterNumber) {
+        ChapterEntity ch = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
+                .orElseThrow(() -> new IllegalArgumentException("Chapter not found: " + chapterNumber));
+        String content = ch.getContent() != null ? ch.getContent() : "";
+        String contentPreview = content.length() > 1000 ? content.substring(0, 1000) : content;
+        return Map.of("contentPreview", contentPreview);
+    }
+
     public void generateAndSaveTitles(Long projectId) {
         generateAndSaveTitles(projectId, () -> false);
     }
 
     public void generateAndSaveTitles(Long projectId, BooleanSupplier shouldStop) {
+        generateAndSaveTitles(projectId, shouldStop, null);
+    }
+
+    public void generateAndSaveTitles(Long projectId, BooleanSupplier shouldStop, Consumer<String> tokenSink) {
         List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
         AiProviderRouter.ResolvedModel resolved = providerRouter.resolveModel(projectId, WorkflowStep.CHAPTER_WRITING);
 
@@ -74,7 +87,10 @@ public class TitleGenerationService {
                 StringBuilder title = new StringBuilder();
                 long titleStart = System.currentTimeMillis();
                 resolved.provider().streamText(request)
-                        .doOnNext(title::append)
+                        .doOnNext(token -> {
+                            title.append(token);
+                            if (tokenSink != null) tokenSink.accept(token);
+                        })
                         .blockLast();
                 aiUsageTracker.record(projectId, resolved.modelId(), resolved.provider().getProviderName(), System.currentTimeMillis() - titleStart);
 

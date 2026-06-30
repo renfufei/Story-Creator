@@ -219,7 +219,7 @@
                                 <select class="form-select" x-model="wizard.configId" @change="onConfigSelected()">
                                     <option value="">-- 请选择 --</option>
                                     <template x-for="cfg in ttsConfigs" :key="cfg.id">
-                                        <option :value="cfg.id" x-text="cfg.displayName"></option>
+                                        <option :value="cfg.id" x-text="cfg.displayName + (cfg.isDefault ? ' （默认）' : '')"></option>
                                     </template>
                                 </select>
                             </div>
@@ -374,6 +374,7 @@ function ttsExportApp() {
             this.startPolling();
             // Pre-load TTS configs
             await this.loadTtsConfigs();
+            this.applyDefaultTtsConfig();
             // Check ffmpeg
             try {
                 const res = await fetch('/api/tts-export/ffmpeg-status');
@@ -466,6 +467,17 @@ function ttsExportApp() {
                 const res = await fetch(`/api/tts-export/projects/${projectId}/chapters`);
                 if (res.ok) this.wizardChapters = await res.json();
             } catch (e) { this.wizardChapters = []; }
+        },
+
+        applyDefaultTtsConfig() {
+            if (this.ttsConfigs.length === 0) return;
+            const defaultCfg = this.ttsConfigs.find(c => c.isDefault) || this.ttsConfigs[0];
+            this.wizard.configId = String(defaultCfg.id);
+            if (defaultCfg.voices) {
+                const parsed = defaultCfg.voices.split(',').map(v => v.trim()).filter(v => v);
+                if (parsed.length > 0) this.wizardVoices = parsed;
+            }
+            this.wizard.voice = this.wizardVoices[0] || 'alloy';
         },
 
         async onConfigSelected() {

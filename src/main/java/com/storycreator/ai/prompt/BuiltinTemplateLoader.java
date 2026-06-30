@@ -54,9 +54,13 @@ public class BuiltinTemplateLoader {
                     } catch (IllegalArgumentException e) {
                         continue; // skip non-workflow-step directories (e.g. context-summary)
                     }
-                    PromptSubStep subStep = null;
-                    if (!"default".equals(fileName)) {
+
+                    PromptSubStep subStep;
+                    try {
                         subStep = PromptSubStep.valueOf(fileName);
+                    } catch (IllegalArgumentException e) {
+                        log.warn("Unknown sub-step file name: {}/{}.yaml, skipping", stepName, fileName);
+                        continue;
                     }
 
                     String name = (String) data.get("name");
@@ -64,15 +68,15 @@ public class BuiltinTemplateLoader {
                     String template = trimTrailingNewline((String) data.get("template"));
 
                     // Key format: "STEP|SUBSTEP|GENRE" - genre is empty for generic
-                    String key = step.name() + "|" + (subStep != null ? subStep.name() : "") + "|";
+                    String key = step.name() + "|" + subStep.name() + "|";
 
                     templates.add(new BuiltinTemplate(key, step, subStep, null, name, systemPrompt, template));
                 } catch (Exception e) {
                     log.warn("Failed to load builtin template: {}", resource.getFilename(), e);
                 }
             }
-            // Sort by step order
-            templates.sort(Comparator.comparingInt(t -> t.step().getOrder()));
+            // Sort by sub-step sortOrder
+            templates.sort(Comparator.comparingInt(BuiltinTemplate::sortOrder));
             log.info("Loaded {} builtin prompt templates", templates.size());
         } catch (Exception e) {
             log.error("Failed to scan builtin prompt templates", e);
@@ -93,18 +97,18 @@ public class BuiltinTemplateLoader {
     }
 
     /**
-     * Find main-step builtin template (subStep == null).
+     * Find main-step builtin template (subStep.isPrimary() == true).
      * Falls back from genre-specific to generic (null genre).
      */
     public Optional<BuiltinTemplate> findMainStep(WorkflowStep step, Genre genre) {
         if (genre != null) {
             Optional<BuiltinTemplate> genreMatch = templates.stream()
-                    .filter(t -> t.step() == step && t.subStep() == null && t.genre() == genre)
+                    .filter(t -> t.step() == step && t.subStep() != null && t.subStep().isPrimary() && t.genre() == genre)
                     .findFirst();
             if (genreMatch.isPresent()) return genreMatch;
         }
         return templates.stream()
-                .filter(t -> t.step() == step && t.subStep() == null && t.genre() == null)
+                .filter(t -> t.step() == step && t.subStep() != null && t.subStep().isPrimary() && t.genre() == null)
                 .findFirst();
     }
 

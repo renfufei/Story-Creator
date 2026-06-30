@@ -143,6 +143,7 @@ public class ProjectController {
         project.setChaptersPerVolume(form.getChaptersPerVolume() > 0 ? form.getChaptersPerVolume() : 10);
         project.setDefaultModelConfigId(form.getDefaultModelConfigId());
         project.setAutoMode(form.isAutoMode());
+        project.setAutoRunStrategy(form.getAutoRunStrategy() != null ? form.getAutoRunStrategy() : "DEFAULT");
         project.setCurrentStep(WorkflowStep.WORLD_BUILDING);
         project = projectRepository.save(project);
 
@@ -203,6 +204,7 @@ public class ProjectController {
         form.setChaptersPerVolume(project.getChaptersPerVolume());
         form.setDefaultModelConfigId(project.getDefaultModelConfigId());
         form.setAutoMode(project.isAutoMode());
+        form.setAutoRunStrategy(project.getAutoRunStrategy());
         form.setProjectStatus(project.getStatus());
 
         // Load step guidances
@@ -258,6 +260,7 @@ public class ProjectController {
         project.setChaptersPerVolume(form.getChaptersPerVolume() > 0 ? form.getChaptersPerVolume() : 10);
         project.setDefaultModelConfigId(form.getDefaultModelConfigId());
         project.setAutoMode(form.isAutoMode());
+        project.setAutoRunStrategy(form.getAutoRunStrategy() != null ? form.getAutoRunStrategy() : "DEFAULT");
         if (form.getProjectStatus() != null) {
             project.setStatus(form.getProjectStatus());
         }
@@ -291,6 +294,7 @@ public class ProjectController {
         data.put("chaptersPerVolume", project.getChaptersPerVolume());
         data.put("defaultModelConfigId", project.getDefaultModelConfigId());
         data.put("autoMode", project.isAutoMode());
+        data.put("autoRunStrategy", project.getAutoRunStrategy());
 
         // Load step guidances
         List<StepGuidanceEntity> guidances = stepGuidanceRepository.findByProjectId(id);
@@ -420,6 +424,8 @@ public class ProjectController {
 
         private boolean autoMode = true;
 
+        private String autoRunStrategy = "DEFAULT";
+
         private ProjectStatus projectStatus;
 
         private Map<String, String> stepGuidances = new HashMap<>();
@@ -458,6 +464,9 @@ public class ProjectController {
 
         public boolean isAutoMode() { return autoMode; }
         public void setAutoMode(boolean autoMode) { this.autoMode = autoMode; }
+
+        public String getAutoRunStrategy() { return autoRunStrategy; }
+        public void setAutoRunStrategy(String autoRunStrategy) { this.autoRunStrategy = autoRunStrategy; }
 
         public ProjectStatus getProjectStatus() { return projectStatus; }
         public void setProjectStatus(ProjectStatus projectStatus) { this.projectStatus = projectStatus; }

@@ -18,10 +18,18 @@
     </div>
 
     <!-- 过滤按钮组 -->
-    <div class="btn-group mb-3" role="group">
-        <button type="button" class="btn btn-outline-secondary btn-sm active" data-filter="all">全部</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-filter="builtin">内置</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-filter="custom">自定义</button>
+    <div class="d-flex align-items-center mb-3 gap-3">
+        <div class="btn-group" role="group">
+            <button type="button" class="btn btn-outline-secondary btn-sm active" data-filter="all">全部</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-filter="builtin">内置</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-filter="custom">自定义</button>
+        </div>
+        <div class="btn-group" role="group">
+            <button type="button" class="btn btn-outline-secondary btn-sm active" data-workflow="all">所有流程</button>
+            <button type="button" class="btn btn-outline-primary btn-sm" data-workflow="STANDARD">标准</button>
+            <button type="button" class="btn btn-outline-success btn-sm" data-workflow="ENHANCED">增强</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-workflow="IMAGE">图像</button>
+        </div>
     </div>
 
     <div class="table-responsive">
@@ -30,6 +38,7 @@
             <tr>
                 <th>步骤</th>
                 <th>子步骤</th>
+                <th>流程</th>
                 <th>题材</th>
                 <th>名称</th>
                 <th>类型</th>
@@ -39,11 +48,19 @@
             </tr>
             </thead>
             <tbody>
-            <tr th:each="t : ${templates}" th:data-builtin="${t.builtin()}">
+            <tr th:each="t : ${templates}" th:data-builtin="${t.builtin()}"
+                th:data-workflow-tags="${t.workflowTagNamesCsv()}">
                 <td><span class="badge bg-primary" th:text="${t.step().displayName}">步骤</span></td>
                 <td>
                     <span th:if="${t.subStep() != null}" class="badge bg-warning text-dark" th:text="${t.subStep().displayName}">子步骤</span>
                     <span th:if="${t.subStep() == null}" class="text-muted">-</span>
+                </td>
+                <td>
+                    <span th:each="tag : ${t.workflowTags()}"
+                          class="badge me-1"
+                          th:classappend="${tag.name() == 'STANDARD' ? 'bg-primary' : (tag.name() == 'ENHANCED' ? 'bg-success' : 'bg-secondary')}"
+                          th:text="${tag.displayName}">标签</span>
+                    <span th:if="${t.workflowTags().isEmpty()}" class="text-muted">-</span>
                 </td>
                 <td th:text="${t.genre() != null ? t.genre().displayName : '通用'}">题材</td>
                 <td th:text="${t.name()}">名称</td>
@@ -85,6 +102,11 @@
                                 <i class="bi bi-arrow-counterclockwise"></i> 删除覆盖
                             </button>
                         </form>
+                        <!-- 探索按钮 -->
+                        <a th:href="@{/prompts/explore(templateKey=${t.builtin() ? t.key() : null}, templateId=${!t.builtin() ? t.id() : null})}"
+                           target="_blank" class="btn btn-sm btn-outline-success">
+                            <i class="bi bi-compass"></i> 探索
+                        </a>
                         <!-- 复制按钮（内置和自定义都有） -->
                         <button type="button" class="btn btn-sm btn-outline-info btn-copy"
                                 th:data-step="${t.step()}"
@@ -278,23 +300,51 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            // 过滤按钮逻辑
+            var currentTypeFilter = 'all';
+            var currentWorkflowFilter = 'all';
+
+            function applyFilters() {
+                var rows = document.querySelectorAll('tbody tr[data-builtin]');
+                rows.forEach(function(row) {
+                    var showType = true;
+                    var showWorkflow = true;
+
+                    // Type filter
+                    if (currentTypeFilter === 'builtin') {
+                        showType = row.getAttribute('data-builtin') === 'true';
+                    } else if (currentTypeFilter === 'custom') {
+                        showType = row.getAttribute('data-builtin') === 'false';
+                    }
+
+                    // Workflow filter
+                    if (currentWorkflowFilter !== 'all') {
+                        var tags = row.getAttribute('data-workflow-tags') || '';
+                        showWorkflow = tags.indexOf(currentWorkflowFilter) !== -1;
+                    }
+
+                    row.style.display = (showType && showWorkflow) ? '' : 'none';
+                });
+            }
+
+            // 类型过滤按钮逻辑
             var filterBtns = document.querySelectorAll('[data-filter]');
             filterBtns.forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     filterBtns.forEach(function(b) { b.classList.remove('active'); });
                     this.classList.add('active');
-                    var filter = this.getAttribute('data-filter');
-                    var rows = document.querySelectorAll('tbody tr[data-builtin]');
-                    rows.forEach(function(row) {
-                        if (filter === 'all') {
-                            row.style.display = '';
-                        } else if (filter === 'builtin') {
-                            row.style.display = row.getAttribute('data-builtin') === 'true' ? '' : 'none';
-                        } else if (filter === 'custom') {
-                            row.style.display = row.getAttribute('data-builtin') === 'false' ? '' : 'none';
-                        }
-                    });
+                    currentTypeFilter = this.getAttribute('data-filter');
+                    applyFilters();
+                });
+            });
+
+            // 工作流过滤按钮逻辑
+            var workflowBtns = document.querySelectorAll('[data-workflow]');
+            workflowBtns.forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    workflowBtns.forEach(function(b) { b.classList.remove('active'); });
+                    this.classList.add('active');
+                    currentWorkflowFilter = this.getAttribute('data-workflow');
+                    applyFilters();
                 });
             });
 

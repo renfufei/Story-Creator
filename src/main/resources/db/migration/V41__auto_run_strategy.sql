@@ -1,0 +1,1 @@
+ALTER TABLE projects ADD COLUMN auto_run_strategy VARCHAR(50) NOT NULL DEFAULT 'DEFAULT';

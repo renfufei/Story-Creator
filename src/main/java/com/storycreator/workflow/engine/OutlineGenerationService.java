@@ -318,6 +318,237 @@ public class OutlineGenerationService {
                 });
     }
 
+    // --- Public variable builders (for prompt explore) ---
+
+    public Map<String, String> buildVolumeArcVariables(Long projectId, int volumeNumber) {
+        ProjectEntity project = projectRepository.findById(projectId).orElseThrow();
+        int totalChapters = project.getTotalChapters();
+        WorkflowContext baseContext = contextBuilder.build(projectId, 0);
+        baseContext.setTotalChapters(totalChapters);
+
+        String guidanceSuffix = stepGuidanceRepository.findByProjectIdAndStep(projectId, WorkflowStep.OUTLINE_GENERATION)
+                .filter(sg -> sg.getGuidance() != null && !sg.getGuidance().isBlank())
+                .map(sg -> "\n\n【创作指导】\n" + sg.getGuidance() + "\n请在生成时参考以上指导意见。")
+                .orElse("");
+
+        List<VolumeRange> volumes = computeVolumes(totalChapters, project.getChaptersPerVolume());
+        VolumeRange vol = volumes.stream()
+                .filter(v -> v.volumeNumber() == volumeNumber)
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Volume not found: " + volumeNumber));
+
+        List<VolumeOutlineEntity> existingVolumes = volumeOutlineRepository.findByProjectIdOrderByVolumeNumber(projectId);
+        StringBuilder previousContext = new StringBuilder();
+        for (int i = 0; i < volumeNumber - 1; i++) {
+            int volIdx = i;
+            existingVolumes.stream()
+                    .filter(v -> v.getVolumeNumber() == volIdx + 1)
+                    .findFirst()
+                    .map(VolumeOutlineEntity::getArcSummary)
+                    .filter(s -> s != null && !s.isBlank())
+                    .ifPresent(arc -> previousContext.append("第").append(volIdx + 1).append("卷：")
+                            .append(truncate(arc, 300)).append("\n\n"));
+        }
+        if (!previousContext.isEmpty()) {
+            previousContext.insert(0, "\n【前文各卷弧线摘要】\n");
+        }
+
+        Genre genre = baseContext.getGenre();
+        return Map.ofEntries(
+                Map.entry("title", baseContext.getTitle() != null ? baseContext.getTitle() : ""),
+                Map.entry("genre", genre != null ? genre.getDisplayName() : ""),
+                Map.entry("description", baseContext.getDescription() != null ? baseContext.getDescription() : ""),
+                Map.entry("worldSetting", wrapContent(truncate(baseContext.getWorldSetting(), 400))),
+                Map.entry("characters", wrapContent(truncate(baseContext.getCharacters(), 400))),
+                Map.entry("totalChapters", String.valueOf(totalChapters)),
+                Map.entry("volumeNumber", String.valueOf(vol.volumeNumber())),
+                Map.entry("chapterStart", String.valueOf(vol.chapterStart())),
+                Map.entry("chapterEnd", String.valueOf(vol.chapterEnd())),
+                Map.entry("previousArcs", previousContext.toString()),
+                Map.entry("stepGuidance", guidanceSuffix)
+        );
+    }
+
+    public Map<String, String> buildChapterOutlineVariables(Long projectId, int chapterNumber) {
+        ProjectEntity project = projectRepository.findById(projectId).orElseThrow();
+        int totalChapters = project.getTotalChapters();
+        WorkflowContext baseContext = contextBuilder.build(projectId, 0);
+        baseContext.setTotalChapters(totalChapters);
+
+        String guidanceSuffix = stepGuidanceRepository.findByProjectIdAndStep(projectId, WorkflowStep.OUTLINE_GENERATION)
+                .filter(sg -> sg.getGuidance() != null && !sg.getGuidance().isBlank())
+                .map(sg -> "\n\n【创作指导】\n" + sg.getGuidance() + "\n请在生成时参考以上指导意见。")
+                .orElse("");
+
+        List<VolumeRange> volumes = computeVolumes(totalChapters, project.getChaptersPerVolume());
+        VolumeRange vol = volumes.stream()
+                .filter(v -> chapterNumber >= v.chapterStart() && chapterNumber <= v.chapterEnd())
+                .findFirst()
+                .orElse(new VolumeRange(1, 1, totalChapters));
+
+        String volumeArc = volumeOutlineRepository.findByProjectIdAndVolumeNumber(projectId, vol.volumeNumber())
+                .map(VolumeOutlineEntity::getArcSummary).orElse("");
+
+        List<String> previousOutlines = new ArrayList<>();
+        int prevStart = Math.max(1, chapterNumber - 5);
+        for (int i = prevStart; i < chapterNumber; i++) {
+            previousOutlines.add(chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, i)
+                    .map(ChapterOutlineEntity::getSummary).orElse(""));
+        }
+
+        String phaseHint;
+        double progress = (double) chapterNumber / totalChapters;
+        if (progress <= 0.2) phaseHint = "开篇引入阶段";
+        else if (progress <= 0.4) phaseHint = "发展铺垫阶段";
+        else if (progress <= 0.6) phaseHint = "中段高潮阶段";
+        else if (progress <= 0.8) phaseHint = "深入发展阶段";
+        else phaseHint = "收束结局阶段";
+
+        StringBuilder contextInfo = new StringBuilder();
+        if (volumeArc != null && !volumeArc.isBlank()) {
+            contextInfo.append("\n【本卷故事弧线】").append(wrapContent(truncate(volumeArc, 500)));
+        }
+        if (!previousOutlines.isEmpty()) {
+            contextInfo.append("\n===== 以下为相邻章节大纲（仅供了解前后脉络，严禁照搬内容） =====\n");
+            contextInfo.append("【前文章节大纲】\n");
+            int startChapter = chapterNumber - previousOutlines.size();
+            for (int i = 0; i < previousOutlines.size(); i++) {
+                String outline = previousOutlines.get(i);
+                if (outline != null && !outline.isBlank()) {
+                    contextInfo.append("第").append(startChapter + i).append("章：")
+                            .append(truncate(outline, 300)).append("\n");
+                }
+            }
+            contextInfo.append("===== 相邻章节大纲结束（以上仅供参考，你必须生成全新的独特内容） =====\n");
+        }
+
+        Genre genre = baseContext.getGenre();
+        return Map.ofEntries(
+                Map.entry("title", baseContext.getTitle() != null ? baseContext.getTitle() : ""),
+                Map.entry("genre", genre != null ? genre.getDisplayName() : ""),
+                Map.entry("worldSetting", wrapContent(truncate(baseContext.getWorldSetting(), 300))),
+                Map.entry("characters", wrapContent(truncate(baseContext.getCharacters(), 300))),
+                Map.entry("chapterNumber", String.valueOf(chapterNumber)),
+                Map.entry("totalChapters", String.valueOf(totalChapters)),
+                Map.entry("chapterStart", String.valueOf(vol.chapterStart())),
+                Map.entry("chapterEnd", String.valueOf(vol.chapterEnd())),
+                Map.entry("phaseHint", phaseHint),
+                Map.entry("contextInfo", contextInfo.toString()),
+                Map.entry("stepGuidance", guidanceSuffix)
+        );
+    }
+
+    public Map<String, String> buildChapterOutlineRefineVariables(Long projectId, int chapterNumber) {
+        ProjectEntity project = projectRepository.findById(projectId).orElseThrow();
+        int totalChapters = project.getTotalChapters();
+        WorkflowContext baseContext = contextBuilder.build(projectId, 0);
+        baseContext.setTotalChapters(totalChapters);
+
+        String guidanceSuffix = stepGuidanceRepository.findByProjectIdAndStep(projectId, WorkflowStep.OUTLINE_GENERATION)
+                .filter(sg -> sg.getGuidance() != null && !sg.getGuidance().isBlank())
+                .map(sg -> "\n\n【创作指导】\n" + sg.getGuidance() + "\n请在生成时参考以上指导意见。")
+                .orElse("");
+
+        List<VolumeRange> volumes = computeVolumes(totalChapters, project.getChaptersPerVolume());
+        VolumeRange vol = volumes.stream()
+                .filter(v -> chapterNumber >= v.chapterStart() && chapterNumber <= v.chapterEnd())
+                .findFirst()
+                .orElse(new VolumeRange(1, 1, totalChapters));
+
+        String volumeArc = volumeOutlineRepository.findByProjectIdAndVolumeNumber(projectId, vol.volumeNumber())
+                .map(VolumeOutlineEntity::getArcSummary).orElse("");
+
+        List<String> previousOutlines = new ArrayList<>();
+        int refPrevStart = Math.max(1, chapterNumber - 3);
+        for (int pi = refPrevStart; pi < chapterNumber; pi++) {
+            previousOutlines.add(chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, pi)
+                    .map(ChapterOutlineEntity::getSummary).orElse(""));
+        }
+        String currentOutline = chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
+                .map(ChapterOutlineEntity::getSummary).orElse("");
+        List<String> nextOutlines = new ArrayList<>();
+        for (int ni = chapterNumber + 1; ni <= Math.min(totalChapters, chapterNumber + 2); ni++) {
+            nextOutlines.add(chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, ni)
+                    .map(ChapterOutlineEntity::getSummary).orElse(""));
+        }
+
+        StringBuilder contextInfo = new StringBuilder();
+        if (volumeArc != null && !volumeArc.isBlank()) {
+            contextInfo.append("\n【本卷故事弧线】").append(wrapContent(truncate(volumeArc, 500)));
+        }
+        boolean hasAdjacentContext = !previousOutlines.isEmpty() || !nextOutlines.isEmpty();
+        if (hasAdjacentContext) {
+            contextInfo.append("\n===== 以下为相邻章节大纲（仅供了解前后脉络，严禁照搬内容） =====\n");
+        }
+        if (!previousOutlines.isEmpty()) {
+            contextInfo.append("【前文章节大纲】\n");
+            int startChapter = chapterNumber - previousOutlines.size();
+            for (int i = 0; i < previousOutlines.size(); i++) {
+                String outline = previousOutlines.get(i);
+                if (outline != null && !outline.isBlank()) {
+                    contextInfo.append("第").append(startChapter + i).append("章：")
+                            .append(truncate(outline, 300)).append("\n");
+                }
+            }
+        }
+        if (!nextOutlines.isEmpty()) {
+            contextInfo.append("【后续章节大纲】\n");
+            for (int i = 0; i < nextOutlines.size(); i++) {
+                String outline = nextOutlines.get(i);
+                if (outline != null && !outline.isBlank()) {
+                    contextInfo.append("第").append(chapterNumber + 1 + i).append("章：")
+                            .append(truncate(outline, 300)).append("\n");
+                }
+            }
+        }
+        if (hasAdjacentContext) {
+            contextInfo.append("===== 相邻章节大纲结束（以上仅供参考，你必须生成全新的独特内容） =====\n");
+        }
+
+        Genre genre = baseContext.getGenre();
+        return Map.of(
+                "title", baseContext.getTitle() != null ? baseContext.getTitle() : "",
+                "genre", genre != null ? genre.getDisplayName() : "",
+                "worldSetting", wrapContent(truncate(baseContext.getWorldSetting(), 300)),
+                "characters", wrapContent(truncate(baseContext.getCharacters(), 300)),
+                "chapterNumber", String.valueOf(chapterNumber),
+                "totalChapters", String.valueOf(totalChapters),
+                "contextInfo", contextInfo.toString(),
+                "currentOutline", currentOutline,
+                "stepGuidance", guidanceSuffix
+        );
+    }
+
+    public Map<String, String> buildStorySummaryVariables(Long projectId) {
+        ProjectEntity project = projectRepository.findById(projectId).orElseThrow();
+        int totalChapters = project.getTotalChapters();
+        WorkflowContext baseContext = contextBuilder.build(projectId, 0);
+
+        String guidanceSuffix = stepGuidanceRepository.findByProjectIdAndStep(projectId, WorkflowStep.OUTLINE_GENERATION)
+                .filter(sg -> sg.getGuidance() != null && !sg.getGuidance().isBlank())
+                .map(sg -> "\n\n【创作指导】\n" + sg.getGuidance() + "\n请在生成时参考以上指导意见。")
+                .orElse("");
+
+        List<VolumeOutlineEntity> existingVolumes = volumeOutlineRepository.findByProjectIdOrderByVolumeNumber(projectId);
+        StringBuilder arcsInfo = new StringBuilder();
+        for (VolumeOutlineEntity v : existingVolumes) {
+            if (v.getArcSummary() != null && !v.getArcSummary().isBlank()) {
+                arcsInfo.append("第").append(v.getVolumeNumber()).append("卷：")
+                        .append(wrapContent(truncate(v.getArcSummary(), 400))).append("\n");
+            }
+        }
+
+        Genre genre = baseContext.getGenre();
+        return Map.of(
+                "title", baseContext.getTitle() != null ? baseContext.getTitle() : "",
+                "genre", genre != null ? genre.getDisplayName() : "",
+                "description", baseContext.getDescription() != null ? baseContext.getDescription() : "",
+                "totalChapters", String.valueOf(totalChapters),
+                "arcsInfo", arcsInfo.toString(),
+                "stepGuidance", guidanceSuffix
+        );
+    }
+
     // --- Private helpers ---
 
     record VolumeRange(int volumeNumber, int chapterStart, int chapterEnd) {}

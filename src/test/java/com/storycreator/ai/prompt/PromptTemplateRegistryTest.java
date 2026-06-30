@@ -108,10 +108,11 @@ class PromptTemplateRegistryTest {
     // --- getSubStepTemplate tests ---
 
     @Test
-    void getSubStepTemplate_nullSubStepReturnsNull() {
-        String result = registry.getSubStepTemplate(WorkflowStep.CHARACTER_DESIGN, null, Genre.XUANHUAN);
-
-        assertThat(result).isNull();
+    void getSubStepTemplate_nullSubStep_throwsIllegalArgumentException() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                registry.getSubStepTemplate(WorkflowStep.CHARACTER_DESIGN, null, Genre.XUANHUAN))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("subStep must not be null");
         verifyNoInteractions(repository);
     }
 
@@ -150,7 +151,7 @@ class PromptTemplateRegistryTest {
     }
 
     @Test
-    void getSubStepTemplate_returnsNullWhenNoTemplateFound() {
+    void getSubStepTemplate_throwsWhenNoTemplateFound() {
         when(repository.findByStepAndSubStepAndGenreAndIsDefaultTrue(any(), any(), any()))
                 .thenReturn(Optional.empty());
         when(repository.findByStepAndSubStepAndGenreIsNullAndIsDefaultTrue(any(), any()))
@@ -158,10 +159,10 @@ class PromptTemplateRegistryTest {
         when(builtinLoader.findSubStep(any(), any(), any()))
                 .thenReturn(Optional.empty());
 
-        String result = registry.getSubStepTemplate(
-                WorkflowStep.PROOFREADING, PromptSubStep.PROOFREAD_FIX, Genre.DUSHI);
-
-        assertThat(result).isNull();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                registry.getSubStepTemplate(WorkflowStep.PROOFREADING, PromptSubStep.PROOFREAD_FIX, Genre.DUSHI))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("No template found for sub-step");
     }
 
     // --- SUB_STEP_VARIABLES coverage ---

@@ -25,7 +25,22 @@ fi
 echo "Starting Story Creator in background..."
 echo "数据库路径: ${DB_PATH}/story-creator"
 echo "  (设置环境变量 STORY_DB_PATH 可自定义，例如: STORY_DB_PATH=/var/data ./start_web.sh)"
-nohup mvn clean spring-boot:run -Dspring-boot.run.arguments="--server.port=$PORT --spring.datasource.url=jdbc:h2:file:${DB_PATH}/story-creator" > "$LOG_FILE" 2>&1 &
+
+# 打包 jar
+JAR_FILE="target/story-creator-1.0.0-SNAPSHOT.jar"
+echo "正在打包..."
+mvn package -DskipTests -q
+if [ $? -ne 0 ]; then
+    echo "打包失败!"
+    exit 1
+fi
+echo "打包完成"
+
+# 用 java -jar 启动（单进程，避免 Maven daemon 额外开销）
+nohup java -jar "$JAR_FILE" \
+    --server.port=$PORT \
+    --spring.datasource.url="jdbc:h2:file:${DB_PATH}/story-creator" \
+    > "$LOG_FILE" 2>&1 &
 APP_PID=$!
 echo "进程 PID: $APP_PID"
 

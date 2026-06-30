@@ -103,7 +103,11 @@ public class WorkflowContextBuilder {
             chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
                     .ifPresent(co -> {
                         context.setChapterTitle(co.getTitle());
-                        context.setChapterSummary(co.getSummary());
+                        String summary = co.getSummary();
+                        if (co.getEventPlan() != null && !co.getEventPlan().isBlank()) {
+                            summary = summary + "\n\n【事件计划】\n" + co.getEventPlan();
+                        }
+                        context.setChapterSummary(summary);
 
                         // Load character cards for this chapter's characters
                         if (co.getCharacterNames() != null && !co.getCharacterNames().isBlank()) {
