@@ -656,7 +656,7 @@
                                       x-model="form.extraParams"
                                       :placeholder="form.modelType === 'TTS' ? '例: {&quot;voice&quot;: &quot;alloy&quot;, &quot;voices&quot;: &quot;alloy,echo,nova&quot;}' : form.modelType === 'IMAGE' ? '例: {&quot;quality&quot;: &quot;hd&quot;, &quot;style&quot;: &quot;vivid&quot;}' : '例: {&quot;enable_thinking&quot;: false}'"></textarea>
                             <small class="text-muted" x-show="form.modelType === 'TEXT'">合并到API请求体</small>
-                            <small class="text-muted" x-show="form.modelType === 'TTS'">voice: 默认测试音色; voices: 可用音色列表(逗号分隔)</small>
+                            <small class="text-muted" x-show="form.modelType === 'TTS'">voice: 默认测试音色; voices: 可用音色列表(逗号分隔); systemPrompt: 文本前缀(VoxCPM格式含括号); noVoice: true则不发送voice参数</small>
                             <small class="text-muted" x-show="form.modelType === 'IMAGE'">OpenAI: quality/style; SD WebUI: steps/cfg_scale/sampler_name/negative_prompt; 输出格式: return_base64/response_format</small>
                             <div x-show="form.modelType === 'TEXT'" class="mt-1">
                                 <span class="badge bg-secondary" role="button" style="cursor:pointer"
@@ -676,6 +676,15 @@
                                 <span x-show="!probing"><i class="bi bi-mic"></i> 探测可用音色</span>
                                 <span x-show="probing"><span class="spinner-border spinner-border-sm"></span> 探测中...</span>
                             </button>
+                            <span class="badge bg-info text-dark ms-2" role="button" style="cursor:pointer"
+                                  x-show="form.modelType === 'TTS'"
+                                  @click="
+                                    let obj = {};
+                                    try { obj = JSON.parse(form.extraParams || '{}'); } catch(e) { obj = {}; }
+                                    obj.systemPrompt = obj.systemPrompt || '(A young woman, gentle and sweet voice)';
+                                    obj.noVoice = true;
+                                    form.extraParams = JSON.stringify(obj, null, 2);
+                                  ">VoxCPM风格</span>
                             <span class="small ms-2" :class="probeSuccess ? 'text-success' : 'text-danger'"
                                   x-text="probeMessage" x-show="probeMessage"></span>
                         </div>

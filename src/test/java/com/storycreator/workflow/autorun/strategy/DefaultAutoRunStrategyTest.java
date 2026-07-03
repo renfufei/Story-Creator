@@ -112,18 +112,18 @@ class DefaultAutoRunStrategyTest {
         var stepConfigRepo = mock(com.storycreator.persistence.repository.AutoRunStepConfigRepository.class);
         var disabledConfig = mock(com.storycreator.persistence.entity.AutoRunStepConfigEntity.class);
         when(disabledConfig.isEnabled()).thenReturn(false);
-        when(stepConfigRepo.findByProjectIdAndStep(PROJECT_ID, WorkflowStep.WORLD_BUILDING))
+        when(stepConfigRepo.findByProjectIdAndStep(PROJECT_ID, "WORLD_BUILDING"))
                 .thenReturn(Optional.of(disabledConfig));
         // All other steps default to enabled (return empty = enabled)
-        lenient().when(stepConfigRepo.findByProjectIdAndStep(eq(PROJECT_ID), eq(WorkflowStep.CHARACTER_DESIGN)))
+        lenient().when(stepConfigRepo.findByProjectIdAndStep(eq(PROJECT_ID), eq("CHARACTER_DESIGN")))
                 .thenReturn(Optional.empty());
-        lenient().when(stepConfigRepo.findByProjectIdAndStep(eq(PROJECT_ID), eq(WorkflowStep.OUTLINE_GENERATION)))
+        lenient().when(stepConfigRepo.findByProjectIdAndStep(eq(PROJECT_ID), eq("OUTLINE_GENERATION")))
                 .thenReturn(Optional.empty());
-        lenient().when(stepConfigRepo.findByProjectIdAndStep(eq(PROJECT_ID), eq(WorkflowStep.CHAPTER_WRITING)))
+        lenient().when(stepConfigRepo.findByProjectIdAndStep(eq(PROJECT_ID), eq("CHAPTER_WRITING")))
                 .thenReturn(Optional.empty());
-        lenient().when(stepConfigRepo.findByProjectIdAndStep(eq(PROJECT_ID), eq(WorkflowStep.POLISHING)))
+        lenient().when(stepConfigRepo.findByProjectIdAndStep(eq(PROJECT_ID), eq("POLISHING")))
                 .thenReturn(Optional.empty());
-        lenient().when(stepConfigRepo.findByProjectIdAndStep(eq(PROJECT_ID), eq(WorkflowStep.PROOFREADING)))
+        lenient().when(stepConfigRepo.findByProjectIdAndStep(eq(PROJECT_ID), eq("PROOFREADING")))
                 .thenReturn(Optional.empty());
 
         AutoRunContext ctx = new AutoRunContext(

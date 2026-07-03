@@ -8,6 +8,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.concurrent.ConcurrentHashMap;
+
 @Service
 public class ContextSummaryService {
 
@@ -16,6 +21,7 @@ public class ContextSummaryService {
     private final AiProviderRouter providerRouter;
     private final AiUsageTracker aiUsageTracker;
     private final ContextSummaryTemplateLoader templateLoader;
+    private final ConcurrentHashMap<String, String> summaryCache = new ConcurrentHashMap<>();
 
     public ContextSummaryService(AiProviderRouter providerRouter, AiUsageTracker aiUsageTracker,
                                  ContextSummaryTemplateLoader templateLoader) {
@@ -24,12 +30,31 @@ public class ContextSummaryService {
         this.templateLoader = templateLoader;
     }
 
+    private String computeCacheKey(String type, String content) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest((type + ":" + content).getBytes(StandardCharsets.UTF_8));
+            // Use first 16 bytes as hex string for a compact key
+            StringBuilder sb = new StringBuilder(32);
+            for (int i = 0; i < 16; i++) {
+                sb.append(String.format("%02x", hash[i]));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // SHA-256 is always available
+            return type + ":" + content.hashCode();
+        }
+    }
+
     /**
      * Summarize world setting content to ~500 chars.
      * Returns null on failure (caller falls back to truncation).
      */
     public String summarizeWorldSetting(Long projectId, String content) {
         if (content == null || content.length() < 500) return content;
+        String cacheKey = computeCacheKey("WORLD", content);
+        String cached = summaryCache.get(cacheKey);
+        if (cached != null) return cached;
         try {
             AiProviderRouter.ResolvedModel resolved = providerRouter.resolveModel(projectId, WorkflowStep.WORLD_BUILDING);
             String prompt = resolveTemplate("SUMMARIZE_WORLD", content);
@@ -50,6 +75,7 @@ public class ContextSummaryService {
             aiUsageTracker.record(projectId, resolved.modelId(), resolved.provider().getProviderName(), System.currentTimeMillis() - startTime);
             String summary = sb.toString().trim();
             log.info("[P{}] World setting summary generated ({}→{} chars)", projectId, content.length(), summary.length());
+            summaryCache.put(cacheKey, summary);
             return summary;
         } catch (Exception e) {
             log.warn("[P{}] Failed to generate world setting summary: {}", projectId, e.getMessage());
@@ -63,6 +89,9 @@ public class ContextSummaryService {
      */
     public String summarizeCharacterCard(Long projectId, String content) {
         if (content == null || content.length() < 300) return content;
+        String cacheKey = computeCacheKey("CHAR_CARD", content);
+        String cached = summaryCache.get(cacheKey);
+        if (cached != null) return cached;
         try {
             AiProviderRouter.ResolvedModel resolved = providerRouter.resolveModel(projectId, WorkflowStep.CHARACTER_DESIGN);
             String prompt = resolveTemplate("SUMMARIZE_CHARACTER_CARD", content);
@@ -83,6 +112,7 @@ public class ContextSummaryService {
             aiUsageTracker.record(projectId, resolved.modelId(), resolved.provider().getProviderName(), System.currentTimeMillis() - startTime);
             String summary = sb.toString().trim();
             log.info("[P{}] Character card summary generated ({}→{} chars)", projectId, content.length(), summary.length());
+            summaryCache.put(cacheKey, summary);
             return summary;
         } catch (Exception e) {
             log.warn("[P{}] Failed to generate character card summary: {}", projectId, e.getMessage());
@@ -96,6 +126,9 @@ public class ContextSummaryService {
      */
     public String summarizeCharacterOverview(Long projectId, String content) {
         if (content == null || content.length() < 300) return content;
+        String cacheKey = computeCacheKey("CHAR_OVERVIEW", content);
+        String cached = summaryCache.get(cacheKey);
+        if (cached != null) return cached;
         try {
             AiProviderRouter.ResolvedModel resolved = providerRouter.resolveModel(projectId, WorkflowStep.CHARACTER_DESIGN);
             String prompt = resolveTemplate("SUMMARIZE_CHARACTER_OVERVIEW", content);
@@ -116,6 +149,7 @@ public class ContextSummaryService {
             aiUsageTracker.record(projectId, resolved.modelId(), resolved.provider().getProviderName(), System.currentTimeMillis() - startTime);
             String summary = sb.toString().trim();
             log.info("[P{}] Character overview summary generated ({}→{} chars)", projectId, content.length(), summary.length());
+            summaryCache.put(cacheKey, summary);
             return summary;
         } catch (Exception e) {
             log.warn("[P{}] Failed to generate character overview summary: {}", projectId, e.getMessage());
@@ -131,6 +165,9 @@ public class ContextSummaryService {
     public String summarizeChapterContent(Long projectId, int chapterNumber, String content) {
         if (content == null || content.isBlank()) return null;
         if (content.length() < 500) return content;
+        String cacheKey = computeCacheKey("CHAPTER", content);
+        String cached = summaryCache.get(cacheKey);
+        if (cached != null) return cached;
         try {
             AiProviderRouter.ResolvedModel resolved = providerRouter.resolveModel(projectId, WorkflowStep.CHAPTER_WRITING);
             String truncated = content.length() > 6000 ? content.substring(0, 6000) : content;
@@ -152,6 +189,7 @@ public class ContextSummaryService {
             aiUsageTracker.record(projectId, resolved.modelId(), resolved.provider().getProviderName(), System.currentTimeMillis() - startTime);
             String summary = sb.toString().trim();
             log.info("[P{}] Chapter {} content summary generated ({}→{} chars)", projectId, chapterNumber, content.length(), summary.length());
+            summaryCache.put(cacheKey, summary);
             return summary;
         } catch (Exception e) {
             log.warn("[P{}] Failed to generate chapter {} content summary: {}", projectId, chapterNumber, e.getMessage());

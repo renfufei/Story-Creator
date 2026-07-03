@@ -1,6 +1,5 @@
 package com.storycreator.web;
 
-import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.persistence.entity.AutoRunStepConfigEntity;
 import com.storycreator.persistence.repository.AutoRunStepConfigRepository;
 import com.storycreator.workflow.autorun.AutoRunObservation;
@@ -40,7 +39,7 @@ public class AutoRunController {
             autoRunService.startAutoRun(projectId);
             return ResponseEntity.ok(Map.of("status", "ok"));
         } catch (IllegalStateException e) {
-            return ResponseEntity.badRequest().body(Map.of("status", "error", "message", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("status", "error", "message", SseErrorHelper.sanitize(e)));
         }
     }
 
@@ -59,9 +58,8 @@ public class AutoRunController {
     public ResponseEntity<Map<String, Object>> updateStepConfig(@PathVariable Long projectId,
                                                                  @RequestParam String step,
                                                                  @RequestParam boolean enabled) {
-        WorkflowStep ws = WorkflowStep.valueOf(step);
-        AutoRunStepConfigEntity config = autoRunStepConfigRepository.findByProjectIdAndStep(projectId, ws)
-                .orElseGet(() -> new AutoRunStepConfigEntity(projectId, ws, enabled));
+        AutoRunStepConfigEntity config = autoRunStepConfigRepository.findByProjectIdAndStep(projectId, step)
+                .orElseGet(() -> new AutoRunStepConfigEntity(projectId, step, enabled));
         config.setEnabled(enabled);
         autoRunStepConfigRepository.save(config);
         return ResponseEntity.ok(Map.of("status", "ok", "step", step, "enabled", enabled));
@@ -100,14 +98,15 @@ public class AutoRunController {
         executor.submit(() -> {
             Disposable subscription = null;
             try {
-                // Send current step info
                 emitter.send(SseEmitter.event().name("step-info").data(
                         obs.getCurrentStepName() + "|" + obs.getCurrentChapter()));
 
-                // Send replay buffer (tokens accumulated for current sub-step)
-                String replay = obs.getTokenBuffer();
-                if (replay != null && !replay.isEmpty()) {
-                    emitter.send(SseEmitter.event().name("replay-buffer").data(replay));
+                AutoRunObservation.ReadResult initial = obs.readFrom(0);
+                final long[] batchHolder = {initial.batchId()};
+                final int[] posHolder = {initial.endIndex()};
+
+                if (!initial.content().isEmpty()) {
+                    emitter.send(SseEmitter.event().name("replay-buffer").data(initial.content()));
                 }
 
                 if (!obs.isActive()) {
@@ -116,19 +115,23 @@ public class AutoRunController {
                     return;
                 }
 
-                // Subscribe to live token stream
-                subscription = obs.getSink().asFlux()
-                        .doOnNext(token -> {
+                subscription = obs.getNotifySink().asFlux()
+                        .doOnNext(signal -> {
                             try {
-                                if (token.startsWith("[[AUTORUN_STEP:")) {
-                                    // Parse step change: [[AUTORUN_STEP:STEP_NAME:chapter]]
-                                    String payload = token.substring(15, token.length() - 2);
-                                    emitter.send(SseEmitter.event().name("step-info").data(payload));
-                                } else {
-                                    emitter.send(SseEmitter.event().name("token").data(token));
+                                long newBatch = obs.getBatchId();
+                                if (newBatch != batchHolder[0]) {
+                                    batchHolder[0] = newBatch;
+                                    posHolder[0] = 0;
+                                    emitter.send(SseEmitter.event().name("step-info").data(
+                                            obs.getCurrentStepName() + "|" + obs.getCurrentChapter()));
+                                }
+                                AutoRunObservation.ReadResult result = obs.readFrom(posHolder[0]);
+                                if (result.batchId() == batchHolder[0] && !result.content().isEmpty()) {
+                                    posHolder[0] = result.endIndex();
+                                    emitter.send(SseEmitter.event().name("token").data(result.content()));
                                 }
                             } catch (IOException e) {
-                                // Client disconnected
+                                // client disconnected
                             }
                         })
                         .doOnComplete(() -> {
@@ -141,7 +144,7 @@ public class AutoRunController {
                         })
                         .doOnError(error -> {
                             try {
-                                emitter.send(SseEmitter.event().name("error").data(error.getMessage()));
+                                emitter.send(SseEmitter.event().name("error").data(SseErrorHelper.sanitize(error)));
                             } catch (IOException e) {
                                 // ignore
                             }

@@ -22,15 +22,15 @@ public class PromptTemplateRegistry {
             "title", "genre", "chapterNumber", "totalChapters", "cardNumber", "totalCards",
             "volumeNumber", "chapterStart", "chapterEnd", "dimList", "characterNames",
             "charNames", "phaseHint", "gender", "age", "role",
-            "stepGuidance"
+            "stepGuidance", "referenceMaterials"
     );
 
     public static final Map<PromptSubStep, List<String>> SUB_STEP_VARIABLES = Map.ofEntries(
-            Map.entry(PromptSubStep.WORLD_BUILDING_PRIMARY, List.of("title", "genre", "description", "stepGuidance")),
+            Map.entry(PromptSubStep.WORLD_BUILDING_PRIMARY, List.of("title", "genre", "description", "stepGuidance", "referenceMaterials")),
             Map.entry(PromptSubStep.CHARACTER_DESIGN_PRIMARY, List.of("title", "genre", "description", "worldSetting", "stepGuidance")),
             Map.entry(PromptSubStep.OUTLINE_GENERATION_PRIMARY, List.of("title", "genre", "description", "worldSetting", "characters", "totalChapters", "stepGuidance")),
-            Map.entry(PromptSubStep.CHAPTER_WRITING_PRIMARY, List.of("title", "genre", "worldSetting", "characters", "characterCards", "overallOutline", "chapterNumber", "chapterTitle", "chapterSummary", "previousContext", "previousCharacterStates", "nextChapterTitle", "nextChapterSummary", "stepGuidance", "chapterWordCount", "chapterWordCountMin", "chapterWordCountMax")),
-            Map.entry(PromptSubStep.POLISHING_PRIMARY, List.of("title", "genre", "content", "polishNote", "stepGuidance")),
+            Map.entry(PromptSubStep.CHAPTER_WRITING_PRIMARY, List.of("title", "genre", "worldSetting", "characters", "characterCards", "overallOutline", "chapterNumber", "chapterTitle", "chapterSummary", "previousContext", "previousCharacterStates", "nextChapterTitle", "nextChapterSummary", "stepGuidance", "chapterWordCount", "chapterWordCountMin", "chapterWordCountMax", "referenceMaterials")),
+            Map.entry(PromptSubStep.POLISHING_PRIMARY, List.of("title", "genre", "content", "polishNote", "stepGuidance", "referenceMaterials")),
             Map.entry(PromptSubStep.CHARACTER_CARD, List.of("title", "genre", "description", "worldSetting", "previousContext", "cardNumber", "totalCards", "stepGuidance")),
             Map.entry(PromptSubStep.CHARACTER_OVERVIEW, List.of("title", "genre", "description", "previousSummaries", "stepGuidance")),
             Map.entry(PromptSubStep.CHARACTER_REFINE, List.of("title", "genre", "description", "worldSetting", "allSummaries", "cardContent", "stepGuidance")),

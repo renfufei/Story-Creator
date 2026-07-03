@@ -162,7 +162,7 @@ function workflowOutlineMixin() {
             if (mergeOnly && this._outlineMergeLoading) return;
             if (mergeOnly) this._outlineMergeLoading = true;
             fetch(`/projects/${this.projectId}/outline/data`)
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => {
                     if (mergeOnly) this._outlineMergeLoading = false;
                     if (mergeOnly && this.generating) {
@@ -268,7 +268,7 @@ function workflowOutlineMixin() {
             const formData = new FormData();
             formData.append('content', this.outlineSummaryEdit);
             fetch(`/projects/${this.projectId}/outline/edit-summary`, { method: 'POST', body: formData })
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(() => {
                     this.outlineSummary = this.outlineSummaryEdit;
                     this.editingSummary = false;
@@ -286,7 +286,7 @@ function workflowOutlineMixin() {
             formData.append('volumeNumber', vol.volumeNumber);
             formData.append('arcSummary', vol.arcSummaryEdit);
             fetch(`/projects/${this.projectId}/outline/edit-volume`, { method: 'POST', body: formData })
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(() => {
                     vol.arcSummary = vol.arcSummaryEdit;
                     vol.editingArc = false;
@@ -308,7 +308,7 @@ function workflowOutlineMixin() {
             formData.append('summary', ch.summaryEdit);
             formData.append('characterNames', ch.characterNamesEdit);
             fetch(`/projects/${this.projectId}/outline/edit-chapter`, { method: 'POST', body: formData })
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(() => {
                     ch.title = ch.titleEdit;
                     ch.summary = ch.summaryEdit;

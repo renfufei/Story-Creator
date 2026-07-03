@@ -18,4 +18,9 @@ public interface TtsExportChapterRepository extends JpaRepository<TtsExportChapt
 
     @Transactional
     void deleteByTaskId(Long taskId);
+
+    List<TtsExportChapterEntity> findByTaskIdAndChapterNumberIn(Long taskId, List<Integer> chapterNumbers);
+
+    @Transactional
+    void deleteByTaskIdAndChapterNumberIn(Long taskId, List<Integer> chapterNumbers);
 }

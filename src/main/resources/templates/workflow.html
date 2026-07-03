@@ -45,6 +45,7 @@
             stepGuidance: /*[[${stepGuidance}]]*/ '',
             autoMode: /*[[${project.autoMode}]]*/ false,
             autoRunStepConfigs: /*[[${autoRunStepConfigs}]]*/ {},
+            autoRunStrategy: /*[[${autoRunStrategy}]]*/ 'DEFAULT',
             projectCurrentStep: /*[[${project.currentStep.name()}]]*/ 'WORLD_BUILDING',
             characterStateDims: /*[[${characterStateDimConfigs}]]*/ []
         };
@@ -57,6 +58,7 @@
     <script th:src="@{/js/workflow/chapters.js}"></script>
     <script th:src="@{/js/workflow/polishing.js}"></script>
     <script th:src="@{/js/workflow/proofreading.js}"></script>
+    <script th:src="@{/js/workflow/materials.js}"></script>
     <script th:src="@{/js/workflow/autorun.js}"></script>
     <script th:src="@{/js/workflow/core.js}"></script>
 </div>

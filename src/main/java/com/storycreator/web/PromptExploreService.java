@@ -76,10 +76,14 @@ public class PromptExploreService {
     /**
      * Resolve variables and render prompt for a given step/subStep and project context.
      */
-    public ExploreResult resolve(WorkflowStep step, PromptSubStep subStep,
-                                 Long projectId, Integer chapterNumber,
-                                 Long characterId, Integer cardNumber,
-                                 Integer totalCards, Integer volumeNumber) {
+    public ExploreResult resolve(WorkflowStep step, PromptSubStep subStep, PromptExploreContext ctx) {
+        Long projectId = ctx.projectId();
+        Integer chapterNumber = ctx.chapterNumber();
+        Long characterId = ctx.characterId();
+        Integer cardNumber = ctx.cardNumber();
+        Integer totalCards = ctx.totalCards();
+        Integer volumeNumber = ctx.volumeNumber();
+
         ProjectEntity project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
 
@@ -100,8 +104,8 @@ public class PromptExploreService {
         } else {
             // Main step templates (WORLD_BUILDING, CHAPTER_WRITING, POLISHING)
             int chNum = chapterNumber != null ? chapterNumber : 0;
-            WorkflowContext ctx = contextBuilder.build(projectId, chNum);
-            variables = ctx.toTemplateVariables();
+            WorkflowContext wfCtx = contextBuilder.build(projectId, chNum);
+            variables = wfCtx.toTemplateVariables();
             templateContent = promptRegistry.getTemplate(step, project.getGenre());
             systemPrompt = promptRegistry.getSystemPrompt(step, project.getGenre());
 

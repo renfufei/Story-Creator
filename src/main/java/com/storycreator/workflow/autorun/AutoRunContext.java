@@ -97,15 +97,13 @@ public class AutoRunContext {
         AutoRunObservation obs = observations.get(projectId);
         if (obs != null) {
             obs.reset(stepLabel, chapter);
-            obs.getSink().tryEmitNext("[[AUTORUN_STEP:" + stepLabel + ":" + chapter + "]]");
         }
     }
 
     public void forwardTokenToObservation(String token) {
         AutoRunObservation obs = observations.get(projectId);
         if (obs != null && obs.isActive()) {
-            obs.getTokenBufferRaw().append(token);
-            obs.getSink().tryEmitNext(token);
+            obs.appendToken(token);
         }
     }
 
@@ -113,8 +111,15 @@ public class AutoRunContext {
 
     public boolean isStepEnabled(WorkflowStep step) {
         AutoRunStepConfigEntity config = autoRunStepConfigRepository
-                .findByProjectIdAndStep(projectId, step).orElse(null);
+                .findByProjectIdAndStep(projectId, step.name()).orElse(null);
         return config == null || config.isEnabled();
+    }
+
+    public boolean isSubStepEnabled(String subStepName) {
+        return autoRunStepConfigRepository
+                .findByProjectIdAndStep(projectId, subStepName)
+                .map(AutoRunStepConfigEntity::isEnabled)
+                .orElse(true);
     }
 
     // --- Progress ---
@@ -201,15 +206,13 @@ public class AutoRunContext {
         AutoRunObservation obs = observations.get(projectId);
         if (obs != null) {
             obs.reset(step.name(), chapter);
-            obs.getSink().tryEmitNext("[[AUTORUN_STEP:" + step.name() + ":" + chapter + "]]");
         }
 
         var disposable = workflowEngine.generate(projectId, step, chapter)
                 .doOnNext(token -> {
                     content.append(token);
                     if (obs != null && obs.isActive()) {
-                        obs.getTokenBufferRaw().append(token);
-                        obs.getSink().tryEmitNext(token);
+                        obs.appendToken(token);
                     }
                 })
                 .doOnError(error::set)
@@ -251,7 +254,7 @@ public class AutoRunContext {
             }
             if (progressPrefix != null && ++progressPollCount % 8 == 0) {
                 long elapsed = (System.currentTimeMillis() - gsStart) / 1000;
-                updateProgress(step.getDisplayName(), chapter, progressPrefix + " [" + elapsed + "s]...");
+                updateProgress(step.name(), chapter, progressPrefix + " [" + elapsed + "s]...");
             }
         }
 
@@ -333,7 +336,7 @@ public class AutoRunContext {
             String msg = refining
                     ? "正在精修第" + active.get().getChapterNumber() + "章大纲..."
                     : "正在生成第" + active.get().getChapterNumber() + "章大纲...";
-            updateProgress(refining ? "大纲生成-精修中" : "大纲生成", active.get().getChapterNumber(), msg);
+            updateProgress(WorkflowStep.OUTLINE_GENERATION.name(), active.get().getChapterNumber(), msg);
         }
     }
 }

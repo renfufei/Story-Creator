@@ -105,10 +105,10 @@ class EnhancedChapterWritingServiceTest {
         setupChapterOutline(1);
 
         // Mock all executor calls
-        when(executor.generateContextBriefing(eq(PROJECT_ID), any(), any())).thenReturn("前文梳理");
-        when(executor.generatePlotReasoning(eq(PROJECT_ID), any(), any())).thenReturn("推演结果");
-        when(executor.runInstantReview(eq(PROJECT_ID), any(), any())).thenReturn("审查通过");
-        when(executor.updateStoryline(eq(PROJECT_ID), any(), any())).thenReturn("故事线");
+        when(executor.generateContextBriefing(eq(PROJECT_ID), any(), any(), any())).thenReturn("前文梳理");
+        when(executor.generatePlotReasoning(eq(PROJECT_ID), any(), any(), any())).thenReturn("推演结果");
+        when(executor.runInstantReview(eq(PROJECT_ID), any(), any(), any())).thenReturn("审查通过");
+        when(executor.updateStoryline(eq(PROJECT_ID), any(), any(), any())).thenReturn("故事线");
 
         // Mock projectRepository for ctx.generateAndSave (it calls findById)
         ProjectEntity project = new ProjectEntity();
@@ -124,11 +124,11 @@ class EnhancedChapterWritingServiceTest {
         service.writeChapterEnhanced(ctx, 1, "写作规则", "风格指纹", 5);
 
         // Verify all steps ran
-        verify(executor).generateContextBriefing(eq(PROJECT_ID), any(), any());
-        verify(executor).generatePlotReasoning(eq(PROJECT_ID), any(), any());
+        verify(executor).generateContextBriefing(eq(PROJECT_ID), any(), any(), any());
+        verify(executor).generatePlotReasoning(eq(PROJECT_ID), any(), any(), any());
         verify(workflowEngine).generate(PROJECT_ID, WorkflowStep.CHAPTER_WRITING, 1);
-        verify(executor).runInstantReview(eq(PROJECT_ID), any(), any());
-        verify(executor).updateStoryline(eq(PROJECT_ID), any(), any());
+        verify(executor).runInstantReview(eq(PROJECT_ID), any(), any(), any());
+        verify(executor).updateStoryline(eq(PROJECT_ID), any(), any(), any());
         // Final status saved as DONE
         verify(chapterRepository, atLeast(5)).save(argThat(ch ->
                 ch.getChapterNumber() == 1));
@@ -143,9 +143,9 @@ class EnhancedChapterWritingServiceTest {
         setupWorkflowContext();
         setupChapterOutline(1);
 
-        when(executor.generatePlotReasoning(eq(PROJECT_ID), any(), any())).thenReturn("推演");
-        when(executor.runInstantReview(eq(PROJECT_ID), any(), any())).thenReturn("通过");
-        when(executor.updateStoryline(eq(PROJECT_ID), any(), any())).thenReturn("故事线");
+        when(executor.generatePlotReasoning(eq(PROJECT_ID), any(), any(), any())).thenReturn("推演");
+        when(executor.runInstantReview(eq(PROJECT_ID), any(), any(), any())).thenReturn("通过");
+        when(executor.updateStoryline(eq(PROJECT_ID), any(), any(), any())).thenReturn("故事线");
 
         ProjectEntity project = new ProjectEntity();
         project.setId(PROJECT_ID);
@@ -158,9 +158,9 @@ class EnhancedChapterWritingServiceTest {
         service.writeChapterEnhanced(ctx, 1, "规则", "指纹", 5);
 
         // Step 1 (context briefing) should NOT be called
-        verify(executor, never()).generateContextBriefing(any(), any(), any());
+        verify(executor, never()).generateContextBriefing(any(), any(), any(), any());
         // Step 2 (plot reasoning) should be called
-        verify(executor).generatePlotReasoning(eq(PROJECT_ID), any(), any());
+        verify(executor).generatePlotReasoning(eq(PROJECT_ID), any(), any(), any());
     }
 
     @Test
@@ -173,15 +173,15 @@ class EnhancedChapterWritingServiceTest {
         setupChapterOutline(1);
 
         // Review passes (no "需优化")
-        when(executor.runInstantReview(eq(PROJECT_ID), any(), any())).thenReturn("审查通过，质量良好");
-        when(executor.updateStoryline(eq(PROJECT_ID), any(), any())).thenReturn("故事线");
+        when(executor.runInstantReview(eq(PROJECT_ID), any(), any(), any())).thenReturn("审查通过，质量良好");
+        when(executor.updateStoryline(eq(PROJECT_ID), any(), any(), any())).thenReturn("故事线");
 
         AutoRunContext ctx = buildCtx();
         service.writeChapterEnhanced(ctx, 1, "规则", "指纹", 5);
 
         // Optimization should NOT be called
-        verify(executor, never()).runContentOptimization(any(), any(), any());
-        verify(executor).updateStoryline(eq(PROJECT_ID), any(), any());
+        verify(executor, never()).runContentOptimization(any(), any(), any(), any());
+        verify(executor).updateStoryline(eq(PROJECT_ID), any(), any(), any());
     }
 
     @Test
@@ -194,14 +194,14 @@ class EnhancedChapterWritingServiceTest {
         setupChapterOutline(1);
 
         // Review fails (contains "需优化")
-        when(executor.runInstantReview(eq(PROJECT_ID), any(), any())).thenReturn("需优化：节奏较慢");
-        when(executor.runContentOptimization(eq(PROJECT_ID), any(), any())).thenReturn("优化后的内容");
-        when(executor.updateStoryline(eq(PROJECT_ID), any(), any())).thenReturn("故事线");
+        when(executor.runInstantReview(eq(PROJECT_ID), any(), any(), any())).thenReturn("需优化：节奏较慢");
+        when(executor.runContentOptimization(eq(PROJECT_ID), any(), any(), any())).thenReturn("优化后的内容");
+        when(executor.updateStoryline(eq(PROJECT_ID), any(), any(), any())).thenReturn("故事线");
 
         AutoRunContext ctx = buildCtx();
         service.writeChapterEnhanced(ctx, 1, "规则", "指纹", 5);
 
-        verify(executor).runContentOptimization(eq(PROJECT_ID), any(), any());
+        verify(executor).runContentOptimization(eq(PROJECT_ID), any(), any(), any());
     }
 
     @Test
@@ -214,14 +214,14 @@ class EnhancedChapterWritingServiceTest {
         setupWorkflowContext();
         setupChapterOutline(5);
 
-        when(executor.updateStoryline(eq(PROJECT_ID), any(), any())).thenReturn("故事线");
-        when(executor.runDeepReview(eq(PROJECT_ID), any(), any())).thenReturn("深度审查结果");
+        when(executor.updateStoryline(eq(PROJECT_ID), any(), any(), any())).thenReturn("故事线");
+        when(executor.runDeepReview(eq(PROJECT_ID), any(), any(), any())).thenReturn("深度审查结果");
 
         AutoRunContext ctx = buildCtx();
         service.writeChapterEnhanced(ctx, 5, "规则", "指纹", 5);
 
-        verify(executor).updateStoryline(eq(PROJECT_ID), any(), any());
-        verify(executor).runDeepReview(eq(PROJECT_ID), any(), any());
+        verify(executor).updateStoryline(eq(PROJECT_ID), any(), any(), any());
+        verify(executor).runDeepReview(eq(PROJECT_ID), any(), any(), any());
     }
 
     @Test
@@ -234,13 +234,13 @@ class EnhancedChapterWritingServiceTest {
         setupWorkflowContext();
         setupChapterOutline(3);
 
-        when(executor.updateStoryline(eq(PROJECT_ID), any(), any())).thenReturn("故事线");
+        when(executor.updateStoryline(eq(PROJECT_ID), any(), any(), any())).thenReturn("故事线");
 
         AutoRunContext ctx = buildCtx();
         service.writeChapterEnhanced(ctx, 3, "规则", "指纹", 5);
 
-        verify(executor).updateStoryline(eq(PROJECT_ID), any(), any());
-        verify(executor, never()).runDeepReview(any(), any(), any());
+        verify(executor).updateStoryline(eq(PROJECT_ID), any(), any(), any());
+        verify(executor, never()).runDeepReview(any(), any(), any(), any());
     }
 
     @Test
@@ -263,9 +263,9 @@ class EnhancedChapterWritingServiceTest {
         service.writeChapterEnhanced(ctx, 1, "规则", "指纹", 5);
 
         // Nothing should run
-        verify(executor, never()).generateContextBriefing(any(), any(), any());
-        verify(executor, never()).generatePlotReasoning(any(), any(), any());
-        verify(executor, never()).runInstantReview(any(), any(), any());
+        verify(executor, never()).generateContextBriefing(any(), any(), any(), any());
+        verify(executor, never()).generatePlotReasoning(any(), any(), any(), any());
+        verify(executor, never()).runInstantReview(any(), any(), any(), any());
     }
 
     @Test
@@ -283,7 +283,7 @@ class EnhancedChapterWritingServiceTest {
         service.writeChapterEnhanced(ctx, 1, "规则", "指纹", 5);
 
         // No AI calls should be made
-        verify(executor, never()).generateContextBriefing(any(), any(), any());
+        verify(executor, never()).generateContextBriefing(any(), any(), any(), any());
     }
 
     @Test
@@ -296,11 +296,11 @@ class EnhancedChapterWritingServiceTest {
         setupChapterOutline(1);
 
         // Review fails → optimization runs
-        when(executor.runInstantReview(eq(PROJECT_ID), any(), any())).thenReturn("需优化：节奏较慢");
-        when(executor.runContentOptimization(eq(PROJECT_ID), any(), any())).thenReturn("优化后内容");
+        when(executor.runInstantReview(eq(PROJECT_ID), any(), any(), any())).thenReturn("需优化：节奏较慢");
+        when(executor.runContentOptimization(eq(PROJECT_ID), any(), any(), any())).thenReturn("优化后内容");
         when(contextSummaryService.summarizeChapterContent(eq(PROJECT_ID), eq(1), eq("优化后内容")))
                 .thenReturn("新摘要");
-        when(executor.updateStoryline(eq(PROJECT_ID), any(), any())).thenReturn("故事线");
+        when(executor.updateStoryline(eq(PROJECT_ID), any(), any(), any())).thenReturn("故事线");
 
         AutoRunContext ctx = buildCtx();
         service.writeChapterEnhanced(ctx, 1, "规则", "指纹", 5);
@@ -322,8 +322,8 @@ class EnhancedChapterWritingServiceTest {
         setupChapterOutline(1);
 
         // Review passes (no "需优化")
-        when(executor.runInstantReview(eq(PROJECT_ID), any(), any())).thenReturn("审查通过");
-        when(executor.updateStoryline(eq(PROJECT_ID), any(), any())).thenReturn("故事线");
+        when(executor.runInstantReview(eq(PROJECT_ID), any(), any(), any())).thenReturn("审查通过");
+        when(executor.updateStoryline(eq(PROJECT_ID), any(), any(), any())).thenReturn("故事线");
 
         AutoRunContext ctx = buildCtx();
         service.writeChapterEnhanced(ctx, 1, "规则", "指纹", 5);

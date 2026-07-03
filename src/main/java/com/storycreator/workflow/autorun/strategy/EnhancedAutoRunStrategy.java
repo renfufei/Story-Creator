@@ -79,34 +79,41 @@ public class EnhancedAutoRunStrategy implements AutoRunStrategy {
 
             if (!ctx.isStepEnabled(step)) {
                 log.info("[P{}][ENHANCED] Step {} skipped (disabled)", projectId, step);
-                ctx.updateProgress(step.getDisplayName(), 0, step.getDisplayName() + " 已跳过（未启用）");
+                ctx.updateProgress(step.name(), 0, step.getDisplayName() + " 已跳过（未启用）");
                 step = step.next();
                 continue;
             }
 
             if (ctx.isStepContentComplete(step)) {
                 log.info("[P{}][ENHANCED] Step {} content already complete, skipping", projectId, step);
-                ctx.updateProgress(step.getDisplayName(), 0, step.getDisplayName() + " 内容已完整，跳过");
+                ctx.updateProgress(step.name(), 0, step.getDisplayName() + " 内容已完整，跳过");
                 ctx.getWorkflowEngine().ensureWorkflowStateExists(projectId, step);
                 ctx.getWorkflowEngine().confirmStep(projectId, step);
                 step = step.next();
                 continue;
             }
 
-            ctx.updateProgress(step.getDisplayName(), 0, "精品模式: " + step.getDisplayName() + "...");
+            ctx.updateProgress(step.name(), 0, "精品模式: " + step.getDisplayName() + "...");
 
             switch (step) {
-                case CHARACTER_DESIGN -> {
-                    runPreparation(ctx);
+                case WORLD_BUILDING -> {
+                    ctx.generateAndSave(step, 0);
                     if (ctx.shouldStop()) return;
+                    runPreparation(ctx);
+                }
+                case CHARACTER_DESIGN -> {
                     runCharacterDesign(ctx);
                 }
                 case OUTLINE_GENERATION -> runOutlineGeneration(ctx);
                 case CHAPTER_WRITING -> {
                     runChapterWritingEnhanced(ctx);
                     if (ctx.shouldStop()) return;
-                    ctx.updateProgress("生成标题", 0, "精品模式: 正在生成章节标题...");
-                    runGenerateTitles(ctx);
+                    if (ctx.isSubStepEnabled("TITLE_GENERATION")) {
+                        ctx.updateProgress("生成标题", 0, "精品模式: 正在生成章节标题...");
+                        runGenerateTitles(ctx);
+                    } else {
+                        log.info("[P{}][ENHANCED] Sub-step TITLE_GENERATION skipped (disabled)", projectId);
+                    }
                 }
                 case POLISHING -> runPolishingEnhanced(ctx);
                 case PROOFREADING -> runProofreadingAuto(ctx);
@@ -118,7 +125,7 @@ public class EnhancedAutoRunStrategy implements AutoRunStrategy {
             // Confirm step and advance
             ctx.getWorkflowEngine().ensureWorkflowStateExists(projectId, step);
             log.info("[P{}][ENHANCED] Step {} completed, confirming and advancing", projectId, step);
-            ctx.updateProgress(step.getDisplayName(), 0, step.getDisplayName() + " 完成，正在推进...");
+            ctx.updateProgress(step.name(), 0, step.getDisplayName() + " 完成，正在推进...");
             ctx.getWorkflowEngine().confirmStep(projectId, step);
 
             step = step.next();
@@ -149,7 +156,7 @@ public class EnhancedAutoRunStrategy implements AutoRunStrategy {
                 .orElse("");
 
         // Generate writing rules if not exists
-        if (writingRulesRepository.findByProjectId(projectId).isEmpty()) {
+        if (ctx.isSubStepEnabled("WRITING_RULES") && writingRulesRepository.findByProjectId(projectId).isEmpty()) {
             if (ctx.shouldStop()) return;
             ctx.updateProgress(null, 0, "精品模式: 生成写作规则...");
             log.info("[P{}][ENHANCED] Generating writing rules", projectId);
@@ -170,7 +177,7 @@ public class EnhancedAutoRunStrategy implements AutoRunStrategy {
         }
 
         // Generate style fingerprint if not exists
-        if (styleFingerprintRepository.findByProjectId(projectId).isEmpty()) {
+        if (ctx.isSubStepEnabled("STYLE_FINGERPRINT") && styleFingerprintRepository.findByProjectId(projectId).isEmpty()) {
             if (ctx.shouldStop()) return;
             ctx.updateProgress(null, 0, "精品模式: 提取风格指纹...");
             log.info("[P{}][ENHANCED] Generating style fingerprint", projectId);
@@ -210,7 +217,11 @@ public class EnhancedAutoRunStrategy implements AutoRunStrategy {
         if (ctx.shouldStop()) return;
 
         // Refine characters
-        runCharacterRefine(ctx);
+        if (ctx.isSubStepEnabled("CHARACTER_REFINE")) {
+            runCharacterRefine(ctx);
+        } else {
+            log.info("[P{}][ENHANCED] Sub-step CHARACTER_REFINE skipped (disabled)", projectId);
+        }
         if (ctx.shouldStop()) return;
 
         // Enhanced: generate behavior boundaries for refined characters
@@ -220,29 +231,33 @@ public class EnhancedAutoRunStrategy implements AutoRunStrategy {
         String title = project.getTitle() != null ? project.getTitle() : "";
         String genreDisplay = genre != null ? genre.getDisplayName() : "";
 
-        List<CharacterEntity> cards = ctx.getCharacterRepository()
-                .findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
-        for (CharacterEntity character : cards) {
-            if (ctx.shouldStop()) return;
-            if ("REFINED".equals(character.getStatus())
-                    && (character.getBehaviorBoundaries() == null || character.getBehaviorBoundaries().isBlank())) {
-                ctx.updateProgress(WorkflowStep.CHARACTER_DESIGN.getDisplayName(), 0,
-                        "精品模式: 生成行为边界 - " + character.getName());
-                log.info("[P{}][ENHANCED] Generating behavior boundaries for: {}", projectId, character.getName());
-                ctx.emitSubStep("BEHAVIOR_BOUNDARIES", 0);
+        if (ctx.isSubStepEnabled("BEHAVIOR_BOUNDARIES")) {
+            List<CharacterEntity> cards = ctx.getCharacterRepository()
+                    .findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
+            for (CharacterEntity character : cards) {
+                if (ctx.shouldStop()) return;
+                if ("REFINED".equals(character.getStatus())
+                        && (character.getBehaviorBoundaries() == null || character.getBehaviorBoundaries().isBlank())) {
+                    ctx.updateProgress(WorkflowStep.CHARACTER_DESIGN.name(), 0,
+                            "精品模式: 生成行为边界 - " + character.getName());
+                    log.info("[P{}][ENHANCED] Generating behavior boundaries for: {}", projectId, character.getName());
+                    ctx.emitSubStep("BEHAVIOR_BOUNDARIES", 0);
 
-                Map<String, String> vars = new HashMap<>();
-                vars.put("title", title);
-                vars.put("genre", genreDisplay);
-                vars.put("characterName", character.getName());
-                vars.put("cardContent", character.getContent() != null ? character.getContent() : "");
-                vars.put("worldSetting", worldSetting);
-                vars.put("stepGuidance", "");
+                    Map<String, String> vars = new HashMap<>();
+                    vars.put("title", title);
+                    vars.put("genre", genreDisplay);
+                    vars.put("characterName", character.getName());
+                    vars.put("cardContent", character.getContent() != null ? character.getContent() : "");
+                    vars.put("worldSetting", worldSetting);
+                    vars.put("stepGuidance", "");
 
-                String result = executor.generateBehaviorBoundaries(projectId, vars, genre, ctx::forwardTokenToObservation);
-                character.setBehaviorBoundaries(result);
-                ctx.getCharacterRepository().save(character);
+                    String result = executor.generateBehaviorBoundaries(projectId, vars, genre, ctx::forwardTokenToObservation);
+                    character.setBehaviorBoundaries(result);
+                    ctx.getCharacterRepository().save(character);
+                }
             }
+        } else {
+            log.info("[P{}][ENHANCED] Sub-step BEHAVIOR_BOUNDARIES skipped (disabled)", projectId);
         }
     }
 
@@ -281,32 +296,36 @@ public class EnhancedAutoRunStrategy implements AutoRunStrategy {
         String styleFingerprint = styleFingerprintRepository.findByProjectId(projectId)
                 .map(StyleFingerprintEntity::getContent).orElse("");
 
-        List<ChapterOutlineEntity> outlines = ctx.getChapterOutlineRepository()
-                .findByProjectIdOrderByChapterNumber(projectId);
-        for (ChapterOutlineEntity outline : outlines) {
-            if (ctx.shouldStop()) return;
-            if (outline.getEventPlan() == null || outline.getEventPlan().isBlank()) {
-                int chNum = outline.getChapterNumber();
-                ctx.updateProgress(WorkflowStep.OUTLINE_GENERATION.getDisplayName(), chNum,
-                        "精品模式: 生成事件计划 第" + chNum + "章");
-                log.info("[P{}][ENHANCED] Generating event plan for chapter {}", projectId, chNum);
-                ctx.emitSubStep("EVENT_PLAN", chNum);
+        if (ctx.isSubStepEnabled("EVENT_PLAN")) {
+            List<ChapterOutlineEntity> outlines = ctx.getChapterOutlineRepository()
+                    .findByProjectIdOrderByChapterNumber(projectId);
+            for (ChapterOutlineEntity outline : outlines) {
+                if (ctx.shouldStop()) return;
+                if (outline.getEventPlan() == null || outline.getEventPlan().isBlank()) {
+                    int chNum = outline.getChapterNumber();
+                    ctx.updateProgress(WorkflowStep.OUTLINE_GENERATION.name(), chNum,
+                            "精品模式: 生成事件计划 第" + chNum + "章");
+                    log.info("[P{}][ENHANCED] Generating event plan for chapter {}", projectId, chNum);
+                    ctx.emitSubStep("EVENT_PLAN", chNum);
 
-                Map<String, String> vars = new HashMap<>();
-                vars.put("title", title);
-                vars.put("genre", genreDisplay);
-                vars.put("chapterNumber", String.valueOf(chNum));
-                vars.put("chapterSummary", outline.getSummary() != null ? outline.getSummary() : "");
-                vars.put("worldSetting", worldSetting);
-                vars.put("characters", characters);
-                vars.put("writingRules", writingRules);
-                vars.put("styleFingerprint", styleFingerprint);
-                vars.put("stepGuidance", "");
+                    Map<String, String> vars = new HashMap<>();
+                    vars.put("title", title);
+                    vars.put("genre", genreDisplay);
+                    vars.put("chapterNumber", String.valueOf(chNum));
+                    vars.put("chapterSummary", outline.getSummary() != null ? outline.getSummary() : "");
+                    vars.put("worldSetting", worldSetting);
+                    vars.put("characters", characters);
+                    vars.put("writingRules", writingRules);
+                    vars.put("styleFingerprint", styleFingerprint);
+                    vars.put("stepGuidance", "");
 
-                String result = executor.generateEventPlan(projectId, vars, genre, ctx::forwardTokenToObservation);
-                outline.setEventPlan(result);
-                ctx.getChapterOutlineRepository().save(outline);
+                    String result = executor.generateEventPlan(projectId, vars, genre, ctx::forwardTokenToObservation);
+                    outline.setEventPlan(result);
+                    ctx.getChapterOutlineRepository().save(outline);
+                }
             }
+        } else {
+            log.info("[P{}][ENHANCED] Sub-step EVENT_PLAN skipped (disabled)", projectId);
         }
     }
 
@@ -337,7 +356,7 @@ public class EnhancedAutoRunStrategy implements AutoRunStrategy {
 
         for (int num = startNum; num <= totalChapters; num++) {
             if (ctx.shouldStop()) return;
-            ctx.updateProgress(WorkflowStep.CHAPTER_WRITING.getDisplayName(), num,
+            ctx.updateProgress(WorkflowStep.CHAPTER_WRITING.name(), num,
                     "精品模式: 第 " + num + "/" + totalChapters + " 章写作循环");
 
             enhancedChapterWritingService.writeChapterEnhanced(
@@ -363,7 +382,7 @@ public class EnhancedAutoRunStrategy implements AutoRunStrategy {
             ChapterEntity ch = needsPolish.get(i);
             int chNum = ch.getChapterNumber();
             String prefix = "精品润色：第 " + chNum + " 章（" + (i + 1) + "/" + needsPolish.size() + "）";
-            ctx.updateProgress(WorkflowStep.POLISHING.getDisplayName(), chNum, prefix + "...");
+            ctx.updateProgress(WorkflowStep.POLISHING.name(), chNum, prefix + "...");
 
             // Inject style context into polishNote temporarily
             String originalNote = ch.getPolishNote();
@@ -411,13 +430,15 @@ public class EnhancedAutoRunStrategy implements AutoRunStrategy {
             if (ctx.shouldStop()) return;
 
             // Fix based on proofreading report
-            ch = ctx.getChapterRepository().findByProjectIdAndChapterNumber(projectId, chNum).orElse(ch);
-            if ((ch.getProofreadStatus() == StepStatus.GENERATED || ch.getProofreadStatus() == StepStatus.CONFIRMED)
-                    && ch.getProofreadFixStatus() != StepStatus.GENERATED
-                    && ch.getProofreadFixStatus() != StepStatus.CONFIRMED) {
-                String prefix = "校对精修：第 " + chNum + " 章" + progress;
-                ctx.updateProgress("校对-精修", chNum, prefix + "...");
-                ctx.proofreadFixWithProgress(chNum, "校对-精修", prefix);
+            if (ctx.isSubStepEnabled("PROOFREAD_FIX")) {
+                ch = ctx.getChapterRepository().findByProjectIdAndChapterNumber(projectId, chNum).orElse(ch);
+                if ((ch.getProofreadStatus() == StepStatus.GENERATED || ch.getProofreadStatus() == StepStatus.CONFIRMED)
+                        && ch.getProofreadFixStatus() != StepStatus.GENERATED
+                        && ch.getProofreadFixStatus() != StepStatus.CONFIRMED) {
+                    String prefix = "校对精修：第 " + chNum + " 章" + progress;
+                    ctx.updateProgress("校对-精修", chNum, prefix + "...");
+                    ctx.proofreadFixWithProgress(chNum, "校对-精修", prefix);
+                }
             }
         }
     }

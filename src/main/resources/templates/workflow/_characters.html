@@ -323,11 +323,13 @@
                                                     <span x-show="imgGenerating[img.id]"><span class="spinner-border spinner-border-sm"></span> 生成中...</span>
                                                 </button>
                                             </div>
-                                            <div x-show="img.hasImage">
-                                                <img :src="'/projects/' + projectId + '/images/' + img.id"
-                                                     class="img-fluid rounded" style="max-height: 200px; cursor: pointer; object-fit: contain;"
-                                                     @click="window.open('/projects/' + projectId + '/images/' + img.id, '_blank')">
-                                            </div>
+                                            <template x-if="img.hasImage">
+                                                <div>
+                                                    <img :src="'/projects/' + projectId + '/images/' + img.id + '?t=' + (img._ts || '')"
+                                                         class="img-fluid rounded" style="max-height: 200px; cursor: pointer; object-fit: contain;"
+                                                         @click="window.open('/projects/' + projectId + '/images/' + img.id, '_blank')">
+                                                </div>
+                                            </template>
                                             <div x-show="!img.hasImage" class="border rounded d-flex align-items-center justify-content-center" style="height: 120px; background: #f8f9fa;">
                                                 <span class="text-muted small">未生成图片</span>
                                             </div>

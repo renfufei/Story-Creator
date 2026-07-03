@@ -12,8 +12,10 @@ function workflowChaptersMixin() {
             this.generatedContent = '';
             this.viewingChapterNum = num;
             this.viewingChapterTitle = '';
-            fetch(`/projects/${this.projectId}/bg-gen/start?step=CHAPTER_WRITING&chapter=${num}`, {method:'POST'})
-                .then(r => r.json())
+            const matParam = this.getMaterialIdsParam ? this.getMaterialIdsParam() : '';
+            const matSuffix = matParam ? '&' + matParam : '';
+            fetch(`/projects/${this.projectId}/bg-gen/start?step=CHAPTER_WRITING&chapter=${num}${matSuffix}`, {method:'POST'})
+                .then(checkResponse)
                 .then(data => {
                     if (data.status === 'ok') {
                         this.startElapsedTimer();
@@ -79,8 +81,10 @@ function workflowChaptersMixin() {
             this.generatedContent = '';
             this.viewingChapterNum = num;
             this.viewingChapterTitle = '';
-            fetch(`/projects/${this.projectId}/bg-gen/start?step=CHAPTER_WRITING&chapter=${num}`, {method:'POST'})
-                .then(r => r.json())
+            const matParam = this.getMaterialIdsParam ? this.getMaterialIdsParam() : '';
+            const matSuffix = matParam ? '&' + matParam : '';
+            fetch(`/projects/${this.projectId}/bg-gen/start?step=CHAPTER_WRITING&chapter=${num}${matSuffix}`, {method:'POST'})
+                .then(checkResponse)
                 .then(data => {
                     if (data.status === 'ok') {
                         this.startElapsedTimer();
@@ -185,7 +189,7 @@ function workflowChaptersMixin() {
                 method: 'POST',
                 body: formData
             })
-            .then(r => r.json())
+            .then(checkResponse)
             .then(data => {
                 if (data.status === 'ok') {
                     this.inlinePreviewContent = content;

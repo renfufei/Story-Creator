@@ -177,8 +177,9 @@ public class PromptExploreController {
             WorkflowStep step = stepStr != null ? WorkflowStep.valueOf(stepStr) : null;
             PromptSubStep subStep = (subStepStr != null && !subStepStr.isEmpty()) ? PromptSubStep.valueOf(subStepStr) : null;
 
-            PromptExploreService.ExploreResult result = exploreService.resolve(
-                    step, subStep, projectId, chapterNumber, characterId, cardNumber, totalCards, volumeNumber);
+            PromptExploreContext exploreCtx = new PromptExploreContext(
+                    projectId, chapterNumber, characterId, cardNumber, totalCards, volumeNumber);
+            PromptExploreService.ExploreResult result = exploreService.resolve(step, subStep, exploreCtx);
 
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("success", true);
@@ -188,7 +189,7 @@ public class PromptExploreController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Prompt explore resolve error", e);
-            return ResponseEntity.ok(Map.of("success", false, "error", e.getMessage() != null ? e.getMessage() : "解析失败"));
+            return ResponseEntity.ok(Map.of("success", false, "error", SseErrorHelper.sanitize(e)));
         }
     }
 
@@ -251,14 +252,14 @@ public class PromptExploreController {
                         })
                         .doOnError(e -> {
                             try {
-                                emitter.send(SseEmitter.event().name("error").data(e.getMessage() != null ? e.getMessage() : "生成失败"));
+                                emitter.send(SseEmitter.event().name("error").data(SseErrorHelper.sanitize(e)));
                                 emitter.complete();
                             } catch (Exception ignored) {}
                         })
                         .blockLast();
             } catch (Exception e) {
                 try {
-                    emitter.send(SseEmitter.event().name("error").data(e.getMessage() != null ? e.getMessage() : "调用失败"));
+                    emitter.send(SseEmitter.event().name("error").data(SseErrorHelper.sanitize(e)));
                     emitter.complete();
                 } catch (Exception ignored) {}
             }
@@ -357,7 +358,7 @@ public class PromptExploreController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Prompt explore call-ai error", e);
-            return ResponseEntity.ok(Map.of("success", false, "error", e.getMessage() != null ? e.getMessage() : "调用失败"));
+            return ResponseEntity.ok(Map.of("success", false, "error", SseErrorHelper.sanitize(e)));
         }
     }
 

@@ -81,38 +81,40 @@ public class ClaudeAiProvider implements AiProvider {
 
     @Override
     public Flux<String> streamText(AiRequest request) {
-        String body = buildRequestBody(request, true);
-        WebClient client = buildWebClient(request);
         log.info("Claude streamText: model={} baseUrl={} promptLen={}",
                 request.getModel(), request.getBaseUrl(),
                 request.getUserPrompt() != null ? request.getUserPrompt().length() : 0);
 
-        java.util.concurrent.atomic.AtomicInteger rawCount = new java.util.concurrent.atomic.AtomicInteger(0);
+        return Flux.defer(() -> {
+            String body = buildRequestBody(request, true);
+            WebClient client = buildWebClient(request);
+            java.util.concurrent.atomic.AtomicInteger rawCount = new java.util.concurrent.atomic.AtomicInteger(0);
 
-        return client.post()
-                .uri("/v1/messages")
-                .bodyValue(body)
-                .accept(MediaType.TEXT_EVENT_STREAM)
-                .retrieve()
-                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                        response -> response.bodyToMono(String.class)
-                                .flatMap(errBody -> {
-                                    log.error("Claude API error: status={} body={}", response.statusCode(), errBody);
-                                    return reactor.core.publisher.Mono.error(
-                                            new RuntimeException("Claude API error " + response.statusCode() + ": " + errBody));
-                                }))
-                .bodyToFlux(String.class)
-                .doOnNext(raw -> {
-                    int cnt = rawCount.incrementAndGet();
-                    if (cnt <= 3) {
-                        log.debug("Claude raw SSE event [{}]: {}", cnt,
-                                raw.length() > 200 ? raw.substring(0, 200) + "..." : raw);
-                    }
-                })
-                .doOnComplete(() -> log.info("Claude stream completed, total raw events: {}", rawCount.get()))
-                .doOnError(e -> log.error("Claude stream error: {}", e.getMessage()))
-                .filter(line -> line != null && !line.isEmpty())
-                .mapNotNull(this::extractDelta);
+            return client.post()
+                    .uri("/v1/messages")
+                    .bodyValue(body)
+                    .accept(MediaType.TEXT_EVENT_STREAM)
+                    .retrieve()
+                    .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                            response -> response.bodyToMono(String.class)
+                                    .flatMap(errBody -> {
+                                        log.error("Claude API error: status={} body={}", response.statusCode(), errBody);
+                                        return reactor.core.publisher.Mono.error(
+                                                new RuntimeException("Claude API error " + response.statusCode() + ": " + errBody));
+                                    }))
+                    .bodyToFlux(String.class)
+                    .doOnNext(raw -> {
+                        int cnt = rawCount.incrementAndGet();
+                        if (cnt <= 3) {
+                            log.debug("Claude raw SSE event [{}]: {}", cnt,
+                                    raw.length() > 200 ? raw.substring(0, 200) + "..." : raw);
+                        }
+                    })
+                    .doOnComplete(() -> log.info("Claude stream completed, total raw events: {}", rawCount.get()))
+                    .doOnError(e -> log.error("Claude stream error: {}", e.getMessage()))
+                    .filter(line -> line != null && !line.isEmpty())
+                    .mapNotNull(this::extractDelta);
+        }).retryWhen(AiRetrySpec.linearBackoffRetry("Claude"));
     }
 
     private WebClient buildWebClient(AiRequest request) {

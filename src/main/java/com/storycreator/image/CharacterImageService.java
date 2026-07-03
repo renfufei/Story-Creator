@@ -139,8 +139,11 @@ public class CharacterImageService {
      * Step 2: Generate image from prompt via image AI, save file.
      */
     public CharacterImageEntity generateImageForRecord(Long projectId, Long characterId, Long imageId,
-                                                        String promptOverride, Long imageConfigIdOverride,
-                                                        Integer widthOverride, Integer heightOverride) {
+                                                        ImageGenerationOptions options) {
+        String promptOverride = options.promptOverride();
+        Long imageConfigIdOverride = options.imageConfigIdOverride();
+        Integer widthOverride = options.widthOverride();
+        Integer heightOverride = options.heightOverride();
         CharacterImageEntity image = imageRepository.findById(imageId)
                 .orElseThrow(() -> new IllegalArgumentException("Image record not found: " + imageId));
         if (!image.getProjectId().equals(projectId) || !image.getCharacterId().equals(characterId)) {
@@ -257,7 +260,8 @@ public class CharacterImageService {
     public CharacterImageEntity generateAndSaveImage(Long projectId, Long characterId, ImageType imageType, Long imageConfigId) {
         CharacterImageEntity record = createImageRecord(projectId, characterId, imageType, imageConfigId, null);
         generatePromptForRecord(projectId, characterId, record.getId(), null);
-        return generateImageForRecord(projectId, characterId, record.getId(), null, imageConfigId, null, null);
+        return generateImageForRecord(projectId, characterId, record.getId(),
+                new ImageGenerationOptions(null, imageConfigId, null, null));
     }
 
     public Map<String, String> buildImagePromptVariables(Long projectId, Long characterId, ImageType imageType) {

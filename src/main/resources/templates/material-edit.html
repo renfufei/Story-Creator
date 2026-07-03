@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('编辑素材', ~{::content})}">
+<body>
+<div th:fragment="content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">编辑素材</h2>
+        <a th:href="@{/settings/materials}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> 返回列表
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <form th:action="@{/settings/materials/{id}/update(id=${item.id})}" method="post">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-5">
+                        <label class="form-label">名称</label>
+                        <input type="text" class="form-control" name="name" th:value="${item.name}" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">分类</label>
+                        <select class="form-select" name="category" required>
+                            <option th:each="c : ${categories}" th:value="${c.name()}" th:text="${c.displayName}"
+                                    th:selected="${c == item.category}">分类</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">来源提示</label>
+                        <input type="text" class="form-control" name="sourceHint" th:value="${item.sourceHint}">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">素材内容</label>
+                    <textarea class="form-control" name="content" rows="12" th:text="${item.content}"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">保存</button>
+                <a th:href="@{/settings/materials}" class="btn btn-secondary">取消</a>
+            </form>
+        </div>
+    </div>
+</div>
+</body>
+</html>

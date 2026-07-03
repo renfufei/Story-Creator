@@ -41,7 +41,8 @@ public class GenerationStreamController {
     @PostMapping("/start")
     public ResponseEntity<Map<String, String>> start(@PathVariable Long projectId,
                                                       @RequestParam WorkflowStep step,
-                                                      @RequestParam(defaultValue = "0") int chapter) {
+                                                      @RequestParam(defaultValue = "0") int chapter,
+                                                      @RequestParam(required = false) java.util.List<Long> materialIds) {
         try {
             Runnable postHook = null;
             if (step == WorkflowStep.CHAPTER_WRITING && chapter > 0) {
@@ -55,11 +56,11 @@ public class GenerationStreamController {
                     }
                 };
             }
-            bgService.startGeneration(projectId, step, chapter, postHook);
+            bgService.startGeneration(projectId, step, chapter, postHook, materialIds);
             return ResponseEntity.ok(Map.of("status", "ok"));
         } catch (Exception e) {
             log.error("[P{}] bg-gen start failed step={}: {}", projectId, step, e.getMessage());
-            return ResponseEntity.ok(Map.of("status", "error", "message", e.getMessage()));
+            return ResponseEntity.ok(Map.of("status", "error", "message", SseErrorHelper.sanitize(e)));
         }
     }
 
@@ -131,7 +132,8 @@ public class GenerationStreamController {
                     return;
                 }
                 if (task.isErrored()) {
-                    emitter.send(SseEmitter.event().name("error").data(task.getErrorMessage()));
+                    emitter.send(SseEmitter.event().name("error").data(
+                            SseErrorHelper.sanitize(new RuntimeException(task.getErrorMessage()))));
                     emitter.complete();
                     return;
                 }
@@ -151,7 +153,8 @@ public class GenerationStreamController {
                                     emitter.send(SseEmitter.event().name("stopped").data("stopped"));
                                 } else if (token.startsWith("[[BG_ERROR:")) {
                                     String msg = token.substring(11, token.length() - 2);
-                                    emitter.send(SseEmitter.event().name("error").data(msg));
+                                    emitter.send(SseEmitter.event().name("error").data(
+                                            SseErrorHelper.sanitize(new RuntimeException(msg))));
                                 } else {
                                     emitter.send(SseEmitter.event().name("token").data(token));
                                 }
@@ -172,7 +175,7 @@ public class GenerationStreamController {
                         })
                         .doOnError(error -> {
                             try {
-                                emitter.send(SseEmitter.event().name("error").data(error.getMessage()));
+                                emitter.send(SseEmitter.event().name("error").data(SseErrorHelper.sanitize(error)));
                             } catch (IOException e) {
                                 // ignore
                             }

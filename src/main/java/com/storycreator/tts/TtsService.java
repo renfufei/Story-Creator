@@ -1,5 +1,7 @@
 package com.storycreator.tts;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.storycreator.ai.router.TtsProviderRegistry;
 import com.storycreator.core.port.tts.TtsProvider;
 import com.storycreator.core.port.tts.TtsRequest;
@@ -8,6 +10,7 @@ import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.tts.Mp3QualityDetector.QualityResult;
 import com.storycreator.tts.template.TtsReplacementRule;
 import com.storycreator.tts.template.TtsReplacementTemplateService;
+import com.storycreator.workflow.engine.AiUsageTracker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -39,15 +42,20 @@ public class TtsService {
     private final TtsReplacementTemplateService templateService;
     private final Mp3QualityDetector mp3QualityDetector;
     private final Mp3ProcessingService mp3ProcessingService;
+    private final ObjectMapper objectMapper;
+    private final AiUsageTracker aiUsageTracker;
 
     public TtsService(TtsProviderRegistry ttsProviderRegistry, ChapterRepository chapterRepository,
                       TtsReplacementTemplateService templateService,
-                      Mp3QualityDetector mp3QualityDetector, Mp3ProcessingService mp3ProcessingService) {
+                      Mp3QualityDetector mp3QualityDetector, Mp3ProcessingService mp3ProcessingService,
+                      ObjectMapper objectMapper, AiUsageTracker aiUsageTracker) {
         this.ttsProviderRegistry = ttsProviderRegistry;
         this.chapterRepository = chapterRepository;
         this.templateService = templateService;
         this.mp3QualityDetector = mp3QualityDetector;
         this.mp3ProcessingService = mp3ProcessingService;
+        this.objectMapper = objectMapper;
+        this.aiUsageTracker = aiUsageTracker;
     }
 
     /**
@@ -93,18 +101,38 @@ public class TtsService {
     }
 
     /**
-     * Generate audio for a single text chunk.
+     * Generate audio for a single text chunk (with usage tracking).
      */
-    public byte[] generateAudioForChunk(Long configId, String text, String voice, String format, double speed) {
+    public byte[] generateAudioForChunk(Long projectId, String text, TtsPlaybackSettings settings) {
+        long startTime = System.currentTimeMillis();
+        byte[] result = generateAudioForChunkInternal(settings.configId(), text, settings.voice(), settings.format(), settings.speed());
+        long durationMs = System.currentTimeMillis() - startTime;
+        TtsProviderRegistry.ResolvedTtsConfig resolved = ttsProviderRegistry.resolve(settings.configId());
+        if (resolved != null) {
+            aiUsageTracker.record(projectId, resolved.modelId(),
+                    resolved.provider().getClass().getSimpleName(), durationMs);
+        }
+        return result;
+    }
+
+    /**
+     * Generate audio for a single text chunk (without usage tracking, for batch callers that track at a higher level).
+     */
+    public byte[] generateAudioForChunk(String text, TtsPlaybackSettings settings) {
+        return generateAudioForChunkInternal(settings.configId(), text, settings.voice(), settings.format(), settings.speed());
+    }
+
+    private byte[] generateAudioForChunkInternal(Long configId, String text, String voice, String format, double speed) {
         TtsProviderRegistry.ResolvedTtsConfig resolved = ttsProviderRegistry.resolve(configId);
         if (resolved == null) {
             throw new IllegalArgumentException("TTS config not found or inactive: " + configId);
         }
 
+        String extraParams = resolved.extraParams();
         TtsRequest request = TtsRequest.builder()
                 .model(resolved.modelId())
-                .input(text)
-                .voice(voice != null ? voice : "alloy")
+                .input(applySystemPrompt(text, extraParams))
+                .voice(resolveVoice(voice, extraParams))
                 .responseFormat(format != null ? format : "mp3")
                 .speed(speed > 0 ? speed : 1.0)
                 .baseUrl(resolved.baseUrl())
@@ -114,8 +142,31 @@ public class TtsService {
         return generateWithRetry(resolved.provider(), request);
     }
 
-    public byte[] generateChapterAudio(Long projectId, Long configId, int chapterNumber,
-                                       String voice, String format, double speed) {
+    /**
+     * Generate audio for a single text chunk, returning detailed result including failed audio and issue type.
+     * Used by TtsExportService in debug mode to preserve problematic chunks on disk.
+     */
+    public TtsChunkResult generateAudioForChunkWithResult(String text, TtsPlaybackSettings settings) {
+        TtsProviderRegistry.ResolvedTtsConfig resolved = ttsProviderRegistry.resolve(settings.configId());
+        if (resolved == null) {
+            throw new IllegalArgumentException("TTS config not found or inactive: " + settings.configId());
+        }
+
+        String extraParams = resolved.extraParams();
+        TtsRequest request = TtsRequest.builder()
+                .model(resolved.modelId())
+                .input(applySystemPrompt(text, extraParams))
+                .voice(resolveVoice(settings.voice(), extraParams))
+                .responseFormat(settings.format() != null ? settings.format() : "mp3")
+                .speed(settings.speed() > 0 ? settings.speed() : 1.0)
+                .baseUrl(resolved.baseUrl())
+                .apiKey(resolved.apiKey())
+                .build();
+
+        return generateWithRetryDetailed(resolved.provider(), request);
+    }
+
+    public byte[] generateChapterAudio(Long projectId, int chapterNumber, TtsPlaybackSettings settings) {
         ChapterEntity chapter = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
                 .orElseThrow(() -> new IllegalArgumentException("Chapter not found: " + chapterNumber));
 
@@ -124,11 +175,18 @@ public class TtsService {
             throw new IllegalArgumentException("Chapter " + chapterNumber + " has no content");
         }
 
-        return generateAudioFromText(configId, text, voice, format, speed);
+        long startTime = System.currentTimeMillis();
+        byte[] result = generateAudioFromText(settings.configId(), text, settings.voice(), settings.format(), settings.speed());
+        long durationMs = System.currentTimeMillis() - startTime;
+        TtsProviderRegistry.ResolvedTtsConfig resolved = ttsProviderRegistry.resolve(settings.configId());
+        if (resolved != null) {
+            aiUsageTracker.record(projectId, resolved.modelId(),
+                    resolved.provider().getClass().getSimpleName(), durationMs);
+        }
+        return result;
     }
 
-    public byte[] generateMultiChapterAudio(Long projectId, Long configId, List<Integer> chapterNumbers,
-                                            String voice, String format, double speed) {
+    public byte[] generateMultiChapterAudio(Long projectId, List<Integer> chapterNumbers, TtsPlaybackSettings settings) {
         List<ChapterEntity> chapters;
         if (chapterNumbers == null || chapterNumbers.isEmpty()) {
             chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
@@ -162,7 +220,15 @@ public class TtsService {
             throw new IllegalArgumentException("No chapter content found");
         }
 
-        return generateAudioFromText(configId, fullText.toString(), voice, format, speed);
+        long startTime = System.currentTimeMillis();
+        byte[] result = generateAudioFromText(settings.configId(), fullText.toString(), settings.voice(), settings.format(), settings.speed());
+        long durationMs = System.currentTimeMillis() - startTime;
+        TtsProviderRegistry.ResolvedTtsConfig resolved = ttsProviderRegistry.resolve(settings.configId());
+        if (resolved != null) {
+            aiUsageTracker.record(projectId, resolved.modelId(),
+                    resolved.provider().getClass().getSimpleName(), durationMs);
+        }
+        return result;
     }
 
     private byte[] generateAudioFromText(Long configId, String rawText, String voice, String format, double speed) {
@@ -171,6 +237,7 @@ public class TtsService {
             throw new IllegalArgumentException("TTS config not found or inactive: " + configId);
         }
 
+        String extraParams = resolved.extraParams();
         String cleanedText = cleanText(rawText, configId);
         List<String> chunks = splitIntoChunks(cleanedText, MIN_CHUNK_LENGTH, MAX_CHUNK_LENGTH);
 
@@ -183,8 +250,8 @@ public class TtsService {
         for (int i = 0; i < chunks.size(); i++) {
             TtsRequest request = TtsRequest.builder()
                     .model(resolved.modelId())
-                    .input(chunks.get(i))
-                    .voice(voice != null ? voice : "alloy")
+                    .input(applySystemPrompt(chunks.get(i), extraParams))
+                    .voice(resolveVoice(voice, extraParams))
                     .responseFormat(format != null ? format : "mp3")
                     .speed(speed > 0 ? speed : 1.0)
                     .baseUrl(resolved.baseUrl())
@@ -219,6 +286,37 @@ public class TtsService {
         }
 
         return mp3ProcessingService.concatenateAudioChunksInMemory(audioChunks);
+    }
+
+    private String applySystemPrompt(String input, String extraParams) {
+        if (extraParams == null || extraParams.isBlank()) {
+            return input;
+        }
+        try {
+            JsonNode node = objectMapper.readTree(extraParams);
+            JsonNode systemPromptNode = node.get("systemPrompt");
+            if (systemPromptNode != null && !systemPromptNode.asText().isBlank()) {
+                return systemPromptNode.asText() + input;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse extraParams for systemPrompt: {}", e.getMessage());
+        }
+        return input;
+    }
+
+    private String resolveVoice(String voice, String extraParams) {
+        if (extraParams != null && !extraParams.isBlank()) {
+            try {
+                JsonNode node = objectMapper.readTree(extraParams);
+                JsonNode noVoiceNode = node.get("noVoice");
+                if (noVoiceNode != null && noVoiceNode.asBoolean()) {
+                    return null;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse extraParams for noVoice: {}", e.getMessage());
+            }
+        }
+        return voice != null ? voice : "alloy";
     }
 
     private String cleanText(String text, Long configId) {
@@ -269,10 +367,9 @@ public class TtsService {
             }
         }
 
-        // All retries exhausted — try splitting by comma as fallback
-        log.error("TTS chunk quality issue persists after {} attempts: {} [text: {}]",
+        // All retries exhausted — try splitting by punctuation as fallback
+        log.warn("TTS chunk quality issue persists after {} attempts: {} [text: {}]",
                 MAX_QUALITY_RETRIES, lastResult.issue(), request.getInput());
-        appendToErrorLog(request.getInput(), lastResult.issue());
 
         // Fallback: split by punctuation and generate sub-clauses individually
         String inputText = request.getInput();
@@ -283,6 +380,11 @@ public class TtsService {
                 return splitResult;
             }
         }
+
+        // Splitting failed or not possible — try trim as last resort
+        log.error("TTS chunk quality issue unrecoverable after splitting: {} [text: {}]",
+                lastResult.issue(), request.getInput());
+        appendToErrorLog(request.getInput(), lastResult.issue());
 
         if (lastResult.issueStartSeconds() > 1.0) {
             double trimTo = lastResult.issueStartSeconds() - TRIM_SAFETY_MARGIN_SECONDS;
@@ -298,6 +400,80 @@ public class TtsService {
         log.warn("Discarding chunk: issue at {}s, not enough valid audio",
                 String.format("%.1f", lastResult.issueStartSeconds()));
         return null;
+    }
+
+    private TtsChunkResult generateWithRetryDetailed(TtsProvider provider, TtsRequest request) {
+        String format = request.getResponseFormat();
+        boolean shouldCheck = format == null || "mp3".equalsIgnoreCase(format) || "wav".equalsIgnoreCase(format);
+
+        byte[] lastAudio = null;
+        QualityResult lastResult = null;
+
+        for (int attempt = 1; attempt <= MAX_QUALITY_RETRIES; attempt++) {
+            byte[] audio = provider.generateAudio(request);
+
+            if (!shouldCheck) {
+                return TtsChunkResult.success(audio);
+            }
+
+            QualityResult result = mp3QualityDetector.analyze(audio);
+            if (result.passed()) {
+                if (attempt > 1) {
+                    log.info("TTS chunk quality passed on attempt {}/{}", attempt, MAX_QUALITY_RETRIES);
+                }
+                return TtsChunkResult.success(audio);
+            }
+
+            lastAudio = audio;
+            lastResult = result;
+
+            if (attempt < MAX_QUALITY_RETRIES) {
+                log.warn("TTS chunk quality issue (attempt {}/{}): {} — retrying",
+                        attempt, MAX_QUALITY_RETRIES, result.issue());
+            }
+        }
+
+        // All retries exhausted — try splitting by punctuation as fallback
+        log.warn("TTS chunk quality issue persists after {} attempts: {} [text: {}]",
+                MAX_QUALITY_RETRIES, lastResult.issue(), request.getInput());
+
+        String inputText = request.getInput();
+        if (containsAnySplitPoint(inputText)) {
+            byte[] splitResult = generateBySplitting(provider, request);
+            if (splitResult != null) {
+                log.info("TTS chunk recovered by punctuation-splitting: [{}]", inputText);
+                return TtsChunkResult.success(splitResult);
+            }
+        }
+
+        // Splitting failed or not possible — try trim as last resort
+        log.error("TTS chunk quality issue unrecoverable after splitting: {} [text: {}]",
+                lastResult.issue(), request.getInput());
+        appendToErrorLog(request.getInput(), lastResult.issue());
+
+        if (lastResult.issueStartSeconds() > 1.0) {
+            double trimTo = lastResult.issueStartSeconds() - TRIM_SAFETY_MARGIN_SECONDS;
+            byte[] trimmed = mp3ProcessingService.trimAudioToSeconds(lastAudio, trimTo);
+            if (trimmed != null) {
+                log.info("Trimmed audio to {}s before issue (safety margin {}s)",
+                        String.format("%.1f", trimTo), TRIM_SAFETY_MARGIN_SECONDS);
+                return TtsChunkResult.success(trimmed);
+            }
+        }
+
+        // Effective audio too short or trim failed — return as failed with issue classification
+        log.warn("Discarding chunk: issue at {}s, not enough valid audio",
+                String.format("%.1f", lastResult.issueStartSeconds()));
+        return TtsChunkResult.failed(lastAudio, classifyIssue(lastResult.issue()));
+    }
+
+    private String classifyIssue(String issue) {
+        if (issue == null) return "quality_";
+        String lower = issue.toLowerCase();
+        if (lower.contains("silence")) return "silence_";
+        if (lower.contains("noise") || lower.contains("ramp")) return "noise_";
+        if (lower.contains("repeating") || lower.contains("stuck")) return "repeat_";
+        return "quality_";
     }
 
     private void appendToErrorLog(String text, String errorType) {
@@ -397,6 +573,10 @@ public class TtsService {
 
     private static final int BOUNDARY_ZONE = 5;
     private static final String SECONDARY_PUNCTUATION_PATTERN = "[，、；;：:]+";
+    private static final String SHORT_CHUNK_PUNCTUATION_PATTERN =
+        "[\\p{Punct}" + "\uff0c\u3001\u3002\uff01\uff1f\uff1b\uff1a" +
+        "\u201c\u201d\u2018\u2019\u300c\u300d\u300e\u300f" +
+        "\uff08\uff09\u3010\u3011\u2014\u2026\u00b7]";
 
     private List<String> splitIntoChunks(String text, int minLen, int maxLen) {
         List<String> chunks = new ArrayList<>();
@@ -443,6 +623,32 @@ public class TtsService {
 
         // Remove trailing secondary punctuation (commas, etc.) — they cause TTS silence/stuttering
         merged.replaceAll(c -> c.replaceAll(SECONDARY_PUNCTUATION_PATTERN + "$", ""));
+
+        // Pass: 短文本优化 — 极短chunk合并或去标点
+        List<String> shortOptimized = new ArrayList<>();
+        for (int i = 0; i < merged.size(); i++) {
+            String c = merged.get(i);
+            if (c.length() <= 2) {
+                // 1-2字: 合并到下一个chunk；如果是最后一个则合并到前一个
+                if (i + 1 < merged.size()) {
+                    merged.set(i + 1, c + merged.get(i + 1));
+                } else if (!shortOptimized.isEmpty()) {
+                    shortOptimized.set(shortOptimized.size() - 1,
+                        shortOptimized.get(shortOptimized.size() - 1) + c);
+                } else {
+                    shortOptimized.add(c);
+                }
+            } else if (c.length() < 5) {
+                // 3-4字: 去除所有标点符号
+                String noPunct = c.replaceAll(SHORT_CHUNK_PUNCTUATION_PATTERN, "");
+                if (!noPunct.isEmpty()) {
+                    shortOptimized.add(noPunct);
+                }
+            } else {
+                shortOptimized.add(c);
+            }
+        }
+        merged = shortOptimized;
 
         // Final cleanup
         merged.removeIf(c -> c.isBlank());

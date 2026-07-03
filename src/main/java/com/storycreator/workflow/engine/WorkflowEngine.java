@@ -9,14 +9,17 @@ import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.ProofreadingReportRepository;
 import com.storycreator.persistence.repository.StepGuidanceRepository;
 import com.storycreator.persistence.repository.VolumeOutlineRepository;
+import com.storycreator.web.MaterialLibraryService;
 import com.storycreator.workflow.step.WorkflowStepHandler;
 import com.storycreator.core.port.ai.AiRequest;
+import org.springframework.context.annotation.Lazy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
@@ -51,6 +54,7 @@ public class WorkflowEngine {
     private final CharacterGenerationService characterGenerationService;
     private final OutlineGenerationService outlineGenerationService;
     private final ProofreadingService proofreadingService;
+    private final MaterialLibraryService materialLibraryService;
 
     public WorkflowEngine(List<WorkflowStepHandler> handlerList,
                          AiProviderRouter providerRouter,
@@ -65,7 +69,8 @@ public class WorkflowEngine {
                          CharacterStateService characterStateService,
                          CharacterGenerationService characterGenerationService,
                          OutlineGenerationService outlineGenerationService,
-                         ProofreadingService proofreadingService) {
+                         ProofreadingService proofreadingService,
+                         @Lazy MaterialLibraryService materialLibraryService) {
         this.handlers = handlerList.stream()
                 .collect(Collectors.toMap(WorkflowStepHandler::getStep, Function.identity()));
         this.providerRouter = providerRouter;
@@ -81,6 +86,7 @@ public class WorkflowEngine {
         this.characterGenerationService = characterGenerationService;
         this.outlineGenerationService = outlineGenerationService;
         this.proofreadingService = proofreadingService;
+        this.materialLibraryService = materialLibraryService;
     }
 
     // --- Model resolution ---
@@ -116,10 +122,14 @@ public class WorkflowEngine {
     // --- Generation dispatch ---
 
     public Flux<String> generate(Long projectId, WorkflowStep step) {
-        return generate(projectId, step, 0);
+        return generate(projectId, step, 0, Collections.emptyList());
     }
 
     public Flux<String> generate(Long projectId, WorkflowStep step, int chapterNumber) {
+        return generate(projectId, step, chapterNumber, Collections.emptyList());
+    }
+
+    public Flux<String> generate(Long projectId, WorkflowStep step, int chapterNumber, List<Long> materialIds) {
         // Check project status
         ProjectEntity proj = projectRepository.findById(projectId).orElse(null);
         if (proj != null && proj.getStatus() != null) {
@@ -173,6 +183,12 @@ public class WorkflowEngine {
         // Default: use handler-based generation
         WorkflowContext context = contextBuilder.build(projectId, chapterNumber);
         context.setCurrentStep(step);
+
+        // Inject reference materials if any
+        if (materialIds != null && !materialIds.isEmpty()) {
+            String refMaterials = materialLibraryService.listForInjection(materialIds);
+            context.setReferenceMaterials(refMaterials);
+        }
 
         // Override guidance for the specific step being generated
         stepGuidanceRepository.findByProjectIdAndStep(projectId, step)

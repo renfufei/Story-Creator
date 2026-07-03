@@ -83,37 +83,38 @@ public class OpenAiProvider implements AiProvider {
 
     @Override
     public Flux<String> streamText(AiRequest request) {
-        String body = buildRequestBody(request, true);
-        WebClient client = buildWebClient(request);
         log.info("OpenAI streamText: model={} baseUrl={} promptLen={}",
                 request.getModel(), request.getBaseUrl(),
                 request.getUserPrompt() != null ? request.getUserPrompt().length() : 0);
 
-        // Per-stream state for tracking <think> blocks
-        java.util.concurrent.atomic.AtomicBoolean insideThink = new java.util.concurrent.atomic.AtomicBoolean(false);
-        java.util.concurrent.atomic.AtomicInteger rawCount = new java.util.concurrent.atomic.AtomicInteger(0);
+        return Flux.defer(() -> {
+            String body = buildRequestBody(request, true);
+            WebClient client = buildWebClient(request);
+            java.util.concurrent.atomic.AtomicBoolean insideThink = new java.util.concurrent.atomic.AtomicBoolean(false);
+            java.util.concurrent.atomic.AtomicInteger rawCount = new java.util.concurrent.atomic.AtomicInteger(0);
 
-        return client.post()
-                .uri("/v1/chat/completions")
-                .bodyValue(body)
-                .accept(MediaType.TEXT_EVENT_STREAM)
-                .retrieve()
-                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                        response -> response.bodyToMono(String.class)
-                                .flatMap(errBody -> {
-                                    log.error("OpenAI API error: status={} body={}", response.statusCode(), errBody);
-                                    return reactor.core.publisher.Mono.error(
-                                            new RuntimeException("OpenAI API error " + response.statusCode() + ": " + errBody));
-                                }))
-                .bodyToFlux(String.class)
-                .doOnNext(raw -> {
-                    rawCount.incrementAndGet();
-                })
-                .doOnComplete(() -> log.info("OpenAI stream completed, total raw events: {}", rawCount.get()))
-                .doOnError(e -> log.error("OpenAI stream error: {}", e.getMessage()))
-                .filter(line -> line != null && !line.isEmpty() && !"[DONE]".equals(line))
-                .mapNotNull(this::extractDelta)
-                .mapNotNull(content -> filterThinkBlocks(content, insideThink));
+            return client.post()
+                    .uri("/v1/chat/completions")
+                    .bodyValue(body)
+                    .accept(MediaType.TEXT_EVENT_STREAM)
+                    .retrieve()
+                    .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                            response -> response.bodyToMono(String.class)
+                                    .flatMap(errBody -> {
+                                        log.error("OpenAI API error: status={} body={}", response.statusCode(), errBody);
+                                        return reactor.core.publisher.Mono.error(
+                                                new RuntimeException("OpenAI API error " + response.statusCode() + ": " + errBody));
+                                    }))
+                    .bodyToFlux(String.class)
+                    .doOnNext(raw -> {
+                        rawCount.incrementAndGet();
+                    })
+                    .doOnComplete(() -> log.info("OpenAI stream completed, total raw events: {}", rawCount.get()))
+                    .doOnError(e -> log.error("OpenAI stream error: {}", e.getMessage()))
+                    .filter(line -> line != null && !line.isEmpty() && !"[DONE]".equals(line))
+                    .mapNotNull(this::extractDelta)
+                    .mapNotNull(content -> filterThinkBlocks(content, insideThink));
+        }).retryWhen(AiRetrySpec.linearBackoffRetry("OpenAI"));
     }
 
     private WebClient buildWebClient(AiRequest request) {

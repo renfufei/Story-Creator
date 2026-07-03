@@ -247,7 +247,7 @@ class AutoRunHttpIntegrationTest {
         assertThat(response.getBody()).containsEntry("enabled", false);
 
         // Verify in DB
-        var config = autoRunStepConfigRepository.findByProjectIdAndStep(projectId, WorkflowStep.POLISHING);
+        var config = autoRunStepConfigRepository.findByProjectIdAndStep(projectId, "POLISHING");
         assertThat(config).isPresent();
         assertThat(config.get().isEnabled()).isFalse();
 
@@ -263,7 +263,7 @@ class AutoRunHttpIntegrationTest {
         assertThat(toggleResponse.getBody()).containsEntry("enabled", true);
 
         // Verify toggle persisted
-        var updatedConfig = autoRunStepConfigRepository.findByProjectIdAndStep(projectId, WorkflowStep.POLISHING);
+        var updatedConfig = autoRunStepConfigRepository.findByProjectIdAndStep(projectId, "POLISHING");
         assertThat(updatedConfig).isPresent();
         assertThat(updatedConfig.get().isEnabled()).isTrue();
     }

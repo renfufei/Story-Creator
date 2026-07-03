@@ -1,6 +1,5 @@
 package com.storycreator.web;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.storycreator.ai.router.TtsProviderRegistry;
 import com.storycreator.persistence.entity.AiModelConfigEntity;
 import com.storycreator.persistence.entity.ChapterEntity;
@@ -41,7 +40,6 @@ public class TtsExportController {
     private final AiModelConfigRepository configRepository;
     private final Mp3ProcessingService mp3ProcessingService;
     private final ExecutorService sseExecutor = Executors.newVirtualThreadPerTaskExecutor();
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public TtsExportController(TtsExportService ttsExportService,
                                ProjectRepository projectRepository,
@@ -147,6 +145,24 @@ public class TtsExportController {
         return Map.of("success", true);
     }
 
+    @PutMapping("/api/tts-export/tasks/{id}/chapters")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> updateTaskChapters(@PathVariable Long id,
+                                                                   @RequestBody Map<String, List<Integer>> body) {
+        List<Integer> chapterNumbers = body.get("chapterNumbers");
+        if (chapterNumbers == null || chapterNumbers.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "章节列表不能为空"));
+        }
+        try {
+            TtsExportTaskEntity task = ttsExportService.updateTaskChapters(id, chapterNumbers);
+            return ResponseEntity.ok(taskToMap(task));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("error", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @DeleteMapping("/api/tts-export/tasks/{id}")
     @ResponseBody
     public Map<String, Object> deleteTask(@PathVariable Long id) {
@@ -235,24 +251,12 @@ public class TtsExportController {
                 TtsExportService.TaskProgressSink sink = ttsExportService.getProgressSink(id);
 
                 if (sink == null) {
-                    // No sink — send empty replay and done
-                    emitter.send(SseEmitter.event().name("replay").data("[]"));
                     emitter.send(SseEmitter.event().name("done").data(""));
                     emitter.complete();
                     return;
                 }
 
-                // Send buffered messages as replay
-                String replayJson = objectMapper.writeValueAsString(sink.getBuffer());
-                emitter.send(SseEmitter.event().name("replay").data(replayJson));
-
-                if (sink.isCompleted()) {
-                    emitter.send(SseEmitter.event().name("done").data(""));
-                    emitter.complete();
-                    return;
-                }
-
-                // Subscribe to live messages
+                // Subscribe to replay flux — automatically receives all historical + live messages
                 var disposable = sink.asFlux().subscribe(
                         message -> {
                             try {

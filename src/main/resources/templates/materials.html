@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('素材库', ~{::content})}">
+<body>
+<div th:fragment="content" x-data="{ showAdd: false }">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">素材库</h2>
+        <div>
+            <a th:href="@{/settings}" class="btn btn-outline-secondary btn-sm me-2">
+                <i class="bi bi-arrow-left"></i> 返回设置
+            </a>
+            <button class="btn btn-outline-success btn-sm me-2" data-bs-toggle="modal" data-bs-target="#distillModal">
+                <i class="bi bi-funnel"></i> 蒸馏素材
+            </button>
+            <button class="btn btn-primary btn-sm" @click="showAdd = true">
+                <i class="bi bi-plus"></i> 新建素材
+            </button>
+        </div>
+    </div>
+
+    <!-- Add Form -->
+    <div class="card mb-4" x-show="showAdd" x-cloak>
+        <div class="card-body">
+            <form th:action="@{/settings/materials}" method="post">
+                <div class="row g-2 mb-2">
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">名称</label>
+                        <input type="text" class="form-control form-control-sm" name="name" required placeholder="素材名称">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">分类</label>
+                        <select class="form-select form-select-sm" name="category" required>
+                            <option th:each="c : ${categories}" th:value="${c.name()}" th:text="${c.displayName}">分类</option>
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small mb-1">来源提示（可选）</label>
+                        <input type="text" class="form-control form-control-sm" name="sourceHint" placeholder="如：某项目的世界观">
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small mb-1">素材内容</label>
+                    <textarea class="form-control form-control-sm" name="content" rows="5" placeholder="素材内容..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">创建</button>
+                <button type="button" class="btn btn-sm btn-secondary" @click="showAdd = false">取消</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Distill Modal -->
+    <div class="modal fade" id="distillModal" tabindex="-1" x-data="distillApp()" x-init="init()">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-funnel"></i> 蒸馏素材</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <!-- Project -->
+                        <div class="col-md-6">
+                            <label class="form-label small">选择项目</label>
+                            <select class="form-select form-select-sm" x-model="projectId" @change="onProjectChange()">
+                                <option value="">-- 请选择 --</option>
+                                <template x-for="p in projects" :key="p.id">
+                                    <option :value="p.id" x-text="p.title"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <!-- Source type -->
+                        <div class="col-md-6">
+                            <label class="form-label small">来源类型</label>
+                            <select class="form-select form-select-sm" x-model="sourceType" @change="onSourceTypeChange()" :disabled="!projectId">
+                                <option value="">-- 请选择 --</option>
+                                <option value="world" x-show="sources.hasWorld">世界观</option>
+                                <option value="outline" x-show="sources.hasOutline">故事大纲</option>
+                                <option value="character">角色卡</option>
+                                <option value="chapter_outline">章节大纲</option>
+                                <option value="chapter">章节正文</option>
+                            </select>
+                        </div>
+                        <!-- Secondary select -->
+                        <div class="col-md-6" x-show="needsSecondary">
+                            <label class="form-label small" x-text="secondaryLabel"></label>
+                            <select class="form-select form-select-sm" x-model="secondaryValue">
+                                <option value="">-- 请选择 --</option>
+                                <template x-for="opt in secondaryOptions" :key="opt.value">
+                                    <option :value="opt.value" x-text="opt.label"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <!-- Category -->
+                        <div class="col-md-6">
+                            <label class="form-label small">素材分类</label>
+                            <select class="form-select form-select-sm" x-model="category">
+                                <option th:each="c : ${categories}" th:value="${c.name()}" th:text="${c.displayName}">分类</option>
+                            </select>
+                        </div>
+                        <!-- Name -->
+                        <div class="col-md-6">
+                            <label class="form-label small">素材名称（可选）</label>
+                            <input type="text" class="form-control form-control-sm" x-model="materialName" placeholder="留空则自动生成">
+                        </div>
+                        <!-- Model -->
+                        <div class="col-md-6">
+                            <label class="form-label small">AI模型</label>
+                            <select class="form-select form-select-sm" x-model="configId">
+                                <option value="">使用全局默认</option>
+                                <option th:each="mc : ${modelConfigs}" th:value="${mc.id}"
+                                        th:text="${mc.provider + ' / ' + mc.modelId}">模型</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- Action -->
+                    <div class="mt-3">
+                        <button class="btn btn-success btn-sm" @click="doDistill()" :disabled="!canDistill || loading">
+                            <span x-show="loading" class="spinner-border spinner-border-sm me-1"></span>
+                            蒸馏
+                        </button>
+                    </div>
+                    <!-- Result -->
+                    <div class="mt-3" x-show="error">
+                        <div class="alert alert-danger small mb-0" x-text="error"></div>
+                    </div>
+                    <div class="mt-3" x-show="result">
+                        <div class="alert alert-success small mb-1">
+                            蒸馏成功！素材已保存：<strong x-text="resultName"></strong>
+                        </div>
+                        <div class="border rounded p-2 bg-light small" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;" x-text="resultContent"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    function distillApp() {
+        return {
+            projects: [],
+            projectId: '',
+            sources: {},
+            sourceType: '',
+            needsSecondary: false,
+            secondaryLabel: '',
+            secondaryOptions: [],
+            secondaryValue: '',
+            category: 'OTHER',
+            materialName: '',
+            configId: '',
+            loading: false,
+            error: '',
+            result: false,
+            resultName: '',
+            resultContent: '',
+
+            init() {
+                fetch('/settings/materials/projects-json')
+                    .then(r => r.json())
+                    .then(data => this.projects = data);
+            },
+
+            onProjectChange() {
+                this.sourceType = '';
+                this.sources = {};
+                this.needsSecondary = false;
+                this.secondaryValue = '';
+                this.error = '';
+                this.result = false;
+                if (!this.projectId) return;
+                fetch('/settings/materials/project-sources?projectId=' + this.projectId)
+                    .then(r => r.json())
+                    .then(data => this.sources = data);
+            },
+
+            onSourceTypeChange() {
+                this.secondaryValue = '';
+                this.needsSecondary = false;
+                this.error = '';
+                this.result = false;
+                if (this.sourceType === 'character') {
+                    this.needsSecondary = true;
+                    this.secondaryLabel = '选择角色';
+                    this.secondaryOptions = (this.sources.characters || []).map(c => ({value: 'character:' + c.id, label: c.name}));
+                } else if (this.sourceType === 'chapter_outline') {
+                    this.needsSecondary = true;
+                    this.secondaryLabel = '选择章节大纲';
+                    this.secondaryOptions = (this.sources.chapterOutlines || []).map(co => ({value: 'chapter_outline:' + co.num, label: co.title}));
+                } else if (this.sourceType === 'chapter') {
+                    this.needsSecondary = true;
+                    this.secondaryLabel = '选择章节';
+                    this.secondaryOptions = (this.sources.chapters || []).map(ch => ({value: 'chapter:' + ch.num, label: ch.title}));
+                }
+            },
+
+            get canDistill() {
+                if (!this.projectId || !this.sourceType) return false;
+                if (this.needsSecondary && !this.secondaryValue) return false;
+                return true;
+            },
+
+            doDistill() {
+                this.loading = true;
+                this.error = '';
+                this.result = false;
+                let actualSource = this.needsSecondary ? this.secondaryValue : this.sourceType;
+                let params = new URLSearchParams();
+                params.append('projectId', this.projectId);
+                params.append('sourceType', actualSource);
+                params.append('category', this.category);
+                if (this.materialName) params.append('name', this.materialName);
+                if (this.configId) params.append('configId', this.configId);
+
+                fetch('/settings/materials/distill', {method: 'POST', body: params})
+                    .then(r => r.json())
+                    .then(data => {
+                        this.loading = false;
+                        if (data.error) {
+                            this.error = data.error;
+                        } else {
+                            this.result = true;
+                            this.resultName = data.name;
+                            this.resultContent = data.content;
+                        }
+                    })
+                    .catch(e => {
+                        this.loading = false;
+                        this.error = '请求失败: ' + e.message;
+                    });
+            }
+        };
+    }
+    </script>
+
+    <!-- List -->
+    <div class="card">
+        <div class="card-header">
+            <strong><i class="bi bi-collection"></i> 素材列表</strong>
+            <small class="text-muted ms-2">可在工作流页面"蒸馏素材"按钮提取，也可手动管理</small>
+        </div>
+        <div class="card-body p-0">
+            <div th:if="${items.isEmpty()}" class="p-3">
+                <p class="text-muted small mb-0">暂无素材。可在工作流页面中蒸馏已有项目内容，或点击"新建素材"手动创建。</p>
+            </div>
+            <table th:if="${!items.isEmpty()}" class="table table-sm table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>名称</th>
+                        <th style="width: 100px;">分类</th>
+                        <th style="width: 200px;">内容预览</th>
+                        <th style="width: 160px;">来源</th>
+                        <th style="width: 140px;">更新时间</th>
+                        <th style="width: 120px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="item : ${items}">
+                        <td><strong th:text="${item.name}">名称</strong></td>
+                        <td><span class="badge bg-secondary" th:text="${item.category.displayName}">分类</span></td>
+                        <td class="text-muted small text-truncate" style="max-width: 200px;"
+                            th:text="${item.content != null ? item.content.substring(0, T(java.lang.Math).min(item.content.length(), 60)) : ''}">预览</td>
+                        <td class="text-muted small text-truncate" style="max-width: 160px;"
+                            th:text="${item.sourceHint}">来源</td>
+                        <td class="small text-muted" th:text="${#temporals.format(item.updatedAt, 'yyyy-MM-dd HH:mm')}">时间</td>
+                        <td>
+                            <a th:href="@{/settings/materials/{id}/edit(id=${item.id})}"
+                               class="btn btn-sm btn-outline-primary me-1" title="编辑">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <form th:action="@{/settings/materials/{id}/delete(id=${item.id})}" method="post" class="d-inline"
+                                  onsubmit="return confirm('确定删除此素材？')">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>

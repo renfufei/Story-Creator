@@ -21,10 +21,46 @@ const AUTO_RUN_STEP_LABELS = {
     'DEEP_REVIEW': '深度审查',
 };
 
+const AUTO_RUN_STRATEGY_LABELS = {
+    'DEFAULT': '标准创作模式',
+    'ENHANCED': '精品创作模式',
+};
+
+const STEP_SUB_STEPS = {
+    DEFAULT: {
+        WORLD_BUILDING: [],
+        CHARACTER_DESIGN: ['CHARACTER_REFINE'],
+        OUTLINE_GENERATION: [],
+        CHAPTER_WRITING: ['CHARACTER_STATES', 'TITLE_GENERATION'],
+        POLISHING: [],
+        PROOFREADING: ['PROOFREAD_FIX'],
+    },
+    ENHANCED: {
+        WORLD_BUILDING: ['WRITING_RULES', 'STYLE_FINGERPRINT'],
+        CHARACTER_DESIGN: ['CHARACTER_REFINE', 'BEHAVIOR_BOUNDARIES'],
+        OUTLINE_GENERATION: ['EVENT_PLAN'],
+        CHAPTER_WRITING: ['CONTEXT_BRIEFING', 'PLOT_REASONING',
+                          'INSTANT_REVIEW', 'CONTENT_OPTIMIZATION', 'STORYLINE_UPDATE', 'DEEP_REVIEW',
+                          'CHARACTER_STATES', 'TITLE_GENERATION'],
+        POLISHING: [],
+        PROOFREADING: ['PROOFREAD_FIX'],
+    },
+};
+
+const STEP_PRIMARY_LABELS = {
+    WORLD_BUILDING: '世界观核心',
+    CHARACTER_DESIGN: '角色设计核心',
+    OUTLINE_GENERATION: '大纲核心',
+    CHAPTER_WRITING: '写作核心',
+    POLISHING: '润色核心',
+    PROOFREADING: null,
+};
+
 function workflowAutorunMixin() {
     return {
         autoMode: false,
         autoRunStepConfigs: {},
+        autoRunStrategy: 'DEFAULT',
         fullAutoRunning: false,
         fullAutoStatus: '',
         fullAutoError: '',
@@ -39,7 +75,7 @@ function workflowAutorunMixin() {
 
         checkAutoRunStatus() {
             fetch(`/projects/${this.projectId}/auto-run/status`)
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => {
                     if (data.status === 'RUNNING' || data.status === 'STOPPING') {
                         this.fullAutoRunning = true;
@@ -55,7 +91,7 @@ function workflowAutorunMixin() {
         startFullAuto() {
             this.fullAutoError = '';
             fetch(`/projects/${this.projectId}/auto-run/start`, { method: 'POST' })
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => {
                     if (data.status === 'ok') {
                         this.fullAutoRunning = true;
@@ -70,13 +106,13 @@ function workflowAutorunMixin() {
 
         stopFullAuto() {
             fetch(`/projects/${this.projectId}/auto-run/stop`, { method: 'POST' })
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(() => { this.fullAutoStatus = '正在停止...'; });
         },
 
         openAutoRunStream() {
             fetch(`/projects/${this.projectId}/auto-run/stream-status`)
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => {
                     if (!data.active) {
                         alert('当前没有活跃的自动运行流');
@@ -152,6 +188,23 @@ function workflowAutorunMixin() {
             this.autoRunStreamOpen = false;
         },
 
+        currentStrategyLabel() {
+            return AUTO_RUN_STRATEGY_LABELS[this.autoRunStrategy] || this.autoRunStrategy;
+        },
+
+        stepPrimaryLabel(stepName) {
+            return STEP_PRIMARY_LABELS[stepName] || null;
+        },
+
+        subStepsForStep(stepName) {
+            const mapping = STEP_SUB_STEPS[this.autoRunStrategy] || STEP_SUB_STEPS['DEFAULT'];
+            return mapping[stepName] || [];
+        },
+
+        isMainStepEnabled(stepName) {
+            return this.autoRunStepConfigs[stepName] !== false;
+        },
+
         toggleStepConfig(stepName, enabled) {
             this.autoRunStepConfigs[stepName] = enabled;
             fetch(`/projects/${this.projectId}/auto-run/step-config?step=${stepName}&enabled=${enabled}`, { method: 'PUT' })
@@ -172,12 +225,12 @@ function workflowAutorunMixin() {
 
         pollAutoRunStatus() {
             fetch(`/projects/${this.projectId}/auto-run/status`)
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => {
                     this.fullAutoStatus = data.progress || '';
 
                     if (data.step) {
-                        const matched = this.stepList.find(s => s.label === data.step);
+                        const matched = this.stepList.find(s => s.name === data.step || s.label === data.step);
                         if (matched) {
                             this.autoRunActiveStep = matched.name;
                             this.autoRunActiveOrder = matched.order;
@@ -186,7 +239,7 @@ function workflowAutorunMixin() {
 
                     if (data.status === 'RUNNING' || data.status === 'STOPPING') {
                         this.fullAutoRunning = true;
-                        if (data.step && data.step.includes('大纲') && this.outlineLoaded) {
+                        if (data.step && (data.step === 'OUTLINE_GENERATION' || data.step.includes('大纲')) && this.outlineLoaded) {
                             this.loadOutlineData(true);
                         }
                     } else {

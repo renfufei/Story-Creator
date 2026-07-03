@@ -27,3 +27,5 @@ template: |
   {{polishNote}}
 
   {{stepGuidance}}
+
+  {{referenceMaterials}}

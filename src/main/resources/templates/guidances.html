@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('创作指导库', ~{::content})}">
+<body>
+<div th:fragment="content" x-data="{ showAdd: false }">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">创作指导库</h2>
+        <div>
+            <a th:href="@{/settings}" class="btn btn-outline-secondary btn-sm me-2">
+                <i class="bi bi-arrow-left"></i> 返回设置
+            </a>
+            <button class="btn btn-primary btn-sm" @click="showAdd = true">
+                <i class="bi bi-plus"></i> 新建指导
+            </button>
+        </div>
+    </div>
+
+    <!-- Add Form -->
+    <div class="card mb-4" x-show="showAdd" x-cloak>
+        <div class="card-body">
+            <form th:action="@{/settings/guidances}" method="post">
+                <div class="row g-2 mb-2">
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">名称</label>
+                        <input type="text" class="form-control form-control-sm" name="name" required placeholder="指导名称">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">步骤</label>
+                        <select class="form-select form-select-sm" name="step" required>
+                            <option th:each="s : ${steps}" th:value="${s.name()}" th:text="${s.displayName}">步骤</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small mb-1">指导内容</label>
+                    <textarea class="form-control form-control-sm" name="guidance" rows="4" placeholder="创作指导内容..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">创建</button>
+                <button type="button" class="btn btn-sm btn-secondary" @click="showAdd = false">取消</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- List -->
+    <div class="card">
+        <div class="card-header">
+            <strong><i class="bi bi-journal-text"></i> 指导列表</strong>
+            <small class="text-muted ms-2">可从工作流页面"存为通用"按钮快速保存，也可在此手动管理</small>
+        </div>
+        <div class="card-body p-0">
+            <div th:if="${items.isEmpty()}" class="p-3">
+                <p class="text-muted small mb-0">暂无创作指导。可在工作流页面中将某步骤的创作指导存为通用，或点击"新建指导"创建。</p>
+            </div>
+            <table th:if="${!items.isEmpty()}" class="table table-sm table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>名称</th>
+                        <th style="width: 120px;">步骤</th>
+                        <th style="width: 200px;">内容预览</th>
+                        <th style="width: 160px;">更新时间</th>
+                        <th style="width: 140px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="item : ${items}">
+                        <td><strong th:text="${item.name}">名称</strong></td>
+                        <td><span class="badge bg-info" th:text="${item.step.displayName}">步骤</span></td>
+                        <td class="text-muted small text-truncate" style="max-width: 200px;"
+                            th:text="${item.guidance != null ? item.guidance.substring(0, T(Math).min(item.guidance.length(), 50)) : ''}">预览</td>
+                        <td class="small text-muted" th:text="${#temporals.format(item.updatedAt, 'yyyy-MM-dd HH:mm')}">时间</td>
+                        <td>
+                            <a th:href="@{/settings/guidances/{id}/edit(id=${item.id})}"
+                               class="btn btn-sm btn-outline-primary me-1" title="编辑">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <form th:action="@{/settings/guidances/{id}/delete(id=${item.id})}" method="post" class="d-inline"
+                                  onsubmit="return confirm('确定删除此创作指导？')">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>

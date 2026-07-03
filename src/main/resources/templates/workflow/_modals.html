@@ -135,8 +135,206 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" @click="closeAutoRunStream()"></button>
                 </div>
                 <div class="modal-body p-0">
-                    <pre class="p-3 m-0 bg-light" style="max-height:60vh; overflow-y:auto; white-space:pre-wrap; word-break:break-all; font-size:0.85rem;" x-ref="autoRunStreamOutput" x-text="autoRunStreamContent"></pre>
+                    <pre class="p-3 m-0 bg-light" style="min-height:60vh; max-height:60vh; overflow-y:auto; white-space:pre-wrap; word-break:break-all; font-size:0.85rem;" x-ref="autoRunStreamOutput" x-text="autoRunStreamContent"></pre>
                 </div>
+            </div>
+        </div>
+    </div>
+    <!-- Reuse Guidance Modal -->
+    <div class="modal fade" id="reuseGuidanceModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-journal-arrow-down"></i> 复用创作指导</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="reuseFilterSwitch"
+                                   x-model="reuseFilterByStep">
+                            <label class="form-check-label" for="reuseFilterSwitch">
+                                只显示当前步骤（<span x-text="currentStepLabel()"></span>）的指导
+                            </label>
+                        </div>
+                    </div>
+                    <div x-show="guidanceLibraryLoading" class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm"></div> 加载中...
+                    </div>
+                    <div x-show="!guidanceLibraryLoading && guidanceLibraryItems.length === 0" class="text-muted text-center py-3">
+                        暂无可用的创作指导。请先在创作指导库中添加指导。
+                    </div>
+                    <div x-show="!guidanceLibraryLoading && guidanceLibraryItems.length > 0" class="list-group" style="max-height: 50vh; overflow-y: auto;">
+                        <template x-for="item in guidanceLibraryItems" :key="item.id">
+                            <label class="list-group-item list-group-item-action d-flex align-items-start gap-2"
+                                   :class="{ 'active': selectedGuidanceId === item.id }">
+                                <input type="radio" class="form-check-input mt-1" name="reuseGuidanceRadio"
+                                       :value="item.id" x-model="selectedGuidanceId">
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <strong class="text-truncate" x-text="item.name"></strong>
+                                        <span class="badge bg-info ms-2 flex-shrink-0" x-text="item.stepLabel"></span>
+                                    </div>
+                                    <small class="text-muted d-block mt-1" style="white-space: pre-line; max-height: 60px; overflow: hidden;"
+                                           x-text="item.guidance.substring(0, 150) + (item.guidance.length > 150 ? '...' : '')"></small>
+                                </div>
+                            </label>
+                        </template>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" @click="applyReuseGuidance()"
+                            :disabled="!selectedGuidanceId">
+                        <i class="bi bi-check-lg"></i> 使用选中指导
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Distill Material Modal -->
+    <div class="modal fade" id="distillMaterialModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-funnel"></i> 蒸馏素材</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">从当前项目内容中提取素材，AI将压缩蒸馏为可复用的通用素材。</p>
+                    <div class="mb-3">
+                        <label class="form-label">素材来源</label>
+                        <select class="form-select form-select-sm" x-model="distillSourceType" @change="onDistillSourceChange()">
+                            <option value="world">世界观设定</option>
+                            <option value="outline">故事大纲</option>
+                            <option value="character">角色卡</option>
+                            <option value="chapter_outline">章节大纲</option>
+                            <option value="chapter">章节正文</option>
+                        </select>
+                    </div>
+                    <!-- Secondary select for character/chapter_outline/chapter -->
+                    <div class="mb-3" x-show="distillNeedsSecondary">
+                        <label class="form-label" x-text="distillSecondaryLabel"></label>
+                        <select class="form-select form-select-sm" x-model="distillSecondaryValue">
+                            <option value="">-- 请选择 --</option>
+                            <template x-for="opt in distillSecondaryOptions" :key="opt.value">
+                                <option :value="opt.value" x-text="opt.label"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">素材分类</label>
+                        <select class="form-select form-select-sm" x-model="distillCategory">
+                            <option value="CHARACTER">角色</option>
+                            <option value="WORLD">世界观</option>
+                            <option value="OUTLINE">大纲</option>
+                            <option value="SKILL">金手指/技能</option>
+                            <option value="ITEM">道具/武器</option>
+                            <option value="OTHER">其他</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">AI模型</label>
+                        <select class="form-select form-select-sm" x-model="distillConfigId">
+                            <option value="">使用全局默认</option>
+                            <option th:each="mc : ${modelConfigs}" th:value="${mc.id}" th:text="${mc.displayName}">模型</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">素材名称（可选）</label>
+                        <input type="text" class="form-control form-control-sm" x-model="distillName" placeholder="自动生成名称">
+                    </div>
+
+                    <!-- Result display -->
+                    <div x-show="distillLoading" class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm"></div> AI蒸馏中，请稍候...
+                    </div>
+                    <div x-show="distillError" class="alert alert-danger small" x-text="distillError"></div>
+                    <div x-show="distillResult" class="alert alert-success small">
+                        <strong>蒸馏成功!</strong>
+                        <div class="mt-1" x-text="'素材名: ' + (distillResult && distillResult.name)"></div>
+                        <div class="mt-1 border rounded p-2 bg-white" style="max-height: 150px; overflow-y: auto; white-space: pre-line; font-size: 0.8rem;"
+                             x-text="distillResult && distillResult.content"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary btn-sm" @click="executeDistill()"
+                            :disabled="distillLoading || !canExecuteDistill">
+                        <i class="bi bi-funnel"></i> 开始蒸馏
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Material Reference Modal -->
+    <div class="modal fade" id="materialRefModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-bookmark-plus"></i> 引用素材</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <select class="form-select form-select-sm" x-model="materialFilterCategory"
+                                @change="loadMaterialLibrary()">
+                            <option value="">全部分类</option>
+                            <option value="CHARACTER">角色</option>
+                            <option value="WORLD">世界观</option>
+                            <option value="OUTLINE">大纲</option>
+                            <option value="SKILL">金手指/技能</option>
+                            <option value="ITEM">道具/武器</option>
+                            <option value="OTHER">其他</option>
+                        </select>
+                    </div>
+                    <div x-show="materialLibraryLoading" class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm"></div> 加载中...
+                    </div>
+                    <div x-show="!materialLibraryLoading && materialLibraryItems.length === 0" class="text-muted text-center py-3">
+                        暂无素材。请先在素材库中添加或蒸馏素材。
+                    </div>
+                    <div x-show="!materialLibraryLoading && materialLibraryItems.length > 0"
+                         class="list-group" style="max-height: 50vh; overflow-y: auto;">
+                        <template x-for="item in materialLibraryItems" :key="item.id">
+                            <label class="list-group-item list-group-item-action d-flex align-items-start gap-2"
+                                   :class="{ 'list-group-item-success': isMaterialSelected(item.id) }">
+                                <input type="checkbox" class="form-check-input mt-1"
+                                       :checked="isMaterialSelected(item.id)"
+                                       @change="toggleMaterial(item.id)">
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <strong class="text-truncate" x-text="item.name"></strong>
+                                        <span class="badge bg-secondary ms-2 flex-shrink-0" x-text="item.categoryLabel"></span>
+                                    </div>
+                                    <small class="text-muted d-block mt-1" style="white-space: pre-line; max-height: 60px; overflow: hidden;"
+                                           x-text="item.content.substring(0, 120) + (item.content.length > 120 ? '...' : '')"></small>
+                                    <small x-show="item.sourceHint" class="text-info d-block" x-text="'来源: ' + item.sourceHint"></small>
+                                </div>
+                            </label>
+                        </template>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <span class="me-auto small text-muted" x-text="'已选 ' + selectedMaterialIds.length + ' 项素材'"></span>
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary btn-sm" data-bs-dismiss="modal">
+                        <i class="bi bi-check-lg"></i> 确认选择
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast for guidance actions -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100">
+        <div class="toast align-items-center" :class="guidanceToastType === 'success' ? 'text-bg-success' : 'text-bg-danger'"
+             x-ref="guidanceToast" role="alert">
+            <div class="d-flex">
+                <div class="toast-body" x-text="guidanceToastMsg"></div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
             </div>
         </div>
     </div>

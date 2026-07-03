@@ -60,7 +60,7 @@ class ProofreadingServiceTest {
     void saveProofreadingResults_savesToReportAndChapter_notOutline() throws Exception {
         // Use reflection to call the private saveProofreadingResults method
         var method = ProofreadingService.class.getDeclaredMethod("saveProofreadingResults",
-                ChapterEntity.class, String.class, String.class, String.class, String.class, String.class);
+                ChapterEntity.class, ProofreadingResults.class);
         method.setAccessible(true);
 
         ChapterEntity chapter = new ChapterEntity();
@@ -71,7 +71,8 @@ class ProofreadingServiceTest {
         when(proofreadingReportRepository.findByProjectIdAndChapterNumber(1L, 3))
                 .thenReturn(Optional.empty());
 
-        method.invoke(service, chapter, "剧情摘要", "角色问题", "一致性问题", "衔接问题", "伏笔");
+        ProofreadingResults results = new ProofreadingResults("剧情摘要", "角色问题", "一致性问题", "衔接问题", "伏笔");
+        method.invoke(service, chapter, results);
 
         // Verify report was saved
         verify(proofreadingReportRepository).save(argThat(report ->

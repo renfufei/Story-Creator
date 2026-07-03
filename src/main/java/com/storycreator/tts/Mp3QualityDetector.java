@@ -30,6 +30,13 @@ public class Mp3QualityDetector {
     private static final double STUCK_THRESHOLD_SECONDS = 1.2;   // minimum duration to flag
     private static final int STUCK_SLIDING_WINDOW = 12;          // 1.2 seconds at 100ms windows
 
+    // Energy ramp detection: catches electrical noise that ramps up/down steadily
+    // Missed by CV check because rising energy has CV > 0.05 (not flat)
+    private static final int    RAMP_SLIDING_WINDOW          = 12;    // 1.2s at 100ms windows
+    private static final double RAMP_MONO_FRACTION_THRESHOLD = 0.90;  // >= 10/11 pairs monotone
+    private static final double RAMP_MIN_ENERGY_RATIO        = 1.5;   // max/min in window must differ by 50%
+    private static final double RAMP_THRESHOLD_SECONDS       = 1.2;   // for error message
+
     private final Mp3ProcessingService mp3ProcessingService;
 
     public Mp3QualityDetector(Mp3ProcessingService mp3ProcessingService) {
@@ -285,6 +292,74 @@ public class Mp3QualityDetector {
                     return QualityResult.failed(String.format(
                             "Stuck tone/noise detected (stable RMS): mean=%.1f, CV=%.4f over %.1fs",
                             mean, cv, duration), startSec);
+                }
+            }
+        }
+
+        // Energy ramp detection: catches electrical noise with monotonically rising/falling RMS
+        // Normal speech oscillates rapidly (syllable boundaries), noise ramps steadily
+        if (numWindows >= RAMP_SLIDING_WINDOW) {
+            int upCount = 0;
+            int downCount = 0;
+            int validPairs = 0;
+
+            // Initialize first window
+            for (int j = 0; j < RAMP_SLIDING_WINDOW - 1; j++) {
+                if (rmsHistory[j] < WAV_SILENCE_RMS_THRESHOLD || rmsHistory[j + 1] < WAV_SILENCE_RMS_THRESHOLD) {
+                    continue;
+                }
+                validPairs++;
+                if (rmsHistory[j + 1] > rmsHistory[j]) upCount++;
+                else if (rmsHistory[j + 1] < rmsHistory[j]) downCount++;
+            }
+
+            for (int i = 0; i <= numWindows - RAMP_SLIDING_WINDOW; i++) {
+                // Check if this window triggers
+                if (validPairs >= 10) {
+                    double upFraction = (double) upCount / validPairs;
+                    double downFraction = (double) downCount / validPairs;
+
+                    if (upFraction >= RAMP_MONO_FRACTION_THRESHOLD || downFraction >= RAMP_MONO_FRACTION_THRESHOLD) {
+                        // Guard: require meaningful energy change (max/min ratio)
+                        double minRms = Double.MAX_VALUE;
+                        double maxRms = 0;
+                        boolean allNonSilent = true;
+                        for (int j = i; j < i + RAMP_SLIDING_WINDOW; j++) {
+                            if (rmsHistory[j] < WAV_SILENCE_RMS_THRESHOLD) {
+                                allNonSilent = false;
+                                break;
+                            }
+                            minRms = Math.min(minRms, rmsHistory[j]);
+                            maxRms = Math.max(maxRms, rmsHistory[j]);
+                        }
+
+                        if (allNonSilent && minRms > 0 && (maxRms / minRms) >= RAMP_MIN_ENERGY_RATIO) {
+                            double startSec = i * WAV_WINDOW_SECONDS;
+                            String direction = upFraction >= RAMP_MONO_FRACTION_THRESHOLD ? "rising" : "falling";
+                            return QualityResult.failed(String.format(
+                                    "Electrical noise ramp detected (%s): %.0f→%.0f RMS over %.1fs",
+                                    direction, rmsHistory[i], rmsHistory[i + RAMP_SLIDING_WINDOW - 1],
+                                    RAMP_THRESHOLD_SECONDS), startSec);
+                        }
+                    }
+                }
+
+                // Slide window: remove outgoing pair (i, i+1), add incoming pair (i+WINDOW-1, i+WINDOW)
+                if (i + RAMP_SLIDING_WINDOW < numWindows) {
+                    // Remove outgoing pair
+                    int outJ = i;
+                    if (rmsHistory[outJ] >= WAV_SILENCE_RMS_THRESHOLD && rmsHistory[outJ + 1] >= WAV_SILENCE_RMS_THRESHOLD) {
+                        validPairs--;
+                        if (rmsHistory[outJ + 1] > rmsHistory[outJ]) upCount--;
+                        else if (rmsHistory[outJ + 1] < rmsHistory[outJ]) downCount--;
+                    }
+                    // Add incoming pair
+                    int inJ = i + RAMP_SLIDING_WINDOW - 1;
+                    if (rmsHistory[inJ] >= WAV_SILENCE_RMS_THRESHOLD && rmsHistory[inJ + 1] >= WAV_SILENCE_RMS_THRESHOLD) {
+                        validPairs++;
+                        if (rmsHistory[inJ + 1] > rmsHistory[inJ]) upCount++;
+                        else if (rmsHistory[inJ + 1] < rmsHistory[inJ]) downCount++;
+                    }
                 }
             }
         }

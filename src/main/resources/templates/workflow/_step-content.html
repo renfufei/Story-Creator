@@ -55,11 +55,23 @@
                         <i class="bi bi-compass"></i> 创作指导
                         <span x-show="stepGuidance && !editingGuidance" class="ms-1 text-success"><i class="bi bi-check-circle-fill"></i></span>
                     </small>
-                    <button x-show="!editingGuidance" class="btn btn-sm btn-outline-secondary py-0 px-1"
-                            @click="editingGuidance = true; stepGuidanceEdit = stepGuidance"
-                            :disabled="fullAutoRunning">
-                        <i class="bi bi-pencil"></i> 配置
-                    </button>
+                    <div x-show="!editingGuidance" class="btn-group">
+                        <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                                @click="editingGuidance = true; stepGuidanceEdit = stepGuidance"
+                                :disabled="fullAutoRunning">
+                            <i class="bi bi-pencil"></i> 配置
+                        </button>
+                        <button class="btn btn-sm btn-outline-success py-0 px-1"
+                                @click="saveGuidanceAsShared()"
+                                :disabled="fullAutoRunning || !stepGuidance">
+                            <i class="bi bi-box-arrow-up"></i> 存为通用
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary py-0 px-1"
+                                @click="openReuseModal()"
+                                :disabled="fullAutoRunning">
+                            <i class="bi bi-journal-arrow-down"></i> 复用指导
+                        </button>
+                    </div>
                 </div>
                 <div x-show="!editingGuidance && stepGuidance" class="mt-1">
                     <small class="text-muted" style="white-space: pre-line;" x-text="stepGuidance"></small>
@@ -74,6 +86,36 @@
                         <button class="btn btn-sm btn-outline-secondary" @click="editingGuidance = false">取消</button>
                         <button class="btn btn-sm btn-primary" @click="saveGuidance()">保存配置</button>
                     </div>
+                </div>
+            </div>
+
+            <!-- Material Library Section -->
+            <div class="mb-3 border rounded p-2 bg-light">
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted fw-bold">
+                        <i class="bi bi-collection"></i> 素材库
+                        <span x-show="selectedMaterialIds.length > 0" class="ms-1 badge bg-success" x-text="'已选 ' + selectedMaterialIds.length + ' 项'"></span>
+                    </small>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                                @click="openDistillModal()"
+                                :disabled="fullAutoRunning">
+                            <i class="bi bi-funnel"></i> 蒸馏素材
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary py-0 px-1"
+                                @click="openMaterialRefModal()"
+                                :disabled="fullAutoRunning">
+                            <i class="bi bi-bookmark-plus"></i> 引用素材
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1"
+                                x-show="selectedMaterialIds.length > 0"
+                                @click="clearMaterialSelection()">
+                            <i class="bi bi-x"></i> 清除
+                        </button>
+                    </div>
+                </div>
+                <div x-show="selectedMaterialIds.length > 0" class="mt-1">
+                    <small class="text-success"><i class="bi bi-check-circle"></i> 已选中素材将在下次AI生成时注入提示词</small>
                 </div>
             </div>
 

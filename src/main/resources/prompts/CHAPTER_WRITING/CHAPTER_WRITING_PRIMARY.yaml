@@ -44,5 +44,7 @@ template: |
 
   {{stepGuidance}}
 
+  {{referenceMaterials}}
+
   字数要求：约{{chapterWordCount}}字（不少于{{chapterWordCountMin}}字，不超过{{chapterWordCountMax}}字）
   文风要求：符合{{genre}}类型的读者期待

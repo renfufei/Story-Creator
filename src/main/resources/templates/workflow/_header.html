@@ -72,16 +72,45 @@
                     </button>
                 </div>
             </div>
-            <div x-show="!fullAutoRunning" class="mt-2 d-flex align-items-center flex-wrap gap-2" style="font-size:0.85rem;">
-                <span class="text-muted me-1">步骤:</span>
-                <template x-for="s in stepList" :key="s.name">
-                    <label class="form-check form-check-inline form-switch mb-0" style="min-height:auto;">
-                        <input class="form-check-input" type="checkbox"
-                               :checked="autoRunStepConfigs[s.name] !== false"
-                               @change="toggleStepConfig(s.name, $event.target.checked)">
-                        <span class="form-check-label" x-text="s.label"></span>
-                    </label>
-                </template>
+            <div x-show="!fullAutoRunning" class="mt-2" style="font-size:0.85rem;">
+                <div class="d-flex align-items-center mb-2">
+                    <span class="text-muted me-1">当前策略:</span>
+                    <span class="badge bg-primary" x-text="currentStrategyLabel()"></span>
+                </div>
+                <div class="d-flex flex-nowrap gap-2 overflow-x-auto pb-1">
+                    <template x-for="s in stepList" :key="s.name">
+                        <div class="border rounded p-2" style="min-width:130px; flex-shrink:0;"
+                             :style="isMainStepEnabled(s.name) ? '' : 'opacity:0.5'">
+                            <label class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox"
+                                       :checked="isMainStepEnabled(s.name)"
+                                       @change="toggleStepConfig(s.name, $event.target.checked)">
+                                <span class="form-check-label fw-bold" x-text="s.label" style="font-size:0.8rem;"></span>
+                            </label>
+                            <template x-if="stepPrimaryLabel(s.name) || subStepsForStep(s.name).length > 0">
+                                <div class="mt-1 ms-2">
+                                    <template x-if="stepPrimaryLabel(s.name)">
+                                        <label class="form-check form-switch mb-0 d-block" style="font-size:0.75rem; min-height:1.4rem; opacity:0.5;">
+                                            <input class="form-check-input" type="checkbox" style="width:1.6em; height:0.9em;"
+                                                   checked disabled>
+                                            <span class="form-check-label text-muted" x-text="stepPrimaryLabel(s.name)"></span>
+                                        </label>
+                                    </template>
+                                    <template x-for="sub in subStepsForStep(s.name)" :key="sub">
+                                        <label class="form-check form-switch mb-0 d-block" style="font-size:0.75rem; min-height:1.4rem;">
+                                            <input class="form-check-input" type="checkbox" style="width:1.6em; height:0.9em;"
+                                                   :checked="autoRunStepConfigs[sub] !== false"
+                                                   :disabled="!isMainStepEnabled(s.name)"
+                                                   @change="toggleStepConfig(sub, $event.target.checked)">
+                                            <span class="form-check-label text-muted"
+                                                  x-text="AUTO_RUN_STEP_LABELS[sub] || sub"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
             </div>
         </div>
     </template>

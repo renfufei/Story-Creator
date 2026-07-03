@@ -83,7 +83,7 @@ function workflowProofreadingMixin() {
 
         loadProofreadData() {
             fetch(`/projects/${this.projectId}/proofreading/data`)
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => {
                     this.proofreadData = data;
                     this.proofreadLoaded = true;
@@ -127,30 +127,35 @@ function workflowProofreadingMixin() {
             this.proofreadFixPreviews = restFix;
             const item = this.proofreadData.find(d => d.chapterNumber === num);
             if (item) item.proofreadFixStatus = 'GENERATING';
+            // Fetch draft content first, then open SSE to avoid race condition
             fetch(`/projects/${this.projectId}/chapters/${num}/content`)
-                .then(r => r.json())
+                .then(r => { if (!r.ok) throw new Error('请求失败'); return r.json(); })
                 .then(data => {
                     this.proofreadFixDraft = data.content || '';
+                    const eventSource = new EventSource(`/projects/${this.projectId}/proofread-fix/${num}`);
+                    eventSource.addEventListener('token', (e) => {
+                        this.proofreadFixContent += e.data;
+                    });
+                    eventSource.addEventListener('done', () => {
+                        this.proofreadFixGenerating = false;
+                        eventSource.close();
+                        this.loadProofreadData();
+                        this.loadChapterList();
+                    });
+                    eventSource.addEventListener('error', (e) => {
+                        this.proofreadFixGenerating = false;
+                        eventSource.close();
+                        if (e.data) alert('精修出错: ' + e.data);
+                    });
+                    eventSource.onerror = () => {
+                        this.proofreadFixGenerating = false;
+                        eventSource.close();
+                    };
+                })
+                .catch(err => {
+                    this.proofreadFixGenerating = false;
+                    alert('获取章节内容失败: ' + err.message);
                 });
-            const eventSource = new EventSource(`/projects/${this.projectId}/proofread-fix/${num}`);
-            eventSource.addEventListener('token', (e) => {
-                this.proofreadFixContent += e.data;
-            });
-            eventSource.addEventListener('done', () => {
-                this.proofreadFixGenerating = false;
-                eventSource.close();
-                this.loadProofreadData();
-                this.loadChapterList();
-            });
-            eventSource.addEventListener('error', (e) => {
-                this.proofreadFixGenerating = false;
-                eventSource.close();
-                if (e.data) alert('精修出错: ' + e.data);
-            });
-            eventSource.onerror = () => {
-                this.proofreadFixGenerating = false;
-                eventSource.close();
-            };
         },
 
         previewProofreadFix(num) {
@@ -160,7 +165,7 @@ function workflowProofreadingMixin() {
                 return;
             }
             fetch(`/projects/${this.projectId}/chapters/${num}/content`)
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => {
                     this.proofreadFixPreviews = { ...this.proofreadFixPreviews, [num]: {
                         draft: data.contentBeforeFix || '',

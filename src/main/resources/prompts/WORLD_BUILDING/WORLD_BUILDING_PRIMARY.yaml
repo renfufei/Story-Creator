@@ -22,3 +22,5 @@ template: |
   简介：{{description}}
 
   {{stepGuidance}}
+
+  {{referenceMaterials}}

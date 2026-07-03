@@ -15,15 +15,17 @@ function workflowPolishingMixin() {
             this.generatedContent = '';
             this.viewingChapterNum = num;
             this.viewingChapterTitle = '';
+            const matParam = this.getMaterialIdsParam ? this.getMaterialIdsParam() : '';
+            const matSuffix = matParam ? '&' + matParam : '';
             const { [num]: _, ...restPrev } = this.polishPreviews;
             this.polishPreviews = restPrev;
             fetch(`/projects/${this.projectId}/chapters/${num}/content`)
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => {
                     this.viewingChapterDraft = data.content || '';
                 });
-            fetch(`/projects/${this.projectId}/bg-gen/start?step=POLISHING&chapter=${num}`, {method:'POST'})
-                .then(r => r.json())
+            fetch(`/projects/${this.projectId}/bg-gen/start?step=POLISHING&chapter=${num}${matSuffix}`, {method:'POST'})
+                .then(checkResponse)
                 .then(data => {
                     if (data.status === 'ok') {
                         this.startElapsedTimer();
@@ -76,10 +78,10 @@ function workflowPolishingMixin() {
             this.generatedContent = '';
             this.viewingChapterNum = chNum;
             fetch(`/projects/${this.projectId}/chapters/${chNum}/content`)
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => { this.viewingChapterDraft = data.content || ''; });
             fetch(`/projects/${this.projectId}/bg-gen/start?step=POLISHING&chapter=${chNum}`, {method:'POST'})
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => {
                     if (data.status === 'ok') {
                         this.startElapsedTimer();
@@ -114,7 +116,7 @@ function workflowPolishingMixin() {
                 method: 'POST',
                 body: formData
             })
-            .then(r => r.json())
+            .then(checkResponse)
             .then(data => {
                 if (data.status === 'ok') {
                     if (this.polishPreviews[num]) {
@@ -146,7 +148,7 @@ function workflowPolishingMixin() {
                 method: 'POST',
                 body: formData
             })
-            .then(r => r.json())
+            .then(checkResponse)
             .then(() => {
                 if (this.polishNoteModal) this.polishNoteModal.hide();
                 this.loadChapterList();

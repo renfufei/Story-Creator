@@ -514,22 +514,22 @@ public class ProofreadingService {
 
         // After all sub-steps, save results
         Flux<String> saveStep = Flux.defer(() -> {
-            saveProofreadingResults(chapter, plotSummaryRef.get(), characterIssuesRef.get(),
+            ProofreadingResults results = new ProofreadingResults(
+                    plotSummaryRef.get(), characterIssuesRef.get(),
                     consistencyIssuesRef.get(), continuityIssuesRef.get(), foreshadowingRef.get());
+            saveProofreadingResults(chapter, results);
             return Flux.empty();
         });
 
         return step1.concatWith(step2).concatWith(step3).concatWith(step4).concatWith(step5).concatWith(saveStep);
     }
 
-    private void saveProofreadingResults(ChapterEntity chapter, String plotSummary,
-                                          String characterIssues, String consistencyIssues,
-                                          String continuityIssues, String foreshadowing) {
-        final String cleanPlotSummary = stripAiFormatting(plotSummary);
-        final String cleanCharacterIssues = stripAiFormatting(characterIssues);
-        final String cleanConsistencyIssues = stripAiFormatting(consistencyIssues);
-        final String cleanContinuityIssues = stripAiFormatting(continuityIssues);
-        final String cleanForeshadowing = stripAiFormatting(foreshadowing);
+    private void saveProofreadingResults(ChapterEntity chapter, ProofreadingResults results) {
+        final String cleanPlotSummary = stripAiFormatting(results.plotSummary());
+        final String cleanCharacterIssues = stripAiFormatting(results.characterIssues());
+        final String cleanConsistencyIssues = stripAiFormatting(results.consistencyIssues());
+        final String cleanContinuityIssues = stripAiFormatting(results.continuityIssues());
+        final String cleanForeshadowing = stripAiFormatting(results.foreshadowing());
         Long projectId = chapter.getProjectId();
         int chNum = chapter.getChapterNumber();
 

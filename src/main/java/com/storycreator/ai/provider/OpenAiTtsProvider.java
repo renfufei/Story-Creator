@@ -53,6 +53,7 @@ public class OpenAiTtsProvider implements TtsProvider {
                                             new RuntimeException("TTS API error " + response.statusCode() + ": " + errBody));
                                 }))
                 .bodyToMono(byte[].class)
+                .retryWhen(AiRetrySpec.linearBackoffRetry("TTS"))
                 .block();
 
         if (audio == null || audio.length == 0) {
@@ -94,7 +95,9 @@ public class OpenAiTtsProvider implements TtsProvider {
             ObjectNode root = objectMapper.createObjectNode();
             root.put("model", request.getModel());
             root.put("input", request.getInput());
-            root.put("voice", request.getVoice());
+            if (request.getVoice() != null && !request.getVoice().isBlank()) {
+                root.put("voice", request.getVoice());
+            }
             root.put("response_format", request.getResponseFormat());
             root.put("speed", request.getSpeed());
             return objectMapper.writeValueAsString(root);

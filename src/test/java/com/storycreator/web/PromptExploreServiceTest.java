@@ -101,7 +101,7 @@ class PromptExploreServiceTest {
         stubTemplateResolution();
 
         service.resolve(WorkflowStep.CHARACTER_DESIGN, PromptSubStep.CHARACTER_CARD,
-                1L, null, null, 2, 5, null);
+                new PromptExploreContext(1L, null, null, 2, 5, null));
 
         verify(characterGenerationService).buildCharacterCardVariables(1L, 2, 5);
     }
@@ -114,7 +114,7 @@ class PromptExploreServiceTest {
         stubTemplateResolution();
 
         service.resolve(WorkflowStep.OUTLINE_GENERATION, PromptSubStep.CHAPTER_OUTLINE,
-                1L, 3, null, null, null, null);
+                new PromptExploreContext(1L, 3, null, null, null, null));
 
         verify(outlineGenerationService).buildChapterOutlineVariables(1L, 3);
     }
@@ -127,7 +127,7 @@ class PromptExploreServiceTest {
         stubTemplateResolution();
 
         service.resolve(WorkflowStep.PROOFREADING, PromptSubStep.PROOFREAD_FIX,
-                1L, 5, null, null, null, null);
+                new PromptExploreContext(1L, 5, null, null, null, null));
 
         verify(proofreadingService).buildProofreadFixVariables(1L, 5);
     }
@@ -140,7 +140,7 @@ class PromptExploreServiceTest {
         stubTemplateResolution();
 
         service.resolve(WorkflowStep.POLISHING, PromptSubStep.CHAPTER_TITLE,
-                1L, 2, null, null, null, null);
+                new PromptExploreContext(1L, 2, null, null, null, null));
 
         verify(titleGenerationService).buildChapterTitleVariables(1L, 2);
     }
@@ -153,7 +153,7 @@ class PromptExploreServiceTest {
         stubTemplateResolution();
 
         service.resolve(WorkflowStep.POLISHING, PromptSubStep.CHARACTER_STATES,
-                1L, 4, null, null, null, null);
+                new PromptExploreContext(1L, 4, null, null, null, null));
 
         verify(characterStateService).buildCharacterStateVariables(1L, 4);
     }
@@ -166,7 +166,7 @@ class PromptExploreServiceTest {
         stubTemplateResolution();
 
         service.resolve(WorkflowStep.CHARACTER_DESIGN, PromptSubStep.IMAGE_PROMPT_AVATAR,
-                1L, null, 10L, null, null, null);
+                new PromptExploreContext(1L, null, 10L, null, null, null));
 
         verify(characterImageService).buildImagePromptVariables(1L, 10L, ImageType.AVATAR);
     }
@@ -183,7 +183,7 @@ class PromptExploreServiceTest {
         when(promptRegistry.resolveTemplate(anyString(), anyMap())).thenReturn("rendered");
 
         PromptExploreService.ExploreResult result = service.resolve(
-                WorkflowStep.WORLD_BUILDING, null, 1L, null, null, null, null, null);
+                WorkflowStep.WORLD_BUILDING, null, new PromptExploreContext(1L, null, null, null, null, null));
 
         verify(contextBuilder).build(1L, 0);
         assertThat(result.templateContent()).isEqualTo("tmpl");
@@ -195,7 +195,7 @@ class PromptExploreServiceTest {
         when(projectRepository.findById(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.resolve(
-                WorkflowStep.WORLD_BUILDING, null, 999L, null, null, null, null, null))
+                WorkflowStep.WORLD_BUILDING, null, new PromptExploreContext(999L, null, null, null, null, null)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Project not found");
     }
@@ -210,7 +210,7 @@ class PromptExploreServiceTest {
         when(promptRegistry.getSystemPrompt(any(), any())).thenReturn(null);
         when(promptRegistry.resolveTemplate(anyString(), anyMap())).thenReturn("rendered");
 
-        service.resolve(WorkflowStep.CHAPTER_WRITING, null, 1L, null, null, null, null, null);
+        service.resolve(WorkflowStep.CHAPTER_WRITING, null, new PromptExploreContext(1L, null, null, null, null, null));
 
         verify(contextBuilder).build(1L, 0);
     }
@@ -222,7 +222,7 @@ class PromptExploreServiceTest {
         stubTemplateResolution();
 
         service.resolve(WorkflowStep.CHARACTER_DESIGN, PromptSubStep.CHARACTER_CARD,
-                1L, null, null, null, 5, null);
+                new PromptExploreContext(1L, null, null, null, 5, null));
 
         verify(characterGenerationService).buildCharacterCardVariables(1L, 1, 5);
     }
@@ -239,7 +239,7 @@ class PromptExploreServiceTest {
         when(promptRegistry.resolveTemplate("写第{{title}}章", vars)).thenReturn("写第武侠小说章");
 
         PromptExploreService.ExploreResult result = service.resolve(
-                WorkflowStep.CHAPTER_WRITING, null, 1L, 3, null, null, null, null);
+                WorkflowStep.CHAPTER_WRITING, null, new PromptExploreContext(1L, 3, null, null, null, null));
 
         assertThat(result.templateContent()).isEqualTo("写第{{title}}章");
         assertThat(result.systemPrompt()).isEqualTo("你是写手");
@@ -257,7 +257,7 @@ class PromptExploreServiceTest {
 
         PromptExploreService.ExploreResult result = service.resolve(
                 WorkflowStep.WORLD_BUILDING, PromptSubStep.WRITING_RULES,
-                1L, null, null, null, null, null);
+                new PromptExploreContext(1L, null, null, null, null, null));
 
         assertThat(result.variables()).containsEntry("title", "测试小说");
         assertThat(result.variables()).containsEntry("genre", "玄幻");
@@ -275,7 +275,7 @@ class PromptExploreServiceTest {
 
         PromptExploreService.ExploreResult result = service.resolve(
                 WorkflowStep.WORLD_BUILDING, PromptSubStep.WRITING_RULES,
-                1L, null, null, null, null, null);
+                new PromptExploreContext(1L, null, null, null, null, null));
 
         assertThat(result.variables()).containsEntry("worldSetting", "");
     }
@@ -291,7 +291,7 @@ class PromptExploreServiceTest {
 
         PromptExploreService.ExploreResult result = service.resolve(
                 WorkflowStep.WORLD_BUILDING, PromptSubStep.STYLE_FINGERPRINT,
-                1L, null, null, null, null, null);
+                new PromptExploreContext(1L, null, null, null, null, null));
 
         assertThat(result.variables()).containsEntry("worldSetting", "未来科技世界");
         assertThat(result.variables().get("stepGuidance")).contains("科幻感要强");
@@ -313,7 +313,7 @@ class PromptExploreServiceTest {
 
         PromptExploreService.ExploreResult result = service.resolve(
                 WorkflowStep.CHARACTER_DESIGN, PromptSubStep.CHARACTER_BEHAVIOR_BOUNDARIES,
-                1L, null, 5L, null, null, null);
+                new PromptExploreContext(1L, null, 5L, null, null, null));
 
         assertThat(result.variables()).containsEntry("characterName", "张三");
         assertThat(result.variables()).containsEntry("cardContent", "武功高强的侠客");
@@ -336,7 +336,7 @@ class PromptExploreServiceTest {
 
         PromptExploreService.ExploreResult result = service.resolve(
                 WorkflowStep.CHARACTER_DESIGN, PromptSubStep.CHARACTER_BEHAVIOR_BOUNDARIES,
-                1L, null, null, null, null, null);
+                new PromptExploreContext(1L, null, null, null, null, null));
 
         assertThat(result.variables()).containsEntry("characterName", "李四");
         assertThat(result.variables()).containsEntry("cardContent", "神秘侦探");
@@ -373,7 +373,7 @@ class PromptExploreServiceTest {
 
         PromptExploreService.ExploreResult result = service.resolve(
                 WorkflowStep.OUTLINE_GENERATION, PromptSubStep.CHAPTER_EVENT_PLAN,
-                1L, 3, null, null, null, null);
+                new PromptExploreContext(1L, 3, null, null, null, null));
 
         assertThat(result.variables()).containsEntry("chapterNumber", "3");
         assertThat(result.variables()).containsEntry("chapterSummary", "第三章摘要");
@@ -407,7 +407,7 @@ class PromptExploreServiceTest {
 
         PromptExploreService.ExploreResult result = service.resolve(
                 WorkflowStep.CHAPTER_WRITING, PromptSubStep.CHAPTER_CONTEXT_BRIEFING,
-                1L, 2, null, null, null, null);
+                new PromptExploreContext(1L, 2, null, null, null, null));
 
         assertThat(result.variables()).containsEntry("title", "都市小说");
         assertThat(result.variables()).containsEntry("chapterNumber", "2");
@@ -444,7 +444,7 @@ class PromptExploreServiceTest {
 
         PromptExploreService.ExploreResult result = service.resolve(
                 WorkflowStep.CHAPTER_WRITING, PromptSubStep.CHAPTER_PLOT_REASONING,
-                1L, 3, null, null, null, null);
+                new PromptExploreContext(1L, 3, null, null, null, null));
 
         assertThat(result.variables()).containsEntry("eventPlan", "事件计划内容");
         assertThat(result.variables()).containsEntry("writingBriefing", "写作简报内容");
@@ -465,7 +465,7 @@ class PromptExploreServiceTest {
 
         PromptExploreService.ExploreResult result = service.resolve(
                 WorkflowStep.CHAPTER_WRITING, PromptSubStep.CHAPTER_INSTANT_REVIEW,
-                1L, 2, null, null, null, null);
+                new PromptExploreContext(1L, 2, null, null, null, null));
 
         assertThat(result.variables()).containsEntry("writingReasoning", "推理过程");
         assertThat(result.variables()).containsEntry("contentDraft", "初稿内容");
@@ -480,7 +480,7 @@ class PromptExploreServiceTest {
 
         PromptExploreService.ExploreResult result = service.resolve(
                 WorkflowStep.CHAPTER_WRITING, PromptSubStep.CHAPTER_INSTANT_REVIEW,
-                1L, 99, null, null, null, null);
+                new PromptExploreContext(1L, 99, null, null, null, null));
 
         assertThat(result.variables()).containsEntry("writingReasoning", "");
         assertThat(result.variables()).containsEntry("contentDraft", "");
@@ -508,7 +508,7 @@ class PromptExploreServiceTest {
 
         PromptExploreService.ExploreResult result = service.resolve(
                 WorkflowStep.CHAPTER_WRITING, PromptSubStep.CHAPTER_CONTENT_OPTIMIZATION,
-                1L, 4, null, null, null, null);
+                new PromptExploreContext(1L, 4, null, null, null, null));
 
         assertThat(result.variables()).containsEntry("contentDraft", "初稿");
         assertThat(result.variables()).containsEntry("instantReview", "即时审阅内容");
@@ -533,7 +533,7 @@ class PromptExploreServiceTest {
 
         PromptExploreService.ExploreResult result = service.resolve(
                 WorkflowStep.CHAPTER_WRITING, PromptSubStep.CHAPTER_STORYLINE_UPDATE,
-                1L, 3, null, null, null, null);
+                new PromptExploreContext(1L, 3, null, null, null, null));
 
         assertThat(result.variables()).containsEntry("optimizedContent", "当前章内容");
         assertThat(result.variables()).containsEntry("previousStorylineSnapshot", "前一章快照");
@@ -551,7 +551,7 @@ class PromptExploreServiceTest {
 
         PromptExploreService.ExploreResult result = service.resolve(
                 WorkflowStep.CHAPTER_WRITING, PromptSubStep.CHAPTER_STORYLINE_UPDATE,
-                1L, 1, null, null, null, null);
+                new PromptExploreContext(1L, 1, null, null, null, null));
 
         assertThat(result.variables()).containsEntry("previousStorylineSnapshot", "");
     }
@@ -581,7 +581,7 @@ class PromptExploreServiceTest {
 
         PromptExploreService.ExploreResult result = service.resolve(
                 WorkflowStep.CHAPTER_WRITING, PromptSubStep.CHAPTER_DEEP_REVIEW,
-                1L, 5, null, null, null, null);
+                new PromptExploreContext(1L, 5, null, null, null, null));
 
         assertThat(result.variables()).containsEntry("finalContent", "最终内容");
         assertThat(result.variables()).containsEntry("previousPlotSummary", "前章情节摘要");
@@ -611,7 +611,7 @@ class PromptExploreServiceTest {
         mockStepGuidance(WorkflowStep.WORLD_BUILDING, "世界观创作指导");
 
         PromptExploreService.ExploreResult result = service.resolve(
-                WorkflowStep.WORLD_BUILDING, null, 1L, null, null, null, null, null);
+                WorkflowStep.WORLD_BUILDING, null, new PromptExploreContext(1L, null, null, null, null, null));
 
         // stepGuidance should be from WORLD_BUILDING, not CHAPTER_WRITING
         assertThat(result.variables().get("stepGuidance")).contains("世界观创作指导");
@@ -635,7 +635,7 @@ class PromptExploreServiceTest {
                 .thenReturn(Optional.empty());
 
         PromptExploreService.ExploreResult result = service.resolve(
-                WorkflowStep.POLISHING, null, 1L, null, null, null, null, null);
+                WorkflowStep.POLISHING, null, new PromptExploreContext(1L, null, null, null, null, null));
 
         assertThat(result.variables().get("stepGuidance")).isEmpty();
     }
@@ -651,7 +651,7 @@ class PromptExploreServiceTest {
 
         PromptExploreService.ExploreResult result = service.resolve(
                 WorkflowStep.WORLD_BUILDING, PromptSubStep.WRITING_RULES,
-                1L, null, null, null, null, null);
+                new PromptExploreContext(1L, null, null, null, null, null));
 
         assertThat(result.variables().get("stepGuidance")).contains("世界观指导内容");
 

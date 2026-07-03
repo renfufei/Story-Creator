@@ -3,6 +3,7 @@ package com.storycreator.web;
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.ai.router.TtsProviderRegistry;
 import com.storycreator.persistence.entity.AiModelConfigEntity;
+import com.storycreator.tts.TtsPlaybackSettings;
 import com.storycreator.tts.TtsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,13 +97,11 @@ public class TtsController {
             @PathVariable Long projectId,
             @RequestBody ChunkRequest request) {
         try {
-            byte[] audio = ttsService.generateAudioForChunk(
-                    request.configId(),
-                    request.text(),
-                    request.voice(),
+            TtsPlaybackSettings settings = new TtsPlaybackSettings(
+                    request.configId(), request.voice(),
                     request.format() != null ? request.format() : "mp3",
-                    request.speed() > 0 ? request.speed() : 1.0
-            );
+                    request.speed() > 0 ? request.speed() : 1.0);
+            byte[] audio = ttsService.generateAudioForChunk(projectId, request.text(), settings);
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_TYPE, getContentType(request.format() != null ? request.format() : "mp3"))
                     .header(HttpHeaders.CACHE_CONTROL, "no-cache")
@@ -125,7 +124,8 @@ public class TtsController {
             @RequestParam(defaultValue = "1.0") double speed) {
 
         try {
-            byte[] audio = ttsService.generateChapterAudio(projectId, configId, chapterNumber, voice, format, speed);
+            TtsPlaybackSettings settings = new TtsPlaybackSettings(configId, voice, format, speed);
+            byte[] audio = ttsService.generateChapterAudio(projectId, chapterNumber, settings);
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_TYPE, getContentType(format))
                     .header(HttpHeaders.CACHE_CONTROL, "no-cache")
@@ -154,7 +154,8 @@ public class TtsController {
                         .collect(Collectors.toList());
             }
 
-            byte[] audio = ttsService.generateMultiChapterAudio(projectId, configId, chapterNumbers, voice, format, speed);
+            TtsPlaybackSettings settings = new TtsPlaybackSettings(configId, voice, format, speed);
+            byte[] audio = ttsService.generateMultiChapterAudio(projectId, chapterNumbers, settings);
 
             String filename = "novel_export." + format;
             return ResponseEntity.ok()

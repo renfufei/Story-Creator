@@ -60,6 +60,13 @@ public class OllamaAiProvider implements AiProvider {
                 .uri("/api/chat")
                 .bodyValue(body)
                 .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        resp -> resp.bodyToMono(String.class)
+                                .flatMap(errBody -> {
+                                    log.error("Ollama API error: status={} body={}", resp.statusCode(), errBody);
+                                    return reactor.core.publisher.Mono.error(
+                                            new RuntimeException("Ollama API error " + resp.statusCode() + ": " + errBody));
+                                }))
                 .bodyToMono(String.class)
                 .block();
 
@@ -78,17 +85,26 @@ public class OllamaAiProvider implements AiProvider {
 
     @Override
     public Flux<String> streamText(AiRequest request) {
-        String body = buildRequestBody(request, true);
-        WebClient client = buildWebClient(request);
+        return Flux.defer(() -> {
+            String body = buildRequestBody(request, true);
+            WebClient client = buildWebClient(request);
 
-        return client.post()
-                .uri("/api/chat")
-                .bodyValue(body)
-                .accept(MediaType.APPLICATION_NDJSON)
-                .retrieve()
-                .bodyToFlux(String.class)
-                .filter(line -> line != null && !line.isEmpty())
-                .mapNotNull(this::extractDelta);
+            return client.post()
+                    .uri("/api/chat")
+                    .bodyValue(body)
+                    .accept(MediaType.APPLICATION_NDJSON)
+                    .retrieve()
+                    .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                            response -> response.bodyToMono(String.class)
+                                    .flatMap(errBody -> {
+                                        log.error("Ollama API error: status={} body={}", response.statusCode(), errBody);
+                                        return reactor.core.publisher.Mono.error(
+                                                new RuntimeException("Ollama API error " + response.statusCode() + ": " + errBody));
+                                    }))
+                    .bodyToFlux(String.class)
+                    .filter(line -> line != null && !line.isEmpty())
+                    .mapNotNull(this::extractDelta);
+        }).retryWhen(AiRetrySpec.linearBackoffRetry("Ollama"));
     }
 
     private WebClient buildWebClient(AiRequest request) {

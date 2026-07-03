@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('编辑创作指导', ~{::content})}">
+<body>
+<div th:fragment="content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">编辑创作指导</h2>
+        <a th:href="@{/settings/guidances}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> 返回列表
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <form th:action="@{/settings/guidances/{id}/update(id=${item.id})}" method="post">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">名称</label>
+                        <input type="text" class="form-control" name="name" th:value="${item.name}" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">步骤</label>
+                        <select class="form-select" name="step" required>
+                            <option th:each="s : ${steps}" th:value="${s.name()}" th:text="${s.displayName}"
+                                    th:selected="${s == item.step}">步骤</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">指导内容</label>
+                    <textarea class="form-control" name="guidance" rows="12" th:text="${item.guidance}"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">保存</button>
+                <a th:href="@{/settings/guidances}" class="btn btn-secondary">取消</a>
+            </form>
+        </div>
+    </div>
+</div>
+</body>
+</html>

@@ -265,6 +265,9 @@
                             form.querySelector('#defaultModelConfigId').value = data.defaultModelConfigId;
                         }
                         form.querySelector('#autoMode').checked = data.autoMode;
+                        if (data.autoRunStrategy) {
+                            form.querySelector('#autoRunStrategy').value = data.autoRunStrategy;
+                        }
                         if (data.stepModelConfigs) {
                             for (const [step, configId] of Object.entries(data.stepModelConfigs)) {
                                 const select = form.querySelector('[name="stepModelConfigs[' + step + ']"]');

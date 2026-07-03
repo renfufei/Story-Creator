@@ -106,9 +106,10 @@ public class CharacterGenerationService {
                     long cardStart = System.currentTimeMillis();
                     List<String> currentSummaries = new ArrayList<>(previousSummaries);
 
+                    AiCallConfig aiConfig = new AiCallConfig(resolved, guidanceSuffix);
                     StringBuilder cardContent = new StringBuilder();
                     Flux<String> cardFlux = generateSingleCharacterCard(
-                            baseContext, cardNum, characterCount, resolved, guidanceSuffix, currentSummaries)
+                            baseContext, cardNum, characterCount, aiConfig, currentSummaries)
                         .doOnNext(cardContent::append)
                         .doOnComplete(() -> {
                             String text = cardContent.toString();
@@ -193,6 +194,7 @@ public class CharacterGenerationService {
                 .map(sg -> "\n\n【创作指导】\n" + sg.getGuidance() + "\n请在生成时参考以上指导意见。")
                 .orElse("");
 
+        AiCallConfig aiConfig = new AiCallConfig(resolved, guidanceSuffix);
         return Flux.range(0, cards.size())
                 .concatMap(idx -> {
                     CharacterEntity card = cards.get(idx);
@@ -202,7 +204,7 @@ public class CharacterGenerationService {
                     Flux<String> marker = Flux.just("[[CHAR:REFINE:" + (idx + 1) + "]]");
                     StringBuilder refined = new StringBuilder();
 
-                    Flux<String> refineFlux = generateSingleRefine(ctx, card, allSummaries, resolved, guidanceSuffix)
+                    Flux<String> refineFlux = generateSingleRefine(ctx, card, allSummaries, aiConfig)
                             .doOnNext(refined::append)
                             .doOnComplete(() -> {
                                 String text = stripAiFormatting(refined.toString());
@@ -395,9 +397,10 @@ public class CharacterGenerationService {
 
     private Flux<String> generateSingleCharacterCard(WorkflowContext baseContext,
                                                       int cardNum, int totalCards,
-                                                      AiProviderRouter.ResolvedModel resolved,
-                                                      String guidanceSuffix,
+                                                      AiCallConfig aiConfig,
                                                       List<String> previousCharacterSummaries) {
+        AiProviderRouter.ResolvedModel resolved = aiConfig.resolved();
+        String guidanceSuffix = aiConfig.guidanceSuffix();
         StringBuilder previousContext = new StringBuilder();
         if (!previousCharacterSummaries.isEmpty()) {
             previousContext.append("\n\n【已设计角色】\n");
@@ -513,7 +516,9 @@ public class CharacterGenerationService {
     }
 
     private Flux<String> generateSingleRefine(WorkflowContext ctx, CharacterEntity card,
-                                               List<String> allSummaries, AiProviderRouter.ResolvedModel resolved, String guidanceSuffix) {
+                                               List<String> allSummaries, AiCallConfig aiConfig) {
+        AiProviderRouter.ResolvedModel resolved = aiConfig.resolved();
+        String guidanceSuffix = aiConfig.guidanceSuffix();
         String summariesText = String.join("\n", allSummaries);
 
         Genre genre = ctx.getGenre();

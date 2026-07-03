@@ -12,10 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
-import reactor.util.retry.Retry;
 
-import java.io.IOException;
-import java.time.Duration;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -119,7 +116,8 @@ public class OutlineGenerationService {
                     log.info("[P{}] Volume {} generating (ch{}-{})", projectId, vol.volumeNumber(), vol.chapterStart(), vol.chapterEnd());
                     long volStart = System.currentTimeMillis();
                     StringBuilder arcContent = new StringBuilder();
-                    Flux<String> arcFlux = generateSingleVolumeArc(baseContext, vol, totalChapters, resolved, guidanceSuffix, volumeArcSummaries)
+                    AiCallConfig aiConfig = new AiCallConfig(resolved, guidanceSuffix);
+                    Flux<String> arcFlux = generateSingleVolumeArc(baseContext, vol, totalChapters, aiConfig, volumeArcSummaries)
                             .doOnNext(arcContent::append)
                             .doOnComplete(() -> {
                                 String text = arcContent.toString();
@@ -167,8 +165,10 @@ public class OutlineGenerationService {
                                 long chStart = System.currentTimeMillis();
                                 String volumeArc = volumeArcSummaries.get(vol.volumeNumber() - 1);
                                 StringBuilder chContent = new StringBuilder();
-                                Flux<String> chFlux = generateSingleChapterOutlineV2(
-                                        baseContext, chapterNum, totalChapters, vol, volumeArc, previousOutlines, nextOutlines, resolved, guidanceSuffix)
+                                AiCallConfig aiConfig = new AiCallConfig(resolved, guidanceSuffix);
+                                ChapterOutlineContext outlineCtx = new ChapterOutlineContext(
+                                        chapterNum, totalChapters, vol, volumeArc, previousOutlines, nextOutlines);
+                                Flux<String> chFlux = generateSingleChapterOutlineV2(baseContext, outlineCtx, aiConfig)
                                         .doOnNext(chContent::append)
                                         .doOnComplete(() -> {
                                             String text = chContent.toString();
@@ -225,9 +225,11 @@ public class OutlineGenerationService {
                                 long refineStart = System.currentTimeMillis();
                                 StringBuilder refineContent = new StringBuilder();
 
-                                Flux<String> refineFlux = generateSingleChapterRefine(
-                                        baseContext, chapterNum, totalChapters, volumeArc,
-                                        prevOutlinesForRefine, currentOutline, nextOutlinesForRefine, resolved, guidanceSuffix)
+                                AiCallConfig aiConfig = new AiCallConfig(resolved, guidanceSuffix);
+                                ChapterRefineContext refineCtx = new ChapterRefineContext(
+                                        chapterNum, totalChapters, volumeArc, currentOutline,
+                                        prevOutlinesForRefine, nextOutlinesForRefine);
+                                Flux<String> refineFlux = generateSingleChapterRefine(baseContext, refineCtx, aiConfig)
                                         .doOnNext(refineContent::append)
                                         .doOnComplete(() -> {
                                             String text = refineContent.toString();
@@ -254,7 +256,8 @@ public class OutlineGenerationService {
             String summaryMarker = "[[SECTION:SUMMARY]]";
             long summaryStart = System.currentTimeMillis();
             StringBuilder summaryContent = new StringBuilder();
-            Flux<String> summaryFlux = generateStorySummary(baseContext, totalChapters, volumeArcSummaries, resolved, guidanceSuffix)
+            AiCallConfig aiConfig = new AiCallConfig(resolved, guidanceSuffix);
+            Flux<String> summaryFlux = generateStorySummary(baseContext, totalChapters, volumeArcSummaries, aiConfig)
                     .doOnNext(summaryContent::append)
                     .doOnComplete(() -> {
                         saveStorySummaryToDb(projectId, summaryContent.toString());
@@ -306,8 +309,11 @@ public class OutlineGenerationService {
         log.info("[P{}] Regenerating chapter outline {}", projectId, chapterNumber);
         long regenStart = System.currentTimeMillis();
 
+        AiCallConfig aiConfig = new AiCallConfig(resolved, guidanceSuffix);
+        ChapterOutlineContext outlineCtx = new ChapterOutlineContext(
+                chapterNumber, totalChapters, vol, volumeArc, previousOutlines, nextOutlines);
         StringBuilder chContent = new StringBuilder();
-        return generateSingleChapterOutlineV2(baseContext, chapterNumber, totalChapters, vol, volumeArc, previousOutlines, nextOutlines, resolved, guidanceSuffix)
+        return generateSingleChapterOutlineV2(baseContext, outlineCtx, aiConfig)
                 .doOnNext(chContent::append)
                 .doOnComplete(() -> {
                     String text = chContent.toString();
@@ -551,7 +557,7 @@ public class OutlineGenerationService {
 
     // --- Private helpers ---
 
-    record VolumeRange(int volumeNumber, int chapterStart, int chapterEnd) {}
+    // VolumeRange extracted to package-level file
 
     private List<VolumeRange> computeVolumes(int totalChapters, int volumeSize) {
         if (volumeSize <= 0) volumeSize = 10;
@@ -566,9 +572,10 @@ public class OutlineGenerationService {
 
     private Flux<String> generateSingleVolumeArc(WorkflowContext baseContext,
                                                    VolumeRange vol, int totalChapters,
-                                                   AiProviderRouter.ResolvedModel resolved,
-                                                   String guidanceSuffix,
+                                                   AiCallConfig aiConfig,
                                                    List<String> previousArcSummaries) {
+        AiProviderRouter.ResolvedModel resolved = aiConfig.resolved();
+        String guidanceSuffix = aiConfig.guidanceSuffix();
         StringBuilder previousContext = new StringBuilder();
         if (!previousArcSummaries.isEmpty()) {
             previousContext.append("\n【前文各卷弧线摘要】\n");
@@ -607,17 +614,20 @@ public class OutlineGenerationService {
                 .build();
         applyResolvedConfig(request, resolved);
 
-        return Flux.defer(() -> resolved.provider().streamText(request))
-                .retryWhen(retryOnConnectionReset("VolumeArc-" + vol.volumeNumber()));
+        return resolved.provider().streamText(request);
     }
 
     private Flux<String> generateSingleChapterOutlineV2(WorkflowContext baseContext,
-                                                          int chapterNum, int totalChapters,
-                                                          VolumeRange vol, String volumeArc,
-                                                          List<String> previousOutlines,
-                                                          List<String> nextOutlines,
-                                                          AiProviderRouter.ResolvedModel resolved,
-                                                          String guidanceSuffix) {
+                                                          ChapterOutlineContext ctx,
+                                                          AiCallConfig aiConfig) {
+        AiProviderRouter.ResolvedModel resolved = aiConfig.resolved();
+        String guidanceSuffix = aiConfig.guidanceSuffix();
+        int chapterNum = ctx.chapterNum();
+        int totalChapters = ctx.totalChapters();
+        VolumeRange vol = ctx.vol();
+        String volumeArc = ctx.volumeArc();
+        List<String> previousOutlines = ctx.previousOutlines();
+        List<String> nextOutlines = ctx.nextOutlines();
         String phaseHint;
         double progress = (double) chapterNum / totalChapters;
         if (progress <= 0.2) phaseHint = "开篇引入阶段";
@@ -689,18 +699,20 @@ public class OutlineGenerationService {
                 .build();
         applyResolvedConfig(request, resolved);
 
-        return Flux.defer(() -> resolved.provider().streamText(request))
-                .retryWhen(retryOnConnectionReset("ChapterOutline-" + chapterNum));
+        return resolved.provider().streamText(request);
     }
 
     private Flux<String> generateSingleChapterRefine(WorkflowContext baseContext,
-                                                       int chapterNum, int totalChapters,
-                                                       String volumeArc,
-                                                       List<String> previousOutlines,
-                                                       String currentChapterOutline,
-                                                       List<String> nextOutlines,
-                                                       AiProviderRouter.ResolvedModel resolved,
-                                                       String guidanceSuffix) {
+                                                       ChapterRefineContext ctx,
+                                                       AiCallConfig aiConfig) {
+        AiProviderRouter.ResolvedModel resolved = aiConfig.resolved();
+        String guidanceSuffix = aiConfig.guidanceSuffix();
+        int chapterNum = ctx.chapterNum();
+        int totalChapters = ctx.totalChapters();
+        String volumeArc = ctx.volumeArc();
+        List<String> previousOutlines = ctx.previousOutlines();
+        String currentChapterOutline = ctx.currentChapterOutline();
+        List<String> nextOutlines = ctx.nextOutlines();
         StringBuilder contextInfo = new StringBuilder();
         if (volumeArc != null && !volumeArc.isBlank()) {
             contextInfo.append("\n【本卷故事弧线】").append(wrapContent(truncate(volumeArc, 500)));
@@ -762,14 +774,14 @@ public class OutlineGenerationService {
                 .build();
         applyResolvedConfig(request, resolved);
 
-        return Flux.defer(() -> resolved.provider().streamText(request))
-                .retryWhen(retryOnConnectionReset("ChapterRefine-" + chapterNum));
+        return resolved.provider().streamText(request);
     }
 
     private Flux<String> generateStorySummary(WorkflowContext baseContext, int totalChapters,
                                                List<String> volumeArcSummaries,
-                                               AiProviderRouter.ResolvedModel resolved,
-                                               String guidanceSuffix) {
+                                               AiCallConfig aiConfig) {
+        AiProviderRouter.ResolvedModel resolved = aiConfig.resolved();
+        String guidanceSuffix = aiConfig.guidanceSuffix();
         StringBuilder arcsInfo = new StringBuilder();
         for (int i = 0; i < volumeArcSummaries.size(); i++) {
             arcsInfo.append("第").append(i + 1).append("卷：")
@@ -800,34 +812,7 @@ public class OutlineGenerationService {
                 .build();
         applyResolvedConfig(request, resolved);
 
-        return Flux.defer(() -> resolved.provider().streamText(request))
-                .retryWhen(retryOnConnectionReset("StorySummary"));
-    }
-
-    // --- Retry helper ---
-
-    private Retry retryOnConnectionReset(String context) {
-        return Retry.backoff(3, Duration.ofSeconds(2))
-                .maxBackoff(Duration.ofSeconds(10))
-                .filter(this::isRetryableError)
-                .doBeforeRetry(signal -> log.warn("[{}] Retrying due to transient error (attempt {}): {}",
-                        context, signal.totalRetries() + 1, signal.failure().getMessage()));
-    }
-
-    private boolean isRetryableError(Throwable e) {
-        if (e instanceof IOException) return true;
-        String msg = e.getMessage();
-        if (msg == null) {
-            return e.getCause() instanceof IOException;
-        }
-        return msg.contains("Connection reset")
-                || msg.contains("connection reset")
-                || msg.contains("Connection refused")
-                || msg.contains("Connection timed out")
-                || msg.contains("Connection prematurely closed")
-                || msg.contains("premature close")
-                || msg.contains("GOAWAY")
-                || msg.contains("connection was aborted");
+        return resolved.provider().streamText(request);
     }
 
     // --- Persistence helpers ---

@@ -4,6 +4,7 @@ import com.storycreator.ai.router.ImageProviderRegistry;
 import com.storycreator.core.domain.ImageType;
 import com.storycreator.core.domain.ModelType;
 import com.storycreator.image.CharacterImageService;
+import com.storycreator.image.ImageGenerationOptions;
 import com.storycreator.persistence.entity.AiModelConfigEntity;
 import com.storycreator.persistence.entity.CharacterImageEntity;
 import com.storycreator.persistence.repository.AiModelConfigRepository;
@@ -77,7 +78,8 @@ public class CharacterImageController {
             @RequestParam(required = false) Integer width,
             @RequestParam(required = false) Integer height) {
         try {
-            CharacterImageEntity image = imageService.generateImageForRecord(projectId, charId, imageId, prompt, imageConfigId, width, height);
+            ImageGenerationOptions options = new ImageGenerationOptions(prompt, imageConfigId, width, height);
+            CharacterImageEntity image = imageService.generateImageForRecord(projectId, charId, imageId, options);
             return ResponseEntity.ok(buildImageMap(image, projectId));
         } catch (Exception e) {
             log.error("Image generation failed for image {}", imageId, e);
@@ -154,7 +156,7 @@ public class CharacterImageController {
             byte[] data = imageService.getImageBytes(image);
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_TYPE, "image/png")
-                    .header(HttpHeaders.CACHE_CONTROL, "max-age=3600")
+                    .header(HttpHeaders.CACHE_CONTROL, "no-cache")
                     .body(data);
         } catch (Exception e) {
             log.error("Failed to serve image {}", imageId, e);

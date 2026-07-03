@@ -1,3 +1,8 @@
+function checkResponse(r) {
+    if (!r.ok) throw new Error('请求失败: ' + r.status);
+    return r.json();
+}
+
 function workflowCoreMixin() {
     const d = window.__WORKFLOW_DATA__;
     return {
@@ -25,6 +30,12 @@ function workflowCoreMixin() {
         stepGuidance: d.stepGuidance || '',
         stepGuidanceEdit: '',
         editingGuidance: false,
+        guidanceLibraryItems: [],
+        guidanceLibraryLoading: false,
+        reuseFilterByStep: true,
+        selectedGuidanceId: null,
+        guidanceToastMsg: '',
+        guidanceToastType: 'success',
         stepList: [
             { name: 'WORLD_BUILDING', label: '世界观设定', order: 1 },
             { name: 'CHARACTER_DESIGN', label: '角色设计', order: 2 },
@@ -39,10 +50,12 @@ function workflowCoreMixin() {
             this.wfStateCurrentStep = d.projectCurrentStep;
             this.autoMode = d.autoMode;
             this.autoRunStepConfigs = d.autoRunStepConfigs;
+            this.autoRunStrategy = d.autoRunStrategy || 'DEFAULT';
             this.autoRunActiveStep = d.currentStep;
             this.autoRunActiveOrder = d.currentStepOrder;
             this.characterStateDims = d.characterStateDims;
 
+            this.$watch('reuseFilterByStep', () => { this.loadGuidanceLibrary(); });
             this.loadChapterList();
             this.loadCharacterList();
             if (this.currentStep === 'OUTLINE_GENERATION') {
@@ -61,7 +74,7 @@ function workflowCoreMixin() {
         checkBgGenStatus() {
             if (['OUTLINE_GENERATION','CHARACTER_DESIGN','PROOFREADING'].includes(this.currentStep)) {
                 fetch(`/projects/${this.projectId}/bg-gen/status?step=${this.currentStep}&chapter=0`)
-                    .then(r => r.json())
+                    .then(checkResponse)
                     .then(data => {
                         if (data.bgActive) {
                             this.generating = true;
@@ -80,7 +93,7 @@ function workflowCoreMixin() {
                     .catch(() => {});
             } else if (['CHAPTER_WRITING','POLISHING'].includes(this.currentStep)) {
                 fetch(`/projects/${this.projectId}/bg-gen/active-chapter?step=${this.currentStep}`)
-                    .then(r => r.json())
+                    .then(checkResponse)
                     .then(data => {
                         if (data.bgActive) {
                             this.generating = true;
@@ -92,7 +105,7 @@ function workflowCoreMixin() {
                     .catch(() => {});
             } else if (this.currentStep === 'WORLD_BUILDING') {
                 fetch(`/projects/${this.projectId}/bg-gen/status?step=WORLD_BUILDING&chapter=0`)
-                    .then(r => r.json())
+                    .then(checkResponse)
                     .then(data => {
                         if (data.bgActive) {
                             this.generating = true;
@@ -186,6 +199,8 @@ function workflowCoreMixin() {
             this.generatedContent = '';
             this.viewingChapterNum = 0;
             this.viewingChapterTitle = '';
+            const matParam = this.getMaterialIdsParam ? this.getMaterialIdsParam() : '';
+            const matSuffix = matParam ? '&' + matParam : '';
             if (['OUTLINE_GENERATION','CHARACTER_DESIGN','PROOFREADING'].includes(this.currentStep)) {
                 if (this.currentStep === 'OUTLINE_GENERATION') {
                     this.outlineVolumes = [];
@@ -196,8 +211,8 @@ function workflowCoreMixin() {
                 } else if (this.currentStep === 'PROOFREADING') {
                     this.proofreadStreaming = { chapterNumber: 0, substep: '' };
                 }
-                fetch(`/projects/${this.projectId}/bg-gen/start?step=${this.currentStep}&chapter=0`, {method:'POST'})
-                    .then(r => r.json())
+                fetch(`/projects/${this.projectId}/bg-gen/start?step=${this.currentStep}&chapter=0${matSuffix}`, {method:'POST'})
+                    .then(checkResponse)
                     .then(data => {
                         if (data.status === 'ok') {
                             this.startElapsedTimer();
@@ -212,8 +227,8 @@ function workflowCoreMixin() {
                         this.generating = false;
                     });
             } else {
-                fetch(`/projects/${this.projectId}/bg-gen/start?step=${this.currentStep}&chapter=0`, {method:'POST'})
-                    .then(r => r.json())
+                fetch(`/projects/${this.projectId}/bg-gen/start?step=${this.currentStep}&chapter=0${matSuffix}`, {method:'POST'})
+                    .then(checkResponse)
                     .then(data => {
                         if (data.status === 'ok') {
                             this.startElapsedTimer();
@@ -270,7 +285,7 @@ function workflowCoreMixin() {
 
         loadChapterList() {
             fetch(`/projects/${this.projectId}/chapters/list`)
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => { this.chapterListData = data; })
                 .catch(err => console.error('Failed to load chapters:', err));
         },
@@ -283,7 +298,7 @@ function workflowCoreMixin() {
                 method: 'POST',
                 body: formData
             })
-            .then(r => r.json())
+            .then(checkResponse)
             .then(() => {
                 this.stepGuidance = this.stepGuidanceEdit;
                 this.editingGuidance = false;
@@ -293,22 +308,103 @@ function workflowCoreMixin() {
 
         confirmStep() {
             fetch(`/projects/${this.projectId}/confirm-only-ajax?step=${this.currentStep}`, {method:'POST'})
-                .then(r => r.json())
+                .then(r => { if (!r.ok) throw new Error('请求失败'); return r.json(); })
                 .then(data => {
                     if (data.status === 'ok') {
                         this.stepConfirmed = true;
+                    } else {
+                        alert(data.error || '确认失败');
                     }
-                });
+                })
+                .catch(err => alert('确认步骤失败: ' + err.message));
         },
 
         advanceStep() {
             fetch(`/projects/${this.projectId}/advance-ajax?step=${this.currentStep}`, {method:'POST'})
-                .then(r => r.json())
+                .then(r => { if (!r.ok) throw new Error('请求失败'); return r.json(); })
                 .then(data => {
                     if (data.status === 'ok') {
                         location.reload();
+                    } else {
+                        alert(data.error || '推进失败');
                     }
+                })
+                .catch(err => alert('推进步骤失败: ' + err.message));
+        },
+
+        currentStepLabel() {
+            const found = this.stepList.find(s => s.name === this.currentStep);
+            return found ? found.label : this.currentStep;
+        },
+
+        showGuidanceToast(msg, type) {
+            this.guidanceToastMsg = msg;
+            this.guidanceToastType = type || 'success';
+            const toastEl = this.$refs.guidanceToast;
+            if (toastEl) {
+                const toast = new bootstrap.Toast(toastEl, { delay: 3000 });
+                toast.show();
+            }
+        },
+
+        saveGuidanceAsShared() {
+            if (!this.stepGuidance) return;
+            const formData = new FormData();
+            formData.append('projectId', this.projectId);
+            formData.append('step', this.currentStep);
+            fetch('/settings/guidances/save-from-project', { method: 'POST', body: formData })
+                .then(checkResponse)
+                .then(data => {
+                    if (data.error) {
+                        this.showGuidanceToast(data.error, 'danger');
+                    } else {
+                        this.showGuidanceToast('已保存为通用指导: ' + data.name, 'success');
+                    }
+                })
+                .catch(err => this.showGuidanceToast('保存失败: ' + err, 'danger'));
+        },
+
+        openReuseModal() {
+            this.selectedGuidanceId = null;
+            this.loadGuidanceLibrary();
+            const modal = new bootstrap.Modal(document.getElementById('reuseGuidanceModal'));
+            modal.show();
+        },
+
+        loadGuidanceLibrary() {
+            this.guidanceLibraryLoading = true;
+            let url = '/settings/guidances/list-json';
+            if (this.reuseFilterByStep) {
+                url += '?step=' + this.currentStep;
+            }
+            fetch(url)
+                .then(checkResponse)
+                .then(data => {
+                    this.guidanceLibraryItems = data;
+                    this.guidanceLibraryLoading = false;
+                })
+                .catch(() => {
+                    this.guidanceLibraryItems = [];
+                    this.guidanceLibraryLoading = false;
                 });
+        },
+
+        applyReuseGuidance() {
+            if (!this.selectedGuidanceId) return;
+            const item = this.guidanceLibraryItems.find(i => i.id === this.selectedGuidanceId);
+            if (!item) return;
+            const formData = new FormData();
+            formData.append('step', this.currentStep);
+            formData.append('guidance', item.guidance);
+            fetch(`/projects/${this.projectId}/step-guidance`, { method: 'POST', body: formData })
+                .then(checkResponse)
+                .then(() => {
+                    this.stepGuidance = item.guidance;
+                    this.editingGuidance = false;
+                    bootstrap.Modal.getInstance(document.getElementById('reuseGuidanceModal')).hide();
+                    this.showGuidanceToast('已应用指导: ' + item.name, 'success');
+                })
+                .catch(err => this.showGuidanceToast('应用失败: ' + err, 'danger'));
         },
 
         initGlobalScrollSync() {
@@ -342,6 +438,7 @@ function workflowApp() {
         workflowPolishingMixin(),
         workflowProofreadingMixin(),
         workflowAutorunMixin(),
-        workflowStateMixin()
+        workflowStateMixin(),
+        materialsMixin()
     );
 }

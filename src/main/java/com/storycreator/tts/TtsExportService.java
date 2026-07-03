@@ -1,11 +1,13 @@
 package com.storycreator.tts;
 
+import com.storycreator.ai.router.TtsProviderRegistry;
 import com.storycreator.persistence.entity.ChapterEntity;
 import com.storycreator.persistence.entity.TtsExportChapterEntity;
 import com.storycreator.persistence.entity.TtsExportTaskEntity;
 import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.TtsExportChapterRepository;
 import com.storycreator.persistence.repository.TtsExportTaskRepository;
+import com.storycreator.workflow.engine.AiUsageTracker;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +22,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +42,8 @@ public class TtsExportService {
     private final TtsService ttsService;
     private final Mp3ProcessingService mp3ProcessingService;
     private final com.storycreator.core.service.GlobalSettingService globalSettingService;
+    private final AiUsageTracker aiUsageTracker;
+    private final TtsProviderRegistry ttsProviderRegistry;
 
     private final ConcurrentHashMap<Long, Boolean> stopSignals = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Boolean> pauseSignals = new ConcurrentHashMap<>();
@@ -50,12 +53,10 @@ public class TtsExportService {
     private final ScheduledExecutorService cleanupScheduler = Executors.newSingleThreadScheduledExecutor();
 
     public static class TaskProgressSink {
-        private final Sinks.Many<String> sink = Sinks.many().multicast().onBackpressureBuffer(512, false);
-        private final List<String> buffer = Collections.synchronizedList(new ArrayList<>());
+        private final Sinks.Many<String> sink = Sinks.many().replay().all();
         private volatile boolean completed = false;
 
         public void emit(String message) {
-            buffer.add(message);
             sink.tryEmitNext(message);
         }
 
@@ -66,10 +67,6 @@ public class TtsExportService {
 
         public Flux<String> asFlux() {
             return sink.asFlux();
-        }
-
-        public List<String> getBuffer() {
-            return buffer;
         }
 
         public boolean isCompleted() {
@@ -85,6 +82,8 @@ public class TtsExportService {
                             TtsService ttsService,
                             Mp3ProcessingService mp3ProcessingService,
                             com.storycreator.core.service.GlobalSettingService globalSettingService,
+                            AiUsageTracker aiUsageTracker,
+                            TtsProviderRegistry ttsProviderRegistry,
                             @Value("${STORY_DB_PATH:./data}") String dbPath) {
         this.taskRepository = taskRepository;
         this.chapterRepository = chapterRepository;
@@ -92,6 +91,8 @@ public class TtsExportService {
         this.ttsService = ttsService;
         this.mp3ProcessingService = mp3ProcessingService;
         this.globalSettingService = globalSettingService;
+        this.aiUsageTracker = aiUsageTracker;
+        this.ttsProviderRegistry = ttsProviderRegistry;
         this.storageBaseDir = Paths.get(dbPath, "tts-export");
     }
 
@@ -237,6 +238,61 @@ public class TtsExportService {
         return taskRepository.findByProjectIdOrderByCreatedAtDesc(projectId);
     }
 
+    public TtsExportTaskEntity updateTaskChapters(Long taskId, List<Integer> newChapterNumbers) {
+        TtsExportTaskEntity task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new IllegalArgumentException("任务不存在: " + taskId));
+
+        if (task.getStatus() == TtsExportStatus.RUNNING) {
+            throw new IllegalStateException("任务正在运行中，无法修改章节");
+        }
+
+        List<TtsExportChapterEntity> existingChapters = chapterRepository.findByTaskIdOrderByChapterNumber(taskId);
+        List<Integer> existingNumbers = existingChapters.stream()
+                .map(TtsExportChapterEntity::getChapterNumber).toList();
+
+        // Determine chapters to remove and add
+        List<Integer> toRemove = existingNumbers.stream()
+                .filter(n -> !newChapterNumbers.contains(n)).toList();
+        List<Integer> toAdd = newChapterNumbers.stream()
+                .filter(n -> !existingNumbers.contains(n)).toList();
+
+        // Delete removed chapters and their audio files
+        if (!toRemove.isEmpty()) {
+            List<TtsExportChapterEntity> chaptersToDelete =
+                    chapterRepository.findByTaskIdAndChapterNumberIn(taskId, toRemove);
+            for (TtsExportChapterEntity ch : chaptersToDelete) {
+                if (ch.getFilePath() != null) {
+                    try {
+                        Files.deleteIfExists(storageBaseDir.resolve(ch.getFilePath()));
+                    } catch (IOException e) {
+                        log.warn("Failed to delete audio file for task {} chapter {}: {}",
+                                taskId, ch.getChapterNumber(), e.getMessage());
+                    }
+                }
+            }
+            chapterRepository.deleteByTaskIdAndChapterNumberIn(taskId, toRemove);
+        }
+
+        // Add new chapters
+        for (int chapterNum : toAdd) {
+            TtsExportChapterEntity chapterEntity = new TtsExportChapterEntity();
+            chapterEntity.setTaskId(taskId);
+            chapterEntity.setProjectId(task.getProjectId());
+            chapterEntity.setChapterNumber(chapterNum);
+            chapterRepository.save(chapterEntity);
+        }
+
+        // Update progress counts
+        List<TtsExportChapterEntity> updatedChapters = chapterRepository.findByTaskIdOrderByChapterNumber(taskId);
+        long completedCount = updatedChapters.stream()
+                .filter(ch -> ch.getStatus() == TtsExportChapterStatus.COMPLETED).count();
+        task.setProgressTotalChapters(updatedChapters.size());
+        task.setProgressChapter((int) completedCount);
+        task.setStatus(TtsExportStatus.PAUSED);
+        task.setErrorMessage(null);
+        return taskRepository.save(task);
+    }
+
     /**
      * Returns a map of chapterNumber -> download URL for completed chapters of the latest task.
      */
@@ -372,6 +428,8 @@ public class TtsExportService {
 
     private Path generateChapterAudio(TtsExportTaskEntity task, TtsExportChapterEntity chapter,
                                        Path taskDir, TaskProgressSink progressSink) throws IOException {
+        long startTime = System.currentTimeMillis();
+
         // Get text chunks
         List<String> chunks = ttsService.getChapterChunks(
                 task.getProjectId(), chapter.getChapterNumber(), task.getMinLen(), task.getMaxLen(), task.getConfigId());
@@ -393,6 +451,8 @@ public class TtsExportService {
         Path reusableChunkGapFile = null;  // reused for normal inter-chunk gap
         Path reusableSkipGapFile = null;   // reused for skip gap (quality failure)
         try {
+            boolean debugMode = globalSettingService.isTtsDebugMode();
+
             // Generate audio for each chunk
             for (int i = 0; i < chunks.size(); i++) {
                 // Check stop signal between chunks
@@ -400,20 +460,36 @@ public class TtsExportService {
                     throw new IOException("任务被停止");
                 }
 
-                // Emit batch start with text content
-                if (progressSink != null) {
-                    progressSink.emit("  [批次 " + (i + 1) + "/" + chunks.size() + "] " + chunks.get(i));
-                }
+                String batchPrefix = "  [批次 " + (i + 1) + "/" + chunks.size() + "] ";
+                String chunkText = chunks.get(i);
 
-                byte[] audio = ttsService.generateAudioForChunk(
-                        task.getConfigId(), chunks.get(i), task.getVoice(), fmt, task.getSpeed());
+                byte[] audio;
+                TtsPlaybackSettings chunkSettings = new TtsPlaybackSettings(
+                        task.getConfigId(), task.getVoice(), fmt, task.getSpeed());
+                if (debugMode) {
+                    TtsChunkResult result = ttsService.generateAudioForChunkWithResult(chunkText, chunkSettings);
+                    if (result.passed()) {
+                        audio = result.audio();
+                    } else {
+                        audio = null;
+                        // Write failed chunk with issue-type prefix for debugging
+                        if (result.audio() != null && result.audio().length > 0) {
+                            String prefix = result.issueType();
+                            Path debugFile = chunkDir.resolve(prefix + "chunk_" + i + "." + fmt);
+                            Files.write(debugFile, result.audio());
+                            log.info("Debug: wrote failed chunk with prefix '{}' at: {}", prefix, debugFile);
+                        }
+                    }
+                } else {
+                    audio = ttsService.generateAudioForChunk(chunkText, chunkSettings);
+                }
 
                 if (audio == null) {
                     // Insert longer skip gap for discarded chunk
                     log.warn("Skipping chunk {}/{} for chapter {} due to quality failure",
                             i + 1, chunks.size(), chapter.getChapterNumber());
                     if (progressSink != null) {
-                        progressSink.emit("  [批次 " + (i + 1) + "/" + chunks.size() + "] 跳过（质量检测未通过）");
+                        progressSink.emit(batchPrefix + chunkText + " [跳过:质量检测未通过]");
                     }
                     if (!chunkFiles.isEmpty() && skipGap > 0) {
                         if (reusableSkipGapFile == null) {
@@ -436,9 +512,9 @@ public class TtsExportService {
                 Files.write(chunkFile, audio);
                 chunkFiles.add(chunkFile);
 
-                // Emit batch complete
+                // Emit single consolidated line per batch
                 if (progressSink != null) {
-                    progressSink.emit("  [批次 " + (i + 1) + "/" + chunks.size() + "] 完成");
+                    progressSink.emit(batchPrefix + chunkText + " [完成]");
                 }
             }
 
@@ -448,6 +524,14 @@ public class TtsExportService {
                 mp3ProcessingService.concatenateAndCompress(chunkFiles, outputFile, task.getBitrate());
             } else {
                 mp3ProcessingService.concatenateMp3(chunkFiles, outputFile);
+            }
+
+            // Record TTS usage for this chapter
+            long durationMs = System.currentTimeMillis() - startTime;
+            TtsProviderRegistry.ResolvedTtsConfig resolved = ttsProviderRegistry.resolve(task.getConfigId());
+            if (resolved != null) {
+                aiUsageTracker.record(task.getProjectId(), resolved.modelId(),
+                        resolved.provider().getClass().getSimpleName(), durationMs);
             }
 
             return outputFile;

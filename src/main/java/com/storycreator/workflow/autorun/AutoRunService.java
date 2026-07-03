@@ -173,7 +173,7 @@ public class AutoRunService {
         AutoRunObservation obs = observations.get(projectId);
         if (obs != null) {
             obs.setActive(false);
-            obs.getSink().tryEmitComplete();
+            obs.getNotifySink().tryEmitComplete();
             observationCleanupScheduler.schedule(() -> observations.remove(projectId, obs), 30, TimeUnit.SECONDS);
         }
     }

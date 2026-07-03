@@ -11,6 +11,8 @@ import reactor.core.publisher.Sinks;
 
 import java.util.concurrent.*;
 
+import static com.storycreator.workflow.background.ErrorSanitizer.sanitize;
+
 @Service
 public class BackgroundGenerationService {
 
@@ -64,24 +66,32 @@ public class BackgroundGenerationService {
     }
 
     public void startGeneration(Long projectId, WorkflowStep step, int chapter) {
-        startGeneration(projectId, step, chapter, null);
+        startGeneration(projectId, step, chapter, null, null);
     }
 
     public void startGeneration(Long projectId, WorkflowStep step, int chapter, Runnable postCompletionHook) {
+        startGeneration(projectId, step, chapter, postCompletionHook, null);
+    }
+
+    public void startGeneration(Long projectId, WorkflowStep step, int chapter, Runnable postCompletionHook, java.util.List<Long> materialIds) {
         GenerationKey key = new GenerationKey(projectId, step, chapter);
 
-        GenerationTask existing = activeTasks.get(key);
-        if (existing != null && !existing.completed && !existing.errored) {
+        GenerationTask task = new GenerationTask(isCappedStep(step));
+        GenerationTask existing = activeTasks.compute(key, (k, prev) -> {
+            if (prev != null && !prev.completed && !prev.errored) {
+                return prev; // keep existing active task, signal rejection
+            }
+            return task; // replace completed/errored/null with new task
+        });
+        if (existing != task) {
             throw new IllegalStateException("该步骤已有后台任务在运行中");
         }
-
-        GenerationTask task = new GenerationTask(isCappedStep(step));
-        activeTasks.put(key, task);
 
         executor.submit(() -> {
             log.info("[P{}] Background generation started step={} chapter={}", projectId, step, chapter);
             try {
-                task.disposable = workflowEngine.generate(projectId, step, chapter)
+                task.disposable = workflowEngine.generate(projectId, step, chapter,
+                                materialIds != null ? materialIds : java.util.Collections.emptyList())
                         .doOnNext(token -> {
                             task.contentBuffer.append(token);
                             if (task.cappedDisplay) {
@@ -113,19 +123,23 @@ public class BackgroundGenerationService {
                         })
                         .doOnError(error -> {
                             task.errored = true;
-                            task.errorMessage = error.getMessage();
+                            task.errorMessage = sanitize(error);
                             log.error("[P{}] Background generation error step={}: {}", projectId, step, error.getMessage());
                             workflowEngine.resetGeneratingStatus(projectId, step, chapter);
-                            task.sink.tryEmitNext("[[BG_ERROR:" + error.getMessage() + "]]");
+                            task.sink.tryEmitNext("[[BG_ERROR:" + task.errorMessage + "]]");
                             task.sink.tryEmitComplete();
                             scheduleCleanup(key);
                         })
                         .subscribe();
 
                 // Wait for completion or stop signal
-                while (!task.disposable.isDisposed()) {
+                Disposable d = task.disposable;
+                while (!task.completed && !task.errored) {
                     if (task.stopRequested) {
-                        task.disposable.dispose();
+                        d = task.disposable;
+                        if (d != null) {
+                            d.dispose();
+                        }
                         workflowEngine.resetGeneratingStatus(projectId, step, chapter);
                         task.sink.tryEmitNext("[[BG_STOPPED]]");
                         task.sink.tryEmitComplete();
@@ -139,13 +153,17 @@ public class BackgroundGenerationService {
                         Thread.currentThread().interrupt();
                         return;
                     }
+                    d = task.disposable;
+                    if (d != null && d.isDisposed()) {
+                        break;
+                    }
                 }
             } catch (Exception e) {
                 task.errored = true;
-                task.errorMessage = e.getMessage();
+                task.errorMessage = sanitize(e);
                 log.error("[P{}] Background generation exception step={}", projectId, step, e);
                 workflowEngine.resetGeneratingStatus(projectId, step, chapter);
-                task.sink.tryEmitNext("[[BG_ERROR:" + e.getMessage() + "]]");
+                task.sink.tryEmitNext("[[BG_ERROR:" + task.errorMessage + "]]");
                 task.sink.tryEmitComplete();
                 scheduleCleanup(key);
             }

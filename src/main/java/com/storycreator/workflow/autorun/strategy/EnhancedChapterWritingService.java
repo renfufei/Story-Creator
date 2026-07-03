@@ -94,21 +94,25 @@ public class EnhancedChapterWritingService {
         // Step 1 — 前文梳理 (Context Briefing)
         if (isBeforeOrAt(status, "NOT_STARTED")) {
             if (ctx.shouldStop()) return;
-            log.info("[P{}] Chapter {} — Step 1: Context Briefing", projectId, chapterNumber);
-            ctx.emitSubStep("CONTEXT_BRIEFING", chapterNumber);
+            if (ctx.isSubStepEnabled("CONTEXT_BRIEFING")) {
+                log.info("[P{}] Chapter {} — Step 1: Context Briefing", projectId, chapterNumber);
+                ctx.emitSubStep("CONTEXT_BRIEFING", chapterNumber);
 
-            Map<String, String> vars = new HashMap<>();
-            vars.put("title", title);
-            vars.put("genre", genreDisplay);
-            vars.put("chapterNumber", String.valueOf(chapterNumber));
-            vars.put("previousChapterContent", prevContent);
-            vars.put("chapterSummary", chapterSummary);
-            vars.put("writingRules", writingRules);
-            vars.put("characterCards", chapterCards);
-            vars.put("stepGuidance", stepGuidance);
+                Map<String, String> vars = new HashMap<>();
+                vars.put("title", title);
+                vars.put("genre", genreDisplay);
+                vars.put("chapterNumber", String.valueOf(chapterNumber));
+                vars.put("previousChapterContent", prevContent);
+                vars.put("chapterSummary", chapterSummary);
+                vars.put("writingRules", writingRules);
+                vars.put("characterCards", chapterCards);
+                vars.put("stepGuidance", stepGuidance);
 
-            String briefing = executor.generateContextBriefing(projectId, vars, genre, tokenSink);
-            chapter.setWritingBriefing(briefing);
+                String briefing = executor.generateContextBriefing(projectId, vars, genre, tokenSink);
+                chapter.setWritingBriefing(briefing);
+            } else {
+                log.info("[P{}] Chapter {} — Step 1: Context Briefing skipped (disabled)", projectId, chapterNumber);
+            }
             chapter.setWritingCycleStatus("BRIEFING_DONE");
             chapterRepository.save(chapter);
         }
@@ -116,25 +120,29 @@ public class EnhancedChapterWritingService {
         // Step 2 — 剧情推演 (Plot Reasoning)
         if (isBeforeOrAt(status, "BRIEFING_DONE")) {
             if (ctx.shouldStop()) return;
-            log.info("[P{}] Chapter {} — Step 2: Plot Reasoning", projectId, chapterNumber);
-            ctx.emitSubStep("PLOT_REASONING", chapterNumber);
+            if (ctx.isSubStepEnabled("PLOT_REASONING")) {
+                log.info("[P{}] Chapter {} — Step 2: Plot Reasoning", projectId, chapterNumber);
+                ctx.emitSubStep("PLOT_REASONING", chapterNumber);
 
-            // Reload briefing in case we're resuming
-            chapter = reloadChapter(projectId, chapterNumber);
-            String briefing = chapter.getWritingBriefing() != null ? chapter.getWritingBriefing() : "";
+                // Reload briefing in case we're resuming
+                chapter = reloadChapter(projectId, chapterNumber);
+                String briefing = chapter.getWritingBriefing() != null ? chapter.getWritingBriefing() : "";
 
-            Map<String, String> vars = new HashMap<>();
-            vars.put("title", title);
-            vars.put("genre", genreDisplay);
-            vars.put("chapterNumber", String.valueOf(chapterNumber));
-            vars.put("chapterSummary", chapterSummary);
-            vars.put("eventPlan", eventPlan);
-            vars.put("writingBriefing", briefing);
-            vars.put("characterCards", chapterCards);
-            vars.put("stepGuidance", stepGuidance);
+                Map<String, String> vars = new HashMap<>();
+                vars.put("title", title);
+                vars.put("genre", genreDisplay);
+                vars.put("chapterNumber", String.valueOf(chapterNumber));
+                vars.put("chapterSummary", chapterSummary);
+                vars.put("eventPlan", eventPlan);
+                vars.put("writingBriefing", briefing);
+                vars.put("characterCards", chapterCards);
+                vars.put("stepGuidance", stepGuidance);
 
-            String reasoning = executor.generatePlotReasoning(projectId, vars, genre, tokenSink);
-            chapter.setWritingReasoning(reasoning);
+                String reasoning = executor.generatePlotReasoning(projectId, vars, genre, tokenSink);
+                chapter.setWritingReasoning(reasoning);
+            } else {
+                log.info("[P{}] Chapter {} — Step 2: Plot Reasoning skipped (disabled)", projectId, chapterNumber);
+            }
             chapter.setWritingCycleStatus("REASONING_DONE");
             chapterRepository.save(chapter);
         }
@@ -155,20 +163,24 @@ public class EnhancedChapterWritingService {
         // Step 4 — 即时审查 (Instant Review)
         if (isBeforeOrAt(status, "CONTENT_DONE")) {
             if (ctx.shouldStop()) return;
-            log.info("[P{}] Chapter {} — Step 4: Instant Review", projectId, chapterNumber);
-            ctx.emitSubStep("INSTANT_REVIEW", chapterNumber);
+            if (ctx.isSubStepEnabled("INSTANT_REVIEW")) {
+                log.info("[P{}] Chapter {} — Step 4: Instant Review", projectId, chapterNumber);
+                ctx.emitSubStep("INSTANT_REVIEW", chapterNumber);
 
-            chapter = reloadChapter(projectId, chapterNumber);
-            String reasoning = chapter.getWritingReasoning() != null ? chapter.getWritingReasoning() : "";
-            String contentDraft = chapter.getContent() != null ? chapter.getContent() : "";
+                chapter = reloadChapter(projectId, chapterNumber);
+                String reasoning = chapter.getWritingReasoning() != null ? chapter.getWritingReasoning() : "";
+                String contentDraft = chapter.getContent() != null ? chapter.getContent() : "";
 
-            Map<String, String> vars = new HashMap<>();
-            vars.put("chapterNumber", String.valueOf(chapterNumber));
-            vars.put("writingReasoning", reasoning);
-            vars.put("contentDraft", contentDraft);
+                Map<String, String> vars = new HashMap<>();
+                vars.put("chapterNumber", String.valueOf(chapterNumber));
+                vars.put("writingReasoning", reasoning);
+                vars.put("contentDraft", contentDraft);
 
-            String review = executor.runInstantReview(projectId, vars, genre, tokenSink);
-            chapter.setInstantReview(review);
+                String review = executor.runInstantReview(projectId, vars, genre, tokenSink);
+                chapter.setInstantReview(review);
+            } else {
+                log.info("[P{}] Chapter {} — Step 4: Instant Review skipped (disabled)", projectId, chapterNumber);
+            }
             chapter.setWritingCycleStatus("REVIEWED");
             chapterRepository.save(chapter);
         }
@@ -177,31 +189,35 @@ public class EnhancedChapterWritingService {
         if (isBeforeOrAt(status, "REVIEWED")) {
             if (ctx.shouldStop()) return;
 
-            chapter = reloadChapter(projectId, chapterNumber);
-            if (needsOptimization(chapter.getInstantReview())) {
-                log.info("[P{}] Chapter {} — Step 5: Content Optimization", projectId, chapterNumber);
-                ctx.emitSubStep("CONTENT_OPTIMIZATION", chapterNumber);
+            if (ctx.isSubStepEnabled("CONTENT_OPTIMIZATION")) {
+                chapter = reloadChapter(projectId, chapterNumber);
+                if (needsOptimization(chapter.getInstantReview())) {
+                    log.info("[P{}] Chapter {} — Step 5: Content Optimization", projectId, chapterNumber);
+                    ctx.emitSubStep("CONTENT_OPTIMIZATION", chapterNumber);
 
-                String contentDraft = chapter.getContent() != null ? chapter.getContent() : "";
-                String review = chapter.getInstantReview() != null ? chapter.getInstantReview() : "";
+                    String contentDraft = chapter.getContent() != null ? chapter.getContent() : "";
+                    String review = chapter.getInstantReview() != null ? chapter.getInstantReview() : "";
 
-                Map<String, String> vars = new HashMap<>();
-                vars.put("chapterNumber", String.valueOf(chapterNumber));
-                vars.put("contentDraft", contentDraft);
-                vars.put("instantReview", review);
-                vars.put("writingRules", writingRules);
-                vars.put("styleFingerprint", styleFingerprint);
+                    Map<String, String> vars = new HashMap<>();
+                    vars.put("chapterNumber", String.valueOf(chapterNumber));
+                    vars.put("contentDraft", contentDraft);
+                    vars.put("instantReview", review);
+                    vars.put("writingRules", writingRules);
+                    vars.put("styleFingerprint", styleFingerprint);
 
-                String optimized = executor.runContentOptimization(projectId, vars, genre, tokenSink);
-                chapter.setContent(optimized);
-                chapter.setWordCount(optimized.length());
-                // Regenerate content summary for optimized content
-                String newSummary = contextSummaryService.summarizeChapterContent(projectId, chapterNumber, optimized);
-                if (newSummary != null) {
-                    chapter.setContentSummary(newSummary);
+                    String optimized = executor.runContentOptimization(projectId, vars, genre, tokenSink);
+                    chapter.setContent(optimized);
+                    chapter.setWordCount(optimized.length());
+                    // Regenerate content summary for optimized content
+                    String newSummary = contextSummaryService.summarizeChapterContent(projectId, chapterNumber, optimized);
+                    if (newSummary != null) {
+                        chapter.setContentSummary(newSummary);
+                    }
+                } else {
+                    log.info("[P{}] Chapter {} — Step 5: Skipped (review passed)", projectId, chapterNumber);
                 }
             } else {
-                log.info("[P{}] Chapter {} — Step 5: Skipped (review passed)", projectId, chapterNumber);
+                log.info("[P{}] Chapter {} — Step 5: Content Optimization skipped (disabled)", projectId, chapterNumber);
             }
             chapter.setWritingCycleStatus("OPTIMIZED");
             chapterRepository.save(chapter);
@@ -210,28 +226,32 @@ public class EnhancedChapterWritingService {
         // Step 6 — 故事线更新 (Storyline Update)
         if (isBeforeOrAt(status, "OPTIMIZED")) {
             if (ctx.shouldStop()) return;
-            log.info("[P{}] Chapter {} — Step 6: Storyline Update", projectId, chapterNumber);
-            ctx.emitSubStep("STORYLINE_UPDATE", chapterNumber);
+            if (ctx.isSubStepEnabled("STORYLINE_UPDATE")) {
+                log.info("[P{}] Chapter {} — Step 6: Storyline Update", projectId, chapterNumber);
+                ctx.emitSubStep("STORYLINE_UPDATE", chapterNumber);
 
-            chapter = reloadChapter(projectId, chapterNumber);
-            String content = chapter.getContent() != null ? chapter.getContent() : "";
+                chapter = reloadChapter(projectId, chapterNumber);
+                String content = chapter.getContent() != null ? chapter.getContent() : "";
 
-            // Load previous chapter's storyline snapshot
-            String prevSnapshot = "";
-            if (chapterNumber > 1) {
-                prevSnapshot = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber - 1)
-                        .map(ChapterEntity::getStorylineSnapshot)
-                        .orElse("");
-                if (prevSnapshot == null) prevSnapshot = "";
+                // Load previous chapter's storyline snapshot
+                String prevSnapshot = "";
+                if (chapterNumber > 1) {
+                    prevSnapshot = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber - 1)
+                            .map(ChapterEntity::getStorylineSnapshot)
+                            .orElse("");
+                    if (prevSnapshot == null) prevSnapshot = "";
+                }
+
+                Map<String, String> vars = new HashMap<>();
+                vars.put("chapterNumber", String.valueOf(chapterNumber));
+                vars.put("optimizedContent", content);
+                vars.put("previousStorylineSnapshot", prevSnapshot);
+
+                String storyline = executor.updateStoryline(projectId, vars, genre, tokenSink);
+                chapter.setStorylineSnapshot(storyline);
+            } else {
+                log.info("[P{}] Chapter {} — Step 6: Storyline Update skipped (disabled)", projectId, chapterNumber);
             }
-
-            Map<String, String> vars = new HashMap<>();
-            vars.put("chapterNumber", String.valueOf(chapterNumber));
-            vars.put("optimizedContent", content);
-            vars.put("previousStorylineSnapshot", prevSnapshot);
-
-            String storyline = executor.updateStoryline(projectId, vars, genre, tokenSink);
-            chapter.setStorylineSnapshot(storyline);
             chapter.setWritingCycleStatus("STORYLINE_DONE");
             chapterRepository.save(chapter);
         }
@@ -241,7 +261,7 @@ public class EnhancedChapterWritingService {
             if (ctx.shouldStop()) return;
 
             chapter = reloadChapter(projectId, chapterNumber);
-            if (chapterNumber > 0 && chapterNumber % deepReviewInterval == 0) {
+            if (ctx.isSubStepEnabled("DEEP_REVIEW") && chapterNumber > 0 && chapterNumber % deepReviewInterval == 0) {
                 log.info("[P{}] Chapter {} — Step 7: Deep Review", projectId, chapterNumber);
                 ctx.emitSubStep("DEEP_REVIEW", chapterNumber);
 
@@ -266,18 +286,20 @@ public class EnhancedChapterWritingService {
                 String deepReviewResult = executor.runDeepReview(projectId, vars, genre, tokenSink);
                 chapter.setDeepReview(deepReviewResult);
             } else {
-                log.info("[P{}] Chapter {} — Step 7: Skipped (not at interval {})", projectId, chapterNumber, deepReviewInterval);
+                log.info("[P{}] Chapter {} — Step 7: Skipped (disabled or not at interval {})", projectId, chapterNumber, deepReviewInterval);
             }
             chapter.setWritingCycleStatus("DONE");
             chapterRepository.save(chapter);
         }
 
         // Post-cycle: Generate character states
-        try {
-            ctx.emitSubStep("CHARACTER_STATES", chapterNumber);
-            workflowEngine.generateCharacterStates(projectId, chapterNumber, tokenSink);
-        } catch (Exception e) {
-            log.warn("[P{}] Character state generation failed for chapter {}: {}", projectId, chapterNumber, e.getMessage());
+        if (ctx.isSubStepEnabled("CHARACTER_STATES")) {
+            try {
+                ctx.emitSubStep("CHARACTER_STATES", chapterNumber);
+                workflowEngine.generateCharacterStates(projectId, chapterNumber, tokenSink);
+            } catch (Exception e) {
+                log.warn("[P{}] Character state generation failed for chapter {}: {}", projectId, chapterNumber, e.getMessage());
+            }
         }
 
         log.info("[P{}] Chapter {} enhanced writing cycle complete", projectId, chapterNumber);

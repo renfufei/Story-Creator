@@ -48,11 +48,4 @@ public enum WorkflowStep {
         return steps[nextOrdinal];
     }
 
-    public WorkflowStep previous() {
-        int prevOrdinal = this.ordinal() - 1;
-        if (prevOrdinal < 0) {
-            return null;
-        }
-        return values()[prevOrdinal];
-    }
 }

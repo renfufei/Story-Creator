@@ -83,6 +83,11 @@
                                     <div class="d-flex justify-content-between align-items-center mb-2">
                                         <strong>任务 #<span x-text="task.id"></span> — 章节详情</strong>
                                         <div class="d-flex gap-2">
+                                            <button class="btn btn-sm btn-outline-primary"
+                                                    x-show="task.status !== 'RUNNING' && editingChaptersTaskId !== task.id"
+                                                    @click="openEditChapters(task)">
+                                                <i class="bi bi-pencil-square"></i> 编辑章节
+                                            </button>
                                             <a class="btn btn-sm btn-outline-success"
                                                :href="'/tts-fullplay?taskId=' + task.id"
                                                target="_blank"
@@ -95,6 +100,37 @@
                                             <button class="btn btn-sm btn-outline-secondary" @click="expandedTaskId = null">关闭</button>
                                         </div>
                                     </div>
+                                    <!-- Edit Chapters Mode -->
+                                    <div x-show="editingChaptersTaskId === task.id" class="mb-3 border rounded p-3 bg-white">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <strong>编辑章节列表</strong>
+                                            <div class="d-flex gap-2">
+                                                <button class="btn btn-sm btn-outline-primary" @click="editSelectAllChapters()">全选</button>
+                                                <button class="btn btn-sm btn-outline-secondary" @click="editDeselectAllChapters()">取消全选</button>
+                                            </div>
+                                        </div>
+                                        <div style="max-height: 200px; overflow-y: auto;" class="border rounded p-2 mb-2">
+                                            <template x-for="ch in editableChapters" :key="ch.chapterNumber">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox"
+                                                           :id="'edit-ch-' + ch.chapterNumber" :value="ch.chapterNumber"
+                                                           x-model="editSelectedChapters">
+                                                    <label class="form-check-label" :for="'edit-ch-' + ch.chapterNumber"
+                                                           x-text="'第' + ch.chapterNumber + '章 ' + (ch.title || '')"></label>
+                                                </div>
+                                            </template>
+                                        </div>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="text-muted">已选 <span x-text="editSelectedChapters.length"></span> 章</small>
+                                            <div class="d-flex gap-2">
+                                                <button class="btn btn-sm btn-secondary" @click="cancelEditChapters()">取消</button>
+                                                <button class="btn btn-sm btn-success" @click="saveEditChapters(task.id)"
+                                                        :disabled="editSelectedChapters.length === 0">
+                                                    <i class="bi bi-check-lg"></i> 保存
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <!-- Progress Log (inside details) -->
                                     <div x-show="showProgressTaskId === task.id" class="mb-2">
                                         <div class="bg-dark text-light px-3 py-2 rounded">
@@ -104,7 +140,7 @@
                                             <div :id="'progress-log-' + task.id"
                                                  style="max-height: 150px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; line-height: 1.6;">
                                                 <template x-for="(line, idx) in (progressLogs[task.id] || [])" :key="idx">
-                                                    <div x-text="line" class="text-success"></div>
+                                                    <div x-text="line" :class="line.includes('[跳过') || line.includes('失败') ? 'text-warning' : 'text-success'"></div>
                                                 </template>
                                                 <div x-show="!progressLogs[task.id] || progressLogs[task.id].length === 0"
                                                      class="text-muted">等待进度消息...</div>
@@ -347,6 +383,9 @@ function ttsExportApp() {
         pollInterval: null,
         _loadingTasks: false,
         _loadingDetails: false,
+        editingChaptersTaskId: null,
+        editableChapters: [],
+        editSelectedChapters: [],
 
         // Wizard state
         wizardStep: 0,
@@ -564,6 +603,45 @@ function ttsExportApp() {
             await this.loadTasks();
         },
 
+        // Edit chapters methods
+        async openEditChapters(task) {
+            try {
+                const res = await fetch(`/api/tts-export/projects/${task.projectId}/chapters`);
+                if (res.ok) {
+                    this.editableChapters = await res.json();
+                }
+            } catch (e) { this.editableChapters = []; }
+            // Pre-select currently included chapters
+            this.editSelectedChapters = this.expandedChapters.map(ch => ch.chapterNumber);
+            this.editingChaptersTaskId = task.id;
+        },
+        editSelectAllChapters() {
+            this.editSelectedChapters = this.editableChapters.map(ch => ch.chapterNumber);
+        },
+        editDeselectAllChapters() {
+            this.editSelectedChapters = [];
+        },
+        async saveEditChapters(taskId) {
+            try {
+                const res = await fetch(`/api/tts-export/tasks/${taskId}/chapters`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chapterNumbers: this.editSelectedChapters.map(Number).sort((a, b) => a - b) })
+                });
+                if (res.ok) {
+                    this.editingChaptersTaskId = null;
+                    await this.loadTasks();
+                    await this.loadDetails(taskId);
+                } else {
+                    const data = await res.json();
+                    alert(data.error || '修改失败');
+                }
+            } catch (e) { alert('修改失败: ' + e.message); }
+        },
+        cancelEditChapters() {
+            this.editingChaptersTaskId = null;
+        },
+
         toggleProgress(taskId) {
             if (this.showProgressTaskId === taskId) {
                 this.closeProgress(taskId);
@@ -579,6 +657,9 @@ function ttsExportApp() {
                 this.progressEventSources[taskId].close();
                 delete this.progressEventSources[taskId];
             }
+
+            // Clear logs on reconnect — replay flux resends all history
+            this.progressLogs[taskId] = [];
 
             const es = new EventSource(`/api/tts-export/tasks/${taskId}/progress-stream`);
             this.progressEventSources[taskId] = es;
@@ -597,16 +678,6 @@ function ttsExportApp() {
                 }, 30000);
             };
             resetInactivityTimer();
-
-            es.addEventListener('replay', (event) => {
-                resetInactivityTimer();
-                try {
-                    this.progressLogs[taskId] = JSON.parse(event.data);
-                } catch (e) {
-                    this.progressLogs[taskId] = [];
-                }
-                this.$nextTick(() => this.scrollProgressLog(taskId));
-            });
 
             es.addEventListener('log', (event) => {
                 resetInactivityTimer();

@@ -125,8 +125,8 @@ class EnhancedAutoRunStrategyTest {
         // Writing rules don't exist yet → should be generated
         when(writingRulesRepository.findByProjectId(PROJECT_ID)).thenReturn(Optional.empty());
         when(styleFingerprintRepository.findByProjectId(PROJECT_ID)).thenReturn(Optional.empty());
-        when(executor.generateWritingRules(eq(PROJECT_ID), any(), any())).thenReturn("写作规则");
-        when(executor.generateStyleFingerprint(eq(PROJECT_ID), any(), any())).thenReturn("风格指纹");
+        when(executor.generateWritingRules(eq(PROJECT_ID), any(), any(), any())).thenReturn("写作规则");
+        when(executor.generateStyleFingerprint(eq(PROJECT_ID), any(), any(), any())).thenReturn("风格指纹");
 
         // Stop after CHARACTER_DESIGN is confirmed
         doAnswer(inv -> {
@@ -139,7 +139,7 @@ class EnhancedAutoRunStrategyTest {
 
         // Verify preparation ran with worldSetting available
         ArgumentCaptor<Map<String, String>> varsCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(executor).generateWritingRules(eq(PROJECT_ID), varsCaptor.capture(), eq(Genre.XUANHUAN));
+        verify(executor).generateWritingRules(eq(PROJECT_ID), varsCaptor.capture(), eq(Genre.XUANHUAN), any());
         assertThat(varsCaptor.getValue().get("worldSetting")).contains("世界观内容");
     }
 
@@ -270,7 +270,7 @@ class EnhancedAutoRunStrategyTest {
         when(globalSettingService.getAiTimeoutSeconds()).thenReturn(300);
         when(workflowEngine.refineAllCharacters(PROJECT_ID)).thenReturn(Flux.empty());
 
-        when(executor.generateBehaviorBoundaries(eq(PROJECT_ID), any(), any())).thenReturn("边界内容");
+        when(executor.generateBehaviorBoundaries(eq(PROJECT_ID), any(), any(), any())).thenReturn("边界内容");
 
         // Stop after CHARACTER_DESIGN confirm
         doAnswer(inv -> {
@@ -282,7 +282,7 @@ class EnhancedAutoRunStrategyTest {
         strategy.execute(ctx);
 
         // Verify behavior boundaries generated for both refined characters
-        verify(executor, times(2)).generateBehaviorBoundaries(eq(PROJECT_ID), any(), eq(Genre.XUANHUAN));
+        verify(executor, times(2)).generateBehaviorBoundaries(eq(PROJECT_ID), any(), eq(Genre.XUANHUAN), any());
     }
 
     @Test
@@ -331,7 +331,7 @@ class EnhancedAutoRunStrategyTest {
         when(chapterOutlineRepository.findByProjectIdOrderByChapterNumber(PROJECT_ID))
                 .thenReturn(List.of(o1, o2));
 
-        when(executor.generateEventPlan(eq(PROJECT_ID), any(), any())).thenReturn("事件计划");
+        when(executor.generateEventPlan(eq(PROJECT_ID), any(), any(), any())).thenReturn("事件计划");
 
         // Stop after OUTLINE confirm
         doAnswer(inv -> {
@@ -343,7 +343,7 @@ class EnhancedAutoRunStrategyTest {
         strategy.execute(ctx);
 
         // Verify event plans generated for both outlines
-        verify(executor, times(2)).generateEventPlan(eq(PROJECT_ID), any(), eq(Genre.XUANHUAN));
+        verify(executor, times(2)).generateEventPlan(eq(PROJECT_ID), any(), eq(Genre.XUANHUAN), any());
         verify(chapterOutlineRepository, times(2)).save(any());
     }
 

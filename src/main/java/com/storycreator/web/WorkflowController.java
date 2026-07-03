@@ -131,33 +131,56 @@ public class WorkflowController {
                 .orElse("");
         model.addAttribute("stepGuidance", stepGuidance);
 
-        // Auto-run step configs: ensure rows exist, pass to model
+        // Auto-run step configs: ensure rows exist for main steps + sub-steps, pass to model
         if (project.isAutoMode()) {
             List<AutoRunStepConfigEntity> configs = autoRunStepConfigRepository.findByProjectId(projectId);
-            Set<WorkflowStep> existingSteps = new HashSet<>();
+            Set<String> existingKeys = new HashSet<>();
             for (AutoRunStepConfigEntity c : configs) {
-                existingSteps.add(c.getStep());
+                existingKeys.add(c.getStep());
             }
+            // Ensure main steps
             for (WorkflowStep ws : WorkflowStep.values()) {
-                if (!existingSteps.contains(ws)) {
+                if (!existingKeys.contains(ws.name())) {
                     boolean defaultEnabled = (ws != WorkflowStep.PROOFREADING);
-                    AutoRunStepConfigEntity newConfig = new AutoRunStepConfigEntity(projectId, ws, defaultEnabled);
+                    AutoRunStepConfigEntity newConfig = new AutoRunStepConfigEntity(projectId, ws.name(), defaultEnabled);
                     autoRunStepConfigRepository.save(newConfig);
                     configs.add(newConfig);
+                    existingKeys.add(ws.name());
+                }
+            }
+            // Ensure sub-steps based on strategy
+            String strategy = project.getAutoRunStrategy() != null ? project.getAutoRunStrategy() : "DEFAULT";
+            List<String> subSteps = getSubStepsForStrategy(strategy);
+            for (String subStep : subSteps) {
+                if (!existingKeys.contains(subStep)) {
+                    AutoRunStepConfigEntity newConfig = new AutoRunStepConfigEntity(projectId, subStep, true);
+                    autoRunStepConfigRepository.save(newConfig);
+                    configs.add(newConfig);
+                    existingKeys.add(subStep);
                 }
             }
             Map<String, Boolean> stepConfigMap = new LinkedHashMap<>();
             for (WorkflowStep ws : WorkflowStep.values()) {
                 for (AutoRunStepConfigEntity c : configs) {
-                    if (c.getStep() == ws) {
+                    if (ws.name().equals(c.getStep())) {
                         stepConfigMap.put(ws.name(), c.isEnabled());
                         break;
                     }
                 }
             }
+            for (String subStep : subSteps) {
+                for (AutoRunStepConfigEntity c : configs) {
+                    if (subStep.equals(c.getStep())) {
+                        stepConfigMap.put(subStep, c.isEnabled());
+                        break;
+                    }
+                }
+            }
             model.addAttribute("autoRunStepConfigs", stepConfigMap);
+            model.addAttribute("autoRunStrategy", strategy);
         } else {
             model.addAttribute("autoRunStepConfigs", new LinkedHashMap<>());
+            model.addAttribute("autoRunStrategy", "DEFAULT");
         }
 
         // Character state dimension configs
@@ -220,7 +243,24 @@ public class WorkflowController {
     @ResponseBody
     public SseEmitter generate(@PathVariable Long projectId,
                                @RequestParam WorkflowStep step,
-                               @RequestParam(defaultValue = "0") int chapter) {
+                               @RequestParam(defaultValue = "0") int chapter,
+                               @RequestParam(required = false) List<Long> materialIds) {
+        // Step order validation: reject requests for steps too far ahead of current progress
+        // Allow CHAPTER_WRITING/POLISHING/PROOFREADING freely (they operate on individual chapters)
+        if (step.getOrder() <= WorkflowStep.OUTLINE_GENERATION.getOrder()) {
+            List<WorkflowStateEntity> states = workflowStateRepository.findByProjectId(projectId);
+            int maxConfirmedOrder = 0;
+            for (WorkflowStateEntity ws : states) {
+                if (ws.getStatus() == StepStatus.CONFIRMED || ws.getStatus() == StepStatus.PARTIALLY_DONE) {
+                    maxConfirmedOrder = Math.max(maxConfirmedOrder, ws.getStep().getOrder());
+                }
+            }
+            // Allow generating current step (maxConfirmedOrder + 1) and any previous steps
+            if (step.getOrder() > maxConfirmedOrder + 1) {
+                throw new IllegalStateException("请先完成前置步骤再生成此步骤");
+            }
+        }
+
         // Multi-substep flows need timeout proportional to number of AI calls
         long timeoutMs;
         if (step == WorkflowStep.OUTLINE_GENERATION) {
@@ -253,7 +293,8 @@ public class WorkflowController {
         executor.submit(() -> {
             StringBuilder fullContent = new StringBuilder();
             try {
-                workflowEngine.generate(projectId, step, chapter)
+                workflowEngine.generate(projectId, step, chapter,
+                                materialIds != null ? materialIds : Collections.emptyList())
                         .doOnNext(token -> {
                             try {
                                 if (step == WorkflowStep.CHARACTER_DESIGN && token.startsWith("[[CHAR:")) {
@@ -309,7 +350,7 @@ public class WorkflowController {
                             try {
                                 emitter.send(SseEmitter.event()
                                         .name("error")
-                                        .data(error.getMessage()));
+                                        .data(SseErrorHelper.sanitize(error)));
                             } catch (IOException e) {
                                 // ignore
                             }
@@ -320,7 +361,7 @@ public class WorkflowController {
                 log.error("Stream execution error", e);
                 workflowEngine.resetGeneratingStatus(projectId, step, chapter);
                 try {
-                    emitter.send(SseEmitter.event().name("error").data(e.getMessage()));
+                    emitter.send(SseEmitter.event().name("error").data(SseErrorHelper.sanitize(e)));
                 } catch (IOException ex) {
                     // ignore
                 }
@@ -513,7 +554,7 @@ public class WorkflowController {
                         .doOnError(error -> {
                             log.error("Proofread fix error", error);
                             try {
-                                emitter.send(SseEmitter.event().name("error").data(error.getMessage()));
+                                emitter.send(SseEmitter.event().name("error").data(SseErrorHelper.sanitize(error)));
                             } catch (IOException e) {
                                 // ignore
                             }
@@ -523,7 +564,7 @@ public class WorkflowController {
             } catch (Exception e) {
                 log.error("Proofread fix execution error", e);
                 try {
-                    emitter.send(SseEmitter.event().name("error").data(e.getMessage()));
+                    emitter.send(SseEmitter.event().name("error").data(SseErrorHelper.sanitize(e)));
                 } catch (IOException ex) {
                     // ignore
                 }
@@ -630,7 +671,7 @@ public class WorkflowController {
                         .doOnError(error -> {
                             log.error("Character refine error", error);
                             try {
-                                emitter.send(SseEmitter.event().name("error").data(error.getMessage()));
+                                emitter.send(SseEmitter.event().name("error").data(SseErrorHelper.sanitize(error)));
                             } catch (IOException e) {
                                 // ignore
                             }
@@ -640,7 +681,7 @@ public class WorkflowController {
             } catch (Exception e) {
                 log.error("Character refine execution error", e);
                 try {
-                    emitter.send(SseEmitter.event().name("error").data(e.getMessage()));
+                    emitter.send(SseEmitter.event().name("error").data(SseErrorHelper.sanitize(e)));
                 } catch (IOException ex) {
                     // ignore
                 }
@@ -732,7 +773,9 @@ public class WorkflowController {
     @GetMapping(value = "/chapters/generate-titles", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @ResponseBody
     public SseEmitter generateChapterTitles(@PathVariable Long projectId) {
-        SseEmitter emitter = new SseEmitter(120_000L);
+        List<ChapterEntity> allChapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
+        long timeoutMs = Math.max(120_000L, globalSettingService.getAiTimeoutSeconds() * 1000L * allChapters.size());
+        SseEmitter emitter = new SseEmitter(timeoutMs);
 
         executor.submit(() -> {
             try {
@@ -776,7 +819,7 @@ public class WorkflowController {
             } catch (Exception e) {
                 log.error("Title generation error", e);
                 try {
-                    emitter.send(SseEmitter.event().name("error").data(e.getMessage()));
+                    emitter.send(SseEmitter.event().name("error").data(SseErrorHelper.sanitize(e)));
                 } catch (IOException ex) { /* ignore */ }
                 emitter.completeWithError(e);
             }
@@ -1011,7 +1054,7 @@ public class WorkflowController {
                         .doOnError(error -> {
                             log.error("Regenerate chapter outline error", error);
                             try {
-                                emitter.send(SseEmitter.event().name("error").data(error.getMessage()));
+                                emitter.send(SseEmitter.event().name("error").data(SseErrorHelper.sanitize(error)));
                             } catch (IOException e) {
                                 // ignore
                             }
@@ -1021,7 +1064,7 @@ public class WorkflowController {
             } catch (Exception e) {
                 log.error("Regenerate chapter outline execution error", e);
                 try {
-                    emitter.send(SseEmitter.event().name("error").data(e.getMessage()));
+                    emitter.send(SseEmitter.event().name("error").data(SseErrorHelper.sanitize(e)));
                 } catch (IOException ex) {
                     // ignore
                 }
@@ -1245,7 +1288,7 @@ public class WorkflowController {
             } catch (Exception e) {
                 log.error("Global replace error", e);
                 try {
-                    emitter.send(SseEmitter.event().name("error").data("替换出错: " + e.getMessage()));
+                    emitter.send(SseEmitter.event().name("error").data("替换出错: " + SseErrorHelper.sanitize(e)));
                 } catch (IOException ex) { /* ignore */ }
                 emitter.completeWithError(e);
             }
@@ -1287,5 +1330,23 @@ public class WorkflowController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid dimension key: " + dimKey));
         }
+    }
+
+    private List<String> getSubStepsForStrategy(String strategy) {
+        return switch (strategy) {
+            case "ENHANCED" -> List.of(
+                    "WRITING_RULES", "STYLE_FINGERPRINT", "CHARACTER_REFINE", "BEHAVIOR_BOUNDARIES",
+                    "EVENT_PLAN",
+                    "CONTEXT_BRIEFING", "PLOT_REASONING",
+                    "INSTANT_REVIEW", "CONTENT_OPTIMIZATION", "STORYLINE_UPDATE", "DEEP_REVIEW",
+                    "CHARACTER_STATES", "TITLE_GENERATION",
+                    "PROOFREAD_FIX"
+            );
+            default -> List.of(
+                    "CHARACTER_REFINE",
+                    "CHARACTER_STATES", "TITLE_GENERATION",
+                    "PROOFREAD_FIX"
+            );
+        };
     }
 }

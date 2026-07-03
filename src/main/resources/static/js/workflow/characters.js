@@ -77,7 +77,7 @@ function workflowCharactersMixin() {
         loadCharacterList() {
             if (this.currentStep !== 'CHARACTER_DESIGN') return;
             fetch(`/projects/${this.projectId}/characters`)
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => { this.characterList = data; })
                 .catch(err => console.error('Failed to load characters:', err));
             this.loadCharacterOverview();
@@ -85,7 +85,7 @@ function workflowCharactersMixin() {
 
         loadCharacterOverview() {
             fetch(`/projects/${this.projectId}/characters/overview`)
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => { this.characterOverview = data.content || ''; })
                 .catch(err => console.error('Failed to load character overview:', err));
         },
@@ -97,7 +97,7 @@ function workflowCharactersMixin() {
                 method: 'POST',
                 body: formData
             })
-            .then(r => r.json())
+            .then(checkResponse)
             .then(() => {
                 this.characterOverview = this.editOverviewContent;
                 this.editingOverview = false;
@@ -118,7 +118,7 @@ function workflowCharactersMixin() {
                 method: 'POST',
                 body: formData
             })
-            .then(r => r.json())
+            .then(checkResponse)
             .then(() => {
                 this.editingCharacterId = null;
                 this.loadCharacterList();
@@ -134,7 +134,7 @@ function workflowCharactersMixin() {
                 method: 'POST',
                 body: formData
             })
-            .then(r => r.json())
+            .then(checkResponse)
             .then(() => {
                 this.newCharacterName = '';
                 this.showAddCharacter = false;
@@ -146,7 +146,7 @@ function workflowCharactersMixin() {
         deleteCharacter(id) {
             if (!confirm('确定删除该角色？')) return;
             fetch(`/projects/${this.projectId}/characters/${id}/delete`, { method: 'POST' })
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(() => this.loadCharacterList())
                 .catch(err => alert('删除失败: ' + err));
         },
@@ -157,6 +157,7 @@ function workflowCharactersMixin() {
             this.refineProgress = '正在准备精修...';
 
             const es = new EventSource(`/projects/${this.projectId}/characters/refine-all`);
+            this.currentEventSource = es;
             let currentIdx = 0;
 
             es.addEventListener('char-refine', (e) => {
@@ -190,6 +191,7 @@ function workflowCharactersMixin() {
 
             es.addEventListener('done', (e) => {
                 es.close();
+                this.currentEventSource = null;
                 this.refiningCharacters = false;
                 this.refineProgress = '';
                 this.refineStreamContent = '';
@@ -198,6 +200,7 @@ function workflowCharactersMixin() {
 
             es.addEventListener('error', (e) => {
                 es.close();
+                this.currentEventSource = null;
                 this.refiningCharacters = false;
                 this.refineProgress = '';
                 this.refineStreamContent = '';
@@ -207,6 +210,7 @@ function workflowCharactersMixin() {
 
             es.onerror = () => {
                 es.close();
+                this.currentEventSource = null;
                 this.refiningCharacters = false;
                 this.refineProgress = '';
                 this.refineStreamContent = '';
@@ -251,7 +255,7 @@ function workflowCharactersMixin() {
         loadCharacterImages(charId) {
             this.imageLoading = true;
             fetch(`/projects/${this.projectId}/characters/${charId}/images`)
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => {
                     this.characterImages = data;
                     // Initialize editing prompts
@@ -267,7 +271,7 @@ function workflowCharactersMixin() {
 
         loadImageConfigs() {
             fetch(`/projects/${this.projectId}/image-configs`)
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => {
                     this.imageConfigs = data;
                     const def = data.find(c => c.isDefault);
@@ -278,7 +282,7 @@ function workflowCharactersMixin() {
 
         loadTextConfigs() {
             fetch(`/projects/${this.projectId}/text-configs`)
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => {
                     this.textConfigs = data;
                     if (data.length > 0 && !this.selectedTextConfigId) {
@@ -311,7 +315,7 @@ function workflowCharactersMixin() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: params.toString()
-                }).then(r => r.json());
+                }).then(checkResponse);
 
                 if (!createRes.success) {
                     alert(createRes.message || '创建失败');
@@ -353,7 +357,7 @@ function workflowCharactersMixin() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: params.toString()
-                }).then(r => r.json());
+                }).then(checkResponse);
 
                 if (res.success) {
                     const idx = this.characterImages.findIndex(i => i.id === imageId);
@@ -385,12 +389,12 @@ function workflowCharactersMixin() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: params.toString()
-                }).then(r => r.json());
+                }).then(checkResponse);
 
                 if (res.success) {
                     const idx = this.characterImages.findIndex(i => i.id === imageId);
                     if (idx >= 0) {
-                        this.characterImages[idx] = { ...this.characterImages[idx], ...res };
+                        this.characterImages[idx] = { ...this.characterImages[idx], ...res, _ts: Date.now() };
                     }
                 } else {
                     alert(res.message || '生成图片失败');
@@ -412,7 +416,7 @@ function workflowCharactersMixin() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: params.toString()
-                }).then(r => r.json());
+                }).then(checkResponse);
                 if (res.success) {
                     const idx = this.characterImages.findIndex(i => i.id === imageId);
                     if (idx >= 0) {
@@ -429,7 +433,7 @@ function workflowCharactersMixin() {
         deleteImage(imageId) {
             if (!confirm('确定删除这张图片？')) return;
             fetch(`/projects/${this.projectId}/images/${imageId}/delete`, { method: 'POST' })
-                .then(r => r.json())
+                .then(checkResponse)
                 .then(data => {
                     if (data.success) {
                         this.characterImages = this.characterImages.filter(img => img.id !== imageId);

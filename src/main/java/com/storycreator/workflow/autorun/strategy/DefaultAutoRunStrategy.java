@@ -56,7 +56,7 @@ public class DefaultAutoRunStrategy implements AutoRunStrategy {
             // Check if step is disabled
             if (!ctx.isStepEnabled(step)) {
                 log.info("[P{}][AutoRun] Step {} skipped (disabled), no state modified", projectId, step);
-                ctx.updateProgress(step.getDisplayName(), 0, step.getDisplayName() + " 已跳过（未启用）");
+                ctx.updateProgress(step.name(), 0, step.getDisplayName() + " 已跳过（未启用）");
                 step = step.next();
                 continue;
             }
@@ -64,14 +64,14 @@ public class DefaultAutoRunStrategy implements AutoRunStrategy {
             // Check if step content is already complete
             if (ctx.isStepContentComplete(step)) {
                 log.info("[P{}][AutoRun] Step {} content already complete, skipping", projectId, step);
-                ctx.updateProgress(step.getDisplayName(), 0, step.getDisplayName() + " 内容已完整，跳过");
+                ctx.updateProgress(step.name(), 0, step.getDisplayName() + " 内容已完整，跳过");
                 ctx.getWorkflowEngine().ensureWorkflowStateExists(projectId, step);
                 ctx.getWorkflowEngine().confirmStep(projectId, step);
                 step = step.next();
                 continue;
             }
 
-            ctx.updateProgress(step.getDisplayName(), 0, "正在生成: " + step.getDisplayName() + "...");
+            ctx.updateProgress(step.name(), 0, "正在生成: " + step.getDisplayName() + "...");
 
             switch (step) {
                 case CHARACTER_DESIGN -> {
@@ -85,13 +85,21 @@ public class DefaultAutoRunStrategy implements AutoRunStrategy {
                         ctx.generateAndSave(step, 0);
                     }
                     if (ctx.shouldStop()) return;
-                    runCharacterRefine(ctx);
+                    if (ctx.isSubStepEnabled("CHARACTER_REFINE")) {
+                        runCharacterRefine(ctx);
+                    } else {
+                        log.info("[P{}][AutoRun] Sub-step CHARACTER_REFINE skipped (disabled)", projectId);
+                    }
                 }
                 case CHAPTER_WRITING -> {
                     runChapterWriting(ctx);
                     if (ctx.shouldStop()) return;
-                    ctx.updateProgress("生成标题", 0, "正在生成章节标题...");
-                    runGenerateTitles(ctx);
+                    if (ctx.isSubStepEnabled("TITLE_GENERATION")) {
+                        ctx.updateProgress("生成标题", 0, "正在生成章节标题...");
+                        runGenerateTitles(ctx);
+                    } else {
+                        log.info("[P{}][AutoRun] Sub-step TITLE_GENERATION skipped (disabled)", projectId);
+                    }
                 }
                 case POLISHING -> runPolishing(ctx);
                 case PROOFREADING -> runProofreadingAuto(ctx);
@@ -103,7 +111,7 @@ public class DefaultAutoRunStrategy implements AutoRunStrategy {
             // Confirm step and advance
             ctx.getWorkflowEngine().ensureWorkflowStateExists(projectId, step);
             log.info("[P{}][AutoRun] Step {} completed, confirming and advancing", projectId, step);
-            ctx.updateProgress(step.getDisplayName(), 0, step.getDisplayName() + " 完成，正在推进...");
+            ctx.updateProgress(step.name(), 0, step.getDisplayName() + " 完成，正在推进...");
             ctx.getWorkflowEngine().confirmStep(projectId, step);
 
             step = step.next();
@@ -151,15 +159,17 @@ public class DefaultAutoRunStrategy implements AutoRunStrategy {
         for (int num = startNum; num <= totalChapters; num++) {
             if (ctx.shouldStop()) return;
             String prefix = "章节写作：第 " + num + "/" + totalChapters + " 章";
-            ctx.updateProgress(WorkflowStep.CHAPTER_WRITING.getDisplayName(), num, prefix + "...");
+            ctx.updateProgress(WorkflowStep.CHAPTER_WRITING.name(), num, prefix + "...");
             ctx.generateAndSave(WorkflowStep.CHAPTER_WRITING, num, prefix);
             // Generate character states after each chapter
-            try {
-                ctx.emitSubStep("CHARACTER_STATES", num);
-                ctx.getWorkflowEngine().generateCharacterStates(projectId, num, ctx::forwardTokenToObservation);
-            } catch (Exception e) {
-                log.warn("[P{}][AutoRun] Failed to generate character states for ch{}: {}",
-                        projectId, num, e.getMessage());
+            if (ctx.isSubStepEnabled("CHARACTER_STATES")) {
+                try {
+                    ctx.emitSubStep("CHARACTER_STATES", num);
+                    ctx.getWorkflowEngine().generateCharacterStates(projectId, num, ctx::forwardTokenToObservation);
+                } catch (Exception e) {
+                    log.warn("[P{}][AutoRun] Failed to generate character states for ch{}: {}",
+                            projectId, num, e.getMessage());
+                }
             }
         }
     }
@@ -176,7 +186,7 @@ public class DefaultAutoRunStrategy implements AutoRunStrategy {
             if (ctx.shouldStop()) return;
             ChapterEntity ch = needsPolish.get(i);
             String prefix = "润色：第 " + ch.getChapterNumber() + " 章（" + (i + 1) + "/" + needsPolish.size() + "）";
-            ctx.updateProgress(WorkflowStep.POLISHING.getDisplayName(), ch.getChapterNumber(), prefix + "...");
+            ctx.updateProgress(WorkflowStep.POLISHING.name(), ch.getChapterNumber(), prefix + "...");
             ctx.generateAndSave(WorkflowStep.POLISHING, ch.getChapterNumber(), prefix);
         }
     }
@@ -204,14 +214,16 @@ public class DefaultAutoRunStrategy implements AutoRunStrategy {
 
             if (ctx.shouldStop()) return;
 
-            // Step 2: Fix based on proofreading report (skip if already done)
-            ch = ctx.getChapterRepository().findByProjectIdAndChapterNumber(projectId, chNum).orElse(ch);
-            if ((ch.getProofreadStatus() == StepStatus.GENERATED || ch.getProofreadStatus() == StepStatus.CONFIRMED)
-                    && ch.getProofreadFixStatus() != StepStatus.GENERATED
-                    && ch.getProofreadFixStatus() != StepStatus.CONFIRMED) {
-                String prefix = "校对精修：第 " + chNum + " 章" + progress;
-                ctx.updateProgress("校对-精修", chNum, prefix + "...");
-                ctx.proofreadFixWithProgress(chNum, "校对-精修", prefix);
+            // Step 2: Fix based on proofreading report (skip if already done or disabled)
+            if (ctx.isSubStepEnabled("PROOFREAD_FIX")) {
+                ch = ctx.getChapterRepository().findByProjectIdAndChapterNumber(projectId, chNum).orElse(ch);
+                if ((ch.getProofreadStatus() == StepStatus.GENERATED || ch.getProofreadStatus() == StepStatus.CONFIRMED)
+                        && ch.getProofreadFixStatus() != StepStatus.GENERATED
+                        && ch.getProofreadFixStatus() != StepStatus.CONFIRMED) {
+                    String prefix = "校对精修：第 " + chNum + " 章" + progress;
+                    ctx.updateProgress("校对-精修", chNum, prefix + "...");
+                    ctx.proofreadFixWithProgress(chNum, "校对-精修", prefix);
+                }
             }
         }
     }

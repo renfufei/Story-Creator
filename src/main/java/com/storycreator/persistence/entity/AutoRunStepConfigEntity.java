@@ -1,6 +1,5 @@
 package com.storycreator.persistence.entity;
 
-import com.storycreator.core.domain.WorkflowStep;
 import jakarta.persistence.*;
 
 @Entity
@@ -16,16 +15,15 @@ public class AutoRunStepConfigEntity {
     @Column(name = "project_id", nullable = false)
     private Long projectId;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "step", nullable = false, length = 50)
-    private WorkflowStep step;
+    private String step;
 
     @Column(name = "enabled", nullable = false)
     private boolean enabled = true;
 
     public AutoRunStepConfigEntity() {}
 
-    public AutoRunStepConfigEntity(Long projectId, WorkflowStep step, boolean enabled) {
+    public AutoRunStepConfigEntity(Long projectId, String step, boolean enabled) {
         this.projectId = projectId;
         this.step = step;
         this.enabled = enabled;
@@ -37,8 +35,8 @@ public class AutoRunStepConfigEntity {
     public Long getProjectId() { return projectId; }
     public void setProjectId(Long projectId) { this.projectId = projectId; }
 
-    public WorkflowStep getStep() { return step; }
-    public void setStep(WorkflowStep step) { this.step = step; }
+    public String getStep() { return step; }
+    public void setStep(String step) { this.step = step; }
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }

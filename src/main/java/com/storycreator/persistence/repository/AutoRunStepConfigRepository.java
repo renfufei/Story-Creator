@@ -1,6 +1,5 @@
 package com.storycreator.persistence.repository;
 
-import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.persistence.entity.AutoRunStepConfigEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -11,7 +10,7 @@ public interface AutoRunStepConfigRepository extends JpaRepository<AutoRunStepCo
 
     List<AutoRunStepConfigEntity> findByProjectId(Long projectId);
 
-    Optional<AutoRunStepConfigEntity> findByProjectIdAndStep(Long projectId, WorkflowStep step);
+    Optional<AutoRunStepConfigEntity> findByProjectIdAndStep(Long projectId, String step);
 
     void deleteByProjectId(Long projectId);
 }
