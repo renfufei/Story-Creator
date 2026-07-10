@@ -65,7 +65,7 @@
                         <td><strong th:text="${item.name}">名称</strong></td>
                         <td><span class="badge bg-info" th:text="${item.step.displayName}">步骤</span></td>
                         <td class="text-muted small text-truncate" style="max-width: 200px;"
-                            th:text="${item.guidance != null ? item.guidance.substring(0, T(Math).min(item.guidance.length(), 50)) : ''}">预览</td>
+                            th:text="${item.guidance != null ? #strings.abbreviate(item.guidance, 50) : ''}">预览</td>
                         <td class="small text-muted" th:text="${#temporals.format(item.updatedAt, 'yyyy-MM-dd HH:mm')}">时间</td>
                         <td>
                             <a th:href="@{/settings/guidances/{id}/edit(id=${item.id})}"

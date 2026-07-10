@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout(${project.title} + ' - 创作透视', ~{::content})}">
+<body>
+<div th:fragment="content">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a th:href="@{/projects/{id}(id=${project.id})}" th:text="${project.title}">项目</a></li>
+            <li class="breadcrumb-item active">创作透视</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0"><i class="bi bi-eye"></i> 创作透视</h4>
+        <div class="d-flex gap-2">
+            <a th:href="@{/projects/{id}/inspect/characters(id=${project.id})}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-people"></i> 角色透视
+            </a>
+            <a th:href="@{/projects/{id}/workflow(id=${project.id})}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> 返回创作
+            </a>
+        </div>
+    </div>
+
+    <!-- Writing Rules & Style Fingerprints -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#rulesCollapse" style="cursor:pointer;">
+                    <span><i class="bi bi-journal-check text-primary"></i> 写作规则</span>
+                    <i class="bi bi-chevron-down"></i>
+                </div>
+                <div class="collapse show" id="rulesCollapse">
+                    <div class="card-body">
+                        <th:block th:if="${writingRules}">
+                            <pre style="white-space:pre-wrap; max-height:300px; overflow-y:auto; font-size:0.85rem; margin:0;" th:text="${writingRules}"></pre>
+                        </th:block>
+                        <th:block th:unless="${writingRules}">
+                            <p class="text-muted mb-0">暂无写作规则数据（需使用增强策略生成）</p>
+                        </th:block>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#styleCollapse" style="cursor:pointer;">
+                    <span><i class="bi bi-palette text-info"></i> 风格指纹</span>
+                    <i class="bi bi-chevron-down"></i>
+                </div>
+                <div class="collapse show" id="styleCollapse">
+                    <div class="card-body">
+                        <th:block th:if="${styleFingerprint}">
+                            <pre style="white-space:pre-wrap; max-height:300px; overflow-y:auto; font-size:0.85rem; margin:0;" th:text="${styleFingerprint}"></pre>
+                        </th:block>
+                        <th:block th:unless="${styleFingerprint}">
+                            <p class="text-muted mb-0">暂无风格指纹数据（需使用增强策略生成）</p>
+                        </th:block>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Outline Overview -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="bi bi-list-nested"></i> 大纲透视
+        </div>
+        <div class="card-body">
+            <!-- Story Outline -->
+            <div class="mb-3">
+                <div class="d-flex align-items-center mb-2" data-bs-toggle="collapse" data-bs-target="#storyOutlineCollapse" style="cursor:pointer;">
+                    <strong class="me-2">总体大纲</strong>
+                    <i class="bi bi-chevron-down text-muted"></i>
+                </div>
+                <div class="collapse" id="storyOutlineCollapse">
+                    <th:block th:if="${storyOutline}">
+                        <pre style="white-space:pre-wrap; max-height:400px; overflow-y:auto; font-size:0.85rem; margin:0; background:#f8f9fa; padding:0.75rem; border-radius:4px;" th:text="${storyOutline}"></pre>
+                    </th:block>
+                    <th:block th:unless="${storyOutline}">
+                        <p class="text-muted mb-0">暂无总体大纲数据</p>
+                    </th:block>
+                </div>
+            </div>
+
+            <!-- Volume Arcs -->
+            <div class="mb-3">
+                <div class="d-flex align-items-center mb-2" data-bs-toggle="collapse" data-bs-target="#volumeArcsCollapse" style="cursor:pointer;">
+                    <strong class="me-2">卷弧线</strong>
+                    <i class="bi bi-chevron-down text-muted"></i>
+                </div>
+                <div class="collapse" id="volumeArcsCollapse">
+                    <th:block th:if="${volumes != null && !volumes.isEmpty()}">
+                        <div th:each="vol : ${volumes}" class="border rounded p-2 mb-2" style="background:#f8f9fa;">
+                            <div class="fw-semibold mb-1" style="font-size:0.9rem;">
+                                <span th:text="'第' + ${vol.volumeNumber} + '卷'"></span>
+                                <span th:if="${vol.title}" th:text="' — ' + ${vol.title}" class="text-muted"></span>
+                                <small class="text-muted" th:text="'（第' + ${vol.chapterStart} + '-' + ${vol.chapterEnd} + '章）'"></small>
+                            </div>
+                            <th:block th:if="${vol.arcSummary}">
+                                <pre style="white-space:pre-wrap; font-size:0.85rem; margin:0;" th:text="${vol.arcSummary}"></pre>
+                            </th:block>
+                            <th:block th:unless="${vol.arcSummary}">
+                                <p class="text-muted mb-0" style="font-size:0.85rem;">暂无弧线摘要</p>
+                            </th:block>
+                        </div>
+                    </th:block>
+                    <th:block th:if="${volumes == null || volumes.isEmpty()}">
+                        <p class="text-muted mb-0">暂无卷弧线数据</p>
+                    </th:block>
+                </div>
+            </div>
+
+            <!-- Chapter Outlines Table -->
+            <div>
+                <div class="d-flex align-items-center mb-2" data-bs-toggle="collapse" data-bs-target="#chapterOutlinesCollapse" style="cursor:pointer;">
+                    <strong class="me-2">分章大纲</strong>
+                    <i class="bi bi-chevron-down text-muted"></i>
+                </div>
+                <div class="collapse" id="chapterOutlinesCollapse">
+                    <th:block th:if="${outlines != null && !outlines.isEmpty()}">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width:50px">#</th>
+                                        <th style="width:120px">标题</th>
+                                        <th style="width:150px">出场角色</th>
+                                        <th>大纲摘要</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr th:each="ol : ${outlines}">
+                                        <td th:text="${ol.chapterNumber}">1</td>
+                                        <td th:text="${ol.title ?: '-'}">标题</td>
+                                        <td><small th:text="${ol.characterNames ?: '-'}">角色</small></td>
+                                        <td style="font-size:0.85rem;">
+                                            <span th:if="${ol.summary != null}" th:text="${ol.summary.length() > 100 ? ol.summary.substring(0, 100) + '...' : ol.summary}"></span>
+                                            <span th:unless="${ol.summary != null}" class="text-muted">-</span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </th:block>
+                    <th:block th:if="${outlines == null || outlines.isEmpty()}">
+                        <p class="text-muted mb-0">暂无分章大纲数据</p>
+                    </th:block>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chapter Completeness Table -->
+    <div class="card">
+        <div class="card-header">
+            <i class="bi bi-table"></i> 章节数据完整度
+        </div>
+        <div class="card-body p-0">
+            <th:block th:if="${chapterList.isEmpty()}">
+                <p class="text-muted text-center py-4 mb-0">暂无章节数据</p>
+            </th:block>
+            <th:block th:unless="${chapterList.isEmpty()}">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:50px">#</th>
+                                <th>标题</th>
+                                <th class="text-center" title="写作简报" style="width:36px"><small>简报</small></th>
+                                <th class="text-center" title="推理规划" style="width:36px"><small>推理</small></th>
+                                <th class="text-center" title="事件计划" style="width:36px"><small>事件</small></th>
+                                <th class="text-center" title="正文内容" style="width:36px"><small>正文</small></th>
+                                <th class="text-center" title="原稿" style="width:36px"><small>原稿</small></th>
+                                <th class="text-center" title="即时审查" style="width:36px"><small>审查</small></th>
+                                <th class="text-center" title="深度复盘" style="width:36px"><small>复盘</small></th>
+                                <th class="text-center" title="故事线快照" style="width:36px"><small>故事线</small></th>
+                                <th class="text-center" title="内容摘要" style="width:36px"><small>摘要</small></th>
+                                <th class="text-center" title="角色状态" style="width:36px"><small>角色</small></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr th:each="ch : ${chapterList}" style="cursor:pointer;"
+                                th:onclick="|window.location='/projects/${project.id}/inspect/chapters/${ch.get('number')}'|">
+                                <td th:text="${ch.get('number')}">1</td>
+                                <td th:text="${ch.get('title') ?: '(未命名)'}">标题</td>
+                                <td class="text-center"><span th:class="${ch.get('hasWritingBriefing') ? 'text-success' : 'text-muted'}" th:text="${ch.get('hasWritingBriefing') ? '●' : '○'}"></span></td>
+                                <td class="text-center"><span th:class="${ch.get('hasWritingReasoning') ? 'text-success' : 'text-muted'}" th:text="${ch.get('hasWritingReasoning') ? '●' : '○'}"></span></td>
+                                <td class="text-center"><span th:class="${ch.get('hasEventPlan') ? 'text-success' : 'text-muted'}" th:text="${ch.get('hasEventPlan') ? '●' : '○'}"></span></td>
+                                <td class="text-center"><span th:class="${ch.get('hasContent') ? 'text-success' : 'text-muted'}" th:text="${ch.get('hasContent') ? '●' : '○'}"></span></td>
+                                <td class="text-center"><span th:class="${ch.get('hasContentDraft') ? 'text-success' : 'text-muted'}" th:text="${ch.get('hasContentDraft') ? '●' : '○'}"></span></td>
+                                <td class="text-center"><span th:class="${ch.get('hasInstantReview') ? 'text-success' : 'text-muted'}" th:text="${ch.get('hasInstantReview') ? '●' : '○'}"></span></td>
+                                <td class="text-center"><span th:class="${ch.get('hasDeepReview') ? 'text-success' : 'text-muted'}" th:text="${ch.get('hasDeepReview') ? '●' : '○'}"></span></td>
+                                <td class="text-center"><span th:class="${ch.get('hasStorylineSnapshot') ? 'text-success' : 'text-muted'}" th:text="${ch.get('hasStorylineSnapshot') ? '●' : '○'}"></span></td>
+                                <td class="text-center"><span th:class="${ch.get('hasContentSummary') ? 'text-success' : 'text-muted'}" th:text="${ch.get('hasContentSummary') ? '●' : '○'}"></span></td>
+                                <td class="text-center"><span th:class="${ch.get('hasCharacterStates') ? 'text-success' : 'text-muted'}" th:text="${ch.get('hasCharacterStates') ? '●' : '○'}"></span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </th:block>
+        </div>
+    </div>
+</div>
+</body>
+</html>

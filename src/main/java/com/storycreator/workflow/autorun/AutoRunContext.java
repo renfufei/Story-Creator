@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Shared infrastructure context passed to AutoRunStrategy implementations.
@@ -32,6 +34,10 @@ public class AutoRunContext {
 
     private static final Logger log = LoggerFactory.getLogger(AutoRunContext.class);
     private static final int CONTENT_MIN_LENGTH = 50;
+
+    private static final Pattern SENTINEL_CHAR = Pattern.compile("\\[\\[CHAR:(OVERVIEW|CARD:\\d+)]]");
+    private static final Pattern SENTINEL_SECTION = Pattern.compile("\\[\\[SECTION:(VOLUME:\\d+:\\d+:\\d+|CHAPTER:\\d+:\\d+|REFINE:\\d+:\\d+|SUMMARY)]]");
+    private static final Pattern SENTINEL_PROOFREAD = Pattern.compile("\\[\\[PROOFREAD:CHAPTER:\\d+:(PLOT_SUMMARY|CHARACTER_CHECK|CONSISTENCY|CONTINUITY|FORESHADOWING)]]");
 
     private final Long projectId;
     private final ProjectRepository projectRepository;
@@ -102,9 +108,39 @@ public class AutoRunContext {
 
     public void forwardTokenToObservation(String token) {
         AutoRunObservation obs = observations.get(projectId);
-        if (obs != null && obs.isActive()) {
+        if (obs == null) return;
+
+        // Check for sentinel tokens and emit sub-step changes
+        String subStep = parseSentinelSubStep(token);
+        if (subStep != null) {
+            obs.reset(subStep, obs.getCurrentChapter());
+            return;
+        }
+
+        if (obs.isActive()) {
             obs.appendToken(token);
         }
+    }
+
+    private String parseSentinelSubStep(String token) {
+        Matcher m = SENTINEL_CHAR.matcher(token);
+        if (m.find()) {
+            String val = m.group(1);
+            return val.equals("OVERVIEW") ? "CHARACTER_OVERVIEW" : "CHARACTER_CARD";
+        }
+        m = SENTINEL_SECTION.matcher(token);
+        if (m.find()) {
+            String val = m.group(1);
+            if (val.equals("SUMMARY")) return "STORY_SUMMARY";
+            if (val.startsWith("VOLUME")) return "VOLUME_ARC";
+            if (val.startsWith("CHAPTER")) return "CHAPTER_OUTLINE";
+            if (val.startsWith("REFINE")) return "CHAPTER_OUTLINE_REFINE";
+        }
+        m = SENTINEL_PROOFREAD.matcher(token);
+        if (m.find()) {
+            return "PROOFREAD_" + m.group(1);
+        }
+        return null;
     }
 
     // --- Step Config ---
@@ -160,7 +196,13 @@ public class AutoRunContext {
                 }
                 List<ChapterOutlineEntity> chapterOutlines = chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId);
                 if (chapterOutlines.size() < project.getTotalChapters()) return false;
-                return chapterOutlines.stream().allMatch(o -> "REFINED".equals(o.getStatus()));
+                boolean refineEnabled = isSubStepEnabled("CHAPTER_OUTLINE_REFINE");
+                if (refineEnabled) {
+                    return chapterOutlines.stream().allMatch(o -> "REFINED".equals(o.getStatus()));
+                } else {
+                    return chapterOutlines.stream().allMatch(o ->
+                        "COMPLETED".equals(o.getStatus()) || "REFINED".equals(o.getStatus()));
+                }
             }
             case CHAPTER_WRITING -> {
                 List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
@@ -211,9 +253,7 @@ public class AutoRunContext {
         var disposable = workflowEngine.generate(projectId, step, chapter)
                 .doOnNext(token -> {
                     content.append(token);
-                    if (obs != null && obs.isActive()) {
-                        obs.appendToken(token);
-                    }
+                    forwardTokenToObservation(token);
                 })
                 .doOnError(error::set)
                 .subscribe();

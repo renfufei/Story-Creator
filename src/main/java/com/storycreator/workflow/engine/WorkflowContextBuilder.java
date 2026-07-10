@@ -89,7 +89,6 @@ public class WorkflowContextBuilder {
         storyOutlineRepository.findByProjectId(projectId).ifPresent(o -> {
             String fullContent = o.getContent();
             context.setOutline(fullContent);
-            context.setTotalChapters(o.getTotalChapters());
             context.setStorySummary(fullContent);
 
             if (fullContent != null) {

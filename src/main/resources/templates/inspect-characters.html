@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout(${project.title} + ' - 角色透视', ~{::content})}">
+<body>
+<div th:fragment="content">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a th:href="@{/projects/{id}(id=${project.id})}" th:text="${project.title}">项目</a></li>
+            <li class="breadcrumb-item"><a th:href="@{/projects/{id}/inspect(id=${project.id})}">创作透视</a></li>
+            <li class="breadcrumb-item active">角色透视</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0"><i class="bi bi-people"></i> 角色透视</h4>
+        <a th:href="@{/projects/{id}/inspect(id=${project.id})}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> 返回总览
+        </a>
+    </div>
+
+    <th:block th:if="${characters.isEmpty()}">
+        <div class="alert alert-secondary">暂无角色数据</div>
+    </th:block>
+
+    <div class="row">
+        <!-- Character Index (sidebar-like) -->
+        <div class="col-md-3" th:unless="${characters.isEmpty()}">
+            <div class="card position-sticky" style="top:1rem;">
+                <div class="card-header"><small class="fw-bold">角色列表</small></div>
+                <div class="list-group list-group-flush">
+                    <a th:each="ch : ${characters}" class="list-group-item list-group-item-action"
+                       th:href="'#char-' + ${ch.id}" th:text="${ch.name}">角色名</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Character Cards -->
+        <div class="col-md-9" th:unless="${characters.isEmpty()}">
+            <div th:each="ch : ${characters}" class="card mb-4" th:id="'char-' + ${ch.id}">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span class="fw-bold" th:text="${ch.name}">角色名</span>
+                    <div>
+                        <span class="badge bg-secondary" th:if="${ch.role}" th:text="${ch.role}">角色</span>
+                        <span class="badge bg-info" th:if="${ch.gender}" th:text="${ch.gender}">性别</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Basic Info -->
+                    <div class="row mb-3">
+                        <div class="col-sm-6" th:if="${ch.personality}">
+                            <small class="text-muted d-block">性格</small>
+                            <span th:text="${ch.personality}">性格</span>
+                        </div>
+                        <div class="col-sm-6" th:if="${ch.appearance}">
+                            <small class="text-muted d-block">外貌</small>
+                            <span th:text="${ch.appearance}">外貌</span>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-sm-6" th:if="${ch.motivation}">
+                            <small class="text-muted d-block">动机</small>
+                            <span th:text="${ch.motivation}">动机</span>
+                        </div>
+                        <div class="col-sm-6" th:if="${ch.relationships}">
+                            <small class="text-muted d-block">关系</small>
+                            <span th:text="${ch.relationships}">关系</span>
+                        </div>
+                    </div>
+                    <div th:if="${ch.abilities}" class="mb-3">
+                        <small class="text-muted d-block">能力</small>
+                        <span th:text="${ch.abilities}">能力</span>
+                    </div>
+                    <div th:if="${ch.background}" class="mb-3">
+                        <small class="text-muted d-block">背景</small>
+                        <pre style="white-space:pre-wrap; font-size:0.85rem; margin:0;" th:text="${ch.background}">背景</pre>
+                    </div>
+
+                    <!-- Behavior Boundaries (highlighted) -->
+                    <th:block th:if="${ch.behaviorBoundaries}">
+                        <div class="alert alert-info mb-0">
+                            <h6 class="alert-heading mb-2"><i class="bi bi-shield-check"></i> 行为边界</h6>
+                            <pre style="white-space:pre-wrap; font-size:0.85rem; margin:0;" th:text="${ch.behaviorBoundaries}">行为边界</pre>
+                        </div>
+                    </th:block>
+                    <th:block th:unless="${ch.behaviorBoundaries}">
+                        <p class="text-muted small mb-0"><i class="bi bi-info-circle"></i> 无行为边界数据（需使用增强策略生成）</p>
+                    </th:block>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

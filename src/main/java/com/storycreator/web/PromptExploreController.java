@@ -143,18 +143,24 @@ public class PromptExploreController {
 
     @GetMapping("/characters")
     @ResponseBody
-    public ResponseEntity<List<Map<String, Object>>> getCharacters(@RequestParam Long projectId) {
+    public ResponseEntity<Map<String, Object>> getCharacters(@RequestParam Long projectId) {
         List<CharacterEntity> characters = characterRepository
                 .findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
-        List<Map<String, Object>> result = new ArrayList<>();
+        List<Map<String, Object>> list = new ArrayList<>();
         for (CharacterEntity c : characters) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("id", c.getId());
             item.put("name", c.getName() != null ? c.getName() : "角色" + c.getSortOrder());
             item.put("sortOrder", c.getSortOrder());
-            result.add(item);
+            list.add(item);
         }
-        return ResponseEntity.ok(result);
+        int totalCards = projectRepository.findById(projectId)
+                .map(p -> p.getCharacterCount())
+                .orElse(5);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("characters", list);
+        response.put("totalCards", totalCards);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/resolve")

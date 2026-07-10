@@ -29,7 +29,6 @@ public class WorkflowStateService {
     private final CharacterRepository characterRepository;
     private final StoryOutlineRepository storyOutlineRepository;
     private final ChapterOutlineRepository chapterOutlineRepository;
-    private final VolumeOutlineRepository volumeOutlineRepository;
     private final ChapterRepository chapterRepository;
     private final BackgroundGenerationService backgroundGenerationService;
     private final ContextSummaryService contextSummaryService;
@@ -40,7 +39,6 @@ public class WorkflowStateService {
                                 CharacterRepository characterRepository,
                                 StoryOutlineRepository storyOutlineRepository,
                                 ChapterOutlineRepository chapterOutlineRepository,
-                                VolumeOutlineRepository volumeOutlineRepository,
                                 ChapterRepository chapterRepository,
                                 @Lazy BackgroundGenerationService backgroundGenerationService,
                                 ContextSummaryService contextSummaryService) {
@@ -50,7 +48,6 @@ public class WorkflowStateService {
         this.characterRepository = characterRepository;
         this.storyOutlineRepository = storyOutlineRepository;
         this.chapterOutlineRepository = chapterOutlineRepository;
-        this.volumeOutlineRepository = volumeOutlineRepository;
         this.chapterRepository = chapterRepository;
         this.backgroundGenerationService = backgroundGenerationService;
         this.contextSummaryService = contextSummaryService;
@@ -302,99 +299,6 @@ public class WorkflowStateService {
 
     private void saveOutline(Long projectId, String content) {
         if (content == null || content.isBlank()) return;
-
-        if (content.contains("[[SECTION:")) {
-            saveOutlineWithMarkers(projectId, content);
-        } else {
-            saveOutlineLegacy(projectId, content);
-        }
-    }
-
-    private void saveOutlineWithMarkers(Long projectId, String content) {
-        content = stripAiFormatting(content);
-        volumeOutlineRepository.deleteByProjectId(projectId);
-        chapterOutlineRepository.deleteByProjectId(projectId);
-
-        Pattern sectionPattern = Pattern.compile("\\[\\[SECTION:([A-Z]+)(?::([^\\]]+))?\\]\\]");
-        Pattern titlePattern = Pattern.compile("\\*\\*标题[：:]\\*\\*\\s*(.+)");
-        Pattern characterPattern = Pattern.compile("\\*\\*出场角色[：:]\\*\\*\\s*(.+)");
-
-        String[] sections = content.split("\\[\\[SECTION:");
-        String storySummaryText = null;
-
-        for (String section : sections) {
-            if (section.isBlank()) continue;
-
-            int closeBracket = section.indexOf("]]");
-            if (closeBracket < 0) continue;
-            String markerInfo = section.substring(0, closeBracket);
-            String text = section.substring(closeBracket + 2).strip();
-
-            String[] markerParts = markerInfo.split(":");
-
-            if (markerParts[0].equals("VOLUME") && markerParts.length >= 4) {
-                int volNum = Integer.parseInt(markerParts[1]);
-                int chStart = Integer.parseInt(markerParts[2]);
-                int chEnd = Integer.parseInt(markerParts[3]);
-
-                VolumeOutlineEntity vol = new VolumeOutlineEntity();
-                vol.setProjectId(projectId);
-                vol.setVolumeNumber(volNum);
-                vol.setChapterStart(chStart);
-                vol.setChapterEnd(chEnd);
-                vol.setArcSummary(text);
-                vol.setTitle("第" + volNum + "卷");
-                volumeOutlineRepository.save(vol);
-
-            } else if (markerParts[0].equals("CHAPTER") && markerParts.length >= 3) {
-                int chNum = Integer.parseInt(markerParts[1]);
-                int volNum = Integer.parseInt(markerParts[2]);
-
-                String title = null;
-                Matcher tMatcher = titlePattern.matcher(text);
-                if (tMatcher.find()) {
-                    title = tMatcher.group(1).trim();
-                    if (title.length() > 200) title = title.substring(0, 200);
-                }
-
-                String characterNames = null;
-                Matcher cMatcher = characterPattern.matcher(text);
-                if (cMatcher.find()) {
-                    characterNames = cMatcher.group(1).trim();
-                    if (characterNames.length() > 500) characterNames = characterNames.substring(0, 500);
-                }
-
-                String summary = text
-                        .replaceFirst("\\*\\*标题[：:]\\*\\*[^\\n]*\\n?", "")
-                        .replaceFirst("\\*\\*出场角色[：:]\\*\\*[^\\n]*\\n?", "")
-                        .strip();
-
-                ChapterOutlineEntity entity = new ChapterOutlineEntity();
-                entity.setProjectId(projectId);
-                entity.setChapterNumber(chNum);
-                entity.setVolumeNumber(volNum);
-                entity.setTitle(title != null ? title : "第" + chNum + "章");
-                entity.setSummary(summary);
-                entity.setCharacterNames(characterNames);
-                entity.setStatus("COMPLETED");
-                chapterOutlineRepository.save(entity);
-
-            } else if (markerParts[0].equals("SUMMARY")) {
-                storySummaryText = text;
-            }
-        }
-
-        StoryOutlineEntity outline = storyOutlineRepository.findByProjectId(projectId)
-                .orElseGet(() -> {
-                    StoryOutlineEntity o = new StoryOutlineEntity();
-                    o.setProjectId(projectId);
-                    return o;
-                });
-        outline.setContent(storySummaryText != null ? storySummaryText : "");
-        storyOutlineRepository.save(outline);
-    }
-
-    private void saveOutlineLegacy(Long projectId, String content) {
         content = stripAiFormatting(content);
         StoryOutlineEntity outline = storyOutlineRepository.findByProjectId(projectId)
                 .orElseGet(() -> {

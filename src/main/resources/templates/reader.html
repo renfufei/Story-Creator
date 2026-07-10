@@ -65,6 +65,31 @@
             background: #e9ecef;
             color: #000;
         }
+        .toc-volume-header {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.4rem 0.5rem;
+            margin-top: 0.3rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #333;
+            cursor: pointer;
+            border-radius: 4px;
+            user-select: none;
+        }
+        .toc-volume-header:hover {
+            background: #e9ecef;
+        }
+        .toc-volume-header i {
+            font-size: 0.75rem;
+            transition: transform 0.2s;
+        }
+        .toc-volume-chapters {
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            padding-left: 0.5rem;
+        }
         .tts-toolbar {
             background: #f8f9fa;
             border: 1px solid #dee2e6;
@@ -86,7 +111,7 @@
         }
     </style>
 </head>
-<body x-data="readerApp()" x-init="initTts()">
+<body x-data="readerApp()" x-init="initVolumes(); initTts()">
 
     <button class="btn btn-sm btn-outline-dark toggle-btn"
             :class="{ 'shifted': sidebarOpen && window.innerWidth > 768 }"
@@ -103,7 +128,28 @@
         </div>
         <h6 class="text-muted mb-2" th:text="${project.title}">书名</h6>
         <hr>
-        <nav>
+        <!-- Volume-grouped TOC -->
+        <nav th:if="${!#lists.isEmpty(volumes)}">
+            <template x-for="vol in volumes" :key="vol.volumeNumber">
+                <div>
+                    <div class="toc-volume-header" @click="toggleVolume(vol.volumeNumber)">
+                        <i class="bi" :class="openVolumes.includes(vol.volumeNumber) ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
+                        <span x-text="'第' + vol.volumeNumber + '卷 ' + (vol.title || '')"></span>
+                    </div>
+                    <div class="toc-volume-chapters" x-show="openVolumes.includes(vol.volumeNumber)">
+                        <template x-for="chapter in chaptersInVolume(vol)" :key="chapter.number">
+                            <a :href="'#chapter-' + chapter.number"
+                               x-text="'第' + chapter.number + '章 ' + (chapter.title || '')"
+                               class="toc-link"
+                               @click="if(window.innerWidth <= 768) sidebarOpen = false">
+                            </a>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </nav>
+        <!-- Fallback: flat list when no volumes -->
+        <nav th:if="${#lists.isEmpty(volumes)}">
             <a th:each="chapter : ${chapters}"
                th:href="'#chapter-' + ${chapter.chapterNumber}"
                th:text="'第' + ${chapter.chapterNumber} + '章 ' + (${chapter.title} ?: '')"
@@ -246,6 +292,28 @@
         const projectId = /*[[${project.id}]]*/ 0;
         return {
             sidebarOpen: window.innerWidth > 768,
+            volumes: /*[[${volumesJs}]]*/ [],
+            chaptersData: /*[[${chaptersJs}]]*/ [],
+            openVolumes: [],
+            initVolumes() {
+                const hash = window.location.hash;
+                const match = hash.match(/chapter-(\d+)/);
+                const targetChapter = match ? parseInt(match[1]) : null;
+                if (targetChapter && this.volumes.length > 0) {
+                    const vol = this.volumes.find(v => targetChapter >= v.chapterStart && targetChapter <= v.chapterEnd);
+                    this.openVolumes = vol ? [vol.volumeNumber] : [this.volumes[0].volumeNumber];
+                } else if (this.volumes.length > 0) {
+                    this.openVolumes = [this.volumes[0].volumeNumber];
+                }
+            },
+            toggleVolume(volNum) {
+                const idx = this.openVolumes.indexOf(volNum);
+                if (idx >= 0) this.openVolumes.splice(idx, 1);
+                else this.openVolumes.push(volNum);
+            },
+            chaptersInVolume(vol) {
+                return this.chaptersData.filter(c => c.number >= vol.chapterStart && c.number <= vol.chapterEnd);
+            },
             tts: {
                 configs: [],
                 selectedConfigId: null,

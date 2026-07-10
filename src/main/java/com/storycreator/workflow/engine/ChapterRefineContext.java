@@ -10,6 +10,7 @@ public record ChapterRefineContext(
     int totalChapters,
     String volumeArc,
     String currentChapterOutline,
-    List<String> previousOutlines,
-    List<String> nextOutlines
+    List<ChapterOutlineInfo> previousOutlines,
+    List<ChapterOutlineInfo> nextOutlines,
+    VolumeRange currentVolume
 ) {}

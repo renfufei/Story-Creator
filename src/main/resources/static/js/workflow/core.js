@@ -26,6 +26,8 @@ function workflowCoreMixin() {
         generateElapsed: '',
         generateTimer: null,
         chapterListData: [],
+        _volumeMeta: [],
+        chapterVolumeGroups: [],
         editing: false,
         stepGuidance: d.stepGuidance || '',
         stepGuidanceEdit: '',
@@ -63,6 +65,9 @@ function workflowCoreMixin() {
             }
             if (this.currentStep === 'PROOFREADING') {
                 this.loadProofreadData();
+            }
+            if (['CHAPTER_WRITING', 'POLISHING', 'PROOFREADING'].includes(this.currentStep)) {
+                this.loadVolumes();
             }
             this.checkBgGenStatus();
             if (this.autoMode) {
@@ -286,8 +291,83 @@ function workflowCoreMixin() {
         loadChapterList() {
             fetch(`/projects/${this.projectId}/chapters/list`)
                 .then(checkResponse)
-                .then(data => { this.chapterListData = data; })
+                .then(data => {
+                    this.chapterListData = data;
+                    this._rebuildChapterVolumeGroups();
+                })
                 .catch(err => console.error('Failed to load chapters:', err));
+        },
+
+        loadVolumes() {
+            fetch(`/projects/${this.projectId}/volumes`)
+                .then(checkResponse)
+                .then(data => {
+                    this._volumeMeta = data;
+                    this._rebuildChapterVolumeGroups();
+                    if (this.currentStep === 'PROOFREADING' && this._rebuildProofreadVolumeGroups) {
+                        this._rebuildProofreadVolumeGroups();
+                    }
+                })
+                .catch(err => console.error('Failed to load volumes:', err));
+        },
+
+        _rebuildChapterVolumeGroups() {
+            if (!this._volumeMeta || this._volumeMeta.length === 0) {
+                this.chapterVolumeGroups = [];
+                return;
+            }
+            let firstIncompleteFound = false;
+            this.chapterVolumeGroups = this._volumeMeta.map(vol => {
+                const chapters = this.chapterListData.filter(
+                    ch => ch.chapterNumber >= vol.chapterStart && ch.chapterNumber <= vol.chapterEnd
+                );
+                const hasIncomplete = chapters.some(ch => {
+                    if (this.currentStep === 'CHAPTER_WRITING') return ch.status !== 'CONFIRMED';
+                    if (this.currentStep === 'POLISHING') return ch.polishStatus !== 'CONFIRMED';
+                    return false;
+                });
+                let expanded = false;
+                if (!firstIncompleteFound && hasIncomplete) {
+                    expanded = true;
+                    firstIncompleteFound = true;
+                }
+                if (!firstIncompleteFound && !hasIncomplete && chapters.length === 0) {
+                    // skip
+                } else if (!firstIncompleteFound) {
+                    // all complete, don't expand
+                }
+                return {
+                    volumeNumber: vol.volumeNumber,
+                    title: vol.title,
+                    chapterStart: vol.chapterStart,
+                    chapterEnd: vol.chapterEnd,
+                    expanded: expanded,
+                    chapters: chapters
+                };
+            });
+            // If no incomplete found, expand the last volume with chapters
+            if (!firstIncompleteFound) {
+                for (let i = this.chapterVolumeGroups.length - 1; i >= 0; i--) {
+                    if (this.chapterVolumeGroups[i].chapters.length > 0) {
+                        this.chapterVolumeGroups[i].expanded = true;
+                        break;
+                    }
+                }
+            }
+        },
+
+        volumeSummaryLabel(vol) {
+            const total = vol.chapters.length;
+            if (total === 0) return '';
+            if (this.currentStep === 'CHAPTER_WRITING') {
+                const done = vol.chapters.filter(ch => ch.status === 'CONFIRMED').length;
+                return done + '/' + total + ' 已写';
+            }
+            if (this.currentStep === 'POLISHING') {
+                const done = vol.chapters.filter(ch => ch.polishStatus === 'CONFIRMED').length;
+                return done + '/' + total + ' 已润色';
+            }
+            return total + '章';
         },
 
         saveGuidance() {

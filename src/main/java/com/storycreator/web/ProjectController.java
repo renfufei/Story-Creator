@@ -3,8 +3,10 @@ package com.storycreator.web;
 import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.ModelType;
 import com.storycreator.core.domain.ProjectStatus;
+import com.storycreator.core.domain.StepStatus;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.persistence.entity.ProjectEntity;
+import com.storycreator.persistence.entity.WorkflowStateEntity;
 import com.storycreator.persistence.entity.ChapterEntity;
 import com.storycreator.persistence.entity.StepGuidanceEntity;
 import com.storycreator.persistence.entity.StepModelConfigEntity;
@@ -22,9 +24,13 @@ import com.storycreator.persistence.repository.StoryOutlineRepository;
 import com.storycreator.persistence.repository.VolumeOutlineRepository;
 import com.storycreator.persistence.repository.WorkflowStateRepository;
 import com.storycreator.persistence.repository.WorldSettingRepository;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -97,6 +103,14 @@ public class ProjectController {
         return "dashboard";
     }
 
+    private WorkflowStateEntity createNotStartedState(WorkflowStep step, Long projectId) {
+        WorkflowStateEntity state = new WorkflowStateEntity();
+        state.setProjectId(projectId);
+        state.setStep(step);
+        state.setStatus(StepStatus.NOT_STARTED);
+        return state;
+    }
+
     private String formatWordCount(long wordCount) {
         if (wordCount >= 10000) {
             double wan = wordCount / 10000.0;
@@ -161,7 +175,15 @@ public class ProjectController {
         ProjectEntity project = projectRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found: " + id));
         model.addAttribute("project", project);
-        model.addAttribute("workflowStates", workflowStateRepository.findByProjectId(id));
+
+        List<WorkflowStateEntity> existingStates = workflowStateRepository.findByProjectId(id);
+        Map<WorkflowStep, WorkflowStateEntity> stateMap = existingStates.stream()
+                .collect(Collectors.toMap(WorkflowStateEntity::getStep, Function.identity()));
+        List<WorkflowStateEntity> allStates = Arrays.stream(WorkflowStep.values())
+                .sorted(Comparator.comparingInt(WorkflowStep::getOrder))
+                .map(step -> stateMap.getOrDefault(step, createNotStartedState(step, id)))
+                .toList();
+        model.addAttribute("workflowStates", allStates);
         model.addAttribute("usageStats", aiUsageStatRepository.findByProjectIdOrderByTotalDurationMsDesc(id));
         // Chapter stats for this project
         long chapterCount = 0;
@@ -183,8 +205,21 @@ public class ProjectController {
         ProjectEntity project = projectRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found: " + id));
         List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(id);
+        var volumes = volumeOutlineRepository.findByProjectIdOrderByVolumeNumber(id);
         model.addAttribute("project", project);
         model.addAttribute("chapters", chapters);
+        model.addAttribute("volumes", volumes);
+        // Lightweight JS data for Alpine.js TOC
+        model.addAttribute("volumesJs", volumes.stream().map(v -> Map.of(
+                "volumeNumber", v.getVolumeNumber(),
+                "title", v.getTitle() != null ? v.getTitle() : "",
+                "chapterStart", v.getChapterStart(),
+                "chapterEnd", v.getChapterEnd()
+        )).toList());
+        model.addAttribute("chaptersJs", chapters.stream().map(c -> Map.of(
+                "number", c.getChapterNumber(),
+                "title", c.getTitle() != null ? c.getTitle() : ""
+        )).toList());
         return "reader";
     }
 

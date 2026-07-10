@@ -181,7 +181,7 @@ public class PromptExploreService {
         vars.put("genre", project.getGenre() != null ? project.getGenre().getDisplayName() : "");
         vars.put("description", safe(project.getDescription()));
         vars.put("worldSetting", worldSetting);
-        vars.put("stepGuidance", loadStepGuidance(projectId, WorkflowStep.WORLD_BUILDING));
+        vars.put("stepGuidance", "");
         return vars;
     }
 
@@ -194,7 +194,7 @@ public class PromptExploreService {
         vars.put("genre", project.getGenre() != null ? project.getGenre().getDisplayName() : "");
         vars.put("description", safe(project.getDescription()));
         vars.put("worldSetting", worldSetting);
-        vars.put("stepGuidance", loadStepGuidance(projectId, WorkflowStep.WORLD_BUILDING));
+        vars.put("stepGuidance", "");
         return vars;
     }
 
@@ -228,7 +228,7 @@ public class PromptExploreService {
         vars.put("characterName", characterName);
         vars.put("cardContent", cardContent);
         vars.put("worldSetting", worldSetting);
-        vars.put("stepGuidance", loadStepGuidance(projectId, WorkflowStep.CHARACTER_DESIGN));
+        vars.put("stepGuidance", "");
         return vars;
     }
 
@@ -264,7 +264,7 @@ public class PromptExploreService {
         vars.put("characters", charSb.toString());
         vars.put("writingRules", writingRules);
         vars.put("styleFingerprint", styleFingerprint);
-        vars.put("stepGuidance", loadStepGuidance(projectId, WorkflowStep.OUTLINE_GENERATION));
+        vars.put("stepGuidance", "");
         return vars;
     }
 
@@ -288,7 +288,7 @@ public class PromptExploreService {
         vars.put("chapterSummary", chapterSummary);
         vars.put("writingRules", writingRules);
         vars.put("characterCards", chapterCards);
-        vars.put("stepGuidance", loadStepGuidance(projectId, WorkflowStep.CHAPTER_WRITING));
+        vars.put("stepGuidance", loadRawStepGuidance(projectId, WorkflowStep.CHAPTER_WRITING));
         return vars;
     }
 
@@ -315,7 +315,7 @@ public class PromptExploreService {
         vars.put("eventPlan", eventPlan);
         vars.put("writingBriefing", writingBriefing);
         vars.put("characterCards", chapterCards);
-        vars.put("stepGuidance", loadStepGuidance(projectId, WorkflowStep.CHAPTER_WRITING));
+        vars.put("stepGuidance", loadRawStepGuidance(projectId, WorkflowStep.CHAPTER_WRITING));
         return vars;
     }
 
@@ -423,6 +423,13 @@ public class PromptExploreService {
         return stepGuidanceRepository.findByProjectIdAndStep(projectId, step)
                 .filter(sg -> sg.getGuidance() != null && !sg.getGuidance().isBlank())
                 .map(sg -> "\n\n【创作指导】\n" + sg.getGuidance() + "\n请在生成时参考以上指导意见。")
+                .orElse("");
+    }
+
+    private String loadRawStepGuidance(Long projectId, WorkflowStep step) {
+        return stepGuidanceRepository.findByProjectIdAndStep(projectId, step)
+                .filter(sg -> sg.getGuidance() != null && !sg.getGuidance().isBlank())
+                .map(StepGuidanceEntity::getGuidance)
                 .orElse("");
     }
 

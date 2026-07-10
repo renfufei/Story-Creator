@@ -89,6 +89,12 @@
                         <input type="number" class="form-control form-control-sm" x-model.number="volumeNumber" min="1" max="50">
                     </div>
 
+                    <!-- Chapter number input (for outline sub-steps) -->
+                    <div class="col-md-2" x-show="needsChapterNumber">
+                        <label class="form-label">章节号</label>
+                        <input type="number" class="form-control form-control-sm" x-model.number="chapterNumber" min="1" max="999">
+                    </div>
+
                     <!-- Resolve button -->
                     <div class="col-md-2">
                         <button class="btn btn-success btn-sm w-100" @click="resolvePrompt()" :disabled="resolving || !projectId">
@@ -199,13 +205,16 @@
                 get needsChapter() {
                     var ss = pageSubStep;
                     if (!ss) return pageStep === 'CHAPTER_WRITING' || pageStep === 'POLISHING';
-                    return ['CHAPTER_OUTLINE', 'CHAPTER_OUTLINE_REFINE', 'CHAPTER_TITLE', 'CHARACTER_STATES',
+                    return ['CHAPTER_TITLE', 'CHARACTER_STATES',
                             'PROOFREAD_PLOT_SUMMARY', 'PROOFREAD_CHARACTER_CHECK', 'PROOFREAD_CONSISTENCY',
                             'PROOFREAD_CONTINUITY', 'PROOFREAD_FORESHADOWING', 'PROOFREAD_FIX'].includes(ss);
                 },
+                get needsChapterNumber() {
+                    return pageSubStep && ['CHAPTER_OUTLINE', 'CHAPTER_OUTLINE_REFINE'].includes(pageSubStep);
+                },
                 get needsCharacter() {
                     var ss = pageSubStep;
-                    return ss && ['CHARACTER_REFINE', 'IMAGE_PROMPT_AVATAR', 'IMAGE_PROMPT_PORTRAIT'].includes(ss);
+                    return ss && ['CHARACTER_REFINE', 'CHARACTER_BEHAVIOR_BOUNDARIES', 'IMAGE_PROMPT_AVATAR', 'IMAGE_PROMPT_PORTRAIT'].includes(ss);
                 },
                 get needsCardNumber() {
                     return pageSubStep === 'CHARACTER_CARD';
@@ -232,7 +241,10 @@
                         .then(data => { this.chapters = data; });
                     fetch('/prompts/explore/characters?projectId=' + this.projectId)
                         .then(r => r.json())
-                        .then(data => { this.characters = data; });
+                        .then(data => {
+                            this.characters = data.characters;
+                            if (data.totalCards) this.totalCards = data.totalCards;
+                        });
                 },
 
                 resolvePrompt() {

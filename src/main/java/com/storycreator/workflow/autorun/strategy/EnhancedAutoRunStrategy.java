@@ -167,7 +167,6 @@ public class EnhancedAutoRunStrategy implements AutoRunStrategy {
             vars.put("genre", genreDisplay);
             vars.put("description", description);
             vars.put("worldSetting", worldSetting);
-            vars.put("stepGuidance", "");
 
             String result = executor.generateWritingRules(projectId, vars, genre, ctx::forwardTokenToObservation);
             WritingRulesEntity entity = new WritingRulesEntity();
@@ -188,7 +187,6 @@ public class EnhancedAutoRunStrategy implements AutoRunStrategy {
             vars.put("genre", genreDisplay);
             vars.put("description", description);
             vars.put("worldSetting", worldSetting);
-            vars.put("stepGuidance", "");
 
             String result = executor.generateStyleFingerprint(projectId, vars, genre, ctx::forwardTokenToObservation);
             StyleFingerprintEntity entity = new StyleFingerprintEntity();

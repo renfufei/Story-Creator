@@ -8,6 +8,9 @@
             <a th:href="@{/projects/{id}/read(id=${project.id})}" class="btn btn-sm btn-outline-success" target="_blank">
                 <i class="bi bi-book"></i> 全文阅读
             </a>
+            <a th:href="@{/projects/{id}/inspect(id=${project.id})}" class="btn btn-sm btn-outline-info" target="_blank">
+                <i class="bi bi-eye"></i> 创作透视
+            </a>
             <div class="dropdown">
                 <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                     <i class="bi bi-download"></i> 导出
@@ -87,8 +90,8 @@
                                        @change="toggleStepConfig(s.name, $event.target.checked)">
                                 <span class="form-check-label fw-bold" x-text="s.label" style="font-size:0.8rem;"></span>
                             </label>
-                            <template x-if="stepPrimaryLabel(s.name) || subStepsForStep(s.name).length > 0">
-                                <div class="mt-1 ms-2">
+                            <template x-if="stepPrimaryLabel(s.name) || orderedSubStepsForStep(s.name).length > 0">
+                                <div class="mt-1 ms-2" style="max-height: 8rem; overflow-y: auto;">
                                     <template x-if="stepPrimaryLabel(s.name)">
                                         <label class="form-check form-switch mb-0 d-block" style="font-size:0.75rem; min-height:1.4rem; opacity:0.5;">
                                             <input class="form-check-input" type="checkbox" style="width:1.6em; height:0.9em;"
@@ -96,12 +99,14 @@
                                             <span class="form-check-label text-muted" x-text="stepPrimaryLabel(s.name)"></span>
                                         </label>
                                     </template>
-                                    <template x-for="sub in subStepsForStep(s.name)" :key="sub">
-                                        <label class="form-check form-switch mb-0 d-block" style="font-size:0.75rem; min-height:1.4rem;">
+                                    <template x-for="sub in orderedSubStepsForStep(s.name)" :key="sub">
+                                        <label class="form-check form-switch mb-0 d-block"
+                                               style="font-size:0.75rem; min-height:1.4rem;"
+                                               :style="isSubStepLocked(sub) ? 'opacity:0.5' : ''">
                                             <input class="form-check-input" type="checkbox" style="width:1.6em; height:0.9em;"
-                                                   :checked="autoRunStepConfigs[sub] !== false"
-                                                   :disabled="!isMainStepEnabled(s.name)"
-                                                   @change="toggleStepConfig(sub, $event.target.checked)">
+                                                   :checked="isSubStepLocked(sub) || autoRunStepConfigs[sub] !== false"
+                                                   :disabled="isSubStepLocked(sub) || !isMainStepEnabled(s.name)"
+                                                   @change="!isSubStepLocked(sub) && toggleStepConfig(sub, $event.target.checked)">
                                             <span class="form-check-label text-muted"
                                                   x-text="AUTO_RUN_STEP_LABELS[sub] || sub"></span>
                                         </label>

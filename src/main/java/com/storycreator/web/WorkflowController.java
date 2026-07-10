@@ -936,6 +936,23 @@ public class WorkflowController {
         return ResponseEntity.ok(Map.of("status", "ok"));
     }
 
+    /**
+     * Get volume metadata (lightweight, for chapter grouping in writing/polishing/proofreading)
+     */
+    @GetMapping("/volumes")
+    @ResponseBody
+    public List<Map<String, Object>> getVolumes(@PathVariable Long projectId) {
+        List<VolumeOutlineEntity> volumes = volumeOutlineRepository.findByProjectIdOrderByVolumeNumber(projectId);
+        return volumes.stream().map(vol -> {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("volumeNumber", vol.getVolumeNumber());
+            map.put("title", vol.getTitle());
+            map.put("chapterStart", vol.getChapterStart());
+            map.put("chapterEnd", vol.getChapterEnd());
+            return map;
+        }).toList();
+    }
+
     // --- Outline structured data endpoints ---
 
     /**
@@ -1336,7 +1353,7 @@ public class WorkflowController {
         return switch (strategy) {
             case "ENHANCED" -> List.of(
                     "WRITING_RULES", "STYLE_FINGERPRINT", "CHARACTER_REFINE", "BEHAVIOR_BOUNDARIES",
-                    "EVENT_PLAN",
+                    "CHAPTER_OUTLINE_REFINE", "EVENT_PLAN",
                     "CONTEXT_BRIEFING", "PLOT_REASONING",
                     "INSTANT_REVIEW", "CONTENT_OPTIMIZATION", "STORYLINE_UPDATE", "DEEP_REVIEW",
                     "CHARACTER_STATES", "TITLE_GENERATION",
@@ -1344,6 +1361,7 @@ public class WorkflowController {
             );
             default -> List.of(
                     "CHARACTER_REFINE",
+                    "CHAPTER_OUTLINE_REFINE",
                     "CHARACTER_STATES", "TITLE_GENERATION",
                     "PROOFREAD_FIX"
             );

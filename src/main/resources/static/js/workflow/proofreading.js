@@ -1,6 +1,7 @@
 function workflowProofreadingMixin() {
     return {
         proofreadData: [],
+        proofreadVolumeGroups: [],
         proofreadStreaming: null,
         proofreadLoaded: false,
         proofreadExpandedChapter: null,
@@ -87,8 +88,55 @@ function workflowProofreadingMixin() {
                 .then(data => {
                     this.proofreadData = data;
                     this.proofreadLoaded = true;
+                    this._rebuildProofreadVolumeGroups();
                 })
                 .catch(err => console.error('Failed to load proofreading data:', err));
+        },
+
+        _rebuildProofreadVolumeGroups() {
+            if (!this._volumeMeta || this._volumeMeta.length === 0) {
+                this.proofreadVolumeGroups = [];
+                return;
+            }
+            let firstIncompleteFound = false;
+            this.proofreadVolumeGroups = this._volumeMeta.map(vol => {
+                const chapters = this.proofreadData.filter(
+                    ch => ch.chapterNumber >= vol.chapterStart && ch.chapterNumber <= vol.chapterEnd
+                );
+                const hasIncomplete = chapters.some(ch =>
+                    ch.proofreadStatus !== 'GENERATED' && ch.proofreadStatus !== 'CONFIRMED'
+                );
+                let expanded = false;
+                if (!firstIncompleteFound && hasIncomplete) {
+                    expanded = true;
+                    firstIncompleteFound = true;
+                }
+                return {
+                    volumeNumber: vol.volumeNumber,
+                    title: vol.title,
+                    chapterStart: vol.chapterStart,
+                    chapterEnd: vol.chapterEnd,
+                    expanded: expanded,
+                    chapters: chapters
+                };
+            });
+            if (!firstIncompleteFound) {
+                for (let i = this.proofreadVolumeGroups.length - 1; i >= 0; i--) {
+                    if (this.proofreadVolumeGroups[i].chapters.length > 0) {
+                        this.proofreadVolumeGroups[i].expanded = true;
+                        break;
+                    }
+                }
+            }
+        },
+
+        proofreadVolumeSummaryLabel(vol) {
+            const total = vol.chapters.length;
+            if (total === 0) return '';
+            const done = vol.chapters.filter(ch =>
+                ch.proofreadStatus === 'GENERATED' || ch.proofreadStatus === 'CONFIRMED'
+            ).length;
+            return done + '/' + total + ' 已校对';
         },
 
         getSubstepLabel(substep) {

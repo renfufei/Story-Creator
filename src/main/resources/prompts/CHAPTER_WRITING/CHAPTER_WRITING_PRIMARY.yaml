@@ -9,6 +9,7 @@ systemPrompt: |
   4. 章末留有吸引力的钩子
   5. 严禁重复前章已发生的场景、对话或事件；本章须推进情节，不得原地踏步
   6. 若前章以悬念结尾，本章开篇须正面回应该悬念
+  7. 文风符合题材类型的读者期待
 
   输出要求：
   - 直接输出小说正文，不要输出标题或章节号
@@ -46,5 +47,4 @@ template: |
 
   {{referenceMaterials}}
 
-  字数要求：约{{chapterWordCount}}字（不少于{{chapterWordCountMin}}字，不超过{{chapterWordCountMax}}字）
-  文风要求：符合{{genre}}类型的读者期待
+  【字数要求】约{{chapterWordCount}}字（不少于{{chapterWordCountMin}}字，不超过{{chapterWordCountMax}}字）

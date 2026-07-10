@@ -263,7 +263,7 @@ class PromptExploreServiceTest {
         assertThat(result.variables()).containsEntry("genre", "玄幻");
         assertThat(result.variables()).containsEntry("description", "测试描述");
         assertThat(result.variables()).containsEntry("worldSetting", "一个魔法世界");
-        assertThat(result.variables().get("stepGuidance")).contains("注意世界观一致性");
+        assertThat(result.variables().get("stepGuidance")).isEmpty();
     }
 
     @Test
@@ -294,7 +294,7 @@ class PromptExploreServiceTest {
                 new PromptExploreContext(1L, null, null, null, null, null));
 
         assertThat(result.variables()).containsEntry("worldSetting", "未来科技世界");
-        assertThat(result.variables().get("stepGuidance")).contains("科幻感要强");
+        assertThat(result.variables().get("stepGuidance")).isEmpty();
     }
 
     // ═══════ Enhanced Sub-Steps: CHARACTER_BEHAVIOR_BOUNDARIES ═══════
@@ -318,7 +318,7 @@ class PromptExploreServiceTest {
         assertThat(result.variables()).containsEntry("characterName", "张三");
         assertThat(result.variables()).containsEntry("cardContent", "武功高强的侠客");
         assertThat(result.variables()).containsEntry("worldSetting", "江湖世界");
-        assertThat(result.variables().get("stepGuidance")).contains("角色性格鲜明");
+        assertThat(result.variables().get("stepGuidance")).isEmpty();
     }
 
     @Test
@@ -381,7 +381,7 @@ class PromptExploreServiceTest {
         assertThat(result.variables()).containsEntry("writingRules", "写作规则内容");
         assertThat(result.variables()).containsEntry("styleFingerprint", "风格指纹内容");
         assertThat(result.variables().get("characters")).contains("主角");
-        assertThat(result.variables().get("stepGuidance")).contains("大纲指导");
+        assertThat(result.variables().get("stepGuidance")).isEmpty();
     }
 
     // ═══════ Enhanced Sub-Steps: CHAPTER_CONTEXT_BRIEFING ═══════
@@ -653,9 +653,7 @@ class PromptExploreServiceTest {
                 WorkflowStep.WORLD_BUILDING, PromptSubStep.WRITING_RULES,
                 new PromptExploreContext(1L, null, null, null, null, null));
 
-        assertThat(result.variables().get("stepGuidance")).contains("世界观指导内容");
-
-        // Verify it's NOT using CHARACTER_DESIGN guidance
-        verify(stepGuidanceRepository).findByProjectIdAndStep(1L, WorkflowStep.WORLD_BUILDING);
+        // In auto-run, WRITING_RULES does not receive stepGuidance, so explore page also sets it empty
+        assertThat(result.variables().get("stepGuidance")).isEmpty();
     }
 }

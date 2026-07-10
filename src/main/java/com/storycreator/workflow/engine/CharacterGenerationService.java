@@ -209,8 +209,12 @@ public class CharacterGenerationService {
                             .doOnComplete(() -> {
                                 String text = stripAiFormatting(refined.toString());
                                 card.setContent(text);
-                                card.setName(truncateNullable(extractField(text, "姓名"), 100));
-                                if (card.getName() == null || card.getName().isBlank()) card.setName("角色" + card.getSortOrder());
+                                // 精修时保留原名称，不让 AI 覆盖
+                                String originalName = card.getName();
+                                if (originalName == null || originalName.isBlank()) {
+                                    card.setName(truncateNullable(extractField(text, "姓名"), 100));
+                                    if (card.getName() == null || card.getName().isBlank()) card.setName("角色" + card.getSortOrder());
+                                }
                                 card.setGender(truncateNullable(extractField(text, "性别"), 20));
                                 card.setAge(truncateNullable(extractField(text, "年龄"), 20));
                                 card.setRole(truncateNullable(extractField(text, "身份"), 50));
@@ -277,7 +281,7 @@ public class CharacterGenerationService {
                 "title", baseContext.getTitle() != null ? baseContext.getTitle() : "",
                 "genre", genre != null ? genre.getDisplayName() : "",
                 "description", baseContext.getDescription() != null ? baseContext.getDescription() : "",
-                "worldSetting", wrapContent(truncate(baseContext.getWorldSetting(), 400)),
+                "worldSetting", wrapContent(baseContext.getWorldSetting()),
                 "previousContext", previousContext.toString(),
                 "cardNumber", String.valueOf(cardNumber),
                 "totalCards", String.valueOf(totalCards),
@@ -421,7 +425,7 @@ public class CharacterGenerationService {
                 "title", baseContext.getTitle() != null ? baseContext.getTitle() : "",
                 "genre", genre != null ? genre.getDisplayName() : "",
                 "description", baseContext.getDescription() != null ? baseContext.getDescription() : "",
-                "worldSetting", wrapContent(truncate(baseContext.getWorldSetting(), 400)),
+                "worldSetting", wrapContent(baseContext.getWorldSetting()),
                 "previousContext", previousContext.toString(),
                 "cardNumber", String.valueOf(cardNum),
                 "totalCards", String.valueOf(totalCards),

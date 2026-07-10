@@ -16,7 +16,7 @@ systemPrompt: |
   - 本章应在前一章基础上有明确的情节推进（新事件、新信息、关系变化）
   - 直接输出上述格式内容即可，不要添加任何其他文字
 template: |
-  请为以下小说生成第{{chapterNumber}}章（共{{totalChapters}}章，本卷第{{chapterStart}}-{{chapterEnd}}章）的详细大纲。
+  请为以下小说生成第{{chapterNumber}}章（共{{totalChapters}}章，本卷第{{chapterStart}}-{{chapterEnd}}章）的大纲。
 
   【小说信息】标题：{{title}}，题材：{{genre}}
   【世界观摘要】{{worldSetting}}

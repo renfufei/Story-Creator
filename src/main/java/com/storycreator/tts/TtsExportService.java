@@ -53,7 +53,7 @@ public class TtsExportService {
     private final ScheduledExecutorService cleanupScheduler = Executors.newSingleThreadScheduledExecutor();
 
     public static class TaskProgressSink {
-        private final Sinks.Many<String> sink = Sinks.many().replay().all();
+        private final Sinks.Many<String> sink = Sinks.many().replay().limit(200);
         private volatile boolean completed = false;
 
         public void emit(String message) {

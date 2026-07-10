@@ -664,6 +664,22 @@ function ttsExportApp() {
             const es = new EventSource(`/api/tts-export/tasks/${taskId}/progress-stream`);
             this.progressEventSources[taskId] = es;
 
+            // Batch incoming messages to avoid per-message DOM updates
+            let pendingMessages = [];
+            let flushScheduled = false;
+            const flushMessages = () => {
+                flushScheduled = false;
+                if (pendingMessages.length === 0) return;
+                if (!this.progressLogs[taskId]) this.progressLogs[taskId] = [];
+                this.progressLogs[taskId].push(...pendingMessages);
+                // Keep only last 500 lines to prevent DOM bloat
+                if (this.progressLogs[taskId].length > 500) {
+                    this.progressLogs[taskId] = this.progressLogs[taskId].slice(-500);
+                }
+                pendingMessages = [];
+                this.$nextTick(() => this.scrollProgressLog(taskId));
+            };
+
             // Inactivity timeout for reconnection
             let inactivityTimer = null;
             const resetInactivityTimer = () => {
@@ -681,18 +697,22 @@ function ttsExportApp() {
 
             es.addEventListener('log', (event) => {
                 resetInactivityTimer();
-                if (!this.progressLogs[taskId]) this.progressLogs[taskId] = [];
-                this.progressLogs[taskId].push(event.data);
-                this.$nextTick(() => this.scrollProgressLog(taskId));
+                pendingMessages.push(event.data);
+                if (!flushScheduled) {
+                    flushScheduled = true;
+                    requestAnimationFrame(flushMessages);
+                }
             });
 
             es.addEventListener('done', () => {
+                flushMessages(); // flush remaining
                 if (inactivityTimer) clearTimeout(inactivityTimer);
                 es.close();
                 delete this.progressEventSources[taskId];
             });
 
             es.onerror = () => {
+                flushMessages(); // flush remaining
                 if (inactivityTimer) clearTimeout(inactivityTimer);
                 es.close();
                 delete this.progressEventSources[taskId];
