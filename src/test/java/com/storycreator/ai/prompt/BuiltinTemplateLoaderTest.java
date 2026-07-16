@@ -92,13 +92,13 @@ class BuiltinTemplateLoaderTest {
     void load_primaryFileNameSetsPrimarySubStep() throws Exception {
         String yaml = "name: 默认模板\ntemplate: content\n";
         Resource resource = mockResource(
-                "/jar/classes/prompts/CHARACTER_DESIGN/CHARACTER_DESIGN_PRIMARY.yaml", yaml);
+                "/jar/classes/prompts/WORLD_BUILDING/WORLD_BUILDING_PRIMARY.yaml", yaml);
         when(resourcePatternResolver.getResources(anyString())).thenReturn(new Resource[]{resource});
 
         loader.load();
 
         assertThat(loader.getAll()).hasSize(1);
-        assertThat(loader.getAll().get(0).subStep()).isEqualTo(PromptSubStep.CHARACTER_DESIGN_PRIMARY);
+        assertThat(loader.getAll().get(0).subStep()).isEqualTo(PromptSubStep.WORLD_BUILDING_PRIMARY);
         assertThat(loader.getAll().get(0).subStep().isPrimary()).isTrue();
     }
 

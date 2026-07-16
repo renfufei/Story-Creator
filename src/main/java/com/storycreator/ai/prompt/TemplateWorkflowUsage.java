@@ -23,8 +23,6 @@ public final class TemplateWorkflowUsage {
 
         // Primary steps — used by both standard and enhanced
         map.put(PromptSubStep.WORLD_BUILDING_PRIMARY, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.CHARACTER_DESIGN_PRIMARY, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.OUTLINE_GENERATION_PRIMARY, Set.of(STANDARD, ENHANCED));
         map.put(PromptSubStep.CHAPTER_WRITING_PRIMARY, Set.of(STANDARD, ENHANCED));
         map.put(PromptSubStep.POLISHING_PRIMARY, Set.of(STANDARD, ENHANCED));
 

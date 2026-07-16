@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.storycreator.workflow.engine.TextProcessingUtils.truncate;
 
@@ -28,6 +29,7 @@ public class PromptExploreService {
     private final CharacterStateService characterStateService;
     private final CharacterImageService characterImageService;
     private final ProjectRepository projectRepository;
+    private final PromptTemplateRepository promptTemplateRepository;
     private final WritingRulesRepository writingRulesRepository;
     private final StyleFingerprintRepository styleFingerprintRepository;
     private final WorldSettingRepository worldSettingRepository;
@@ -45,6 +47,7 @@ public class PromptExploreService {
                                 CharacterStateService characterStateService,
                                 CharacterImageService characterImageService,
                                 ProjectRepository projectRepository,
+                                PromptTemplateRepository promptTemplateRepository,
                                 WritingRulesRepository writingRulesRepository,
                                 StyleFingerprintRepository styleFingerprintRepository,
                                 WorldSettingRepository worldSettingRepository,
@@ -61,6 +64,7 @@ public class PromptExploreService {
         this.characterStateService = characterStateService;
         this.characterImageService = characterImageService;
         this.projectRepository = projectRepository;
+        this.promptTemplateRepository = promptTemplateRepository;
         this.writingRulesRepository = writingRulesRepository;
         this.styleFingerprintRepository = styleFingerprintRepository;
         this.worldSettingRepository = worldSettingRepository;
@@ -77,12 +81,13 @@ public class PromptExploreService {
      * Resolve variables and render prompt for a given step/subStep and project context.
      */
     public ExploreResult resolve(WorkflowStep step, PromptSubStep subStep, PromptExploreContext ctx) {
-        Long projectId = ctx.projectId();
-        Integer chapterNumber = ctx.chapterNumber();
-        Long characterId = ctx.characterId();
-        Integer cardNumber = ctx.cardNumber();
-        Integer totalCards = ctx.totalCards();
-        Integer volumeNumber = ctx.volumeNumber();
+        Long projectId = ctx.getProjectId();
+        Integer chapterNumber = ctx.getChapterNumber();
+        Long characterId = ctx.getCharacterId();
+        Integer cardNumber = ctx.getCardNumber();
+        Integer totalCards = ctx.getTotalCards();
+        Integer volumeNumber = ctx.getVolumeNumber();
+        Long templateId = ctx.getTemplateId();
 
         ProjectEntity project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
@@ -112,6 +117,16 @@ public class PromptExploreService {
             // Fix: override stepGuidance with the explored template's step, not project.currentStep
             String correctGuidance = loadStepGuidance(projectId, step);
             variables.put("stepGuidance", correctGuidance);
+        }
+
+        // If a specific custom templateId is provided, override template content and system prompt
+        if (templateId != null) {
+            Optional<PromptTemplateEntity> customTemplate = promptTemplateRepository.findById(templateId);
+            if (customTemplate.isPresent()) {
+                PromptTemplateEntity entity = customTemplate.get();
+                templateContent = entity.getTemplate() != null ? entity.getTemplate() : templateContent;
+                systemPrompt = entity.getSystemPrompt() != null ? entity.getSystemPrompt() : systemPrompt;
+            }
         }
 
         String renderedPrompt = promptRegistry.resolveTemplate(templateContent, variables);
@@ -164,8 +179,7 @@ public class PromptExploreService {
             case CHAPTER_CONTENT_OPTIMIZATION -> buildChapterContentOptimizationVariables(projectId, chapterNumber);
             case CHAPTER_STORYLINE_UPDATE -> buildChapterStorylineUpdateVariables(projectId, chapterNumber);
             case CHAPTER_DEEP_REVIEW -> buildChapterDeepReviewVariables(projectId, chapterNumber);
-            case WORLD_BUILDING_PRIMARY, CHARACTER_DESIGN_PRIMARY, OUTLINE_GENERATION_PRIMARY,
-                 CHAPTER_WRITING_PRIMARY, POLISHING_PRIMARY ->
+            case WORLD_BUILDING_PRIMARY, CHAPTER_WRITING_PRIMARY, POLISHING_PRIMARY ->
                     throw new IllegalStateException("PRIMARY sub-steps should be intercepted before reaching switch");
         };
     }

@@ -52,20 +52,20 @@ class DefaultAutoRunStrategyTest {
     }
 
     private AutoRunContext buildCtx() {
-        return new AutoRunContext(
-                PROJECT_ID,
-                projectRepository,
-                chapterRepository,
-                mock(com.storycreator.persistence.repository.ChapterOutlineRepository.class),
-                characterRepository,
-                mock(com.storycreator.persistence.repository.WorldSettingRepository.class),
-                mock(com.storycreator.persistence.repository.StoryOutlineRepository.class),
-                workflowEngine,
-                globalSettingService,
-                mock(com.storycreator.persistence.repository.AutoRunStepConfigRepository.class),
-                stopSignals,
-                observations
-        );
+        AutoRunContext ctx = new AutoRunContext();
+        ctx.setProjectId(PROJECT_ID);
+        ctx.setProjectRepository(projectRepository);
+        ctx.setChapterRepository(chapterRepository);
+        ctx.setChapterOutlineRepository(mock(com.storycreator.persistence.repository.ChapterOutlineRepository.class));
+        ctx.setCharacterRepository(characterRepository);
+        ctx.setWorldSettingRepository(mock(com.storycreator.persistence.repository.WorldSettingRepository.class));
+        ctx.setStoryOutlineRepository(mock(com.storycreator.persistence.repository.StoryOutlineRepository.class));
+        ctx.setWorkflowEngine(workflowEngine);
+        ctx.setGlobalSettingService(globalSettingService);
+        ctx.setAutoRunStepConfigRepository(mock(com.storycreator.persistence.repository.AutoRunStepConfigRepository.class));
+        ctx.setStopSignals(stopSignals);
+        ctx.setObservations(observations);
+        return ctx;
     }
 
     private ProjectEntity makeProject(WorkflowStep currentStep, int totalChapters) {
@@ -126,14 +126,19 @@ class DefaultAutoRunStrategyTest {
         lenient().when(stepConfigRepo.findByProjectIdAndStep(eq(PROJECT_ID), eq("PROOFREADING")))
                 .thenReturn(Optional.empty());
 
-        AutoRunContext ctx = new AutoRunContext(
-                PROJECT_ID, projectRepository, chapterRepository,
-                mock(com.storycreator.persistence.repository.ChapterOutlineRepository.class),
-                characterRepository,
-                mock(com.storycreator.persistence.repository.WorldSettingRepository.class),
-                mock(com.storycreator.persistence.repository.StoryOutlineRepository.class),
-                workflowEngine, globalSettingService, stepConfigRepo, stopSignals, observations
-        );
+        AutoRunContext ctx = new AutoRunContext();
+        ctx.setProjectId(PROJECT_ID);
+        ctx.setProjectRepository(projectRepository);
+        ctx.setChapterRepository(chapterRepository);
+        ctx.setChapterOutlineRepository(mock(com.storycreator.persistence.repository.ChapterOutlineRepository.class));
+        ctx.setCharacterRepository(characterRepository);
+        ctx.setWorldSettingRepository(mock(com.storycreator.persistence.repository.WorldSettingRepository.class));
+        ctx.setStoryOutlineRepository(mock(com.storycreator.persistence.repository.StoryOutlineRepository.class));
+        ctx.setWorkflowEngine(workflowEngine);
+        ctx.setGlobalSettingService(globalSettingService);
+        ctx.setAutoRunStepConfigRepository(stepConfigRepo);
+        ctx.setStopSignals(stopSignals);
+        ctx.setObservations(observations);
 
         // Stop after skipping first step
         doAnswer(inv -> {
@@ -158,15 +163,19 @@ class DefaultAutoRunStrategyTest {
         when(worldSetting.getContent()).thenReturn("x".repeat(100));
         when(worldSettingRepo.findByProjectId(PROJECT_ID)).thenReturn(Optional.of(worldSetting));
 
-        AutoRunContext ctx = new AutoRunContext(
-                PROJECT_ID, projectRepository, chapterRepository,
-                mock(com.storycreator.persistence.repository.ChapterOutlineRepository.class),
-                characterRepository, worldSettingRepo,
-                mock(com.storycreator.persistence.repository.StoryOutlineRepository.class),
-                workflowEngine, globalSettingService,
-                mock(com.storycreator.persistence.repository.AutoRunStepConfigRepository.class),
-                stopSignals, observations
-        );
+        AutoRunContext ctx = new AutoRunContext();
+        ctx.setProjectId(PROJECT_ID);
+        ctx.setProjectRepository(projectRepository);
+        ctx.setChapterRepository(chapterRepository);
+        ctx.setChapterOutlineRepository(mock(com.storycreator.persistence.repository.ChapterOutlineRepository.class));
+        ctx.setCharacterRepository(characterRepository);
+        ctx.setWorldSettingRepository(worldSettingRepo);
+        ctx.setStoryOutlineRepository(mock(com.storycreator.persistence.repository.StoryOutlineRepository.class));
+        ctx.setWorkflowEngine(workflowEngine);
+        ctx.setGlobalSettingService(globalSettingService);
+        ctx.setAutoRunStepConfigRepository(mock(com.storycreator.persistence.repository.AutoRunStepConfigRepository.class));
+        ctx.setStopSignals(stopSignals);
+        ctx.setObservations(observations);
 
         // Stop after first step is confirmed
         doAnswer(inv -> {
@@ -270,13 +279,19 @@ class DefaultAutoRunStrategyTest {
             return null;
         }).when(workflowEngine).saveGeneratedContent(eq(PROJECT_ID), eq(WorkflowStep.CHAPTER_WRITING), anyString(), eq(3));
 
-        AutoRunContext ctx = new AutoRunContext(
-                PROJECT_ID, projectRepository, chapterRepository,
-                chapterOutlineRepo, characterRepository, worldSettingRepo, storyOutlineRepo,
-                workflowEngine, globalSettingService,
-                mock(com.storycreator.persistence.repository.AutoRunStepConfigRepository.class),
-                stopSignals, observations
-        );
+        AutoRunContext ctx = new AutoRunContext();
+        ctx.setProjectId(PROJECT_ID);
+        ctx.setProjectRepository(projectRepository);
+        ctx.setChapterRepository(chapterRepository);
+        ctx.setChapterOutlineRepository(chapterOutlineRepo);
+        ctx.setCharacterRepository(characterRepository);
+        ctx.setWorldSettingRepository(worldSettingRepo);
+        ctx.setStoryOutlineRepository(storyOutlineRepo);
+        ctx.setWorkflowEngine(workflowEngine);
+        ctx.setGlobalSettingService(globalSettingService);
+        ctx.setAutoRunStepConfigRepository(mock(com.storycreator.persistence.repository.AutoRunStepConfigRepository.class));
+        ctx.setStopSignals(stopSignals);
+        ctx.setObservations(observations);
         strategy.execute(ctx);
 
         // Should only generate chapter 3
@@ -342,13 +357,19 @@ class DefaultAutoRunStrategyTest {
         when(chapterRepository.findByProjectIdOrderByChapterNumber(PROJECT_ID))
                 .thenReturn(List.of(ch1, ch2));
 
-        AutoRunContext ctx = new AutoRunContext(
-                PROJECT_ID, projectRepository, chapterRepository,
-                chapterOutlineRepo, characterRepository, worldSettingRepo, storyOutlineRepo,
-                workflowEngine, globalSettingService,
-                mock(com.storycreator.persistence.repository.AutoRunStepConfigRepository.class),
-                stopSignals, observations
-        );
+        AutoRunContext ctx = new AutoRunContext();
+        ctx.setProjectId(PROJECT_ID);
+        ctx.setProjectRepository(projectRepository);
+        ctx.setChapterRepository(chapterRepository);
+        ctx.setChapterOutlineRepository(chapterOutlineRepo);
+        ctx.setCharacterRepository(characterRepository);
+        ctx.setWorldSettingRepository(worldSettingRepo);
+        ctx.setStoryOutlineRepository(storyOutlineRepo);
+        ctx.setWorkflowEngine(workflowEngine);
+        ctx.setGlobalSettingService(globalSettingService);
+        ctx.setAutoRunStepConfigRepository(mock(com.storycreator.persistence.repository.AutoRunStepConfigRepository.class));
+        ctx.setStopSignals(stopSignals);
+        ctx.setObservations(observations);
 
         strategy.execute(ctx);
 
@@ -378,15 +399,19 @@ class DefaultAutoRunStrategyTest {
             return null;
         }).when(workflowEngine).saveGeneratedContent(eq(PROJECT_ID), eq(WorkflowStep.WORLD_BUILDING), anyString(), eq(0));
 
-        AutoRunContext ctx = new AutoRunContext(
-                PROJECT_ID, projectRepository, chapterRepository,
-                mock(com.storycreator.persistence.repository.ChapterOutlineRepository.class),
-                characterRepository, worldSettingRepo,
-                mock(com.storycreator.persistence.repository.StoryOutlineRepository.class),
-                workflowEngine, globalSettingService,
-                mock(com.storycreator.persistence.repository.AutoRunStepConfigRepository.class),
-                stopSignals, observations
-        );
+        AutoRunContext ctx = new AutoRunContext();
+        ctx.setProjectId(PROJECT_ID);
+        ctx.setProjectRepository(projectRepository);
+        ctx.setChapterRepository(chapterRepository);
+        ctx.setChapterOutlineRepository(mock(com.storycreator.persistence.repository.ChapterOutlineRepository.class));
+        ctx.setCharacterRepository(characterRepository);
+        ctx.setWorldSettingRepository(worldSettingRepo);
+        ctx.setStoryOutlineRepository(mock(com.storycreator.persistence.repository.StoryOutlineRepository.class));
+        ctx.setWorkflowEngine(workflowEngine);
+        ctx.setGlobalSettingService(globalSettingService);
+        ctx.setAutoRunStepConfigRepository(mock(com.storycreator.persistence.repository.AutoRunStepConfigRepository.class));
+        ctx.setStopSignals(stopSignals);
+        ctx.setObservations(observations);
 
         strategy.execute(ctx);
 

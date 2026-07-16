@@ -169,8 +169,13 @@ public class OutlineGenerationService {
                                 String volumeArc = volumeArcSummaries.get(vol.volumeNumber() - 1);
                                 StringBuilder chContent = new StringBuilder();
                                 AiCallConfig aiConfig = new AiCallConfig(resolved, guidanceSuffix);
-                                ChapterOutlineContext outlineCtx = new ChapterOutlineContext(
-                                        chapterNum, totalChapters, vol, volumeArc, previousOutlines, nextOutlines);
+                                ChapterOutlineContext outlineCtx = new ChapterOutlineContext();
+                                outlineCtx.setChapterNum(chapterNum);
+                                outlineCtx.setTotalChapters(totalChapters);
+                                outlineCtx.setVol(vol);
+                                outlineCtx.setVolumeArc(volumeArc);
+                                outlineCtx.setPreviousOutlines(previousOutlines);
+                                outlineCtx.setNextOutlines(nextOutlines);
                                 Flux<String> chFlux = generateSingleChapterOutlineV2(baseContext, outlineCtx, aiConfig)
                                         .doOnNext(chContent::append)
                                         .doOnComplete(() -> {
@@ -222,9 +227,14 @@ public class OutlineGenerationService {
                                 StringBuilder refineContent = new StringBuilder();
 
                                 AiCallConfig aiConfig = new AiCallConfig(resolved, guidanceSuffix);
-                                ChapterRefineContext refineCtx = new ChapterRefineContext(
-                                        chapterNum, totalChapters, volumeArc, currentOutline,
-                                        prevOutlinesForRefine, nextOutlinesForRefine, vol);
+                                ChapterRefineContext refineCtx = new ChapterRefineContext();
+                                refineCtx.setChapterNum(chapterNum);
+                                refineCtx.setTotalChapters(totalChapters);
+                                refineCtx.setVolumeArc(volumeArc);
+                                refineCtx.setCurrentChapterOutline(currentOutline);
+                                refineCtx.setPreviousOutlines(prevOutlinesForRefine);
+                                refineCtx.setNextOutlines(nextOutlinesForRefine);
+                                refineCtx.setCurrentVolume(vol);
                                 Flux<String> refineFlux = generateSingleChapterRefine(baseContext, refineCtx, aiConfig)
                                         .doOnNext(refineContent::append)
                                         .doOnComplete(() -> {
@@ -247,9 +257,16 @@ public class OutlineGenerationService {
                             }));
         });
 
-        // Phase 3: Generate story summary
+        // Phase 3: Generate story summary (skip if already exists)
         Flux<String> phase3 = Flux.defer(() -> {
             String summaryMarker = "[[SECTION:SUMMARY]]";
+            // Skip if story summary already exists
+            Optional<StoryOutlineEntity> existingSummary = storyOutlineRepository.findByProjectId(projectId);
+            if (existingSummary.isPresent() && existingSummary.get().getContent() != null
+                    && !existingSummary.get().getContent().isBlank()) {
+                log.info("[P{}] Story summary already exists, skipping regeneration", projectId);
+                return Flux.just(summaryMarker).concatWith(Flux.just(existingSummary.get().getContent()));
+            }
             long summaryStart = System.currentTimeMillis();
             StringBuilder summaryContent = new StringBuilder();
             AiCallConfig aiConfig = new AiCallConfig(resolved, guidanceSuffix);
@@ -309,8 +326,13 @@ public class OutlineGenerationService {
         long regenStart = System.currentTimeMillis();
 
         AiCallConfig aiConfig = new AiCallConfig(resolved, guidanceSuffix);
-        ChapterOutlineContext outlineCtx = new ChapterOutlineContext(
-                chapterNumber, totalChapters, vol, volumeArc, previousOutlines, nextOutlines);
+        ChapterOutlineContext outlineCtx = new ChapterOutlineContext();
+        outlineCtx.setChapterNum(chapterNumber);
+        outlineCtx.setTotalChapters(totalChapters);
+        outlineCtx.setVol(vol);
+        outlineCtx.setVolumeArc(volumeArc);
+        outlineCtx.setPreviousOutlines(previousOutlines);
+        outlineCtx.setNextOutlines(nextOutlines);
         StringBuilder chContent = new StringBuilder();
         return generateSingleChapterOutlineV2(baseContext, outlineCtx, aiConfig)
                 .doOnNext(chContent::append)
@@ -582,12 +604,12 @@ public class OutlineGenerationService {
                                                           AiCallConfig aiConfig) {
         AiProviderRouter.ResolvedModel resolved = aiConfig.resolved();
         String guidanceSuffix = aiConfig.guidanceSuffix();
-        int chapterNum = ctx.chapterNum();
-        int totalChapters = ctx.totalChapters();
-        VolumeRange vol = ctx.vol();
-        String volumeArc = ctx.volumeArc();
-        List<String> previousOutlines = ctx.previousOutlines();
-        List<String> nextOutlines = ctx.nextOutlines();
+        int chapterNum = ctx.getChapterNum();
+        int totalChapters = ctx.getTotalChapters();
+        VolumeRange vol = ctx.getVol();
+        String volumeArc = ctx.getVolumeArc();
+        List<String> previousOutlines = ctx.getPreviousOutlines();
+        List<String> nextOutlines = ctx.getNextOutlines();
         String phaseHint;
         double progress = (double) chapterNum / totalChapters;
         if (progress <= 0.2) phaseHint = "开篇引入阶段";
@@ -666,12 +688,12 @@ public class OutlineGenerationService {
                                                        ChapterRefineContext ctx,
                                                        AiCallConfig aiConfig) {
         AiProviderRouter.ResolvedModel resolved = aiConfig.resolved();
-        int chapterNum = ctx.chapterNum();
-        int totalChapters = ctx.totalChapters();
-        String volumeArc = ctx.volumeArc();
-        List<ChapterOutlineInfo> previousOutlines = ctx.previousOutlines();
-        String currentChapterOutline = ctx.currentChapterOutline();
-        List<ChapterOutlineInfo> nextOutlines = ctx.nextOutlines();
+        int chapterNum = ctx.getChapterNum();
+        int totalChapters = ctx.getTotalChapters();
+        String volumeArc = ctx.getVolumeArc();
+        List<ChapterOutlineInfo> previousOutlines = ctx.getPreviousOutlines();
+        String currentChapterOutline = ctx.getCurrentChapterOutline();
+        List<ChapterOutlineInfo> nextOutlines = ctx.getNextOutlines();
 
         String contextInfo = buildRefineContextInfo(volumeArc, previousOutlines, nextOutlines);
 

@@ -39,44 +39,35 @@ public class AutoRunContext {
     private static final Pattern SENTINEL_SECTION = Pattern.compile("\\[\\[SECTION:(VOLUME:\\d+:\\d+:\\d+|CHAPTER:\\d+:\\d+|REFINE:\\d+:\\d+|SUMMARY)]]");
     private static final Pattern SENTINEL_PROOFREAD = Pattern.compile("\\[\\[PROOFREAD:CHAPTER:\\d+:(PLOT_SUMMARY|CHARACTER_CHECK|CONSISTENCY|CONTINUITY|FORESHADOWING)]]");
 
-    private final Long projectId;
-    private final ProjectRepository projectRepository;
-    private final ChapterRepository chapterRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
-    private final CharacterRepository characterRepository;
-    private final WorldSettingRepository worldSettingRepository;
-    private final StoryOutlineRepository storyOutlineRepository;
-    private final WorkflowEngine workflowEngine;
-    private final GlobalSettingService globalSettingService;
-    private final AutoRunStepConfigRepository autoRunStepConfigRepository;
-    private final ConcurrentHashMap<Long, Boolean> stopSignals;
-    private final ConcurrentHashMap<Long, AutoRunObservation> observations;
+    private Long projectId;
+    private ProjectRepository projectRepository;
+    private ChapterRepository chapterRepository;
+    private ChapterOutlineRepository chapterOutlineRepository;
+    private CharacterRepository characterRepository;
+    private WorldSettingRepository worldSettingRepository;
+    private StoryOutlineRepository storyOutlineRepository;
+    private WorkflowEngine workflowEngine;
+    private GlobalSettingService globalSettingService;
+    private AutoRunStepConfigRepository autoRunStepConfigRepository;
+    private ConcurrentHashMap<Long, Boolean> stopSignals;
+    private ConcurrentHashMap<Long, AutoRunObservation> observations;
 
-    public AutoRunContext(Long projectId,
-                          ProjectRepository projectRepository,
-                          ChapterRepository chapterRepository,
-                          ChapterOutlineRepository chapterOutlineRepository,
-                          CharacterRepository characterRepository,
-                          WorldSettingRepository worldSettingRepository,
-                          StoryOutlineRepository storyOutlineRepository,
-                          WorkflowEngine workflowEngine,
-                          GlobalSettingService globalSettingService,
-                          AutoRunStepConfigRepository autoRunStepConfigRepository,
-                          ConcurrentHashMap<Long, Boolean> stopSignals,
-                          ConcurrentHashMap<Long, AutoRunObservation> observations) {
-        this.projectId = projectId;
-        this.projectRepository = projectRepository;
-        this.chapterRepository = chapterRepository;
-        this.chapterOutlineRepository = chapterOutlineRepository;
-        this.characterRepository = characterRepository;
-        this.worldSettingRepository = worldSettingRepository;
-        this.storyOutlineRepository = storyOutlineRepository;
-        this.workflowEngine = workflowEngine;
-        this.globalSettingService = globalSettingService;
-        this.autoRunStepConfigRepository = autoRunStepConfigRepository;
-        this.stopSignals = stopSignals;
-        this.observations = observations;
-    }
+    public AutoRunContext() {}
+
+    // --- Setters ---
+
+    public void setProjectId(Long projectId) { this.projectId = projectId; }
+    public void setProjectRepository(ProjectRepository projectRepository) { this.projectRepository = projectRepository; }
+    public void setChapterRepository(ChapterRepository chapterRepository) { this.chapterRepository = chapterRepository; }
+    public void setChapterOutlineRepository(ChapterOutlineRepository chapterOutlineRepository) { this.chapterOutlineRepository = chapterOutlineRepository; }
+    public void setCharacterRepository(CharacterRepository characterRepository) { this.characterRepository = characterRepository; }
+    public void setWorldSettingRepository(WorldSettingRepository worldSettingRepository) { this.worldSettingRepository = worldSettingRepository; }
+    public void setStoryOutlineRepository(StoryOutlineRepository storyOutlineRepository) { this.storyOutlineRepository = storyOutlineRepository; }
+    public void setWorkflowEngine(WorkflowEngine workflowEngine) { this.workflowEngine = workflowEngine; }
+    public void setGlobalSettingService(GlobalSettingService globalSettingService) { this.globalSettingService = globalSettingService; }
+    public void setAutoRunStepConfigRepository(AutoRunStepConfigRepository autoRunStepConfigRepository) { this.autoRunStepConfigRepository = autoRunStepConfigRepository; }
+    public void setStopSignals(ConcurrentHashMap<Long, Boolean> stopSignals) { this.stopSignals = stopSignals; }
+    public void setObservations(ConcurrentHashMap<Long, AutoRunObservation> observations) { this.observations = observations; }
 
     // --- Accessors ---
 

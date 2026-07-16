@@ -51,7 +51,26 @@
                         </select>
                     </div>
 
-                    <!-- Chapter selector -->
+                    <!-- Volume + Chapter selector (outline) -->
+                    <div class="col-md-2" x-show="needsChapterOutline">
+                        <label class="form-label">卷</label>
+                        <select class="form-select form-select-sm" x-model="selectedVolume" @change="chapterNumber = ''">
+                            <option value="">-- 选择卷 --</option>
+                            <template x-for="v in volumes" :key="v">
+                                <option :value="v" x-text="'第' + v + '卷'"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div class="col-md-3" x-show="needsChapterOutline && selectedVolume">
+                        <label class="form-label">章节（大纲）</label>
+                        <select class="form-select form-select-sm" x-model="chapterNumber">
+                            <option value="">-- 选择章节 --</option>
+                            <template x-for="ch in filteredOutlines" :key="ch.chapterNumber">
+                                <option :value="ch.chapterNumber" x-text="'第' + ch.chapterNumber + '章 ' + ch.title"></option>
+                            </template>
+                        </select>
+                    </div>
+
                     <div class="col-md-3" x-show="needsChapter">
                         <label class="form-label">章节</label>
                         <select class="form-select form-select-sm" x-model="chapterNumber">
@@ -157,7 +176,7 @@
                 <!-- Result display -->
                 <div class="mt-3" x-show="aiResult !== null">
                     <div class="d-flex justify-content-between align-items-center mb-1">
-                        <label class="form-label fw-bold mb-0">AI 输出</label>
+                        <label class="form-label fw-bold mb-0">AI 输出 <span class="text-muted fw-normal" x-show="aiResult" x-text="'(' + aiResult.length + ' 字)'"></span></label>
                         <button class="btn btn-sm btn-outline-secondary" @click="copyResult()">
                             <i class="bi bi-clipboard"></i> 复制
                         </button>
@@ -190,6 +209,9 @@
                 totalCards: 5,
                 volumeNumber: 1,
                 chapters: [],
+                chapterOutlines: [],
+                chaptersPerVolume: 10,
+                selectedVolume: '',
                 characters: [],
                 resolving: false,
                 resolved: false,
@@ -202,9 +224,16 @@
                 aiResult: null,
                 aiError: '',
 
+                get needsChapterOutline() {
+                    var ss = pageSubStep;
+                    if (!ss) return pageStep === 'CHAPTER_WRITING';
+                    return ['CHAPTER_WRITING_PRIMARY', 'CHAPTER_CONTEXT_BRIEFING', 'CHAPTER_PLOT_REASONING',
+                            'CHAPTER_INSTANT_REVIEW', 'CHAPTER_CONTENT_OPTIMIZATION', 'CHAPTER_STORYLINE_UPDATE',
+                            'CHAPTER_DEEP_REVIEW', 'CHAPTER_EVENT_PLAN'].includes(ss);
+                },
                 get needsChapter() {
                     var ss = pageSubStep;
-                    if (!ss) return pageStep === 'CHAPTER_WRITING' || pageStep === 'POLISHING';
+                    if (!ss) return pageStep === 'POLISHING';
                     return ['CHAPTER_TITLE', 'CHARACTER_STATES',
                             'PROOFREAD_PLOT_SUMMARY', 'PROOFREAD_CHARACTER_CHECK', 'PROOFREAD_CONSISTENCY',
                             'PROOFREAD_CONTINUITY', 'PROOFREAD_FORESHADOWING', 'PROOFREAD_FIX'].includes(ss);
@@ -222,11 +251,32 @@
                 get needsVolume() {
                     return pageSubStep === 'VOLUME_ARC';
                 },
+                get volumes() {
+                    var set = new Set();
+                    var cpv = this.chaptersPerVolume || 10;
+                    this.chapterOutlines.forEach(o => {
+                        var v = o.volumeNumber != null ? o.volumeNumber : Math.ceil(o.chapterNumber / cpv);
+                        set.add(v);
+                    });
+                    return Array.from(set).sort((a, b) => a - b);
+                },
+                get filteredOutlines() {
+                    if (!this.selectedVolume) return [];
+                    var sv = parseInt(this.selectedVolume);
+                    var cpv = this.chaptersPerVolume || 10;
+                    return this.chapterOutlines.filter(o => {
+                        var v = o.volumeNumber != null ? o.volumeNumber : Math.ceil(o.chapterNumber / cpv);
+                        return v === sv;
+                    });
+                },
 
                 init() {},
 
                 onProjectChange() {
                     this.chapters = [];
+                    this.chapterOutlines = [];
+                    this.chaptersPerVolume = 10;
+                    this.selectedVolume = '';
                     this.characters = [];
                     this.chapterNumber = '';
                     this.characterId = '';
@@ -239,6 +289,12 @@
                     fetch('/prompts/explore/chapters?projectId=' + this.projectId)
                         .then(r => r.json())
                         .then(data => { this.chapters = data; });
+                    fetch('/prompts/explore/chapter-outlines?projectId=' + this.projectId)
+                        .then(r => r.json())
+                        .then(data => {
+                            this.chapterOutlines = data.outlines || [];
+                            this.chaptersPerVolume = data.chaptersPerVolume || 10;
+                        });
                     fetch('/prompts/explore/characters?projectId=' + this.projectId)
                         .then(r => r.json())
                         .then(data => {
@@ -262,7 +318,8 @@
                         characterId: this.characterId || null,
                         cardNumber: this.cardNumber,
                         totalCards: this.totalCards,
-                        volumeNumber: this.volumeNumber
+                        volumeNumber: this.volumeNumber,
+                        templateId: pageTemplateId
                     };
 
                     fetch('/prompts/explore/resolve', {

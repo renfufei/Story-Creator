@@ -5,8 +5,6 @@ import java.util.Map;
 public enum PromptSubStep {
     // PRIMARY sub-steps (one per main workflow step)
     WORLD_BUILDING_PRIMARY("世界观核心", 10),
-    CHARACTER_DESIGN_PRIMARY("角色设计核心", 40),
-    OUTLINE_GENERATION_PRIMARY("大纲核心", 110),
     CHAPTER_WRITING_PRIMARY("写作核心", 170),
     POLISHING_PRIMARY("润色核心", 260),
 
@@ -15,7 +13,7 @@ public enum PromptSubStep {
     STYLE_FINGERPRINT("风格指纹提取", 30),
 
     // CHARACTER_DESIGN sub-steps
-    CHARACTER_OVERVIEW("角色总览", 50),
+    CHARACTER_OVERVIEW("角色总览", 65),
     CHARACTER_CARD("角色卡生成", 60),
     CHARACTER_REFINE("角色精修", 70),
     CHARACTER_BEHAVIOR_BOUNDARIES("角色行为边界", 80),
@@ -67,16 +65,12 @@ public enum PromptSubStep {
 
     public boolean isPrimary() {
         return this == WORLD_BUILDING_PRIMARY
-                || this == CHARACTER_DESIGN_PRIMARY
-                || this == OUTLINE_GENERATION_PRIMARY
                 || this == CHAPTER_WRITING_PRIMARY
                 || this == POLISHING_PRIMARY;
     }
 
     private static final Map<PromptSubStep, WorkflowStep> PARENT_STEP_MAP = Map.ofEntries(
             Map.entry(WORLD_BUILDING_PRIMARY, WorkflowStep.WORLD_BUILDING),
-            Map.entry(CHARACTER_DESIGN_PRIMARY, WorkflowStep.CHARACTER_DESIGN),
-            Map.entry(OUTLINE_GENERATION_PRIMARY, WorkflowStep.OUTLINE_GENERATION),
             Map.entry(CHAPTER_WRITING_PRIMARY, WorkflowStep.CHAPTER_WRITING),
             Map.entry(POLISHING_PRIMARY, WorkflowStep.POLISHING),
             Map.entry(WRITING_RULES, WorkflowStep.WORLD_BUILDING),

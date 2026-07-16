@@ -17,7 +17,9 @@ import com.storycreator.persistence.entity.AiModelConfigEntity;
 import com.storycreator.persistence.entity.ChapterEntity;
 import com.storycreator.persistence.entity.CharacterEntity;
 import com.storycreator.persistence.entity.PromptTemplateEntity;
+import com.storycreator.persistence.entity.ChapterOutlineEntity;
 import com.storycreator.persistence.repository.AiModelConfigRepository;
+import com.storycreator.persistence.repository.ChapterOutlineRepository;
 import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.CharacterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
@@ -47,6 +49,7 @@ public class PromptExploreController {
     private final PromptTemplateRepository promptTemplateRepository;
     private final ProjectRepository projectRepository;
     private final ChapterRepository chapterRepository;
+    private final ChapterOutlineRepository chapterOutlineRepository;
     private final CharacterRepository characterRepository;
     private final AiModelConfigRepository modelConfigRepository;
     private final AiProviderRouter aiProviderRouter;
@@ -59,6 +62,7 @@ public class PromptExploreController {
                                    PromptTemplateRepository promptTemplateRepository,
                                    ProjectRepository projectRepository,
                                    ChapterRepository chapterRepository,
+                                   ChapterOutlineRepository chapterOutlineRepository,
                                    CharacterRepository characterRepository,
                                    AiModelConfigRepository modelConfigRepository,
                                    AiProviderRouter aiProviderRouter,
@@ -70,6 +74,7 @@ public class PromptExploreController {
         this.promptTemplateRepository = promptTemplateRepository;
         this.projectRepository = projectRepository;
         this.chapterRepository = chapterRepository;
+        this.chapterOutlineRepository = chapterOutlineRepository;
         this.characterRepository = characterRepository;
         this.modelConfigRepository = modelConfigRepository;
         this.aiProviderRouter = aiProviderRouter;
@@ -141,6 +146,27 @@ public class PromptExploreController {
         return ResponseEntity.ok(result);
     }
 
+    @GetMapping("/chapter-outlines")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> getChapterOutlines(@RequestParam Long projectId) {
+        List<ChapterOutlineEntity> outlines = chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (ChapterOutlineEntity o : outlines) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("chapterNumber", o.getChapterNumber());
+            item.put("title", o.getTitle() != null ? o.getTitle() : "第" + o.getChapterNumber() + "章");
+            item.put("volumeNumber", o.getVolumeNumber());
+            result.add(item);
+        }
+        int chaptersPerVolume = projectRepository.findById(projectId)
+                .map(p -> p.getChaptersPerVolume())
+                .orElse(10);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("chaptersPerVolume", chaptersPerVolume);
+        response.put("outlines", result);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/characters")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> getCharacters(@RequestParam Long projectId) {
@@ -175,6 +201,7 @@ public class PromptExploreController {
             Integer cardNumber = toInt(body.get("cardNumber"));
             Integer totalCards = toInt(body.get("totalCards"));
             Integer volumeNumber = toInt(body.get("volumeNumber"));
+            Long templateId = toLong(body.get("templateId"));
 
             if (projectId == null) {
                 return ResponseEntity.badRequest().body(Map.of("success", false, "error", "请选择项目"));
@@ -183,8 +210,14 @@ public class PromptExploreController {
             WorkflowStep step = stepStr != null ? WorkflowStep.valueOf(stepStr) : null;
             PromptSubStep subStep = (subStepStr != null && !subStepStr.isEmpty()) ? PromptSubStep.valueOf(subStepStr) : null;
 
-            PromptExploreContext exploreCtx = new PromptExploreContext(
-                    projectId, chapterNumber, characterId, cardNumber, totalCards, volumeNumber);
+            PromptExploreContext exploreCtx = new PromptExploreContext();
+            exploreCtx.setProjectId(projectId);
+            exploreCtx.setChapterNumber(chapterNumber);
+            exploreCtx.setCharacterId(characterId);
+            exploreCtx.setCardNumber(cardNumber);
+            exploreCtx.setTotalCards(totalCards);
+            exploreCtx.setVolumeNumber(volumeNumber);
+            exploreCtx.setTemplateId(templateId);
             PromptExploreService.ExploreResult result = exploreService.resolve(step, subStep, exploreCtx);
 
             Map<String, Object> response = new LinkedHashMap<>();

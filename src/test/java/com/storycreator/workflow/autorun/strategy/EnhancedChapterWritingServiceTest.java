@@ -57,16 +57,20 @@ class EnhancedChapterWritingServiceTest {
     }
 
     private AutoRunContext buildCtx() {
-        return new AutoRunContext(
-                PROJECT_ID, projectRepository, chapterRepository,
-                chapterOutlineRepository,
-                mock(com.storycreator.persistence.repository.CharacterRepository.class),
-                mock(com.storycreator.persistence.repository.WorldSettingRepository.class),
-                mock(com.storycreator.persistence.repository.StoryOutlineRepository.class),
-                workflowEngine, globalSettingService,
-                mock(com.storycreator.persistence.repository.AutoRunStepConfigRepository.class),
-                stopSignals, observations
-        );
+        AutoRunContext ctx = new AutoRunContext();
+        ctx.setProjectId(PROJECT_ID);
+        ctx.setProjectRepository(projectRepository);
+        ctx.setChapterRepository(chapterRepository);
+        ctx.setChapterOutlineRepository(chapterOutlineRepository);
+        ctx.setCharacterRepository(mock(com.storycreator.persistence.repository.CharacterRepository.class));
+        ctx.setWorldSettingRepository(mock(com.storycreator.persistence.repository.WorldSettingRepository.class));
+        ctx.setStoryOutlineRepository(mock(com.storycreator.persistence.repository.StoryOutlineRepository.class));
+        ctx.setWorkflowEngine(workflowEngine);
+        ctx.setGlobalSettingService(globalSettingService);
+        ctx.setAutoRunStepConfigRepository(mock(com.storycreator.persistence.repository.AutoRunStepConfigRepository.class));
+        ctx.setStopSignals(stopSignals);
+        ctx.setObservations(observations);
+        return ctx;
     }
 
     private ChapterEntity makeChapter(int num, String cycleStatus) {

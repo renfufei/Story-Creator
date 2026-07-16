@@ -69,15 +69,19 @@
                         <div x-show="currentIndex >= 0">
                             <h5 class="mb-1" x-text="'正在播放：第' + (currentChapter ? currentChapter.chapterNumber : '') + '章'"></h5>
                             <p class="text-muted small mb-3" x-text="'进度: ' + (currentIndex + 1) + ' / ' + playableChapters.length + ' 章'"></p>
-                            <!-- Progress bar -->
-                            <div class="progress mb-3" style="height: 6px;">
-                                <div class="progress-bar bg-success" :style="'width: ' + overallProgress + '%'"></div>
+                            <!-- Seekable audio progress -->
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <small class="text-muted" style="min-width: 40px" x-text="currentTimeDisplay"></small>
+                                <input type="range" class="form-range flex-grow-1" min="0" max="100" step="0.1"
+                                       :value="audioProgress"
+                                       @input="onSeekInput($event)"
+                                       @mousedown="onSeekStart()"
+                                       @mouseup="onSeekEnd()"
+                                       @touchstart="onSeekStart()"
+                                       @touchend="onSeekEnd()"
+                                       :disabled="!audio">
+                                <small class="text-muted" style="min-width: 40px" x-text="durationDisplay"></small>
                             </div>
-                            <!-- Audio progress -->
-                            <div class="progress mb-2" style="height: 4px;">
-                                <div class="progress-bar" :style="'width: ' + audioProgress + '%'"></div>
-                            </div>
-                            <small class="text-muted" x-text="audioTimeDisplay"></small>
                         </div>
                     </div>
 
@@ -125,7 +129,9 @@ function fullPlayApp() {
         paused: false,
         audio: null,
         audioProgress: 0,
-        audioTimeDisplay: '',
+        currentTimeDisplay: '0:00',
+        durationDisplay: '0:00',
+        seeking: false,
         playError: null,
         resumeOffer: false,
         resumeChapterDisplay: '',
@@ -134,10 +140,6 @@ function fullPlayApp() {
 
         get currentChapter() {
             return this.currentIndex >= 0 ? this.playableChapters[this.currentIndex] : null;
-        },
-        get overallProgress() {
-            if (this.playableChapters.length === 0) return 0;
-            return Math.round(((this.currentIndex + 1) / this.playableChapters.length) * 100);
         },
 
         async init() {
@@ -215,7 +217,8 @@ function fullPlayApp() {
                 // Finished all chapters
                 this.currentIndex = -1;
                 this.audioProgress = 0;
-                this.audioTimeDisplay = '';
+                this.currentTimeDisplay = '0:00';
+                this.durationDisplay = '0:00';
                 localStorage.removeItem(storageKey);
             }
         },
@@ -268,7 +271,8 @@ function fullPlayApp() {
             this.currentIndex = -1;
             this.paused = false;
             this.audioProgress = 0;
-            this.audioTimeDisplay = '';
+            this.currentTimeDisplay = '0:00';
+            this.durationDisplay = '0:00';
             localStorage.removeItem(storageKey);
         },
 
@@ -286,8 +290,11 @@ function fullPlayApp() {
             this.stopProgressTimer();
             this.progressTimer = setInterval(() => {
                 if (this.audio && this.audio.duration) {
-                    this.audioProgress = (this.audio.currentTime / this.audio.duration) * 100;
-                    this.audioTimeDisplay = this.formatTime(this.audio.currentTime) + ' / ' + this.formatTime(this.audio.duration);
+                    if (!this.seeking) {
+                        this.audioProgress = (this.audio.currentTime / this.audio.duration) * 100;
+                    }
+                    this.currentTimeDisplay = this.formatTime(this.audio.currentTime);
+                    this.durationDisplay = this.formatTime(this.audio.duration);
                 }
             }, 500);
         },
@@ -296,6 +303,22 @@ function fullPlayApp() {
             if (this.progressTimer) {
                 clearInterval(this.progressTimer);
                 this.progressTimer = null;
+            }
+        },
+
+        onSeekStart() {
+            this.seeking = true;
+        },
+
+        onSeekEnd() {
+            this.seeking = false;
+        },
+
+        onSeekInput(e) {
+            if (this.audio && this.audio.duration) {
+                this.audio.currentTime = (e.target.value / 100) * this.audio.duration;
+                this.audioProgress = parseFloat(e.target.value);
+                this.currentTimeDisplay = this.formatTime(this.audio.currentTime);
             }
         },
 

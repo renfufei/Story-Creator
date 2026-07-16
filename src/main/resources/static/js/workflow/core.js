@@ -470,9 +470,12 @@ function workflowCoreMixin() {
         },
 
         applyReuseGuidance() {
-            if (!this.selectedGuidanceId) return;
-            const item = this.guidanceLibraryItems.find(i => i.id === this.selectedGuidanceId);
-            if (!item) return;
+            console.log('[applyReuseGuidance] called, selectedGuidanceId:', this.selectedGuidanceId, typeof this.selectedGuidanceId);
+            if (!this.selectedGuidanceId) { console.log('[applyReuseGuidance] no selectedGuidanceId, returning'); return; }
+            console.log('[applyReuseGuidance] guidanceLibraryItems ids:', this.guidanceLibraryItems.map(i => ({id: i.id, type: typeof i.id})));
+            const item = this.guidanceLibraryItems.find(i => i.id == this.selectedGuidanceId);
+            console.log('[applyReuseGuidance] found item:', item);
+            if (!item) { console.log('[applyReuseGuidance] item not found, returning'); return; }
             const formData = new FormData();
             formData.append('step', this.currentStep);
             formData.append('guidance', item.guidance);

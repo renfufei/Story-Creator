@@ -153,20 +153,20 @@ public class AutoRunService {
     }
 
     private AutoRunContext buildContext(Long projectId) {
-        return new AutoRunContext(
-                projectId,
-                projectRepository,
-                chapterRepository,
-                chapterOutlineRepository,
-                characterRepository,
-                worldSettingRepository,
-                storyOutlineRepository,
-                workflowEngine,
-                globalSettingService,
-                autoRunStepConfigRepository,
-                stopSignals,
-                observations
-        );
+        AutoRunContext ctx = new AutoRunContext();
+        ctx.setProjectId(projectId);
+        ctx.setProjectRepository(projectRepository);
+        ctx.setChapterRepository(chapterRepository);
+        ctx.setChapterOutlineRepository(chapterOutlineRepository);
+        ctx.setCharacterRepository(characterRepository);
+        ctx.setWorldSettingRepository(worldSettingRepository);
+        ctx.setStoryOutlineRepository(storyOutlineRepository);
+        ctx.setWorkflowEngine(workflowEngine);
+        ctx.setGlobalSettingService(globalSettingService);
+        ctx.setAutoRunStepConfigRepository(autoRunStepConfigRepository);
+        ctx.setStopSignals(stopSignals);
+        ctx.setObservations(observations);
+        return ctx;
     }
 
     private void completeObservation(Long projectId) {

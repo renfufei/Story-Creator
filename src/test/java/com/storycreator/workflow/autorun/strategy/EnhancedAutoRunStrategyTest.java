@@ -63,12 +63,20 @@ class EnhancedAutoRunStrategyTest {
     }
 
     private AutoRunContext buildCtx() {
-        return new AutoRunContext(
-                PROJECT_ID, projectRepository, chapterRepository, chapterOutlineRepository,
-                characterRepository, worldSettingRepository, storyOutlineRepository,
-                workflowEngine, globalSettingService, autoRunStepConfigRepository,
-                stopSignals, observations
-        );
+        AutoRunContext ctx = new AutoRunContext();
+        ctx.setProjectId(PROJECT_ID);
+        ctx.setProjectRepository(projectRepository);
+        ctx.setChapterRepository(chapterRepository);
+        ctx.setChapterOutlineRepository(chapterOutlineRepository);
+        ctx.setCharacterRepository(characterRepository);
+        ctx.setWorldSettingRepository(worldSettingRepository);
+        ctx.setStoryOutlineRepository(storyOutlineRepository);
+        ctx.setWorkflowEngine(workflowEngine);
+        ctx.setGlobalSettingService(globalSettingService);
+        ctx.setAutoRunStepConfigRepository(autoRunStepConfigRepository);
+        ctx.setStopSignals(stopSignals);
+        ctx.setObservations(observations);
+        return ctx;
     }
 
     private ProjectEntity makeProject(WorkflowStep currentStep, int totalChapters) {

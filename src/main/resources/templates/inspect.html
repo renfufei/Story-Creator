@@ -136,7 +136,7 @@
                                         <td th:text="${ol.title ?: '-'}">标题</td>
                                         <td><small th:text="${ol.characterNames ?: '-'}">角色</small></td>
                                         <td style="font-size:0.85rem;">
-                                            <span th:if="${ol.summary != null}" th:text="${ol.summary.length() > 100 ? ol.summary.substring(0, 100) + '...' : ol.summary}"></span>
+                                            <span th:if="${ol.summary != null}" th:text="${ol.summary}" style="white-space: pre-line;"></span>
                                             <span th:unless="${ol.summary != null}" class="text-muted">-</span>
                                         </td>
                                     </tr>

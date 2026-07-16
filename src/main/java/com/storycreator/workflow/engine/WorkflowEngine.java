@@ -141,11 +141,6 @@ public class WorkflowEngine {
             }
         }
 
-        WorkflowStepHandler handler = handlers.get(step);
-        if (handler == null) {
-            return Flux.error(new IllegalArgumentException("No handler for step: " + step));
-        }
-
         log.info("[P{}] Generate START step={} chapter={}", projectId, step, chapterNumber);
         long startTime = System.currentTimeMillis();
 
@@ -181,6 +176,11 @@ public class WorkflowEngine {
         }
 
         // Default: use handler-based generation
+        WorkflowStepHandler handler = handlers.get(step);
+        if (handler == null) {
+            return Flux.error(new IllegalArgumentException("No handler for step: " + step));
+        }
+
         WorkflowContext context = contextBuilder.build(projectId, chapterNumber);
         context.setCurrentStep(step);
 

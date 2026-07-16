@@ -27,7 +27,7 @@ class PromptSubStepTest {
 
     @Test
     void totalSubStepCountIs27() {
-        assertThat(PromptSubStep.values()).hasSize(32);
+        assertThat(PromptSubStep.values()).hasSize(30);
     }
 
     @Test
