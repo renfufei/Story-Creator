@@ -133,13 +133,4 @@ class EnhancedSubStepExecutorTest {
         verify(promptRegistry).getSubStepTemplate(WorkflowStep.CHARACTER_DESIGN, PromptSubStep.CHARACTER_BEHAVIOR_BOUNDARIES, GENRE);
     }
 
-    @Test
-    void generateEventPlan_delegatesCorrectly() {
-        setupMocks("事件模板", "事件提示", "事件计划内容");
-
-        String result = executor.generateEventPlan(PROJECT_ID, Map.of(), GENRE);
-
-        assertThat(result).isEqualTo("事件计划内容");
-        verify(promptRegistry).getSubStepTemplate(WorkflowStep.OUTLINE_GENERATION, PromptSubStep.CHAPTER_EVENT_PLAN, GENRE);
-    }
 }

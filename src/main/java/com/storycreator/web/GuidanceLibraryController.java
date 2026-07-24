@@ -1,5 +1,7 @@
 package com.storycreator.web;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.persistence.entity.GuidanceLibraryEntity;
 import com.storycreator.persistence.entity.ProjectEntity;
@@ -7,11 +9,17 @@ import com.storycreator.persistence.entity.StepGuidanceEntity;
 import com.storycreator.persistence.repository.GuidanceLibraryRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.StepGuidanceRepository;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
@@ -35,6 +43,7 @@ public class GuidanceLibraryController {
     public String listPage(Model model) {
         List<GuidanceLibraryEntity> items = guidanceLibraryRepository.findAllByOrderByUpdatedAtDesc();
         model.addAttribute("items", items);
+        model.addAttribute("itemIds", items.stream().map(GuidanceLibraryEntity::getId).toList());
         model.addAttribute("steps", WorkflowStep.values());
         return "guidances";
     }
@@ -118,5 +127,82 @@ public class GuidanceLibraryController {
                 "stepLabel", item.getStep().getDisplayName(),
                 "guidance", item.getGuidance() != null ? item.getGuidance() : ""
         )).toList();
+    }
+
+    @PostMapping("/export")
+    @ResponseBody
+    public ResponseEntity<byte[]> exportGuidances(@RequestBody List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        List<GuidanceLibraryEntity> entities = guidanceLibraryRepository.findAllById(ids);
+        List<Map<String, String>> items = entities.stream().map(e -> Map.of(
+                "name", e.getName(),
+                "step", e.getStep().name(),
+                "guidance", e.getGuidance() != null ? e.getGuidance() : ""
+        )).toList();
+
+        Map<String, Object> exportData = Map.of(
+                "version", 1,
+                "exportedAt", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                "items", items
+        );
+
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            byte[] json = mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(exportData);
+            String filename = "guidances-export-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".json";
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(json);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @PostMapping("/import")
+    public String importGuidances(@RequestParam("file") MultipartFile file, RedirectAttributes redirectAttributes) {
+        if (file.isEmpty()) {
+            redirectAttributes.addFlashAttribute("error", "请选择要导入的文件");
+            return "redirect:/settings/guidances";
+        }
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            Map<String, Object> data = mapper.readValue(file.getInputStream(), new TypeReference<>() {});
+            Object itemsObj = data.get("items");
+            if (!(itemsObj instanceof List<?> itemsList)) {
+                redirectAttributes.addFlashAttribute("error", "JSON格式无效：缺少items字段");
+                return "redirect:/settings/guidances";
+            }
+
+            int count = 0;
+            for (Object obj : itemsList) {
+                if (obj instanceof Map<?, ?> itemMap) {
+                    String name = (String) itemMap.get("name");
+                    String stepStr = (String) itemMap.get("step");
+                    String guidance = (String) itemMap.get("guidance");
+                    if (name == null || stepStr == null) continue;
+
+                    WorkflowStep step;
+                    try {
+                        step = WorkflowStep.valueOf(stepStr);
+                    } catch (IllegalArgumentException e) {
+                        continue;
+                    }
+
+                    GuidanceLibraryEntity entity = new GuidanceLibraryEntity();
+                    entity.setName(name);
+                    entity.setStep(step);
+                    entity.setGuidance(guidance != null ? guidance : "");
+                    guidanceLibraryRepository.save(entity);
+                    count++;
+                }
+            }
+            redirectAttributes.addFlashAttribute("success", "成功导入 " + count + " 条创作指导");
+        } catch (Exception e) {
+            redirectAttributes.addFlashAttribute("error", "导入失败：" + e.getMessage());
+        }
+        return "redirect:/settings/guidances";
     }
 }

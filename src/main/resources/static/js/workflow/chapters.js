@@ -98,42 +98,6 @@ function workflowChaptersMixin() {
                 .catch(err => { alert('启动失败: ' + err); this.generating = false; this.autoGenerating = false; });
         },
 
-        generateAllTitles() {
-            if (!confirm('将为所有章节自动生成标题，确认继续？')) return;
-            this.generating = true;
-            this.autoProgress = '正在生成章节标题...';
-            const url = `/projects/${this.projectId}/chapters/generate-titles`;
-            const eventSource = new EventSource(url);
-            this.currentEventSource = eventSource;
-            eventSource.addEventListener('title', (e) => {
-                const [num, ...titleParts] = e.data.split('|');
-                const title = titleParts.join('|');
-                this.autoProgress = `已生成第 ${num} 章标题: ${title}`;
-                const ch = this.chapterListData.find(c => c.chapterNumber == num);
-                if (ch) ch.title = title;
-            });
-            eventSource.addEventListener('done', () => {
-                this.generating = false;
-                this.autoProgress = '';
-                this.currentEventSource = null;
-                eventSource.close();
-                this.loadChapterList();
-            });
-            eventSource.addEventListener('error', (e) => {
-                this.generating = false;
-                this.autoProgress = '';
-                this.currentEventSource = null;
-                if (e.data) alert('生成标题出错: ' + e.data);
-                eventSource.close();
-            });
-            eventSource.onerror = () => {
-                this.generating = false;
-                this.autoProgress = '';
-                this.currentEventSource = null;
-                eventSource.close();
-            };
-        },
-
         previewChapter(num) {
             fetch(`/projects/${this.projectId}/chapters/${num}/content`)
                 .then(r => {

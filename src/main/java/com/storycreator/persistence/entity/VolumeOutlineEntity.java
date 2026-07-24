@@ -20,6 +20,9 @@ public class VolumeOutlineEntity {
     @Column(length = 200)
     private String title;
 
+    @Column(name = "arc_name", length = 200)
+    private String arcName;
+
     @Column(name = "arc_summary", columnDefinition = "TEXT")
     private String arcSummary;
 
@@ -57,6 +60,9 @@ public class VolumeOutlineEntity {
 
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
+
+    public String getArcName() { return arcName; }
+    public void setArcName(String arcName) { this.arcName = arcName; }
 
     public String getArcSummary() { return arcSummary; }
     public void setArcSummary(String arcSummary) { this.arcSummary = arcSummary; }

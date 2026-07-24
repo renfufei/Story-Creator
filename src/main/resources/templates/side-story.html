@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('番外创作', ~{::content})}">
+<body>
+<div th:fragment="content" x-data="sideStoryWorkflow()" x-init="init()">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-0" th:text="${sideStory.title}">番外标题</h4>
+            <small class="text-muted">
+                <a th:href="@{/projects/{id}/side-stories(id=${project.id})}" class="text-decoration-none">番外列表</a>
+                &nbsp;/&nbsp;
+                <span th:text="${project.title}">项目名</span>
+            </small>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <!-- Auto Run Controls -->
+            <template x-if="autoRun.status === 'IDLE' || autoRun.status === 'COMPLETED' || autoRun.status === 'FAILED' || autoRun.status === 'STOPPED'">
+                <button class="btn btn-sm btn-success" @click="startAutoRun()">
+                    <i class="bi bi-play-fill me-1"></i>开始自动创作
+                </button>
+            </template>
+            <template x-if="autoRun.status === 'RUNNING' || autoRun.status === 'STOPPING'">
+                <div class="d-flex gap-2 align-items-center">
+                    <span class="badge bg-success">
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                        <span x-text="autoRun.progress || autoRun.step"></span>
+                    </span>
+                    <button class="btn btn-sm btn-outline-warning" @click="showAutoRunStream = true"
+                            title="实时显示">
+                        <i class="bi bi-terminal"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" @click="stopAutoRun()"
+                            :disabled="autoRun.status === 'STOPPING'">
+                        <i class="bi bi-stop-fill me-1"></i>停止
+                    </button>
+                </div>
+            </template>
+            <template x-if="autoRun.status === 'FAILED' && autoRun.error">
+                <span class="badge bg-danger" x-text="'错误: ' + autoRun.error" style="max-width:200px;overflow:hidden;text-overflow:ellipsis"></span>
+            </template>
+
+            <span class="badge fs-6"
+                  th:classappend="${sideStory.status == 'DRAFT' ? 'bg-light text-dark' :
+                                   sideStory.status == 'OUTLINE_READY' ? 'bg-primary' :
+                                   sideStory.status == 'IN_PROGRESS' ? 'bg-success' : 'bg-dark'}"
+                  th:text="${sideStory.status == 'DRAFT' ? '草稿' :
+                             sideStory.status == 'OUTLINE_READY' ? '大纲就绪' :
+                             sideStory.status == 'IN_PROGRESS' ? '创作中' : '已完成'}">状态</span>
+            <a th:href="@{/projects/{id}/workflow(id=${project.id})}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> 返回主线
+            </a>
+        </div>
+    </div>
+
+    <!-- Auto Run Stream Modal -->
+    <div class="modal fade" :class="{ show: showAutoRunStream }" :style="showAutoRunStream ? 'display:block' : ''"
+         tabindex="-1" @click.self="showAutoRunStream = false">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title">
+                        <i class="bi bi-terminal me-1"></i>自动创作实时输出
+                        <span class="badge bg-info ms-2" x-text="autoRunStreamStep"></span>
+                    </h6>
+                    <button type="button" class="btn-close" @click="showAutoRunStream = false"></button>
+                </div>
+                <div class="modal-body" style="max-height:60vh;overflow-y:auto;white-space:pre-wrap;font-family:monospace;font-size:0.85rem;"
+                     x-ref="autoRunStreamBody" x-text="autoRunStreamContent">
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show" x-show="showAutoRunStream" @click="showAutoRunStream = false"></div>
+
+    <!-- Card 1: 基本信息 -->
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong><i class="bi bi-info-circle me-2"></i>基本信息</strong>
+            <button class="btn btn-sm btn-outline-primary" @click="openInfoModal()">
+                <i class="bi bi-pencil"></i> 编辑
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-2">
+                    <small class="text-muted">标题</small>
+                    <div x-text="infoTitle"></div>
+                </div>
+                <div class="col-md-3 mb-2">
+                    <small class="text-muted">类型</small>
+                    <div>
+                        <span class="badge" :class="infoType === 'SUPPLEMENTARY' ? 'bg-info' : 'bg-warning'"
+                              x-text="infoType === 'SUPPLEMENTARY' ? '正传补充' : '衍生故事'"></span>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-2">
+                    <small class="text-muted">关联卷</small>
+                    <div x-text="infoAttachedVolume ? '第' + infoAttachedVolume + '卷' : '未关联'"></div>
+                </div>
+            </div>
+            <div x-show="infoDescription">
+                <small class="text-muted">简介</small>
+                <div x-text="infoDescription"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Edit Modal -->
+    <div class="modal fade" :class="{ show: showInfoModal }" :style="showInfoModal ? 'display:block' : ''"
+         tabindex="-1" @click.self="showInfoModal = false">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">编辑基本信息</h5>
+                    <button type="button" class="btn-close" @click="showInfoModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">标题</label>
+                        <input type="text" class="form-control" x-model="infoEditForm.title">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">简介</label>
+                        <textarea class="form-control" rows="3" x-model="infoEditForm.description"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">类型</label>
+                            <select class="form-select" x-model="infoEditForm.type">
+                                <option value="SUPPLEMENTARY">正传补充</option>
+                                <option value="TANGENTIAL">衍生故事</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">关联卷</label>
+                            <select class="form-select" x-model="infoEditForm.attachedVolume">
+                                <option :value="null">-- 不关联 --</option>
+                                <option th:each="v : ${volumes}" th:value="${v.volumeNumber}"
+                                        th:text="'第' + ${v.volumeNumber} + '卷 ' + (${v.title} ?: '') + (${v.arcName} != null ? ' [' + ${v.arcName} + ']' : '')">
+                                </option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">章节数</label>
+                            <input type="number" class="form-control" x-model.number="infoEditForm.chapterCount" min="0" max="50">
+                            <div class="form-text" x-text="'当前: ' + chapters.length + '章'"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showInfoModal = false">取消</button>
+                    <button class="btn btn-primary" @click="saveInfo()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show" x-show="showInfoModal" x-cloak></div>
+
+    <!-- Card 2: 创作指导 -->
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong><i class="bi bi-compass me-2"></i>创作指导</strong>
+            <button class="btn btn-sm btn-outline-primary" @click="editingGuidance ? cancelGuidanceEdit() : startGuidanceEdit()" x-text="editingGuidance ? '取消' : '编辑'">
+            </button>
+        </div>
+        <div class="card-body">
+            <!-- Read-only -->
+            <div x-show="!editingGuidance">
+                <pre x-show="creativeGuidance" class="mb-0" style="white-space:pre-wrap;font-family:inherit;" x-text="creativeGuidance"></pre>
+                <div x-show="!creativeGuidance" class="text-muted">暂无创作指导</div>
+            </div>
+            <!-- Editable -->
+            <div x-show="editingGuidance">
+                <textarea class="form-control mb-2" rows="5" x-model="guidanceEdit"
+                          placeholder="描述你对这篇番外的创作方向、意图、风格偏好等..."></textarea>
+                <div class="d-flex justify-content-end gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" @click="cancelGuidanceEdit()">取消</button>
+                    <button class="btn btn-sm btn-primary" @click="saveGuidance()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 3: 关联角色 -->
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong><i class="bi bi-people me-2"></i>关联角色</strong>
+            <button class="btn btn-sm btn-outline-primary" @click="openCharModal()">
+                <i class="bi bi-pencil"></i> 编辑关联
+            </button>
+        </div>
+        <div class="card-body">
+            <div x-show="selectedCharIds.length > 0" class="d-flex flex-wrap gap-2">
+                <template x-for="charId in selectedCharIds" :key="charId">
+                    <span class="badge bg-secondary fs-6 fw-normal">
+                        <i class="bi bi-person me-1"></i>
+                        <span x-text="getCharName(charId)"></span>
+                        <small class="ms-1 opacity-75" x-text="getCharRole(charId)"></small>
+                    </span>
+                </template>
+            </div>
+            <div x-show="selectedCharIds.length === 0" class="text-muted">暂未关联角色</div>
+        </div>
+    </div>
+
+    <!-- Character Edit Modal -->
+    <div class="modal fade" :class="{ show: showCharModal }" :style="showCharModal ? 'display:block' : ''"
+         tabindex="-1" @click.self="showCharModal = false">
+        <div class="modal-dialog modal-dialog-scrollable" style="max-width:500px;">
+            <div class="modal-content" style="max-height:70vh;">
+                <div class="modal-header">
+                    <h5 class="modal-title">编辑关联角色</h5>
+                    <button type="button" class="btn-close" @click="showCharModal = false"></button>
+                </div>
+                <div class="modal-body" style="overflow-y:auto;">
+                    <div class="form-check border-bottom pb-2 mb-2">
+                        <input class="form-check-input flex-shrink-0" type="checkbox"
+                               id="charEdit-all"
+                               :checked="charEditIds.length === allCharacters.length && allCharacters.length > 0"
+                               :indeterminate="charEditIds.length > 0 && charEditIds.length < allCharacters.length"
+                               @change="toggleAllCharsEdit()">
+                        <label class="form-check-label" for="charEdit-all">
+                            <strong>全部角色</strong>
+                            <small class="text-muted ms-1" x-text="'(' + charEditIds.length + '/' + allCharacters.length + ')'"></small>
+                        </label>
+                    </div>
+                    <div class="d-flex flex-column gap-2">
+                        <template x-for="c in allCharacters" :key="c.id">
+                            <div class="d-flex align-items-start gap-2 border rounded p-2"
+                                 :class="charEditIds.includes(c.id) ? 'border-primary bg-light' : ''">
+                                <input class="form-check-input flex-shrink-0 mt-1" type="checkbox"
+                                       :id="'charEdit-' + c.id"
+                                       :checked="charEditIds.includes(c.id)"
+                                       @change="toggleCharEdit(c.id)">
+                                <label class="form-check-label" :for="'charEdit-' + c.id" style="min-width:0;">
+                                    <strong x-text="c.name || '未命名'"></strong>
+                                    <small class="text-muted d-block text-truncate" x-show="c.role" x-text="c.role"></small>
+                                </label>
+                            </div>
+                        </template>
+                    </div>
+                    <div x-show="allCharacters.length === 0" class="text-muted text-center py-3">
+                        项目暂无角色
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showCharModal = false">取消</button>
+                    <button class="btn btn-primary" @click="saveCharacters()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show" x-show="showCharModal" x-cloak></div>
+
+    <!-- Card 4: 番外故事线 -->
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong><i class="bi bi-list-ul me-2"></i>番外故事线
+                <small class="fw-normal text-muted ms-2" x-show="outline" x-text="outline.length + '字'"></small>
+            </strong>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-primary" x-show="!editingOutline && outline" @click="startOutlineEdit()">
+                    <i class="bi bi-pencil"></i> 编辑
+                </button>
+                <button class="btn btn-sm btn-primary" @click="generateOutline()" :disabled="generating.outline">
+                    <span class="spinner-border spinner-border-sm me-1" x-show="generating.outline"></span>
+                    生成故事线
+                </button>
+                <button class="btn btn-sm btn-outline-danger" @click="stopGeneration('OUTLINE', 0)" x-show="generating.outline">
+                    停止
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- Arc Name Badge -->
+            <div class="mb-2" x-show="arcName">
+                <span class="badge bg-primary fs-6">
+                    <i class="bi bi-signpost-2 me-1"></i><span x-text="arcName"></span>
+                </span>
+            </div>
+            <!-- Read-only -->
+            <div x-show="!editingOutline">
+                <pre x-show="outline" class="mb-0" style="white-space:pre-wrap;font-family:inherit;max-height:50vh;overflow-y:auto;" x-text="outline"></pre>
+                <div x-show="!outline && !generating.outline" class="text-center text-muted py-4">
+                    <i class="bi bi-robot display-4"></i>
+                    <p class="mt-2">点击"生成故事线"开始</p>
+                </div>
+            </div>
+            <!-- Editable -->
+            <div x-show="editingOutline">
+                <textarea class="form-control mb-2" rows="10" x-model="outlineEdit"
+                          placeholder="番外故事线..."></textarea>
+                <div class="d-flex justify-content-end gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" @click="cancelOutlineEdit()">取消</button>
+                    <button class="btn btn-sm btn-primary" @click="saveOutline()">保存</button>
+                </div>
+            </div>
+            <!-- Stream display -->
+            <div class="mt-2 border rounded p-2 bg-light" x-show="streamContent.outline"
+                 style="max-height:300px;overflow-y:auto;white-space:pre-wrap;font-size:0.85rem"
+                 x-text="streamContent.outline"></div>
+        </div>
+    </div>
+
+    <!-- Card 5: 章节写作 -->
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong><i class="bi bi-pen me-2"></i>章节写作</strong>
+            <div class="d-flex gap-1">
+                <button class="btn btn-sm btn-outline-secondary" @click="setChapterCount()" title="调整章节数">
+                    <i class="bi bi-sliders"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-primary" @click="addChapters()">
+                    <i class="bi bi-plus"></i> 添加章节
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="list-group list-group-flush">
+                <template x-for="ch in chapters" :key="ch.chapterNumber">
+                    <div class="list-group-item p-0">
+                        <!-- Chapter header (clickable) -->
+                        <div class="d-flex justify-content-between align-items-center px-3 py-2"
+                             style="cursor:pointer"
+                             @click="toggleChapter(ch.chapterNumber)">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi" :class="expandedChapters.includes(ch.chapterNumber) ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
+                                <span x-text="'第' + ch.chapterNumber + '章'"></span>
+                                <small class="text-muted" x-show="ch.title" x-text="ch.title"></small>
+                            </div>
+                            <div class="d-flex gap-1 align-items-center">
+                                <small class="text-muted" x-show="ch.content" x-text="ch.content.length + '字'"></small>
+                                <span class="badge"
+                                      :class="{
+                                          'bg-light text-dark': ch.status === 'NOT_STARTED',
+                                          'bg-warning': ch.status === 'GENERATING' || ch.status === 'POLISHING',
+                                          'bg-success': ch.status === 'COMPLETED',
+                                          'bg-info': ch.status === 'POLISHED',
+                                          'bg-danger': ch.status === 'FAILED'
+                                      }"
+                                      x-text="({NOT_STARTED:'未开始',GENERATING:'生成中',COMPLETED:'已完成',POLISHING:'润色中',POLISHED:'已润色',FAILED:'失败'})[ch.status] || ch.status">
+                                </span>
+                                <button class="btn btn-sm btn-outline-danger border-0 p-0 px-1"
+                                        @click.stop="deleteChapter(ch.chapterNumber)" title="删除">
+                                    <i class="bi bi-x-lg" style="font-size:0.7rem"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Chapter expanded content -->
+                        <div x-show="expandedChapters.includes(ch.chapterNumber)" class="px-3 pb-3 border-top">
+                            <!-- Sub-section: 章节大纲 -->
+                            <div class="mt-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="mb-0 text-muted"><i class="bi bi-card-list me-1"></i>章节大纲
+                                        <small class="fw-normal ms-1" x-show="ch.outlineSummary" x-text="ch.outlineSummary.length + '字'"></small>
+                                    </h6>
+                                    <div class="d-flex gap-1">
+                                        <button class="btn btn-sm btn-outline-primary"
+                                                x-show="editingChapterOutline !== ch.chapterNumber && ch.outlineSummary"
+                                                @click="startChapterOutlineEdit(ch)">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-primary"
+                                                @click="generateChapterOutline(ch.chapterNumber)"
+                                                :disabled="generating.chapterOutline">
+                                            <span class="spinner-border spinner-border-sm me-1" x-show="generating.chapterOutline && generatingChapterNum === ch.chapterNumber"></span>
+                                            生成大纲
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                @click="stopGeneration('CHAPTER_OUTLINE', ch.chapterNumber)"
+                                                x-show="generating.chapterOutline && generatingChapterNum === ch.chapterNumber">
+                                            停止
+                                        </button>
+                                    </div>
+                                </div>
+                                <!-- Read-only -->
+                                <div x-show="editingChapterOutline !== ch.chapterNumber">
+                                    <pre x-show="ch.outlineSummary" class="mb-0 p-2 bg-light rounded" style="white-space:pre-wrap;font-family:inherit;font-size:0.9rem;" x-text="ch.outlineSummary"></pre>
+                                    <div x-show="!ch.outlineSummary" class="text-muted small">暂无大纲</div>
+                                </div>
+                                <!-- Editable -->
+                                <div x-show="editingChapterOutline === ch.chapterNumber">
+                                    <textarea class="form-control mb-2" rows="4" x-model="chapterOutlineEditContent"></textarea>
+                                    <div class="d-flex justify-content-end gap-2">
+                                        <button class="btn btn-sm btn-outline-secondary" @click="editingChapterOutline = null">取消</button>
+                                        <button class="btn btn-sm btn-primary" @click="saveChapterOutline(ch.chapterNumber)">保存</button>
+                                    </div>
+                                </div>
+                                <!-- Stream -->
+                                <div class="mt-2 border rounded p-2 bg-light" x-show="streamContent.chapterOutline && generatingChapterNum === ch.chapterNumber"
+                                     style="max-height:200px;overflow-y:auto;white-space:pre-wrap;font-size:0.85rem"
+                                     x-text="streamContent.chapterOutline"></div>
+                            </div>
+
+                            <!-- Sub-section: 章节正文 -->
+                            <div class="mt-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="mb-0 text-muted"><i class="bi bi-pen me-1"></i>章节正文
+                                        <small class="fw-normal ms-1" x-show="ch.content" x-text="ch.content.length + '字'"></small>
+                                    </h6>
+                                    <div class="d-flex gap-1">
+                                        <button class="btn btn-sm btn-outline-primary"
+                                                x-show="editingChapterContent !== ch.chapterNumber && ch.content"
+                                                @click="startChapterContentEdit(ch)">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-primary"
+                                                @click="generateWriting(ch.chapterNumber)"
+                                                :disabled="generating.writing">
+                                            <span class="spinner-border spinner-border-sm me-1" x-show="generating.writing && generatingChapterNum === ch.chapterNumber"></span>
+                                            生成正文
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                @click="stopGeneration('WRITING', ch.chapterNumber)"
+                                                x-show="generating.writing && generatingChapterNum === ch.chapterNumber">
+                                            停止
+                                        </button>
+                                    </div>
+                                </div>
+                                <!-- Read-only -->
+                                <div x-show="editingChapterContent !== ch.chapterNumber">
+                                    <pre x-show="ch.content" class="mb-0 p-2 bg-light rounded" style="white-space:pre-wrap;font-family:inherit;font-size:0.9rem;max-height:50vh;overflow-y:auto;" x-text="ch.content"></pre>
+                                    <div x-show="!ch.content" class="text-muted small">暂无正文</div>
+                                </div>
+                                <!-- Editable -->
+                                <div x-show="editingChapterContent === ch.chapterNumber">
+                                    <textarea class="form-control mb-2" rows="12" x-model="chapterContentEditContent"></textarea>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <small class="text-muted" x-text="chapterContentEditContent.length + ' 字'"></small>
+                                        <div class="d-flex gap-2">
+                                            <button class="btn btn-sm btn-outline-secondary" @click="editingChapterContent = null">取消</button>
+                                            <button class="btn btn-sm btn-primary" @click="saveChapterContent(ch.chapterNumber)">保存</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Stream -->
+                                <div class="mt-2 border rounded p-2 bg-light" x-show="streamContent.writing && generatingChapterNum === ch.chapterNumber"
+                                     style="max-height:300px;overflow-y:auto;white-space:pre-wrap;font-size:0.85rem"
+                                     x-text="streamContent.writing"></div>
+                            </div>
+
+                            <!-- Sub-section: 润色 -->
+                            <div class="mt-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="mb-0 text-muted"><i class="bi bi-stars me-1"></i>润色</h6>
+                                    <div class="d-flex gap-1">
+                                        <button class="btn btn-sm btn-primary"
+                                                @click="generatePolish(ch.chapterNumber)"
+                                                :disabled="generating.polish || !ch.content">
+                                            <span class="spinner-border spinner-border-sm me-1" x-show="generating.polish && generatingChapterNum === ch.chapterNumber"></span>
+                                            开始润色
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                @click="stopGeneration('POLISH', ch.chapterNumber)"
+                                                x-show="generating.polish && generatingChapterNum === ch.chapterNumber">
+                                            停止
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="text-muted small" x-show="!ch.content">需先生成正文才能润色</div>
+                                <div x-show="ch.status === 'POLISHED'" class="text-success small">
+                                    <i class="bi bi-check-circle me-1"></i>已润色
+                                </div>
+                                <!-- Stream -->
+                                <div class="mt-2 border rounded p-2 bg-light" x-show="streamContent.polish && generatingChapterNum === ch.chapterNumber"
+                                     style="max-height:300px;overflow-y:auto;white-space:pre-wrap;font-size:0.85rem"
+                                     x-text="streamContent.polish"></div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+                <div class="list-group-item text-center text-muted py-4" x-show="chapters.length === 0">
+                    <i class="bi bi-journal-text" style="font-size:2rem;"></i>
+                    <p class="mt-2 mb-0">暂无章节，点击"添加章节"开始</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script th:inline="javascript">
+function sideStoryWorkflow() {
+    const projectId = [[${project.id}]];
+    const sideStoryId = [[${sideStory.id}]];
+    const initChapters = [[${chapters}]];
+    const initOutline = [[${sideStory.outline ?: ''}]];
+    const initArcName = [[${sideStory.arcName ?: ''}]];
+    const initCharacterIds = [[${characterIds}]];
+    const initCharacters = [[${characters}]];
+    const initCreativeGuidance = [[${sideStory.creativeGuidance ?: ''}]];
+    const initTitle = [[${sideStory.title ?: ''}]];
+    const initDescription = [[${sideStory.description ?: ''}]];
+    const initType = [[${sideStory.type ?: 'SUPPLEMENTARY'}]];
+    const initAttachedVolume = [[${sideStory.attachedVolume}]];
+
+    return {
+        // Basic Info
+        infoTitle: initTitle,
+        infoType: initType,
+        infoDescription: initDescription,
+        infoAttachedVolume: initAttachedVolume,
+        showInfoModal: false,
+        infoEditForm: { title: '', description: '', type: '', attachedVolume: null, chapterCount: 0 },
+
+        // Creative Guidance
+        creativeGuidance: initCreativeGuidance,
+        editingGuidance: false,
+        guidanceEdit: '',
+
+        // Characters
+        selectedCharIds: initCharacterIds || [],
+        allCharacters: initCharacters.map(c => ({ id: c.id, name: c.name || '未命名', role: c.role || '' })),
+        showCharModal: false,
+        charEditIds: [],
+
+        // Outline
+        outline: initOutline,
+        arcName: initArcName,
+        editingOutline: false,
+        outlineEdit: '',
+
+        // Chapters
+        chapters: initChapters.map(ch => ({
+            chapterNumber: ch.chapterNumber,
+            title: ch.title || '',
+            outlineSummary: ch.outlineSummary || '',
+            content: ch.content || '',
+            wordCount: ch.wordCount || 0,
+            status: ch.status || 'NOT_STARTED'
+        })),
+        expandedChapters: [],
+        editingChapterOutline: null,
+        editingChapterContent: null,
+        chapterOutlineEditContent: '',
+        chapterContentEditContent: '',
+        generatingChapterNum: 0,
+
+        // Generation state
+        generating: { outline: false, chapterOutline: false, writing: false, polish: false },
+        streamContent: { outline: '', chapterOutline: '', writing: '', polish: '' },
+
+        // Auto Run state
+        autoRun: { status: 'IDLE', step: '', progress: '', chapter: 0, error: '' },
+        autoRunPollTimer: null,
+        showAutoRunStream: false,
+        autoRunStreamContent: '',
+        autoRunStreamStep: '',
+        autoRunEventSource: null,
+
+        init() {
+            this.pollAutoRunStatus();
+        },
+
+        // === Info Methods ===
+        openInfoModal() {
+            this.infoEditForm = {
+                title: this.infoTitle,
+                description: this.infoDescription,
+                type: this.infoType,
+                attachedVolume: this.infoAttachedVolume,
+                chapterCount: this.chapters.length
+            };
+            this.showInfoModal = true;
+        },
+
+        async saveInfo() {
+            const payload = {
+                title: this.infoEditForm.title,
+                description: this.infoEditForm.description,
+                type: this.infoEditForm.type,
+                attachedVolume: this.infoEditForm.attachedVolume ? parseInt(this.infoEditForm.attachedVolume) : null
+            };
+            await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            this.infoTitle = payload.title;
+            this.infoDescription = payload.description;
+            this.infoType = payload.type;
+            this.infoAttachedVolume = payload.attachedVolume;
+
+            // Adjust chapter count if changed
+            const targetCount = this.infoEditForm.chapterCount;
+            const currentCount = this.chapters.length;
+            if (targetCount !== currentCount && targetCount >= 0) {
+                if (targetCount > currentCount) {
+                    await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/chapters`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ count: targetCount - currentCount })
+                    });
+                    window.location.reload();
+                    return;
+                } else {
+                    if (!confirm(`将删除第${targetCount + 1}章到第${currentCount}章，确定？`)) {
+                        this.showInfoModal = false;
+                        return;
+                    }
+                    for (let i = currentCount; i > targetCount; i--) {
+                        await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/chapters/${i}`, { method: 'DELETE' });
+                    }
+                    window.location.reload();
+                    return;
+                }
+            }
+
+            this.showInfoModal = false;
+        },
+
+        // === Guidance Methods ===
+        startGuidanceEdit() {
+            this.guidanceEdit = this.creativeGuidance;
+            this.editingGuidance = true;
+        },
+
+        cancelGuidanceEdit() {
+            this.editingGuidance = false;
+        },
+
+        async saveGuidance() {
+            await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ creativeGuidance: this.guidanceEdit })
+            });
+            this.creativeGuidance = this.guidanceEdit;
+            this.editingGuidance = false;
+        },
+
+        // === Character Methods ===
+        getCharName(charId) {
+            const c = this.allCharacters.find(x => x.id === charId);
+            return c ? c.name : '未知';
+        },
+
+        getCharRole(charId) {
+            const c = this.allCharacters.find(x => x.id === charId);
+            return c ? c.role : '';
+        },
+
+        openCharModal() {
+            this.charEditIds = [...this.selectedCharIds];
+            this.showCharModal = true;
+        },
+
+        toggleCharEdit(id) {
+            const idx = this.charEditIds.indexOf(id);
+            if (idx >= 0) this.charEditIds.splice(idx, 1);
+            else this.charEditIds.push(id);
+        },
+
+        toggleAllCharsEdit() {
+            if (this.charEditIds.length === this.allCharacters.length) {
+                this.charEditIds = [];
+            } else {
+                this.charEditIds = this.allCharacters.map(c => c.id);
+            }
+        },
+
+        async saveCharacters() {
+            await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/characters`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(this.charEditIds)
+            });
+            this.selectedCharIds = [...this.charEditIds];
+            this.showCharModal = false;
+        },
+
+        // === Outline Methods ===
+        startOutlineEdit() {
+            this.outlineEdit = this.outline;
+            this.editingOutline = true;
+        },
+
+        cancelOutlineEdit() {
+            this.editingOutline = false;
+        },
+
+        async saveOutline() {
+            if (this.editingOutline) {
+                this.outline = this.outlineEdit;
+                this.editingOutline = false;
+            }
+            this.parseArcName();
+            await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ outline: this.outline, arcName: this.arcName, status: 'OUTLINE_READY' })
+            });
+        },
+
+        parseArcName() {
+            if (!this.outline) return;
+            const firstLine = this.outline.split('\n')[0] || '';
+            const match = firstLine.match(/^故事弧线[：:]\s*(.+)/);
+            if (match) {
+                this.arcName = match[1].trim();
+            }
+        },
+
+        // === Chapter Methods ===
+        toggleChapter(num) {
+            const idx = this.expandedChapters.indexOf(num);
+            if (idx >= 0) this.expandedChapters.splice(idx, 1);
+            else this.expandedChapters.push(num);
+        },
+
+        startChapterOutlineEdit(ch) {
+            this.chapterOutlineEditContent = ch.outlineSummary;
+            this.editingChapterOutline = ch.chapterNumber;
+        },
+
+        startChapterContentEdit(ch) {
+            this.chapterContentEditContent = ch.content;
+            this.editingChapterContent = ch.chapterNumber;
+        },
+
+        async addChapters() {
+            const count = prompt('添加几个章节？', '3');
+            if (!count || isNaN(count)) return;
+            await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/chapters`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ count: parseInt(count) })
+            });
+            window.location.reload();
+        },
+
+        async setChapterCount() {
+            const current = this.chapters.length;
+            const target = prompt(`当前有 ${current} 章，请输入目标章节数：`, current);
+            if (!target || isNaN(target)) return;
+            const targetNum = parseInt(target);
+            if (targetNum === current) return;
+            if (targetNum > current) {
+                await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/chapters`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ count: targetNum - current })
+                });
+            } else {
+                if (!confirm(`将从第${targetNum + 1}章开始删除至第${current}章，确定？`)) return;
+                for (let i = current; i > targetNum; i--) {
+                    await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/chapters/${i}`, { method: 'DELETE' });
+                }
+            }
+            window.location.reload();
+        },
+
+        async deleteChapter(chapterNumber) {
+            if (!confirm(`确定删除第${chapterNumber}章？此操作不可恢复。`)) return;
+            await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/chapters/${chapterNumber}`, { method: 'DELETE' });
+            window.location.reload();
+        },
+
+        // === Generation Methods ===
+        async generateOutline() {
+            this.generating.outline = true;
+            this.streamContent.outline = '';
+            const resp = await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/generate/outline`, { method: 'POST' });
+            const data = await resp.json();
+            if (data.status === 'error') {
+                alert(data.message);
+                this.generating.outline = false;
+                return;
+            }
+            this.connectStream('OUTLINE', 0, 'outline', (fullContent) => {
+                this.outline = fullContent;
+                this.parseArcName();
+                this.generating.outline = false;
+                this.streamContent.outline = '';
+            });
+        },
+
+        async generateChapterOutline(chapterNumber) {
+            this.generating.chapterOutline = true;
+            this.generatingChapterNum = chapterNumber;
+            this.streamContent.chapterOutline = '';
+            const resp = await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/generate/chapter-outline/${chapterNumber}`, { method: 'POST' });
+            const data = await resp.json();
+            if (data.status === 'error') {
+                alert(data.message);
+                this.generating.chapterOutline = false;
+                return;
+            }
+            this.connectStream('CHAPTER_OUTLINE', chapterNumber, 'chapterOutline', (fullContent) => {
+                const c = this.chapters.find(x => x.chapterNumber === chapterNumber);
+                if (c) c.outlineSummary = fullContent;
+                this.generating.chapterOutline = false;
+                this.streamContent.chapterOutline = '';
+            });
+        },
+
+        async generateWriting(chapterNumber) {
+            this.generating.writing = true;
+            this.generatingChapterNum = chapterNumber;
+            this.streamContent.writing = '';
+            const resp = await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/generate/writing/${chapterNumber}`, { method: 'POST' });
+            const data = await resp.json();
+            if (data.status === 'error') {
+                alert(data.message);
+                this.generating.writing = false;
+                return;
+            }
+            this.connectStream('WRITING', chapterNumber, 'writing', (fullContent) => {
+                const c = this.chapters.find(x => x.chapterNumber === chapterNumber);
+                if (c) { c.content = fullContent; c.status = 'COMPLETED'; }
+                this.generating.writing = false;
+                this.streamContent.writing = '';
+            });
+        },
+
+        async generatePolish(chapterNumber) {
+            this.generating.polish = true;
+            this.generatingChapterNum = chapterNumber;
+            this.streamContent.polish = '';
+            const resp = await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/generate/polish/${chapterNumber}`, { method: 'POST' });
+            const data = await resp.json();
+            if (data.status === 'error') {
+                alert(data.message);
+                this.generating.polish = false;
+                return;
+            }
+            this.connectStream('POLISH', chapterNumber, 'polish', (fullContent) => {
+                const c = this.chapters.find(x => x.chapterNumber === chapterNumber);
+                if (c) { c.content = fullContent; c.status = 'POLISHED'; }
+                this.generating.polish = false;
+                this.streamContent.polish = '';
+            });
+        },
+
+        connectStream(operation, chapterNumber, key, onDone) {
+            const url = `/projects/${projectId}/side-stories/api/${sideStoryId}/generate/stream?operation=${operation}&chapterNumber=${chapterNumber}`;
+            const es = new EventSource(url);
+            let fullContent = '';
+
+            es.addEventListener('replay-buffer', (e) => {
+                fullContent = e.data;
+                this.streamContent[key] = fullContent;
+            });
+            es.addEventListener('token', (e) => {
+                fullContent += e.data;
+                this.streamContent[key] = fullContent;
+            });
+            es.addEventListener('done', (e) => {
+                es.close();
+                onDone(fullContent);
+            });
+            es.addEventListener('stopped', (e) => {
+                es.close();
+                this.generating[key] = false;
+                this.streamContent[key] = '';
+            });
+            es.addEventListener('error', (e) => {
+                es.close();
+                this.generating[key] = false;
+                if (e.data) alert('生成出错: ' + e.data);
+            });
+            es.onerror = () => {
+                es.close();
+                this.generating[key] = false;
+            };
+        },
+
+        async stopGeneration(operation, chapterNumber) {
+            await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/generate/stop?operation=${operation}&chapterNumber=${chapterNumber}`, { method: 'POST' });
+        },
+
+        // === Save Chapter Methods ===
+        async saveChapterOutline(chapterNumber) {
+            const c = this.chapters.find(x => x.chapterNumber === chapterNumber);
+            if (!c) return;
+            c.outlineSummary = this.chapterOutlineEditContent;
+            await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/chapters/${chapterNumber}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ outlineSummary: c.outlineSummary })
+            });
+            this.editingChapterOutline = null;
+        },
+
+        async saveChapterContent(chapterNumber) {
+            const c = this.chapters.find(x => x.chapterNumber === chapterNumber);
+            if (!c) return;
+            c.content = this.chapterContentEditContent;
+            await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/chapters/${chapterNumber}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ content: c.content, status: 'COMPLETED' })
+            });
+            this.editingChapterContent = null;
+        },
+
+        // === Auto Run Methods ===
+        async startAutoRun() {
+            const resp = await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/auto-run/start`, { method: 'POST' });
+            const data = await resp.json();
+            if (data.status === 'error') {
+                alert(data.message);
+                return;
+            }
+            this.autoRun.status = 'RUNNING';
+            this.startAutoRunPolling();
+        },
+
+        async stopAutoRun() {
+            await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/auto-run/stop`, { method: 'POST' });
+            this.autoRun.status = 'STOPPING';
+        },
+
+        async pollAutoRunStatus() {
+            const resp = await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/auto-run/status`);
+            const data = await resp.json();
+            this.autoRun = data;
+            if (data.status === 'RUNNING' || data.status === 'STOPPING') {
+                this.startAutoRunPolling();
+            }
+        },
+
+        startAutoRunPolling() {
+            if (this.autoRunPollTimer) return;
+            this.autoRunPollTimer = setInterval(async () => {
+                const resp = await fetch(`/projects/${projectId}/side-stories/api/${sideStoryId}/auto-run/status`);
+                const data = await resp.json();
+                this.autoRun = data;
+                if (data.status !== 'RUNNING' && data.status !== 'STOPPING') {
+                    clearInterval(this.autoRunPollTimer);
+                    this.autoRunPollTimer = null;
+                    this.closeAutoRunStream();
+                    window.location.reload();
+                }
+            }, 2000);
+            this.connectAutoRunStream();
+        },
+
+        connectAutoRunStream() {
+            if (this.autoRunEventSource) return;
+            this.autoRunStreamContent = '';
+            this.autoRunStreamStep = '';
+            const url = `/projects/${projectId}/side-stories/api/${sideStoryId}/auto-run/stream`;
+            const es = new EventSource(url);
+            this.autoRunEventSource = es;
+
+            es.addEventListener('step-info', (e) => {
+                const parts = e.data.split('|');
+                this.autoRunStreamStep = parts[0] || '';
+                this.autoRunStreamContent = '';
+            });
+            es.addEventListener('replay-buffer', (e) => {
+                this.autoRunStreamContent = e.data;
+                this.scrollStreamBody();
+            });
+            es.addEventListener('token', (e) => {
+                this.autoRunStreamContent += e.data;
+                this.scrollStreamBody();
+            });
+            es.addEventListener('done', (e) => {
+                es.close();
+                this.autoRunEventSource = null;
+            });
+            es.addEventListener('error', (e) => {
+                es.close();
+                this.autoRunEventSource = null;
+            });
+            es.onerror = () => {
+                es.close();
+                this.autoRunEventSource = null;
+            };
+        },
+
+        closeAutoRunStream() {
+            if (this.autoRunEventSource) {
+                this.autoRunEventSource.close();
+                this.autoRunEventSource = null;
+            }
+        },
+
+        scrollStreamBody() {
+            this.$nextTick(() => {
+                const el = this.$refs.autoRunStreamBody;
+                if (el) el.scrollTop = el.scrollHeight;
+            });
+        }
+    };
+}
+    </script>
+</div>
+</body>
+</html>

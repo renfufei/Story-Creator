@@ -18,6 +18,8 @@ import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.CharacterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.ProofreadingReportRepository;
+import com.storycreator.persistence.repository.SideStoryRepository;
+import com.storycreator.persistence.repository.SideStoryChapterRepository;
 import com.storycreator.persistence.repository.StepGuidanceRepository;
 import com.storycreator.persistence.repository.StepModelConfigRepository;
 import com.storycreator.persistence.repository.StoryOutlineRepository;
@@ -58,6 +60,8 @@ public class ProjectController {
     private final ProofreadingReportRepository proofreadingReportRepository;
     private final WorldSettingRepository worldSettingRepository;
     private final AutoRunStepConfigRepository autoRunStepConfigRepository;
+    private final SideStoryRepository sideStoryRepository;
+    private final SideStoryChapterRepository sideStoryChapterRepository;
 
     public ProjectController(ProjectRepository projectRepository,
                            WorkflowStateRepository workflowStateRepository,
@@ -72,7 +76,9 @@ public class ProjectController {
                            VolumeOutlineRepository volumeOutlineRepository,
                            ProofreadingReportRepository proofreadingReportRepository,
                            WorldSettingRepository worldSettingRepository,
-                           AutoRunStepConfigRepository autoRunStepConfigRepository) {
+                           AutoRunStepConfigRepository autoRunStepConfigRepository,
+                           SideStoryRepository sideStoryRepository,
+                           SideStoryChapterRepository sideStoryChapterRepository) {
         this.projectRepository = projectRepository;
         this.workflowStateRepository = workflowStateRepository;
         this.modelConfigRepository = modelConfigRepository;
@@ -87,6 +93,8 @@ public class ProjectController {
         this.proofreadingReportRepository = proofreadingReportRepository;
         this.worldSettingRepository = worldSettingRepository;
         this.autoRunStepConfigRepository = autoRunStepConfigRepository;
+        this.sideStoryRepository = sideStoryRepository;
+        this.sideStoryChapterRepository = sideStoryChapterRepository;
     }
 
     @GetMapping("/")
@@ -220,6 +228,28 @@ public class ProjectController {
                 "number", c.getChapterNumber(),
                 "title", c.getTitle() != null ? c.getTitle() : ""
         )).toList());
+        // Side stories for reader
+        var sideStories = sideStoryRepository.findByProjectIdOrderBySortOrder(id);
+        var sideStoryData = sideStories.stream().map(ss -> {
+            var ssChapters = sideStoryChapterRepository.findBySideStoryIdOrderByChapterNumber(ss.getId());
+            return Map.of("story", ss, "chapters", ssChapters);
+        }).toList();
+        model.addAttribute("sideStories", sideStoryData);
+        model.addAttribute("sideStoriesJs", sideStoryData.stream().map(ss -> {
+            var story = (com.storycreator.persistence.entity.SideStoryEntity) ss.get("story");
+            @SuppressWarnings("unchecked")
+            var chs = (java.util.List<com.storycreator.persistence.entity.SideStoryChapterEntity>) ss.get("chapters");
+            var map = new java.util.HashMap<String, Object>();
+            map.put("id", String.valueOf(story.getId()));
+            map.put("title", story.getTitle() != null ? story.getTitle() : "");
+            map.put("attachedVolume", story.getAttachedVolume());
+            map.put("chapters", chs.stream().map(ch -> Map.of(
+                    "id", ch.getId(),
+                    "number", ch.getChapterNumber(),
+                    "title", ch.getTitle() != null ? ch.getTitle() : ""
+            )).toList());
+            return map;
+        }).toList());
         return "reader";
     }
 

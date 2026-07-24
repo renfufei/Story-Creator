@@ -11,6 +11,8 @@ public class PromptExploreContext {
     private Integer totalCards;
     private Integer volumeNumber;
     private Long templateId;
+    private Long sideStoryId;
+    private Integer sideStoryChapterNumber;
 
     public PromptExploreContext() {}
 
@@ -34,4 +36,10 @@ public class PromptExploreContext {
 
     public Long getTemplateId() { return templateId; }
     public void setTemplateId(Long templateId) { this.templateId = templateId; }
+
+    public Long getSideStoryId() { return sideStoryId; }
+    public void setSideStoryId(Long sideStoryId) { this.sideStoryId = sideStoryId; }
+
+    public Integer getSideStoryChapterNumber() { return sideStoryChapterNumber; }
+    public void setSideStoryChapterNumber(Integer sideStoryChapterNumber) { this.sideStoryChapterNumber = sideStoryChapterNumber; }
 }

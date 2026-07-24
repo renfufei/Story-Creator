@@ -2,7 +2,11 @@ package com.storycreator.export;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.storycreator.persistence.entity.*;
+import com.storycreator.persistence.entity.SideStoryEntity;
+import com.storycreator.persistence.entity.SideStoryChapterEntity;
 import com.storycreator.persistence.repository.*;
+import com.storycreator.persistence.repository.SideStoryRepository;
+import com.storycreator.persistence.repository.SideStoryChapterRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -22,6 +26,8 @@ public class ExportService {
     private final StepModelConfigRepository stepModelConfigRepository;
     private final AiModelConfigRepository aiModelConfigRepository;
     private final ProofreadingReportRepository proofreadingReportRepository;
+    private final SideStoryRepository sideStoryRepository;
+    private final SideStoryChapterRepository sideStoryChapterRepository;
     private final ObjectMapper objectMapper;
 
     public ExportService(ProjectRepository projectRepository,
@@ -36,6 +42,8 @@ public class ExportService {
                         StepModelConfigRepository stepModelConfigRepository,
                         AiModelConfigRepository aiModelConfigRepository,
                         ProofreadingReportRepository proofreadingReportRepository,
+                        SideStoryRepository sideStoryRepository,
+                        SideStoryChapterRepository sideStoryChapterRepository,
                         ObjectMapper objectMapper) {
         this.projectRepository = projectRepository;
         this.worldSettingRepository = worldSettingRepository;
@@ -49,6 +57,8 @@ public class ExportService {
         this.stepModelConfigRepository = stepModelConfigRepository;
         this.aiModelConfigRepository = aiModelConfigRepository;
         this.proofreadingReportRepository = proofreadingReportRepository;
+        this.sideStoryRepository = sideStoryRepository;
+        this.sideStoryChapterRepository = sideStoryChapterRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -101,6 +111,27 @@ public class ExportService {
             }
         }
 
+        // Side Stories
+        List<SideStoryEntity> sideStories = sideStoryRepository.findByProjectIdOrderBySortOrder(projectId);
+        if (!sideStories.isEmpty()) {
+            sb.append("## 番外\n\n");
+            for (SideStoryEntity ss : sideStories) {
+                sb.append("### ").append(ss.getTitle()).append("\n\n");
+                List<SideStoryChapterEntity> ssChapters = sideStoryChapterRepository
+                        .findBySideStoryIdOrderByChapterNumber(ss.getId());
+                for (SideStoryChapterEntity ssCh : ssChapters) {
+                    sb.append("#### 第").append(ssCh.getChapterNumber()).append("章");
+                    if (ssCh.getTitle() != null) {
+                        sb.append(" ").append(ssCh.getTitle());
+                    }
+                    sb.append("\n\n");
+                    if (ssCh.getContent() != null) {
+                        sb.append(ssCh.getContent()).append("\n\n");
+                    }
+                }
+            }
+        }
+
         return sb.toString();
     }
 
@@ -122,6 +153,26 @@ public class ExportService {
             sb.append("-".repeat(30)).append("\n\n");
             if (ch.getContent() != null) {
                 sb.append(ch.getContent()).append("\n\n\n");
+            }
+        }
+
+        // Side Stories
+        List<SideStoryEntity> sideStories = sideStoryRepository.findByProjectIdOrderBySortOrder(projectId);
+        if (!sideStories.isEmpty()) {
+            sb.append("\n").append("=".repeat(40)).append("\n");
+            sb.append("番外\n");
+            sb.append("=".repeat(40)).append("\n\n");
+            for (SideStoryEntity ss : sideStories) {
+                sb.append(ss.getTitle()).append("\n");
+                sb.append("-".repeat(30)).append("\n\n");
+                List<SideStoryChapterEntity> ssChapters = sideStoryChapterRepository
+                        .findBySideStoryIdOrderByChapterNumber(ss.getId());
+                for (SideStoryChapterEntity ssCh : ssChapters) {
+                    sb.append("第").append(ssCh.getChapterNumber()).append("章");
+                    if (ssCh.getTitle() != null) sb.append(" ").append(ssCh.getTitle());
+                    sb.append("\n\n");
+                    if (ssCh.getContent() != null) sb.append(ssCh.getContent()).append("\n\n\n");
+                }
             }
         }
 
@@ -184,6 +235,46 @@ public class ExportService {
                 document.newPage();
             }
 
+            // Side Stories
+            List<SideStoryEntity> sideStories = sideStoryRepository.findByProjectIdOrderBySortOrder(projectId);
+            if (!sideStories.isEmpty()) {
+                com.lowagie.text.Paragraph sideTitle = new com.lowagie.text.Paragraph("番外", titleFont);
+                sideTitle.setAlignment(com.lowagie.text.Element.ALIGN_CENTER);
+                document.add(sideTitle);
+                document.newPage();
+
+                for (SideStoryEntity ss : sideStories) {
+                    com.lowagie.text.Paragraph ssTitle = new com.lowagie.text.Paragraph(ss.getTitle(), chapterFont);
+                    ssTitle.setSpacingBefore(10);
+                    ssTitle.setSpacingAfter(15);
+                    document.add(ssTitle);
+
+                    List<SideStoryChapterEntity> ssChapters = sideStoryChapterRepository
+                            .findBySideStoryIdOrderByChapterNumber(ss.getId());
+                    for (SideStoryChapterEntity ssCh : ssChapters) {
+                        String ssChTitle = "第" + ssCh.getChapterNumber() + "章";
+                        if (ssCh.getTitle() != null) ssChTitle += " " + ssCh.getTitle();
+                        com.lowagie.text.Paragraph chPara = new com.lowagie.text.Paragraph(ssChTitle, chapterFont);
+                        chPara.setSpacingBefore(10);
+                        chPara.setSpacingAfter(15);
+                        document.add(chPara);
+
+                        if (ssCh.getContent() != null) {
+                            String[] paras = ssCh.getContent().split("\n+");
+                            for (String para : paras) {
+                                if (para.isBlank()) continue;
+                                com.lowagie.text.Paragraph p = new com.lowagie.text.Paragraph(para, bodyFont);
+                                p.setFirstLineIndent(24);
+                                p.setSpacingAfter(6);
+                                p.setLeading(20);
+                                document.add(p);
+                            }
+                        }
+                        document.newPage();
+                    }
+                }
+            }
+
             document.close();
             return baos.toByteArray();
         } catch (Exception e) {
@@ -216,6 +307,27 @@ public class ExportService {
                         new io.documentnode.epub4j.domain.Resource(
                                 html.getBytes("UTF-8"),
                                 "chapter" + ch.getChapterNumber() + ".html"));
+            }
+
+            // Add side stories
+            List<SideStoryEntity> sideStories = sideStoryRepository.findByProjectIdOrderBySortOrder(projectId);
+            for (SideStoryEntity ss : sideStories) {
+                List<SideStoryChapterEntity> ssChapters = sideStoryChapterRepository
+                        .findBySideStoryIdOrderByChapterNumber(ss.getId());
+                for (SideStoryChapterEntity ssCh : ssChapters) {
+                    String ssTitle = "番外·" + ss.getTitle() + " 第" + ssCh.getChapterNumber() + "章";
+                    if (ssCh.getTitle() != null) ssTitle += " " + ssCh.getTitle();
+
+                    String ssHtml = "<html><head><title>" + ssTitle + "</title></head><body>"
+                            + "<h2>" + ssTitle + "</h2>"
+                            + "<div>" + (ssCh.getContent() != null ? ssCh.getContent().replace("\n", "<br/>") : "") + "</div>"
+                            + "</body></html>";
+
+                    book.addSection(ssTitle,
+                            new io.documentnode.epub4j.domain.Resource(
+                                    ssHtml.getBytes("UTF-8"),
+                                    "side_story_" + ss.getId() + "_ch" + ssCh.getChapterNumber() + ".html"));
+                }
             }
 
             java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();

@@ -54,7 +54,7 @@
                                         @click="vol.expanded = !vol.expanded">
                                     <span>
                                         <strong x-text="'第' + vol.volumeNumber + '卷'"></strong>
-                                        <span x-show="vol.title" x-text="' ' + vol.title" class="ms-1"></span>
+                                        <span x-show="vol.arcName" x-text="' · ' + vol.arcName" class="ms-1 text-muted"></span>
                                         <small class="text-muted ms-2" x-text="'(第' + vol.chapterStart + '-' + vol.chapterEnd + '章)'"></small>
                                         <span class="badge bg-info ms-2" x-text="proofreadVolumeSummaryLabel(vol)"></span>
                                     </span>

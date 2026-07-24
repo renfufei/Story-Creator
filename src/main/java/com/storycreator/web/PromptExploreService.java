@@ -7,6 +7,7 @@ import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.image.CharacterImageService;
 import com.storycreator.persistence.entity.*;
 import com.storycreator.persistence.repository.*;
+import com.storycreator.sidestory.SideStoryWorkflowService;
 import com.storycreator.workflow.engine.*;
 import org.springframework.stereotype.Service;
 
@@ -14,8 +15,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-
-import static com.storycreator.workflow.engine.TextProcessingUtils.truncate;
 
 @Service
 public class PromptExploreService {
@@ -25,9 +24,9 @@ public class PromptExploreService {
     private final CharacterGenerationService characterGenerationService;
     private final OutlineGenerationService outlineGenerationService;
     private final ProofreadingService proofreadingService;
-    private final TitleGenerationService titleGenerationService;
     private final CharacterStateService characterStateService;
     private final CharacterImageService characterImageService;
+    private final SideStoryWorkflowService sideStoryWorkflowService;
     private final ProjectRepository projectRepository;
     private final PromptTemplateRepository promptTemplateRepository;
     private final WritingRulesRepository writingRulesRepository;
@@ -35,17 +34,17 @@ public class PromptExploreService {
     private final WorldSettingRepository worldSettingRepository;
     private final CharacterRepository characterRepository;
     private final ChapterRepository chapterRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
     private final StepGuidanceRepository stepGuidanceRepository;
+    private final SideStoryRepository sideStoryRepository;
 
     public PromptExploreService(PromptTemplateRegistry promptRegistry,
                                 WorkflowContextBuilder contextBuilder,
                                 CharacterGenerationService characterGenerationService,
                                 OutlineGenerationService outlineGenerationService,
                                 ProofreadingService proofreadingService,
-                                TitleGenerationService titleGenerationService,
                                 CharacterStateService characterStateService,
                                 CharacterImageService characterImageService,
+                                SideStoryWorkflowService sideStoryWorkflowService,
                                 ProjectRepository projectRepository,
                                 PromptTemplateRepository promptTemplateRepository,
                                 WritingRulesRepository writingRulesRepository,
@@ -53,16 +52,16 @@ public class PromptExploreService {
                                 WorldSettingRepository worldSettingRepository,
                                 CharacterRepository characterRepository,
                                 ChapterRepository chapterRepository,
-                                ChapterOutlineRepository chapterOutlineRepository,
-                                StepGuidanceRepository stepGuidanceRepository) {
+                                StepGuidanceRepository stepGuidanceRepository,
+                                SideStoryRepository sideStoryRepository) {
         this.promptRegistry = promptRegistry;
         this.contextBuilder = contextBuilder;
         this.characterGenerationService = characterGenerationService;
         this.outlineGenerationService = outlineGenerationService;
         this.proofreadingService = proofreadingService;
-        this.titleGenerationService = titleGenerationService;
         this.characterStateService = characterStateService;
         this.characterImageService = characterImageService;
+        this.sideStoryWorkflowService = sideStoryWorkflowService;
         this.projectRepository = projectRepository;
         this.promptTemplateRepository = promptTemplateRepository;
         this.writingRulesRepository = writingRulesRepository;
@@ -70,8 +69,8 @@ public class PromptExploreService {
         this.worldSettingRepository = worldSettingRepository;
         this.characterRepository = characterRepository;
         this.chapterRepository = chapterRepository;
-        this.chapterOutlineRepository = chapterOutlineRepository;
         this.stepGuidanceRepository = stepGuidanceRepository;
+        this.sideStoryRepository = sideStoryRepository;
     }
 
     public record ExploreResult(String templateContent, String systemPrompt,
@@ -103,7 +102,7 @@ public class PromptExploreService {
 
         if (subStep != null) {
             // Sub-step templates
-            variables = buildSubStepVariables(subStep, projectId, chapterNumber, characterId, cardNumber, totalCards, volumeNumber);
+            variables = buildSubStepVariables(subStep, project, ctx);
             templateContent = promptRegistry.getSubStepTemplate(step, subStep, project.getGenre());
             systemPrompt = promptRegistry.getSubStepSystemPrompt(step, subStep, project.getGenre());
         } else {
@@ -133,10 +132,14 @@ public class PromptExploreService {
         return new ExploreResult(templateContent, systemPrompt, variables, renderedPrompt);
     }
 
-    private Map<String, String> buildSubStepVariables(PromptSubStep subStep, Long projectId,
-                                                       Integer chapterNumber, Long characterId,
-                                                       Integer cardNumber, Integer totalCards,
-                                                       Integer volumeNumber) {
+    private Map<String, String> buildSubStepVariables(PromptSubStep subStep, ProjectEntity project,
+                                                       PromptExploreContext ctx) {
+        Long projectId = ctx.getProjectId();
+        Integer chapterNumber = ctx.getChapterNumber();
+        Long characterId = ctx.getCharacterId();
+        Integer cardNumber = ctx.getCardNumber();
+        Integer totalCards = ctx.getTotalCards();
+        Integer volumeNumber = ctx.getVolumeNumber();
         return switch (subStep) {
             case CHARACTER_CARD -> characterGenerationService.buildCharacterCardVariables(
                     projectId, cardNumber != null ? cardNumber : 1, totalCards != null ? totalCards : 5);
@@ -161,8 +164,6 @@ public class PromptExploreService {
                     projectId, chapterNumber != null ? chapterNumber : 1);
             case PROOFREAD_FIX -> proofreadingService.buildProofreadFixVariables(
                     projectId, chapterNumber != null ? chapterNumber : 1);
-            case CHAPTER_TITLE -> titleGenerationService.buildChapterTitleVariables(
-                    projectId, chapterNumber != null ? chapterNumber : 1);
             case CHARACTER_STATES -> characterStateService.buildCharacterStateVariables(
                     projectId, chapterNumber != null ? chapterNumber : 1);
             case IMAGE_PROMPT_AVATAR -> characterImageService.buildImagePromptVariables(
@@ -172,13 +173,15 @@ public class PromptExploreService {
             case WRITING_RULES -> buildWritingRulesVariables(projectId);
             case STYLE_FINGERPRINT -> buildStyleFingerprintVariables(projectId);
             case CHARACTER_BEHAVIOR_BOUNDARIES -> buildCharacterBehaviorBoundariesVariables(projectId, characterId);
-            case CHAPTER_EVENT_PLAN -> buildChapterEventPlanVariables(projectId, chapterNumber);
             case CHAPTER_CONTEXT_BRIEFING -> buildChapterContextBriefingVariables(projectId, chapterNumber);
             case CHAPTER_PLOT_REASONING -> buildChapterPlotReasoningVariables(projectId, chapterNumber);
             case CHAPTER_INSTANT_REVIEW -> buildChapterInstantReviewVariables(projectId, chapterNumber);
             case CHAPTER_CONTENT_OPTIMIZATION -> buildChapterContentOptimizationVariables(projectId, chapterNumber);
             case CHAPTER_STORYLINE_UPDATE -> buildChapterStorylineUpdateVariables(projectId, chapterNumber);
             case CHAPTER_DEEP_REVIEW -> buildChapterDeepReviewVariables(projectId, chapterNumber);
+            case SIDE_STORY_OUTLINE -> buildSideStoryOutlineVariables(project, ctx);
+            case SIDE_STORY_CHAPTER_OUTLINE -> buildSideStoryChapterOutlineVariables(project, ctx);
+            case SIDE_STORY_WRITING -> buildSideStoryWritingVariables(project, ctx);
             case WORLD_BUILDING_PRIMARY, CHAPTER_WRITING_PRIMARY, POLISHING_PRIMARY ->
                     throw new IllegalStateException("PRIMARY sub-steps should be intercepted before reaching switch");
         };
@@ -246,42 +249,6 @@ public class PromptExploreService {
         return vars;
     }
 
-    private Map<String, String> buildChapterEventPlanVariables(Long projectId, Integer chapterNumber) {
-        ProjectEntity project = projectRepository.findById(projectId).orElseThrow();
-        int chNum = chapterNumber != null ? chapterNumber : 1;
-
-        String worldSetting = worldSettingRepository.findByProjectId(projectId)
-                .map(WorldSettingEntity::getContent).orElse("");
-        String writingRules = writingRulesRepository.findByProjectId(projectId)
-                .map(WritingRulesEntity::getContent).orElse("");
-        String styleFingerprint = styleFingerprintRepository.findByProjectId(projectId)
-                .map(StyleFingerprintEntity::getContent).orElse("");
-        String chapterSummary = chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, chNum)
-                .map(ChapterOutlineEntity::getSummary).orElse("");
-
-        // Build characters string
-        StringBuilder charSb = new StringBuilder();
-        List<CharacterEntity> chars = characterRepository
-                .findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
-        for (CharacterEntity c : chars) {
-            if (c.getContent() != null) {
-                charSb.append(c.getName()).append(": ").append(truncate(c.getContent(), 200)).append("\n");
-            }
-        }
-
-        Map<String, String> vars = new HashMap<>();
-        vars.put("title", safe(project.getTitle()));
-        vars.put("genre", project.getGenre() != null ? project.getGenre().getDisplayName() : "");
-        vars.put("chapterNumber", String.valueOf(chNum));
-        vars.put("chapterSummary", chapterSummary);
-        vars.put("worldSetting", worldSetting);
-        vars.put("characters", charSb.toString());
-        vars.put("writingRules", writingRules);
-        vars.put("styleFingerprint", styleFingerprint);
-        vars.put("stepGuidance", "");
-        return vars;
-    }
-
     private Map<String, String> buildChapterContextBriefingVariables(Long projectId, Integer chapterNumber) {
         int chNum = chapterNumber != null ? chapterNumber : 1;
 
@@ -311,10 +278,15 @@ public class PromptExploreService {
 
         WorkflowContext wfCtx = contextBuilder.build(projectId, chNum);
 
-        String eventPlan = chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, chNum)
-                .map(ChapterOutlineEntity::getEventPlan).orElse("");
         String chapterSummary = wfCtx.getChapterSummary() != null ? wfCtx.getChapterSummary() : "";
         String chapterCards = wfCtx.getCharacterCards() != null ? wfCtx.getCharacterCards() : "";
+        String worldSetting = wfCtx.getWorldSetting() != null ? wfCtx.getWorldSetting() : "";
+        String characters = wfCtx.getCharacters() != null ? wfCtx.getCharacters() : "";
+
+        String writingRules = writingRulesRepository.findByProjectId(projectId)
+                .map(WritingRulesEntity::getContent).orElse("");
+        String styleFingerprint = styleFingerprintRepository.findByProjectId(projectId)
+                .map(StyleFingerprintEntity::getContent).orElse("");
 
         // Load writingBriefing from chapter entity
         String writingBriefing = chapterRepository.findByProjectIdAndChapterNumber(projectId, chNum)
@@ -326,7 +298,10 @@ public class PromptExploreService {
         vars.put("genre", wfCtx.getGenre() != null ? wfCtx.getGenre().getDisplayName() : "");
         vars.put("chapterNumber", String.valueOf(chNum));
         vars.put("chapterSummary", chapterSummary);
-        vars.put("eventPlan", eventPlan);
+        vars.put("worldSetting", worldSetting);
+        vars.put("characters", characters);
+        vars.put("writingRules", writingRules);
+        vars.put("styleFingerprint", styleFingerprint);
         vars.put("writingBriefing", writingBriefing);
         vars.put("characterCards", chapterCards);
         vars.put("stepGuidance", loadRawStepGuidance(projectId, WorkflowStep.CHAPTER_WRITING));
@@ -429,6 +404,42 @@ public class PromptExploreService {
         vars.put("styleFingerprint", styleFingerprint);
         vars.put("previousPlotSummary", prevPlotSummary);
         return vars;
+    }
+
+    // ═══════ Side story variable builders ═══════
+
+    private Map<String, String> buildSideStoryOutlineVariables(ProjectEntity project, PromptExploreContext ctx) {
+        Long sideStoryId = ctx.getSideStoryId();
+        if (sideStoryId == null) {
+            throw new IllegalArgumentException("请选择番外篇");
+        }
+        SideStoryEntity sideStory = sideStoryRepository.findById(sideStoryId)
+                .orElseThrow(() -> new IllegalArgumentException("番外篇不存在: " + sideStoryId));
+        return sideStoryWorkflowService.buildOutlineVariables(project, sideStory);
+    }
+
+    private Map<String, String> buildSideStoryChapterOutlineVariables(ProjectEntity project, PromptExploreContext ctx) {
+        Long sideStoryId = ctx.getSideStoryId();
+        Integer chapterNumber = ctx.getSideStoryChapterNumber();
+        if (sideStoryId == null) {
+            throw new IllegalArgumentException("请选择番外篇");
+        }
+        SideStoryEntity sideStory = sideStoryRepository.findById(sideStoryId)
+                .orElseThrow(() -> new IllegalArgumentException("番外篇不存在: " + sideStoryId));
+        return sideStoryWorkflowService.buildChapterOutlineVariables(project, sideStory,
+                chapterNumber != null ? chapterNumber : 1);
+    }
+
+    private Map<String, String> buildSideStoryWritingVariables(ProjectEntity project, PromptExploreContext ctx) {
+        Long sideStoryId = ctx.getSideStoryId();
+        Integer chapterNumber = ctx.getSideStoryChapterNumber();
+        if (sideStoryId == null) {
+            throw new IllegalArgumentException("请选择番外篇");
+        }
+        SideStoryEntity sideStory = sideStoryRepository.findById(sideStoryId)
+                .orElseThrow(() -> new IllegalArgumentException("番外篇不存在: " + sideStoryId));
+        return sideStoryWorkflowService.buildWritingVariables(project, sideStory,
+                chapterNumber != null ? chapterNumber : 1);
     }
 
     // ═══════ Helpers ═══════

@@ -30,6 +30,7 @@ public class OutlineGenerationService {
     private final VolumeOutlineRepository volumeOutlineRepository;
     private final StoryOutlineRepository storyOutlineRepository;
     private final StepGuidanceRepository stepGuidanceRepository;
+    private final CharacterRepository characterRepository;
     private final AiProviderRouter providerRouter;
     private final PromptTemplateRegistry promptRegistry;
     private final WorkflowContextBuilder contextBuilder;
@@ -41,6 +42,7 @@ public class OutlineGenerationService {
                                     VolumeOutlineRepository volumeOutlineRepository,
                                     StoryOutlineRepository storyOutlineRepository,
                                     StepGuidanceRepository stepGuidanceRepository,
+                                    CharacterRepository characterRepository,
                                     AiProviderRouter providerRouter,
                                     PromptTemplateRegistry promptRegistry,
                                     WorkflowContextBuilder contextBuilder,
@@ -51,6 +53,7 @@ public class OutlineGenerationService {
         this.volumeOutlineRepository = volumeOutlineRepository;
         this.storyOutlineRepository = storyOutlineRepository;
         this.stepGuidanceRepository = stepGuidanceRepository;
+        this.characterRepository = characterRepository;
         this.providerRouter = providerRouter;
         this.promptRegistry = promptRegistry;
         this.contextBuilder = contextBuilder;
@@ -157,7 +160,7 @@ public class OutlineGenerationService {
                                     return Flux.just(chMarker, existingSummary);
                                 }
                                 List<String> previousOutlines = new ArrayList<>();
-                                int prevStart = Math.max(1, chapterNum - 5);
+                                int prevStart = Math.max(1, chapterNum - 2);
                                 for (int i = prevStart; i < chapterNum; i++) {
                                     previousOutlines.add(outlineMap.getOrDefault(i, ""));
                                 }
@@ -235,6 +238,12 @@ public class OutlineGenerationService {
                                 refineCtx.setPreviousOutlines(prevOutlinesForRefine);
                                 refineCtx.setNextOutlines(nextOutlinesForRefine);
                                 refineCtx.setCurrentVolume(vol);
+                                // Save original summary before refinement overwrites it
+                                if (currentEntity != null && currentEntity.getSummary() != null && !currentEntity.getSummary().isBlank()) {
+                                    currentEntity.setOriginalSummary(currentEntity.getSummary());
+                                    chapterOutlineRepository.save(currentEntity);
+                                }
+
                                 Flux<String> refineFlux = generateSingleChapterRefine(baseContext, refineCtx, aiConfig)
                                         .doOnNext(refineContent::append)
                                         .doOnComplete(() -> {
@@ -308,19 +317,14 @@ public class OutlineGenerationService {
                 .orElse("");
 
         List<String> previousOutlines = new ArrayList<>();
-        int prevStart = Math.max(1, chapterNumber - 5);
+        int prevStart = Math.max(1, chapterNumber - 2);
         for (int i = prevStart; i < chapterNumber; i++) {
             String outline = chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, i)
                     .map(ChapterOutlineEntity::getSummary).orElse("");
             previousOutlines.add(outline);
         }
 
-        List<String> nextOutlines = new ArrayList<>();
-        for (int i = chapterNumber + 1; i <= Math.min(totalChapters, chapterNumber + 2); i++) {
-            String outline = chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, i)
-                    .map(ChapterOutlineEntity::getSummary).orElse("");
-            nextOutlines.add(outline);
-        }
+        List<String> nextOutlines = List.of();
 
         log.info("[P{}] Regenerating chapter outline {}", projectId, chapterNumber);
         long regenStart = System.currentTimeMillis();
@@ -380,6 +384,9 @@ public class OutlineGenerationService {
             previousContext.insert(0, "\n【前文各卷弧线摘要】\n");
         }
 
+        String allCharacters = buildAllCharactersInfo(projectId);
+        String storySummary = loadStorySummary(projectId);
+
         Genre genre = baseContext.getGenre();
         return Map.ofEntries(
                 Map.entry("title", baseContext.getTitle() != null ? baseContext.getTitle() : ""),
@@ -387,6 +394,8 @@ public class OutlineGenerationService {
                 Map.entry("description", baseContext.getDescription() != null ? baseContext.getDescription() : ""),
                 Map.entry("worldSetting", wrapContent(truncate(baseContext.getWorldSetting(), 400))),
                 Map.entry("characters", wrapContent(truncate(baseContext.getCharacters(), 400))),
+                Map.entry("allCharacters", allCharacters),
+                Map.entry("storySummary", storySummary),
                 Map.entry("totalChapters", String.valueOf(totalChapters)),
                 Map.entry("volumeNumber", String.valueOf(vol.volumeNumber())),
                 Map.entry("chapterStart", String.valueOf(vol.chapterStart())),
@@ -417,7 +426,7 @@ public class OutlineGenerationService {
                 .map(VolumeOutlineEntity::getArcSummary).orElse("");
 
         List<String> previousOutlines = new ArrayList<>();
-        int prevStart = Math.max(1, chapterNumber - 5);
+        int prevStart = Math.max(1, chapterNumber - 2);
         for (int i = prevStart; i < chapterNumber; i++) {
             previousOutlines.add(chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, i)
                     .map(ChapterOutlineEntity::getSummary).orElse(""));
@@ -433,7 +442,7 @@ public class OutlineGenerationService {
 
         StringBuilder contextInfo = new StringBuilder();
         if (volumeArc != null && !volumeArc.isBlank()) {
-            contextInfo.append("\n【本卷故事弧线】").append(wrapContent(truncate(volumeArc, 500)));
+            contextInfo.append("\n【本卷故事弧线】").append(wrapContent(volumeArc));
         }
         if (!previousOutlines.isEmpty()) {
             contextInfo.append("\n===== 以下为相邻章节大纲（仅供了解前后脉络，严禁照搬内容） =====\n");
@@ -442,19 +451,24 @@ public class OutlineGenerationService {
             for (int i = 0; i < previousOutlines.size(); i++) {
                 String outline = previousOutlines.get(i);
                 if (outline != null && !outline.isBlank()) {
+                    boolean isLastPrevious = (i == previousOutlines.size() - 1);
                     contextInfo.append("第").append(startChapter + i).append("章：")
-                            .append(truncate(outline, 300)).append("\n");
+                            .append(isLastPrevious ? outline : truncate(outline, 300)).append("\n");
                 }
             }
             contextInfo.append("===== 相邻章节大纲结束（以上仅供参考，你必须生成全新的独特内容） =====\n");
         }
 
+        String allCharacters = buildAllCharactersInfo(projectId);
+        String storySummary = loadStorySummary(projectId);
+
         Genre genre = baseContext.getGenre();
         return Map.ofEntries(
                 Map.entry("title", baseContext.getTitle() != null ? baseContext.getTitle() : ""),
                 Map.entry("genre", genre != null ? genre.getDisplayName() : ""),
-                Map.entry("worldSetting", wrapContent(truncate(baseContext.getWorldSetting(), 300))),
-                Map.entry("characters", wrapContent(truncate(baseContext.getCharacters(), 300))),
+                Map.entry("characters", wrapContent(truncate(baseContext.getCharacters(), 1000))),
+                Map.entry("allCharacters", allCharacters),
+                Map.entry("storySummary", storySummary),
                 Map.entry("chapterNumber", String.valueOf(chapterNumber)),
                 Map.entry("totalChapters", String.valueOf(totalChapters)),
                 Map.entry("chapterStart", String.valueOf(vol.chapterStart())),
@@ -489,14 +503,17 @@ public class OutlineGenerationService {
 
         String contextInfo = buildRefineContextInfo(volumeArc, previousOutlines, nextOutlines);
 
+        String allCharacters = buildAllCharactersInfo(projectId);
+
         Genre genre = baseContext.getGenre();
-        return Map.of(
-                "title", baseContext.getTitle() != null ? baseContext.getTitle() : "",
-                "genre", genre != null ? genre.getDisplayName() : "",
-                "chapterNumber", String.valueOf(chapterNumber),
-                "totalChapters", String.valueOf(totalChapters),
-                "contextInfo", contextInfo,
-                "currentOutline", currentOutline
+        return Map.ofEntries(
+                Map.entry("title", baseContext.getTitle() != null ? baseContext.getTitle() : ""),
+                Map.entry("genre", genre != null ? genre.getDisplayName() : ""),
+                Map.entry("chapterNumber", String.valueOf(chapterNumber)),
+                Map.entry("totalChapters", String.valueOf(totalChapters)),
+                Map.entry("contextInfo", contextInfo),
+                Map.entry("currentOutline", currentOutline),
+                Map.entry("allCharacters", allCharacters)
         );
     }
 
@@ -567,6 +584,10 @@ public class OutlineGenerationService {
             }
         }
 
+        Long projectId = baseContext.getProjectId();
+        String allCharacters = buildAllCharactersInfo(projectId);
+        String storySummary = loadStorySummary(projectId);
+
         Genre genre = baseContext.getGenre();
         String template = promptRegistry.getSubStepTemplate(WorkflowStep.OUTLINE_GENERATION, PromptSubStep.VOLUME_ARC, genre);
         Map<String, String> vars = Map.ofEntries(
@@ -575,6 +596,8 @@ public class OutlineGenerationService {
                 Map.entry("description", baseContext.getDescription() != null ? baseContext.getDescription() : ""),
                 Map.entry("worldSetting", wrapContent(truncate(baseContext.getWorldSetting(), 400))),
                 Map.entry("characters", wrapContent(truncate(baseContext.getCharacters(), 400))),
+                Map.entry("allCharacters", allCharacters),
+                Map.entry("storySummary", storySummary),
                 Map.entry("totalChapters", String.valueOf(totalChapters)),
                 Map.entry("volumeNumber", String.valueOf(vol.volumeNumber())),
                 Map.entry("chapterStart", String.valueOf(vol.chapterStart())),
@@ -591,7 +614,7 @@ public class OutlineGenerationService {
         AiRequest request = AiRequest.builder()
                 .systemPrompt(systemPrompt)
                 .userPrompt(prompt)
-                .maxTokens(1024)
+                .maxTokens(2048)
                 .temperature(0.75)
                 .build();
         applyResolvedConfig(request, resolved);
@@ -620,7 +643,7 @@ public class OutlineGenerationService {
 
         StringBuilder contextInfo = new StringBuilder();
         if (volumeArc != null && !volumeArc.isBlank()) {
-            contextInfo.append("\n【本卷故事弧线】").append(wrapContent(truncate(volumeArc, 500)));
+            contextInfo.append("\n【本卷故事弧线】").append(wrapContent(volumeArc));
         }
         boolean hasAdjacentContext = (previousOutlines != null && !previousOutlines.isEmpty())
                 || (nextOutlines != null && !nextOutlines.isEmpty());
@@ -633,8 +656,9 @@ public class OutlineGenerationService {
             for (int i = 0; i < previousOutlines.size(); i++) {
                 String outline = previousOutlines.get(i);
                 if (outline != null && !outline.isBlank()) {
+                    boolean isLastPrevious = (i == previousOutlines.size() - 1);
                     contextInfo.append("第").append(startChapter + i).append("章：")
-                            .append(truncate(outline, 300)).append("\n");
+                            .append(isLastPrevious ? outline : truncate(outline, 300)).append("\n");
                 }
             }
         }
@@ -652,13 +676,18 @@ public class OutlineGenerationService {
             contextInfo.append("===== 相邻章节大纲结束（以上仅供参考，你必须生成全新的独特内容） =====\n");
         }
 
+        Long projectId = baseContext.getProjectId();
+        String allCharacters = buildAllCharactersInfo(projectId);
+        String storySummary = loadStorySummary(projectId);
+
         Genre genre = baseContext.getGenre();
         String template = promptRegistry.getSubStepTemplate(WorkflowStep.OUTLINE_GENERATION, PromptSubStep.CHAPTER_OUTLINE, genre);
         Map<String, String> vars = Map.ofEntries(
                 Map.entry("title", baseContext.getTitle() != null ? baseContext.getTitle() : ""),
                 Map.entry("genre", genre != null ? genre.getDisplayName() : ""),
-                Map.entry("worldSetting", wrapContent(truncate(baseContext.getWorldSetting(), 300))),
-                Map.entry("characters", wrapContent(truncate(baseContext.getCharacters(), 300))),
+                Map.entry("characters", wrapContent(truncate(baseContext.getCharacters(), 1000))),
+                Map.entry("allCharacters", allCharacters),
+                Map.entry("storySummary", storySummary),
                 Map.entry("chapterNumber", String.valueOf(chapterNum)),
                 Map.entry("totalChapters", String.valueOf(totalChapters)),
                 Map.entry("chapterStart", String.valueOf(vol.chapterStart())),
@@ -676,7 +705,7 @@ public class OutlineGenerationService {
         AiRequest request = AiRequest.builder()
                 .systemPrompt(systemPrompt)
                 .userPrompt(prompt)
-                .maxTokens(768)
+                .maxTokens(1536)
                 .temperature(0.7)
                 .build();
         applyResolvedConfig(request, resolved);
@@ -697,15 +726,19 @@ public class OutlineGenerationService {
 
         String contextInfo = buildRefineContextInfo(volumeArc, previousOutlines, nextOutlines);
 
+        Long projectId = baseContext.getProjectId();
+        String allCharacters = buildAllCharactersInfo(projectId);
+
         Genre genre = baseContext.getGenre();
         String template = promptRegistry.getSubStepTemplate(WorkflowStep.OUTLINE_GENERATION, PromptSubStep.CHAPTER_OUTLINE_REFINE, genre);
-        Map<String, String> vars = Map.of(
-                "title", baseContext.getTitle() != null ? baseContext.getTitle() : "",
-                "genre", genre != null ? genre.getDisplayName() : "",
-                "chapterNumber", String.valueOf(chapterNum),
-                "totalChapters", String.valueOf(totalChapters),
-                "contextInfo", contextInfo,
-                "currentOutline", currentChapterOutline
+        Map<String, String> vars = Map.ofEntries(
+                Map.entry("title", baseContext.getTitle() != null ? baseContext.getTitle() : ""),
+                Map.entry("genre", genre != null ? genre.getDisplayName() : ""),
+                Map.entry("chapterNumber", String.valueOf(chapterNum)),
+                Map.entry("totalChapters", String.valueOf(totalChapters)),
+                Map.entry("contextInfo", contextInfo),
+                Map.entry("currentOutline", currentChapterOutline),
+                Map.entry("allCharacters", allCharacters)
         );
         String prompt = promptRegistry.resolveTemplate(template, vars);
         String systemPrompt = promptRegistry.getSubStepSystemPrompt(WorkflowStep.OUTLINE_GENERATION, PromptSubStep.CHAPTER_OUTLINE_REFINE, genre);
@@ -716,7 +749,7 @@ public class OutlineGenerationService {
         AiRequest request = AiRequest.builder()
                 .systemPrompt(systemPrompt)
                 .userPrompt(prompt)
-                .maxTokens(768)
+                .maxTokens(1536)
                 .temperature(0.65)
                 .build();
         applyResolvedConfig(request, resolved);
@@ -909,6 +942,28 @@ public class OutlineGenerationService {
         return contextInfo.toString();
     }
 
+    // --- Character & story summary helpers ---
+
+    private String buildAllCharactersInfo(Long projectId) {
+        List<CharacterEntity> allCards = characterRepository.findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
+        StringBuilder sb = new StringBuilder();
+        for (CharacterEntity card : allCards) {
+            sb.append("【").append(card.getName()).append("】");
+            String cardText = card.getSummary() != null && !card.getSummary().isBlank()
+                    ? card.getSummary()
+                    : (card.getContent() != null ? truncate(card.getContent(), 300) : "");
+            sb.append(cardText).append("\n\n");
+        }
+        return sb.toString().trim();
+    }
+
+    private String loadStorySummary(Long projectId) {
+        return storyOutlineRepository.findByProjectId(projectId)
+                .map(StoryOutlineEntity::getContent)
+                .filter(c -> c != null && !c.isBlank())
+                .orElse("");
+    }
+
     // --- Persistence helpers ---
 
     private void saveSingleVolumeArc(Long projectId, VolumeRange vol, String content) {
@@ -925,6 +980,17 @@ public class OutlineGenerationService {
         entity.setChapterEnd(vol.chapterEnd());
         entity.setArcSummary(content);
         entity.setTitle("第" + vol.volumeNumber() + "卷");
+
+        // Parse arc name from first line prefix "故事弧线：XXX"
+        String arcName = null;
+        String firstLine = content.split("\\R", 2)[0].strip();
+        if (firstLine.startsWith("故事弧线：")) {
+            arcName = firstLine.substring("故事弧线：".length()).strip();
+            if (arcName.length() > 200) arcName = arcName.substring(0, 200);
+            if (arcName.isBlank()) arcName = null;
+        }
+        entity.setArcName(arcName);
+
         volumeOutlineRepository.save(entity);
     }
 
@@ -1002,6 +1068,15 @@ public class OutlineGenerationService {
                 .replaceFirst("\\*\\*标题[：:]\\*\\*[^\\n]*\\n?", "")
                 .replaceFirst("\\*\\*出场角色[：:]\\*\\*[^\\n]*\\n?", "")
                 .strip();
+
+        // 清除AI常见前缀标签
+        String[] summaryPrefixes = {"大纲内容：", "大纲内容:", "章节大纲：", "章节大纲:", "精修内容：", "精修内容:", "正文内容：", "正文内容:"};
+        for (String prefix : summaryPrefixes) {
+            if (summary.startsWith(prefix)) {
+                summary = summary.substring(prefix.length()).stripLeading();
+                break;
+            }
+        }
 
         ChapterOutlineEntity entity = chapterOutlineRepository
                 .findByProjectIdAndChapterNumber(projectId, chapterNum)

@@ -3,8 +3,6 @@ package com.storycreator.workflow.autorun.strategy;
 import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.persistence.entity.ChapterEntity;
-import com.storycreator.persistence.entity.ChapterOutlineEntity;
-import com.storycreator.persistence.repository.ChapterOutlineRepository;
 import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.workflow.autorun.AutoRunContext;
 import com.storycreator.workflow.engine.ContextSummaryService;
@@ -32,20 +30,17 @@ public class EnhancedChapterWritingService {
 
     private final EnhancedSubStepExecutor executor;
     private final ChapterRepository chapterRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
     private final WorkflowEngine workflowEngine;
     private final WorkflowContextBuilder contextBuilder;
     private final ContextSummaryService contextSummaryService;
 
     public EnhancedChapterWritingService(EnhancedSubStepExecutor executor,
                                          ChapterRepository chapterRepository,
-                                         ChapterOutlineRepository chapterOutlineRepository,
                                          WorkflowEngine workflowEngine,
                                          WorkflowContextBuilder contextBuilder,
                                          ContextSummaryService contextSummaryService) {
         this.executor = executor;
         this.chapterRepository = chapterRepository;
-        this.chapterOutlineRepository = chapterOutlineRepository;
         this.workflowEngine = workflowEngine;
         this.contextBuilder = contextBuilder;
         this.contextSummaryService = contextSummaryService;
@@ -75,11 +70,6 @@ public class EnhancedChapterWritingService {
         // Build context for variable maps
         WorkflowContext wfCtx = contextBuilder.build(projectId, chapterNumber);
         Genre genre = wfCtx.getGenre();
-
-        // Load chapter outline for event plan
-        String eventPlan = chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
-                .map(ChapterOutlineEntity::getEventPlan)
-                .orElse("");
 
         String chapterSummary = wfCtx.getChapterSummary() != null ? wfCtx.getChapterSummary() : "";
         String chapterCards = wfCtx.getCharacterCards() != null ? wfCtx.getCharacterCards() : "";
@@ -133,7 +123,10 @@ public class EnhancedChapterWritingService {
                 vars.put("genre", genreDisplay);
                 vars.put("chapterNumber", String.valueOf(chapterNumber));
                 vars.put("chapterSummary", chapterSummary);
-                vars.put("eventPlan", eventPlan);
+                vars.put("worldSetting", wfCtx.getWorldSetting() != null ? wfCtx.getWorldSetting() : "");
+                vars.put("characters", wfCtx.getCharacters() != null ? wfCtx.getCharacters() : "");
+                vars.put("writingRules", writingRules);
+                vars.put("styleFingerprint", styleFingerprint);
                 vars.put("writingBriefing", briefing);
                 vars.put("characterCards", chapterCards);
                 vars.put("stepGuidance", stepGuidance);

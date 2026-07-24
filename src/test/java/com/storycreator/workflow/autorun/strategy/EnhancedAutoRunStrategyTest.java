@@ -294,9 +294,9 @@ class EnhancedAutoRunStrategyTest {
     }
 
     @Test
-    void execute_outlineGeneratesEventPlans() throws Exception {
+    void execute_outlineGenerationRunsStandardGenerate() throws Exception {
         ProjectEntity project = makeProject(WorkflowStep.OUTLINE_GENERATION, 2);
-        project.setCharacterCount(1); // 1 character needed, 1 exists → CHARACTER_DESIGN complete
+        project.setCharacterCount(1);
         when(projectRepository.findById(PROJECT_ID)).thenReturn(Optional.of(project));
 
         // Earlier steps complete
@@ -325,21 +325,15 @@ class EnhancedAutoRunStrategyTest {
         when(workflowEngine.generate(eq(PROJECT_ID), eq(WorkflowStep.OUTLINE_GENERATION), eq(0)))
                 .thenReturn(Flux.just("大纲" + "x".repeat(200)));
 
-        // After outline generated, outlines exist without event plans
+        // After outline generated, outlines exist
         ChapterOutlineEntity o1 = new ChapterOutlineEntity();
         o1.setChapterNumber(1);
-        o1.setSummary("第1章摘要");
-        o1.setEventPlan(null);
         o1.setStatus("REFINED");
         ChapterOutlineEntity o2 = new ChapterOutlineEntity();
         o2.setChapterNumber(2);
-        o2.setSummary("第2章摘要");
-        o2.setEventPlan(null);
         o2.setStatus("REFINED");
         when(chapterOutlineRepository.findByProjectIdOrderByChapterNumber(PROJECT_ID))
                 .thenReturn(List.of(o1, o2));
-
-        when(executor.generateEventPlan(eq(PROJECT_ID), any(), any(), any())).thenReturn("事件计划");
 
         // Stop after OUTLINE confirm
         doAnswer(inv -> {
@@ -350,9 +344,8 @@ class EnhancedAutoRunStrategyTest {
         AutoRunContext ctx = buildCtx();
         strategy.execute(ctx);
 
-        // Verify event plans generated for both outlines
-        verify(executor, times(2)).generateEventPlan(eq(PROJECT_ID), any(), eq(Genre.XUANHUAN), any());
-        verify(chapterOutlineRepository, times(2)).save(any());
+        // Verify standard outline generation ran
+        verify(workflowEngine).generate(eq(PROJECT_ID), eq(WorkflowStep.OUTLINE_GENERATION), eq(0));
     }
 
     @Test

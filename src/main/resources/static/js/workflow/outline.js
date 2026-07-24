@@ -153,8 +153,16 @@ function workflowOutlineMixin() {
             });
 
             eventSource.onerror = () => {
-                this.currentEventSource = null;
                 eventSource.close();
+                this.currentEventSource = null;
+                if (this.generating) {
+                    // Reconnect after a short delay if generation is still active
+                    setTimeout(() => {
+                        if (this.generating) {
+                            this.attachBgStream('OUTLINE_GENERATION', 0);
+                        }
+                    }, 2000);
+                }
             };
         },
 
@@ -165,7 +173,7 @@ function workflowOutlineMixin() {
                 .then(checkResponse)
                 .then(data => {
                     if (mergeOnly) this._outlineMergeLoading = false;
-                    if (mergeOnly && this.generating) {
+                    if (mergeOnly && this.outlineLoaded) {
                         this.outlineSummary = data.storySummary || this.outlineSummary;
                         if (data.volumes && data.volumes.length > 0) {
                             for (const sv of data.volumes) {
@@ -188,12 +196,19 @@ function workflowOutlineMixin() {
                                             chapterNumber: sch.chapterNumber,
                                             title: sch.title || '', summary: sch.summary || '',
                                             characterNames: sch.characterNames || '',
+                                            originalSummary: sch.originalSummary || null,
+                                            showCompare: false,
                                             status: sch.status || 'COMPLETED',
                                             editing: false, regenerating: false,
                                             titleEdit: '', summaryEdit: '', characterNamesEdit: ''
                                         });
-                                    } else if (sch.status) {
-                                        existingCh.status = sch.status;
+                                    } else if (!existingCh.editing && !existingCh.regenerating) {
+                                        // Update data fields but preserve UI state
+                                        existingCh.status = sch.status || existingCh.status;
+                                        existingCh.title = sch.title || existingCh.title;
+                                        existingCh.summary = sch.summary || existingCh.summary;
+                                        existingCh.characterNames = sch.characterNames || existingCh.characterNames;
+                                        if (sch.originalSummary) existingCh.originalSummary = sch.originalSummary;
                                     }
                                 }
                                 vol.chapters.sort((a, b) => a.chapterNumber - b.chapterNumber);
@@ -202,6 +217,16 @@ function workflowOutlineMixin() {
                         }
                         return;
                     }
+                    // Snapshot current UI state to preserve across refresh
+                    const prevExpanded = {};
+                    const prevShowCompare = {};
+                    this.outlineVolumes.forEach(v => {
+                        prevExpanded[v.volumeNumber] = v.expanded;
+                        v.chapters.forEach(ch => {
+                            prevShowCompare[v.volumeNumber + '_' + ch.chapterNumber] = ch.showCompare;
+                        });
+                    });
+
                     this.outlineSummary = data.storySummary || '';
                     if (data.volumes && data.volumes.length > 0) {
                         this.outlineVolumes = data.volumes.map(v => ({
@@ -210,7 +235,7 @@ function workflowOutlineMixin() {
                             arcSummary: v.arcSummary || '',
                             chapterStart: v.chapterStart,
                             chapterEnd: v.chapterEnd,
-                            expanded: true,
+                            expanded: prevExpanded[v.volumeNumber] !== undefined ? prevExpanded[v.volumeNumber] : true,
                             editingArc: false,
                             arcSummaryEdit: '',
                             chapters: (v.chapters || []).map(ch => ({
@@ -218,6 +243,8 @@ function workflowOutlineMixin() {
                                 title: ch.title || '',
                                 summary: ch.summary || '',
                                 characterNames: ch.characterNames || '',
+                                originalSummary: ch.originalSummary || null,
+                                showCompare: prevShowCompare[v.volumeNumber + '_' + ch.chapterNumber] || false,
                                 status: ch.status || 'COMPLETED',
                                 editing: false,
                                 regenerating: false,
@@ -234,7 +261,7 @@ function workflowOutlineMixin() {
                             arcSummary: '',
                             chapterStart: 1,
                             chapterEnd: data.legacyChapters.length,
-                            expanded: true,
+                            expanded: prevExpanded[1] !== undefined ? prevExpanded[1] : true,
                             editingArc: false,
                             arcSummaryEdit: '',
                             chapters: data.legacyChapters.map(ch => ({
@@ -242,6 +269,8 @@ function workflowOutlineMixin() {
                                 title: ch.title || '',
                                 summary: ch.summary || '',
                                 characterNames: ch.characterNames || '',
+                                originalSummary: ch.originalSummary || null,
+                                showCompare: prevShowCompare['1_' + ch.chapterNumber] || false,
                                 status: ch.status || 'COMPLETED',
                                 editing: false,
                                 regenerating: false,

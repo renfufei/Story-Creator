@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('番外篇', ~{::content})}">
+<body>
+<div th:fragment="content" x-data="sideStoryList()" x-init="init()">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0">番外篇</h2>
+            <small class="text-muted" th:text="${project.title}">项目名</small>
+        </div>
+        <div>
+            <a th:href="@{/projects/{id}/workflow(id=${project.id})}" class="btn btn-outline-secondary btn-sm me-2">
+                <i class="bi bi-arrow-left"></i> 返回创作
+            </a>
+            <button class="btn btn-primary btn-sm" @click="showWizard = true; wizardStep = 1">
+                <i class="bi bi-plus"></i> 新建番外
+            </button>
+        </div>
+    </div>
+
+    <!-- Side Story Cards -->
+    <div class="row g-3" th:if="${!sideStories.isEmpty()}">
+        <div class="col-md-6 col-lg-4" th:each="item : ${sideStories}">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="card-title mb-0" th:text="${item.get('story').title}">标题</h5>
+                        <span class="badge"
+                              th:classappend="${item.get('story').type == 'SUPPLEMENTARY' ? 'bg-info' : 'bg-warning'}"
+                              th:text="${item.get('story').type == 'SUPPLEMENTARY' ? '正传补充' : '衍生故事'}">类型</span>
+                    </div>
+                    <p class="card-text text-muted small" th:if="${item.get('story').description}"
+                       th:text="${#strings.abbreviate(item.get('story').description, 80)}">描述</p>
+                    <div class="d-flex gap-2 mb-2">
+                        <span class="badge bg-secondary" th:text="'章节: ' + ${item.get('chapterCount')}">章节: 0</span>
+                        <span class="badge"
+                              th:classappend="${item.get('story').status == 'DRAFT' ? 'bg-light text-dark' :
+                                               item.get('story').status == 'OUTLINE_READY' ? 'bg-primary' :
+                                               item.get('story').status == 'IN_PROGRESS' ? 'bg-success' : 'bg-dark'}"
+                              th:text="${item.get('story').status == 'DRAFT' ? '草稿' :
+                                         item.get('story').status == 'OUTLINE_READY' ? '大纲就绪' :
+                                         item.get('story').status == 'IN_PROGRESS' ? '创作中' : '已完成'}">状态</span>
+                        <span class="badge bg-outline-secondary" th:if="${item.get('story').attachedVolume != null}"
+                              th:text="'关联卷' + ${item.get('story').attachedVolume}">关联卷</span>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a th:href="@{/projects/{pid}/side-stories/{id}(pid=${project.id}, id=${item.get('story').id})}"
+                       class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-pencil-square"></i> 进入创作
+                    </a>
+                    <button class="btn btn-sm btn-outline-danger float-end"
+                            x-on:click.prevent="deleteSideStory($el.dataset.id)"
+                            th:data-id="${item.get('story').id}">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="text-center text-muted py-5" th:if="${sideStories.isEmpty()}">
+        <i class="bi bi-journal-text" style="font-size: 3rem;"></i>
+        <p class="mt-2">暂无番外篇，点击上方按钮新建</p>
+    </div>
+
+    <!-- Create Wizard Modal -->
+    <div class="modal fade" :class="{ show: showWizard }" :style="showWizard ? 'display:block' : ''"
+         tabindex="-1" @click.self="showWizard = false">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">新建番外篇</h5>
+                    <button type="button" class="btn-close" @click="showWizard = false"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Step Indicator -->
+                    <div class="d-flex justify-content-center mb-4">
+                        <template x-for="s in [1,2,3,4]" :key="s">
+                            <div class="d-flex align-items-center">
+                                <div class="rounded-circle d-flex align-items-center justify-content-center"
+                                     :class="wizardStep >= s ? 'bg-primary text-white' : 'bg-light text-muted'"
+                                     style="width:30px;height:30px;font-size:0.8rem" x-text="s"></div>
+                                <div class="mx-2" style="width:40px;height:2px"
+                                     :class="s < 4 ? (wizardStep > s ? 'bg-primary' : 'bg-light') : ''"
+                                     x-show="s < 4"></div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Step 1: Basic Info -->
+                    <div x-show="wizardStep === 1">
+                        <div class="mb-3">
+                            <label class="form-label">番外标题 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" x-model="form.title" placeholder="输入番外标题">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">简介</label>
+                            <textarea class="form-control" rows="3" x-model="form.description"
+                                      placeholder="简要描述番外内容"></textarea>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">类型</label>
+                                <select class="form-select" x-model="form.type">
+                                    <option value="SUPPLEMENTARY">正传补充</option>
+                                    <option value="TANGENTIAL">衍生故事</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">关联卷（可选）</label>
+                                <select class="form-select" x-model="form.attachedVolume">
+                                    <option :value="null">-- 不关联 --</option>
+                                    <option th:each="v : ${volumes}" th:value="${v.volumeNumber}"
+                                            th:text="'第' + ${v.volumeNumber} + '卷 ' + (${v.title} ?: '') + (${v.arcName} != null ? ' [' + ${v.arcName} + ']' : '')">
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">章节数</label>
+                                <input type="number" class="form-control" x-model.number="form.chapterCount" min="1" max="50" placeholder="3">
+                                <div class="form-text">创建后可随时增减</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Select Characters -->
+                    <div x-show="wizardStep === 2">
+                        <p class="text-muted mb-3">选择番外涉及的角色（可多选）</p>
+                        <div class="form-check border-bottom pb-2 mb-2">
+                            <input class="form-check-input flex-shrink-0" type="checkbox"
+                                   id="char-all"
+                                   :checked="form.characterIds.length === allCharCount && allCharCount > 0"
+                                   :indeterminate="form.characterIds.length > 0 && form.characterIds.length < allCharCount"
+                                   @change="toggleAllChars()">
+                            <label class="form-check-label" for="char-all">
+                                <strong>全部角色</strong>
+                                <small class="text-muted ms-1" x-text="'(' + form.characterIds.length + '/' + allCharCount + ')'"></small>
+                            </label>
+                        </div>
+                        <div class="d-flex flex-column gap-2" style="max-height:50vh;overflow-y:auto;">
+                            <div th:each="c : ${characters}" th:data-cid="${c.id}">
+                                <div class="d-flex align-items-start gap-2 border rounded p-2"
+                                     x-bind:class="form.characterIds.includes(+$el.parentElement.dataset.cid) ? 'border-primary bg-light' : ''">
+                                    <input class="form-check-input flex-shrink-0 mt-1" type="checkbox"
+                                           th:value="${c.id}" th:id="'char-' + ${c.id}"
+                                           x-bind:checked="form.characterIds.includes(+$el.closest('[data-cid]').dataset.cid)"
+                                           x-on:change="toggleChar(+$el.closest('[data-cid]').dataset.cid)">
+                                    <label class="form-check-label" th:for="'char-' + ${c.id}" style="min-width:0;">
+                                        <strong th:text="${c.name ?: '未命名'}">角色名</strong>
+                                        <small class="text-muted d-block text-truncate" th:if="${c.role}" th:text="${c.role}">角色定位</small>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Creative Guidance -->
+                    <div x-show="wizardStep === 3">
+                        <div class="mb-3">
+                            <label class="form-label">创作指导（可选）</label>
+                            <textarea class="form-control" rows="5" x-model="form.creativeGuidance"
+                                      placeholder="描述你对这篇番外的创作方向、意图、风格偏好等..."></textarea>
+                            <div class="form-text">AI 将参考此内容生成大纲和正文</div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Confirm -->
+                    <div x-show="wizardStep === 4">
+                        <h6 class="mb-3">确认创建</h6>
+                        <table class="table table-sm">
+                            <tr><th width="100">标题</th><td x-text="form.title"></td></tr>
+                            <tr><th>类型</th><td x-text="form.type === 'SUPPLEMENTARY' ? '正传补充' : '衍生故事'"></td></tr>
+                            <tr x-show="form.description"><th>简介</th><td x-text="form.description"></td></tr>
+                            <tr x-show="form.attachedVolume"><th>关联卷</th><td x-text="'第' + form.attachedVolume + '卷'"></td></tr>
+                            <tr><th>章节数</th><td x-text="form.chapterCount || 3"></td></tr>
+                            <tr><th>角色</th><td x-text="form.characterIds.length + ' 位角色'"></td></tr>
+                            <tr x-show="form.creativeGuidance"><th>创作指导</th><td x-text="form.creativeGuidance.substring(0,50) + (form.creativeGuidance.length > 50 ? '...' : '')"></td></tr>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="wizardStep > 1 ? wizardStep-- : showWizard = false"
+                            x-text="wizardStep > 1 ? '上一步' : '取消'"></button>
+                    <button class="btn btn-primary" @click="wizardStep < 4 ? wizardStep++ : submitCreate()"
+                            :disabled="wizardStep === 1 && !form.title.trim()"
+                            x-text="wizardStep < 4 ? '下一步' : '确认创建'"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show" x-show="showWizard" x-cloak></div>
+
+<script th:inline="javascript">
+function sideStoryList() {
+    const projectId = [[${project.id}]];
+    return {
+        showWizard: false,
+        wizardStep: 1,
+        form: {
+            title: '',
+            description: '',
+            type: 'SUPPLEMENTARY',
+            attachedVolume: null,
+            characterIds: [],
+            creativeGuidance: '',
+            chapterCount: 3
+        },
+        allCharCount: [[${characters.size()}]],
+        init() {},
+        toggleChar(id) {
+            const idx = this.form.characterIds.indexOf(id);
+            if (idx >= 0) this.form.characterIds.splice(idx, 1);
+            else this.form.characterIds.push(id);
+        },
+        toggleAllChars() {
+            if (this.form.characterIds.length === this.allCharCount) {
+                this.form.characterIds = [];
+            } else {
+                const all = [];
+                document.querySelectorAll('[data-cid]').forEach(el => all.push(+el.dataset.cid));
+                this.form.characterIds = [...new Set(all)];
+            }
+        },
+        async submitCreate() {
+            const payload = {...this.form};
+            payload.attachedVolume = payload.attachedVolume ? parseInt(payload.attachedVolume) : null;
+            const chapterCount = payload.chapterCount || 3;
+            delete payload.chapterCount;
+            const resp = await fetch(`/projects/${projectId}/side-stories/api`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const data = await resp.json();
+            if (data.id) {
+                if (chapterCount > 0) {
+                    await fetch(`/projects/${projectId}/side-stories/api/${data.id}/chapters`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ count: chapterCount })
+                    });
+                }
+                window.location.href = `/projects/${projectId}/side-stories/${data.id}`;
+            }
+        },
+        async deleteSideStory(id) {
+            if (!confirm('确定删除此番外？所有章节将一并删除。')) return;
+            await fetch(`/projects/${projectId}/side-stories/api/${id}`, { method: 'DELETE' });
+            window.location.reload();
+        }
+    };
+}
+</script>
+</div>
+</body>
+</html>

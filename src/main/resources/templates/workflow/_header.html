@@ -5,12 +5,19 @@
     <div class="d-flex justify-content-between align-items-center mb-2">
         <h4 class="mb-0"><a th:href="@{/projects/{id}(id=${project.id})}" class="text-decoration-none text-dark" th:text="${project.title}">项目名</a></h4>
         <div class="d-flex gap-2">
+            <a th:href="@{/projects/{id}/side-stories(id=${project.id})}" class="btn btn-sm btn-outline-warning">
+                <i class="bi bi-journal-bookmark"></i> 番外
+            </a>
             <a th:href="@{/projects/{id}/read(id=${project.id})}" class="btn btn-sm btn-outline-success" target="_blank">
                 <i class="bi bi-book"></i> 全文阅读
             </a>
             <a th:href="@{/projects/{id}/inspect(id=${project.id})}" class="btn btn-sm btn-outline-info" target="_blank">
                 <i class="bi bi-eye"></i> 创作透视
             </a>
+            <button class="btn btn-sm btn-outline-secondary" @click="openGlobalReplace()"
+                    :disabled="generating || fullAutoRunning">
+                <i class="bi bi-arrow-repeat"></i> 全局替换
+            </button>
             <div class="dropdown">
                 <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                     <i class="bi bi-download"></i> 导出
@@ -77,44 +84,50 @@
             </div>
             <div x-show="!fullAutoRunning" class="mt-2" style="font-size:0.85rem;">
                 <div class="d-flex align-items-center mb-2">
+                    <button class="btn btn-sm p-0 me-1 border-0 text-muted" style="line-height:1;"
+                            @click="autoRunConfigExpanded = !autoRunConfigExpanded; localStorage.setItem('autoRunConfigExpanded', String(autoRunConfigExpanded))">
+                        <i class="bi" :class="autoRunConfigExpanded ? 'bi-caret-down-fill' : 'bi-caret-right-fill'"></i>
+                    </button>
                     <span class="text-muted me-1">当前策略:</span>
                     <span class="badge bg-primary" x-text="currentStrategyLabel()"></span>
                 </div>
-                <div class="d-flex flex-nowrap gap-2 overflow-x-auto pb-1">
-                    <template x-for="s in stepList" :key="s.name">
-                        <div class="border rounded p-2" style="min-width:130px; flex-shrink:0;"
-                             :style="isMainStepEnabled(s.name) ? '' : 'opacity:0.5'">
-                            <label class="form-check form-switch mb-0">
-                                <input class="form-check-input" type="checkbox"
-                                       :checked="isMainStepEnabled(s.name)"
-                                       @change="toggleStepConfig(s.name, $event.target.checked)">
-                                <span class="form-check-label fw-bold" x-text="s.label" style="font-size:0.8rem;"></span>
-                            </label>
-                            <template x-if="stepPrimaryLabel(s.name) || orderedSubStepsForStep(s.name).length > 0">
-                                <div class="mt-1 ms-2" style="max-height: 8rem; overflow-y: auto;">
-                                    <template x-if="stepPrimaryLabel(s.name)">
-                                        <label class="form-check form-switch mb-0 d-block" style="font-size:0.75rem; min-height:1.4rem; opacity:0.5;">
-                                            <input class="form-check-input" type="checkbox" style="width:1.6em; height:0.9em;"
-                                                   checked disabled>
-                                            <span class="form-check-label text-muted" x-text="stepPrimaryLabel(s.name)"></span>
-                                        </label>
-                                    </template>
-                                    <template x-for="sub in orderedSubStepsForStep(s.name)" :key="sub">
-                                        <label class="form-check form-switch mb-0 d-block"
-                                               style="font-size:0.75rem; min-height:1.4rem;"
-                                               :style="isSubStepLocked(sub) ? 'opacity:0.5' : ''">
-                                            <input class="form-check-input" type="checkbox" style="width:1.6em; height:0.9em;"
-                                                   :checked="isSubStepLocked(sub) || autoRunStepConfigs[sub] !== false"
-                                                   :disabled="isSubStepLocked(sub) || !isMainStepEnabled(s.name)"
-                                                   @change="!isSubStepLocked(sub) && toggleStepConfig(sub, $event.target.checked)">
-                                            <span class="form-check-label text-muted"
-                                                  x-text="AUTO_RUN_STEP_LABELS[sub] || sub"></span>
-                                        </label>
-                                    </template>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
+                <div x-show="autoRunConfigExpanded">
+                    <div class="d-flex flex-nowrap gap-2 overflow-x-auto pb-1">
+                        <template x-for="s in stepList" :key="s.name">
+                            <div class="border rounded p-2" style="min-width:130px; flex-shrink:0;"
+                                 :style="isMainStepEnabled(s.name) ? '' : 'opacity:0.5'">
+                                <label class="form-check form-switch mb-0">
+                                    <input class="form-check-input" type="checkbox"
+                                           :checked="isMainStepEnabled(s.name)"
+                                           @change="toggleStepConfig(s.name, $event.target.checked)">
+                                    <span class="form-check-label fw-bold" x-text="s.label" style="font-size:0.8rem;"></span>
+                                </label>
+                                <template x-if="stepPrimaryLabel(s.name) || orderedSubStepsForStep(s.name).length > 0">
+                                    <div class="mt-1 ms-2" style="max-height: 8rem; overflow-y: auto;">
+                                        <template x-if="stepPrimaryLabel(s.name)">
+                                            <label class="form-check form-switch mb-0 d-block" style="font-size:0.75rem; min-height:1.4rem; opacity:0.5;">
+                                                <input class="form-check-input" type="checkbox" style="width:1.6em; height:0.9em;"
+                                                       checked disabled>
+                                                <span class="form-check-label text-muted" x-text="stepPrimaryLabel(s.name)"></span>
+                                            </label>
+                                        </template>
+                                        <template x-for="sub in orderedSubStepsForStep(s.name)" :key="sub">
+                                            <label class="form-check form-switch mb-0 d-block"
+                                                   style="font-size:0.75rem; min-height:1.4rem;"
+                                                   :style="isSubStepLocked(sub) ? 'opacity:0.5' : ''">
+                                                <input class="form-check-input" type="checkbox" style="width:1.6em; height:0.9em;"
+                                                       :checked="isSubStepLocked(sub) || autoRunStepConfigs[sub] !== false"
+                                                       :disabled="isSubStepLocked(sub) || !isMainStepEnabled(s.name)"
+                                                       @change="!isSubStepLocked(sub) && toggleStepConfig(sub, $event.target.checked)">
+                                                <span class="form-check-label text-muted"
+                                                      x-text="AUTO_RUN_STEP_LABELS[sub] || sub"></span>
+                                            </label>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
                 </div>
             </div>
         </div>

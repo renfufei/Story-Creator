@@ -5,7 +5,6 @@ import com.storycreator.core.domain.StepStatus;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.core.service.GlobalSettingService;
 import com.storycreator.persistence.entity.*;
-import com.storycreator.persistence.repository.ChapterOutlineRepository;
 import com.storycreator.persistence.repository.StyleFingerprintRepository;
 import com.storycreator.persistence.repository.WritingRulesRepository;
 import com.storycreator.workflow.autorun.AutoRunContext;
@@ -107,13 +106,6 @@ public class EnhancedAutoRunStrategy implements AutoRunStrategy {
                 case OUTLINE_GENERATION -> runOutlineGeneration(ctx);
                 case CHAPTER_WRITING -> {
                     runChapterWritingEnhanced(ctx);
-                    if (ctx.shouldStop()) return;
-                    if (ctx.isSubStepEnabled("TITLE_GENERATION")) {
-                        ctx.updateProgress("生成标题", 0, "精品模式: 正在生成章节标题...");
-                        runGenerateTitles(ctx);
-                    } else {
-                        log.info("[P{}][ENHANCED] Sub-step TITLE_GENERATION skipped (disabled)", projectId);
-                    }
                 }
                 case POLISHING -> runPolishingEnhanced(ctx);
                 case PROOFREADING -> runProofreadingAuto(ctx);
@@ -262,69 +254,8 @@ public class EnhancedAutoRunStrategy implements AutoRunStrategy {
     // ═══════ OUTLINE_GENERATION ═══════
 
     private void runOutlineGeneration(AutoRunContext ctx) {
-        Long projectId = ctx.getProjectId();
-        ProjectEntity project = ctx.getProjectRepository().findById(projectId).orElseThrow();
-        Genre genre = project.getGenre();
-
         // Standard logic: generate outline
         ctx.generateAndSave(WorkflowStep.OUTLINE_GENERATION, 0);
-        if (ctx.shouldStop()) return;
-
-        // Enhanced: generate event plans for chapter outlines that don't have one
-        String worldSetting = ctx.getWorldSettingRepository().findByProjectId(projectId)
-                .map(WorldSettingEntity::getContent)
-                .orElse("");
-        String title = project.getTitle() != null ? project.getTitle() : "";
-        String genreDisplay = genre != null ? genre.getDisplayName() : "";
-        String characters = "";
-        List<CharacterEntity> chars = ctx.getCharacterRepository()
-                .findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
-        if (!chars.isEmpty()) {
-            StringBuilder sb = new StringBuilder();
-            for (CharacterEntity c : chars) {
-                if (c.getContent() != null) {
-                    sb.append(c.getName()).append(": ").append(truncate(c.getContent(), 200)).append("\n");
-                }
-            }
-            characters = sb.toString();
-        }
-
-        String writingRules = writingRulesRepository.findByProjectId(projectId)
-                .map(WritingRulesEntity::getContent).orElse("");
-        String styleFingerprint = styleFingerprintRepository.findByProjectId(projectId)
-                .map(StyleFingerprintEntity::getContent).orElse("");
-
-        if (ctx.isSubStepEnabled("EVENT_PLAN")) {
-            List<ChapterOutlineEntity> outlines = ctx.getChapterOutlineRepository()
-                    .findByProjectIdOrderByChapterNumber(projectId);
-            for (ChapterOutlineEntity outline : outlines) {
-                if (ctx.shouldStop()) return;
-                if (outline.getEventPlan() == null || outline.getEventPlan().isBlank()) {
-                    int chNum = outline.getChapterNumber();
-                    ctx.updateProgress(WorkflowStep.OUTLINE_GENERATION.name(), chNum,
-                            "精品模式: 生成事件计划 第" + chNum + "章");
-                    log.info("[P{}][ENHANCED] Generating event plan for chapter {}", projectId, chNum);
-                    ctx.emitSubStep("EVENT_PLAN", chNum);
-
-                    Map<String, String> vars = new HashMap<>();
-                    vars.put("title", title);
-                    vars.put("genre", genreDisplay);
-                    vars.put("chapterNumber", String.valueOf(chNum));
-                    vars.put("chapterSummary", outline.getSummary() != null ? outline.getSummary() : "");
-                    vars.put("worldSetting", worldSetting);
-                    vars.put("characters", characters);
-                    vars.put("writingRules", writingRules);
-                    vars.put("styleFingerprint", styleFingerprint);
-                    vars.put("stepGuidance", "");
-
-                    String result = executor.generateEventPlan(projectId, vars, genre, ctx::forwardTokenToObservation);
-                    outline.setEventPlan(result);
-                    ctx.getChapterOutlineRepository().save(outline);
-                }
-            }
-        } else {
-            log.info("[P{}][ENHANCED] Sub-step EVENT_PLAN skipped (disabled)", projectId);
-        }
     }
 
     // ═══════ CHAPTER_WRITING (Enhanced 7-step cycle) ═══════
@@ -489,11 +420,6 @@ public class EnhancedAutoRunStrategy implements AutoRunStrategy {
             throw new RuntimeException("角色精修失败: " + error.get().getMessage(), error.get());
         }
         log.info("[P{}][ENHANCED] Character refine completed", projectId);
-    }
-
-    private void runGenerateTitles(AutoRunContext ctx) {
-        ctx.emitSubStep("TITLE_GENERATION", 0);
-        ctx.getWorkflowEngine().generateAndSaveTitles(ctx.getProjectId(), ctx::shouldStop, ctx::forwardTokenToObservation);
     }
 
     private String buildPolishContext(ChapterEntity chapter, String styleFingerprint) {

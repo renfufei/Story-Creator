@@ -25,11 +25,10 @@ public enum PromptSubStep {
     CHAPTER_OUTLINE("章节大纲", 130),
     CHAPTER_OUTLINE_REFINE("章节大纲精修", 140),
     STORY_SUMMARY("故事总纲", 150),
-    CHAPTER_EVENT_PLAN("章节事件计划", 160),
 
     // ENHANCED: CHAPTER_WRITING sub-steps (7-step cycle)
     CHAPTER_CONTEXT_BRIEFING("前文梳理", 180),
-    CHAPTER_PLOT_REASONING("剧情推演", 190),
+    CHAPTER_PLOT_REASONING("章节规划推演", 190),
     CHAPTER_INSTANT_REVIEW("即时审查", 200),
     CHAPTER_CONTENT_OPTIMIZATION("内容优化", 210),
     CHAPTER_STORYLINE_UPDATE("故事线更新", 220),
@@ -37,7 +36,6 @@ public enum PromptSubStep {
 
     // POLISHING auxiliary sub-steps
     CHARACTER_STATES("角色状态", 240),
-    CHAPTER_TITLE("章节标题", 250),
 
     // PROOFREADING sub-steps
     PROOFREAD_PLOT_SUMMARY("情节摘要", 270),
@@ -45,7 +43,12 @@ public enum PromptSubStep {
     PROOFREAD_CONSISTENCY("一致性检查", 290),
     PROOFREAD_CONTINUITY("衔接检查", 300),
     PROOFREAD_FORESHADOWING("伏笔检查", 310),
-    PROOFREAD_FIX("校对修复", 320);
+    PROOFREAD_FIX("校对修复", 320),
+
+    // SIDE_STORY sub-steps
+    SIDE_STORY_OUTLINE("番外故事线", 330),
+    SIDE_STORY_CHAPTER_OUTLINE("番外章节大纲", 340),
+    SIDE_STORY_WRITING("番外写作", 350);
 
     private final String displayName;
     private final int sortOrder;
@@ -85,7 +88,6 @@ public enum PromptSubStep {
             Map.entry(CHAPTER_OUTLINE, WorkflowStep.OUTLINE_GENERATION),
             Map.entry(CHAPTER_OUTLINE_REFINE, WorkflowStep.OUTLINE_GENERATION),
             Map.entry(STORY_SUMMARY, WorkflowStep.OUTLINE_GENERATION),
-            Map.entry(CHAPTER_EVENT_PLAN, WorkflowStep.OUTLINE_GENERATION),
             Map.entry(CHAPTER_CONTEXT_BRIEFING, WorkflowStep.CHAPTER_WRITING),
             Map.entry(CHAPTER_PLOT_REASONING, WorkflowStep.CHAPTER_WRITING),
             Map.entry(CHAPTER_INSTANT_REVIEW, WorkflowStep.CHAPTER_WRITING),
@@ -93,13 +95,15 @@ public enum PromptSubStep {
             Map.entry(CHAPTER_STORYLINE_UPDATE, WorkflowStep.CHAPTER_WRITING),
             Map.entry(CHAPTER_DEEP_REVIEW, WorkflowStep.CHAPTER_WRITING),
             Map.entry(CHARACTER_STATES, WorkflowStep.POLISHING),
-            Map.entry(CHAPTER_TITLE, WorkflowStep.POLISHING),
             Map.entry(PROOFREAD_PLOT_SUMMARY, WorkflowStep.PROOFREADING),
             Map.entry(PROOFREAD_CHARACTER_CHECK, WorkflowStep.PROOFREADING),
             Map.entry(PROOFREAD_CONSISTENCY, WorkflowStep.PROOFREADING),
             Map.entry(PROOFREAD_CONTINUITY, WorkflowStep.PROOFREADING),
             Map.entry(PROOFREAD_FORESHADOWING, WorkflowStep.PROOFREADING),
-            Map.entry(PROOFREAD_FIX, WorkflowStep.PROOFREADING)
+            Map.entry(PROOFREAD_FIX, WorkflowStep.PROOFREADING),
+            Map.entry(SIDE_STORY_OUTLINE, WorkflowStep.CHAPTER_WRITING),
+            Map.entry(SIDE_STORY_CHAPTER_OUTLINE, WorkflowStep.CHAPTER_WRITING),
+            Map.entry(SIDE_STORY_WRITING, WorkflowStep.CHAPTER_WRITING)
     );
 
     public WorkflowStep getParentStep() {

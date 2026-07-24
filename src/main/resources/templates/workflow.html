@@ -19,8 +19,9 @@
     <!-- Chapter Management Section -->
     <div th:replace="~{workflow/_chapters :: chapters}"></div>
 
-    <!-- Advance Step (always available when on current step and not the last step) -->
-    <div th:if="${viewStep == project.currentStep && viewStep.next() != null}" class="mt-3 text-end" x-show="!generating && !fullAutoRunning">
+    <!-- Advance Step (always available when on current step and not the last step; hidden for OUTLINE_GENERATION and CHAPTER_WRITING) -->
+    <div th:if="${viewStep == project.currentStep && viewStep.next() != null}" class="mt-3 text-end"
+         x-show="!generating && !fullAutoRunning && currentStep !== 'OUTLINE_GENERATION' && currentStep !== 'CHAPTER_WRITING'">
         <button type="button" class="btn btn-outline-primary" @click="advanceStep()">
             <i class="bi bi-arrow-right"></i> 跳过当前步骤，进入下一步
         </button>

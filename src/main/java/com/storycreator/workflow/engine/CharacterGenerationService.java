@@ -386,7 +386,7 @@ public class CharacterGenerationService {
         content = stripAiFormatting(content);
         CharacterEntity overview = new CharacterEntity();
         overview.setProjectId(projectId);
-        overview.setName("全部角色");
+        overview.setName("全部角色概览");
         overview.setSortOrder(0);
         overview.setContent(content);
 

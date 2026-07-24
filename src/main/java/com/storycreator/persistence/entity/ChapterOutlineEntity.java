@@ -35,6 +35,9 @@ public class ChapterOutlineEntity {
     @Column(name = "event_plan", columnDefinition = "TEXT")
     private String eventPlan;
 
+    @Column(name = "original_summary", columnDefinition = "TEXT")
+    private String originalSummary;
+
     @Column(name = "refined", nullable = false)
     private boolean refined = false;
 
@@ -81,6 +84,9 @@ public class ChapterOutlineEntity {
 
     public String getEventPlan() { return eventPlan; }
     public void setEventPlan(String eventPlan) { this.eventPlan = eventPlan; }
+
+    public String getOriginalSummary() { return originalSummary; }
+    public void setOriginalSummary(String originalSummary) { this.originalSummary = originalSummary; }
 
     public boolean isRefined() { return refined; }
     public void setRefined(boolean refined) { this.refined = refined; }

@@ -768,67 +768,6 @@ public class WorkflowController {
     }
 
     /**
-     * Generate titles for all chapters based on content (called after polishing)
-     */
-    @GetMapping(value = "/chapters/generate-titles", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @ResponseBody
-    public SseEmitter generateChapterTitles(@PathVariable Long projectId) {
-        List<ChapterEntity> allChapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
-        long timeoutMs = Math.max(120_000L, globalSettingService.getAiTimeoutSeconds() * 1000L * allChapters.size());
-        SseEmitter emitter = new SseEmitter(timeoutMs);
-
-        executor.submit(() -> {
-            try {
-                List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
-                for (ChapterEntity ch : chapters) {
-                    if (ch.getContent() == null || ch.getContent().isBlank()) continue;
-
-                    String contentPreview = ch.getContent().length() > 1000
-                            ? ch.getContent().substring(0, 1000) : ch.getContent();
-                    String titlePrompt = "请为以下小说章节内容生成一个简短的章节标题，要求：4-12个字，不要带第X章前缀，只输出标题文字，不要标点符号。\n\n"
-                            + contentPreview;
-
-                    var resolved = workflowEngine.resolveModelForProject(projectId, com.storycreator.core.domain.WorkflowStep.CHAPTER_WRITING);
-                    var request = com.storycreator.core.port.ai.AiRequest.builder()
-                            .systemPrompt("你是一位小说编辑，擅长给章节起标题。要求每个标题控制在4-12个字，风格统一，长度尽量一致（建议6-8字）。只输出标题文字，不要任何额外内容。")
-                            .userPrompt(titlePrompt)
-                            .maxTokens(30)
-                            .temperature(0.5)
-                            .build();
-                    if (resolved.modelId() != null) request.setModel(resolved.modelId());
-
-                    StringBuilder title = new StringBuilder();
-                    resolved.provider().streamText(request)
-                            .doOnNext(title::append)
-                            .blockLast();
-
-                    String generatedTitle = title.toString().trim()
-                            .replaceAll("[\"'\\n\\r]", "")
-                            .replaceAll("[\u201c\u201d\u2018\u2019]", "");
-                    if (generatedTitle.length() > 12) {
-                        generatedTitle = generatedTitle.substring(0, 12);
-                    }
-                    ch.setTitle(generatedTitle);
-                    chapterRepository.save(ch);
-
-                    emitter.send(SseEmitter.event().name("title")
-                            .data(ch.getChapterNumber() + "|" + generatedTitle));
-                }
-                emitter.send(SseEmitter.event().name("done").data("complete"));
-                emitter.complete();
-            } catch (Exception e) {
-                log.error("Title generation error", e);
-                try {
-                    emitter.send(SseEmitter.event().name("error").data(SseErrorHelper.sanitize(e)));
-                } catch (IOException ex) { /* ignore */ }
-                emitter.completeWithError(e);
-            }
-        });
-
-        return emitter;
-    }
-
-    /**
      * Get workflow state status for a step (used for polling from other tabs)
      */
     @GetMapping("/workflow-state-status")
@@ -947,6 +886,7 @@ public class WorkflowController {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("volumeNumber", vol.getVolumeNumber());
             map.put("title", vol.getTitle());
+            map.put("arcName", vol.getArcName());
             map.put("chapterStart", vol.getChapterStart());
             map.put("chapterEnd", vol.getChapterEnd());
             return map;
@@ -978,6 +918,7 @@ public class WorkflowController {
             Map<String, Object> volMap = new HashMap<>();
             volMap.put("volumeNumber", vol.getVolumeNumber());
             volMap.put("title", vol.getTitle());
+            volMap.put("arcName", vol.getArcName());
             volMap.put("arcSummary", vol.getArcSummary());
             volMap.put("chapterStart", vol.getChapterStart());
             volMap.put("chapterEnd", vol.getChapterEnd());
@@ -993,6 +934,7 @@ public class WorkflowController {
                         chMap.put("summary", ch.getSummary());
                         chMap.put("characterNames", ch.getCharacterNames());
                         chMap.put("status", ch.getStatus() != null ? ch.getStatus() : "COMPLETED");
+                        chMap.put("originalSummary", ch.getOriginalSummary());
                         return chMap;
                     })
                     .toList();
@@ -1011,6 +953,7 @@ public class WorkflowController {
                         chMap.put("summary", ch.getSummary());
                         chMap.put("characterNames", ch.getCharacterNames());
                         chMap.put("status", ch.getStatus() != null ? ch.getStatus() : "COMPLETED");
+                        chMap.put("originalSummary", ch.getOriginalSummary());
                         return chMap;
                     })
                     .toList();
@@ -1353,16 +1296,16 @@ public class WorkflowController {
         return switch (strategy) {
             case "ENHANCED" -> List.of(
                     "WRITING_RULES", "STYLE_FINGERPRINT", "CHARACTER_REFINE", "BEHAVIOR_BOUNDARIES",
-                    "CHAPTER_OUTLINE_REFINE", "EVENT_PLAN",
+                    "CHAPTER_OUTLINE_REFINE",
                     "CONTEXT_BRIEFING", "PLOT_REASONING",
                     "INSTANT_REVIEW", "CONTENT_OPTIMIZATION", "STORYLINE_UPDATE", "DEEP_REVIEW",
-                    "CHARACTER_STATES", "TITLE_GENERATION",
+                    "CHARACTER_STATES",
                     "PROOFREAD_FIX"
             );
             default -> List.of(
                     "CHARACTER_REFINE",
                     "CHAPTER_OUTLINE_REFINE",
-                    "CHARACTER_STATES", "TITLE_GENERATION",
+                    "CHARACTER_STATES",
                     "PROOFREAD_FIX"
             );
         };

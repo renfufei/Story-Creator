@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('乘法口诀音频管理', ~{::content})}">
+<body>
+<div th:fragment="content">
+<div x-data="settingsApp()">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3><i class="bi bi-gear"></i> 九九乘法口诀 - 音频管理</h3>
+        <div>
+            <a th:href="@{/learn/multiplication}" class="btn btn-outline-primary btn-sm me-2">
+                <i class="bi bi-play-circle"></i> 去学习
+            </a>
+            <a th:href="@{/learn}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> 返回
+            </a>
+        </div>
+    </div>
+
+    <!-- Status Summary -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="d-flex align-items-center gap-3 mb-2">
+                <span class="fw-bold">生成进度:</span>
+                <span class="badge bg-success" x-text="readyCount + '/' + totalCount"></span>
+                <span class="badge bg-warning" x-show="generatingCount > 0" x-text="'生成中: ' + generatingCount"></span>
+                <span class="badge bg-danger" x-show="errorCount > 0" x-text="'错误: ' + errorCount"></span>
+            </div>
+            <div class="progress" style="height: 8px;">
+                <div class="progress-bar bg-success" :style="'width: ' + (readyCount/totalCount*100) + '%'"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TTS Config Form -->
+    <div class="card mb-3">
+        <div class="card-header">TTS 配置</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">TTS模型</label>
+                    <select class="form-select form-select-sm" x-model="configId">
+                        <option value="">请选择...</option>
+                        <template x-for="cfg in ttsConfigs" :key="cfg.id">
+                            <option :value="cfg.id" x-text="cfg.displayName ? cfg.displayName + ' (' + cfg.modelId + ')' : cfg.modelId"></option>
+                        </template>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Voice</label>
+                    <input type="text" class="form-control form-control-sm" x-model="voice" placeholder="alloy" list="voiceList">
+                    <datalist id="voiceList">
+                        <template x-for="v in voiceOptions" :key="v">
+                            <option :value="v"></option>
+                        </template>
+                    </datalist>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Speed</label>
+                    <input type="number" class="form-control form-control-sm" x-model.number="speed" min="0.25" max="4.0" step="0.1">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Format</label>
+                    <select class="form-select form-select-sm" x-model="format">
+                        <option value="mp3">mp3</option>
+                        <option value="opus">opus</option>
+                        <option value="aac">aac</option>
+                        <option value="flac">flac</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end gap-2">
+                    <button class="btn btn-primary btn-sm" @click="startBatch()" :disabled="!configId || running">
+                        <i class="bi bi-lightning"></i> 批量生成
+                    </button>
+                    <button class="btn btn-danger btn-sm" @click="stopBatch()" x-show="running">
+                        <i class="bi bi-stop-fill"></i> 停止
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio List Table -->
+    <div class="card">
+        <div class="card-body p-0">
+            <table class="table table-hover table-sm mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:50px">#</th>
+                        <th>口诀</th>
+                        <th>算式</th>
+                        <th style="width:100px">状态</th>
+                        <th style="width:120px">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="(item, idx) in records" :key="item.itemKey">
+                        <tr>
+                            <td x-text="idx + 1"></td>
+                            <td x-text="item.textContent"></td>
+                            <td x-text="formulaMap[item.itemKey] || ''"></td>
+                            <td>
+                                <span class="badge" :class="statusClass(item.status)" x-text="statusText(item.status)"></span>
+                            </td>
+                            <td>
+                                <button class="btn btn-outline-primary btn-sm py-0 px-1" @click="playAudio(item.itemKey)" :disabled="item.status !== 'READY'" title="试听">
+                                    <i class="bi bi-play"></i>
+                                </button>
+                                <button class="btn btn-outline-warning btn-sm py-0 px-1" @click="regenerate(item.itemKey)" :disabled="!configId || running" title="重新生成">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<script th:inline="javascript">
+function settingsApp() {
+    const ttsConfigsRaw = /*[[${ttsConfigs}]]*/ [];
+    const defaultTtsConfigId = /*[[${defaultTtsConfigId}]]*/ null;
+    const formulasRaw = /*[[${formulas}]]*/ [];
+    const prefixesRaw = /*[[${prefixes}]]*/ [];
+    const totalAudioCount = /*[[${totalAudioCount}]]*/ 54;
+
+    const formulaMap = {};
+    formulasRaw.forEach(f => { formulaMap[f.itemKey] = f.mathExpression; });
+    prefixesRaw.forEach(p => { formulaMap[p.itemKey] = '[前缀]'; });
+
+    return {
+        ttsConfigs: ttsConfigsRaw.map(c => {
+            let voices = null, fmt = null;
+            if (c.extraParams) {
+                try {
+                    const ep = typeof c.extraParams === 'string' ? JSON.parse(c.extraParams) : c.extraParams;
+                    if (ep.voices) voices = ep.voices;
+                    if (ep.format) fmt = ep.format;
+                } catch(e) {}
+            }
+            return {id: c.id, displayName: c.displayName, modelId: c.modelId || '', voices: voices, format: fmt};
+        }),
+        formulaMap: formulaMap,
+        totalCount: totalAudioCount,
+        records: [],
+        configId: defaultTtsConfigId ? String(defaultTtsConfigId) : (ttsConfigsRaw.length > 0 ? String(ttsConfigsRaw[0].id) : ''),
+        voice: '',
+        speed: 1.0,
+        format: 'mp3',
+        running: false,
+        pollTimer: null,
+
+        get readyCount() { return this.records.filter(r => r.status === 'READY').length; },
+        get generatingCount() { return this.records.filter(r => r.status === 'GENERATING').length; },
+        get errorCount() { return this.records.filter(r => r.status === 'ERROR').length; },
+        get voiceOptions() {
+            const cfg = this.ttsConfigs.find(c => String(c.id) === String(this.configId));
+            if (cfg && cfg.voices) return cfg.voices.split(',').map(v => v.trim());
+            return [];
+        },
+
+        init() {
+            this.applyConfigDefaults();
+            this.$watch('configId', () => this.applyConfigDefaults());
+            this.fetchStatus();
+            this.checkRunning();
+        },
+
+        applyConfigDefaults() {
+            const cfg = this.ttsConfigs.find(c => String(c.id) === String(this.configId));
+            if (cfg) {
+                this.voice = cfg.voices ? cfg.voices.split(',')[0].trim() : 'alloy';
+                if (cfg.format) this.format = cfg.format;
+            }
+        },
+
+        async fetchStatus() {
+            try {
+                const resp = await fetch('/api/learn/multiplication/audio-status');
+                this.records = await resp.json();
+            } catch(e) {}
+        },
+
+        async checkRunning() {
+            try {
+                const resp = await fetch('/api/learn/multiplication/running');
+                const data = await resp.json();
+                this.running = data.running;
+                if (this.running) this.startPolling();
+            } catch(e) {}
+        },
+
+        startPolling() {
+            if (this.pollTimer) return;
+            this.pollTimer = setInterval(async () => {
+                await this.fetchStatus();
+                await this.checkRunning();
+                if (!this.running) {
+                    clearInterval(this.pollTimer);
+                    this.pollTimer = null;
+                }
+            }, 3000);
+        },
+
+        async startBatch() {
+            if (!this.configId) return;
+            await fetch('/api/learn/multiplication/batch-generate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({configId: parseInt(this.configId), voice: this.voice, speed: this.speed, format: this.format})
+            });
+            this.running = true;
+            this.startPolling();
+        },
+
+        async stopBatch() {
+            await fetch('/api/learn/multiplication/stop-generate', {method: 'POST'});
+        },
+
+        async regenerate(itemKey) {
+            if (!this.configId) return;
+            await fetch('/api/learn/multiplication/' + itemKey + '/regenerate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({configId: parseInt(this.configId), voice: this.voice, speed: this.speed, format: this.format})
+            });
+            await this.fetchStatus();
+        },
+
+        async playAudio(itemKey) {
+            try {
+                const resp = await fetch('/api/learn/multiplication/audio/' + itemKey);
+                if (!resp.ok) return;
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                new Audio(url).play();
+            } catch(e) {}
+        },
+
+        statusClass(status) {
+            switch(status) {
+                case 'READY': return 'bg-success';
+                case 'GENERATING': return 'bg-warning';
+                case 'ERROR': return 'bg-danger';
+                default: return 'bg-secondary';
+            }
+        },
+
+        statusText(status) {
+            switch(status) {
+                case 'READY': return '已生成';
+                case 'GENERATING': return '生成中';
+                case 'ERROR': return '错误';
+                case 'PENDING': return '待生成';
+                default: return status;
+            }
+        }
+    };
+}
+</script>
+
+</div>
+</body>
+</html>

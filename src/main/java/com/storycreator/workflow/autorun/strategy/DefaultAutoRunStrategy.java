@@ -93,13 +93,6 @@ public class DefaultAutoRunStrategy implements AutoRunStrategy {
                 }
                 case CHAPTER_WRITING -> {
                     runChapterWriting(ctx);
-                    if (ctx.shouldStop()) return;
-                    if (ctx.isSubStepEnabled("TITLE_GENERATION")) {
-                        ctx.updateProgress("生成标题", 0, "正在生成章节标题...");
-                        runGenerateTitles(ctx);
-                    } else {
-                        log.info("[P{}][AutoRun] Sub-step TITLE_GENERATION skipped (disabled)", projectId);
-                    }
                 }
                 case POLISHING -> runPolishing(ctx);
                 case PROOFREADING -> runProofreadingAuto(ctx);
@@ -278,8 +271,4 @@ public class DefaultAutoRunStrategy implements AutoRunStrategy {
         ctx.updateProgress("角色精修", 0, "角色精修完成");
     }
 
-    private void runGenerateTitles(AutoRunContext ctx) {
-        ctx.emitSubStep("TITLE_GENERATION", 0);
-        ctx.getWorkflowEngine().generateAndSaveTitles(ctx.getProjectId(), ctx::shouldStop, ctx::forwardTokenToObservation);
-    }
 }

@@ -26,8 +26,8 @@ class PromptSubStepTest {
     }
 
     @Test
-    void totalSubStepCountIs27() {
-        assertThat(PromptSubStep.values()).hasSize(30);
+    void totalSubStepCountIs31() {
+        assertThat(PromptSubStep.values()).hasSize(31);
     }
 
     @Test
@@ -46,7 +46,6 @@ class PromptSubStepTest {
         assertThat(PromptSubStep.CHAPTER_OUTLINE.getParentStep()).isEqualTo(WorkflowStep.OUTLINE_GENERATION);
         assertThat(PromptSubStep.CHAPTER_OUTLINE_REFINE.getParentStep()).isEqualTo(WorkflowStep.OUTLINE_GENERATION);
         assertThat(PromptSubStep.STORY_SUMMARY.getParentStep()).isEqualTo(WorkflowStep.OUTLINE_GENERATION);
-        assertThat(PromptSubStep.CHAPTER_EVENT_PLAN.getParentStep()).isEqualTo(WorkflowStep.OUTLINE_GENERATION);
     }
 
     @Test
@@ -77,7 +76,6 @@ class PromptSubStepTest {
 
     @Test
     void polishingSubStepsMapCorrectly() {
-        assertThat(PromptSubStep.CHAPTER_TITLE.getParentStep()).isEqualTo(WorkflowStep.POLISHING);
         assertThat(PromptSubStep.CHARACTER_STATES.getParentStep()).isEqualTo(WorkflowStep.POLISHING);
     }
 }

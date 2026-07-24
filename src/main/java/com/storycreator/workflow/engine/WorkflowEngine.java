@@ -22,7 +22,6 @@ import reactor.core.publisher.Flux;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -49,7 +48,6 @@ public class WorkflowEngine {
     // Delegated services
     private final WorkflowContextBuilder contextBuilder;
     private final WorkflowStateService stateService;
-    private final TitleGenerationService titleGenerationService;
     private final CharacterStateService characterStateService;
     private final CharacterGenerationService characterGenerationService;
     private final OutlineGenerationService outlineGenerationService;
@@ -65,7 +63,6 @@ public class WorkflowEngine {
                          AiUsageTracker aiUsageTracker,
                          WorkflowContextBuilder contextBuilder,
                          WorkflowStateService stateService,
-                         TitleGenerationService titleGenerationService,
                          CharacterStateService characterStateService,
                          CharacterGenerationService characterGenerationService,
                          OutlineGenerationService outlineGenerationService,
@@ -81,7 +78,6 @@ public class WorkflowEngine {
         this.aiUsageTracker = aiUsageTracker;
         this.contextBuilder = contextBuilder;
         this.stateService = stateService;
-        this.titleGenerationService = titleGenerationService;
         this.characterStateService = characterStateService;
         this.characterGenerationService = characterGenerationService;
         this.outlineGenerationService = outlineGenerationService;
@@ -279,20 +275,6 @@ public class WorkflowEngine {
 
     public void generateCharacterStates(Long projectId, int chapterNumber, Consumer<String> tokenSink) {
         characterStateService.generateCharacterStates(projectId, chapterNumber, tokenSink);
-    }
-
-    // --- Title generation ---
-
-    public void generateAndSaveTitles(Long projectId) {
-        titleGenerationService.generateAndSaveTitles(projectId);
-    }
-
-    public void generateAndSaveTitles(Long projectId, BooleanSupplier shouldStop) {
-        titleGenerationService.generateAndSaveTitles(projectId, shouldStop);
-    }
-
-    public void generateAndSaveTitles(Long projectId, BooleanSupplier shouldStop, Consumer<String> tokenSink) {
-        titleGenerationService.generateAndSaveTitles(projectId, shouldStop, tokenSink);
     }
 
     // --- Character refinement ---

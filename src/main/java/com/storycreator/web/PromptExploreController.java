@@ -24,6 +24,10 @@ import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.CharacterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.PromptTemplateRepository;
+import com.storycreator.persistence.repository.SideStoryRepository;
+import com.storycreator.persistence.repository.SideStoryChapterRepository;
+import com.storycreator.persistence.entity.SideStoryEntity;
+import com.storycreator.persistence.entity.SideStoryChapterEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -55,6 +59,8 @@ public class PromptExploreController {
     private final AiProviderRouter aiProviderRouter;
     private final TtsProviderRegistry ttsProviderRegistry;
     private final ImageProviderRegistry imageProviderRegistry;
+    private final SideStoryRepository sideStoryRepository;
+    private final SideStoryChapterRepository sideStoryChapterRepository;
 
     public PromptExploreController(PromptExploreService exploreService,
                                    PromptTemplateRegistry promptRegistry,
@@ -67,7 +73,9 @@ public class PromptExploreController {
                                    AiModelConfigRepository modelConfigRepository,
                                    AiProviderRouter aiProviderRouter,
                                    TtsProviderRegistry ttsProviderRegistry,
-                                   ImageProviderRegistry imageProviderRegistry) {
+                                   ImageProviderRegistry imageProviderRegistry,
+                                   SideStoryRepository sideStoryRepository,
+                                   SideStoryChapterRepository sideStoryChapterRepository) {
         this.exploreService = exploreService;
         this.promptRegistry = promptRegistry;
         this.builtinLoader = builtinLoader;
@@ -80,6 +88,8 @@ public class PromptExploreController {
         this.aiProviderRouter = aiProviderRouter;
         this.ttsProviderRegistry = ttsProviderRegistry;
         this.imageProviderRegistry = imageProviderRegistry;
+        this.sideStoryRepository = sideStoryRepository;
+        this.sideStoryChapterRepository = sideStoryChapterRepository;
     }
 
     @GetMapping
@@ -189,6 +199,39 @@ public class PromptExploreController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/side-stories")
+    @ResponseBody
+    public ResponseEntity<List<Map<String, Object>>> getSideStories(@RequestParam Long projectId) {
+        List<SideStoryEntity> stories = sideStoryRepository.findByProjectIdOrderBySortOrder(projectId);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (SideStoryEntity s : stories) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", s.getId());
+            item.put("title", s.getTitle());
+            item.put("status", s.getStatus());
+            item.put("hasOutline", s.getOutline() != null && !s.getOutline().isBlank());
+            result.add(item);
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/side-story-chapters")
+    @ResponseBody
+    public ResponseEntity<List<Map<String, Object>>> getSideStoryChapters(@RequestParam Long sideStoryId) {
+        List<SideStoryChapterEntity> chapters = sideStoryChapterRepository
+                .findBySideStoryIdOrderByChapterNumber(sideStoryId);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (SideStoryChapterEntity ch : chapters) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("chapterNumber", ch.getChapterNumber());
+            item.put("title", ch.getTitle() != null ? ch.getTitle() : "第" + ch.getChapterNumber() + "章");
+            item.put("hasOutline", ch.getOutlineSummary() != null && !ch.getOutlineSummary().isBlank());
+            item.put("hasContent", ch.getContent() != null && !ch.getContent().isBlank());
+            result.add(item);
+        }
+        return ResponseEntity.ok(result);
+    }
+
     @PostMapping("/resolve")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> resolve(@RequestBody Map<String, Object> body) {
@@ -202,6 +245,8 @@ public class PromptExploreController {
             Integer totalCards = toInt(body.get("totalCards"));
             Integer volumeNumber = toInt(body.get("volumeNumber"));
             Long templateId = toLong(body.get("templateId"));
+            Long sideStoryId = toLong(body.get("sideStoryId"));
+            Integer sideStoryChapterNumber = toInt(body.get("sideStoryChapterNumber"));
 
             if (projectId == null) {
                 return ResponseEntity.badRequest().body(Map.of("success", false, "error", "请选择项目"));
@@ -218,6 +263,8 @@ public class PromptExploreController {
             exploreCtx.setTotalCards(totalCards);
             exploreCtx.setVolumeNumber(volumeNumber);
             exploreCtx.setTemplateId(templateId);
+            exploreCtx.setSideStoryId(sideStoryId);
+            exploreCtx.setSideStoryChapterNumber(sideStoryChapterNumber);
             PromptExploreService.ExploreResult result = exploreService.resolve(step, subStep, exploreCtx);
 
             Map<String, Object> response = new LinkedHashMap<>();

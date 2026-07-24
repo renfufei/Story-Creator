@@ -134,16 +134,6 @@ public class EnhancedSubStepExecutor {
                 PromptSubStep.CHARACTER_BEHAVIOR_BOUNDARIES, variables, 1024, 0.5, genre, tokenSink);
     }
 
-    public String generateEventPlan(Long projectId, Map<String, String> variables, Genre genre) {
-        return executeSubStep(projectId, WorkflowStep.OUTLINE_GENERATION,
-                PromptSubStep.CHAPTER_EVENT_PLAN, variables, 1024, 0.6, genre);
-    }
-
-    public String generateEventPlan(Long projectId, Map<String, String> variables, Genre genre, Consumer<String> tokenSink) {
-        return executeSubStep(projectId, WorkflowStep.OUTLINE_GENERATION,
-                PromptSubStep.CHAPTER_EVENT_PLAN, variables, 1024, 0.6, genre, tokenSink);
-    }
-
     public String generateContextBriefing(Long projectId, Map<String, String> variables, Genre genre) {
         return executeSubStep(projectId, WorkflowStep.CHAPTER_WRITING,
                 PromptSubStep.CHAPTER_CONTEXT_BRIEFING, variables, 1024, 0.3, genre);
@@ -156,12 +146,12 @@ public class EnhancedSubStepExecutor {
 
     public String generatePlotReasoning(Long projectId, Map<String, String> variables, Genre genre) {
         return executeSubStep(projectId, WorkflowStep.CHAPTER_WRITING,
-                PromptSubStep.CHAPTER_PLOT_REASONING, variables, 1536, 0.7, genre);
+                PromptSubStep.CHAPTER_PLOT_REASONING, variables, 2048, 0.7, genre);
     }
 
     public String generatePlotReasoning(Long projectId, Map<String, String> variables, Genre genre, Consumer<String> tokenSink) {
         return executeSubStep(projectId, WorkflowStep.CHAPTER_WRITING,
-                PromptSubStep.CHAPTER_PLOT_REASONING, variables, 1536, 0.7, genre, tokenSink);
+                PromptSubStep.CHAPTER_PLOT_REASONING, variables, 2048, 0.7, genre, tokenSink);
     }
 
     public String runInstantReview(Long projectId, Map<String, String> variables, Genre genre) {

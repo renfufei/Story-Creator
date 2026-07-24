@@ -53,6 +53,7 @@ function workflowCoreMixin() {
             this.autoMode = d.autoMode;
             this.autoRunStepConfigs = d.autoRunStepConfigs;
             this.autoRunStrategy = d.autoRunStrategy || 'DEFAULT';
+            this.autoRunConfigExpanded = localStorage.getItem('autoRunConfigExpanded') !== 'false';
             this.autoRunActiveStep = d.currentStep;
             this.autoRunActiveOrder = d.currentStepOrder;
             this.characterStateDims = d.characterStateDims;
@@ -131,7 +132,27 @@ function workflowCoreMixin() {
             this.currentEventSource = eventSource;
 
             eventSource.addEventListener('replay-buffer', (e) => {
-                // For outline/character/proofreading, the replay-buffer contains raw tokens
+                // Extract latest section marker to update streaming status
+                if (step === 'OUTLINE_GENERATION' && e.data) {
+                    const markers = e.data.match(/\[\[SECTION:\w+(?::[^\]]+)?\]\]/g);
+                    if (markers && markers.length > 0) {
+                        const lastMarker = markers[markers.length - 1];
+                        const match = lastMarker.match(/\[\[SECTION:(\w+)(?::(.+))?\]\]/);
+                        if (match) {
+                            const type = match[1];
+                            const params = match[2] ? match[2].split(':') : [];
+                            if (type === 'REFINE') {
+                                this.outlineStreamingStatus = `正在精修第${params[0]}章大纲...`;
+                            } else if (type === 'CHAPTER') {
+                                this.outlineStreamingStatus = `正在生成第${params[0]}章大纲...`;
+                            } else if (type === 'VOLUME') {
+                                this.outlineStreamingStatus = `正在生成第${params[0]}卷故事弧线...`;
+                            } else if (type === 'SUMMARY') {
+                                this.outlineStreamingStatus = '正在生成故事总纲...';
+                            }
+                        }
+                    }
+                }
             });
 
             if (step === 'OUTLINE_GENERATION') {

@@ -35,7 +35,6 @@ public final class TemplateWorkflowUsage {
         map.put(PromptSubStep.CHAPTER_OUTLINE_REFINE, Set.of(STANDARD, ENHANCED));
         map.put(PromptSubStep.STORY_SUMMARY, Set.of(STANDARD, ENHANCED));
         map.put(PromptSubStep.CHARACTER_STATES, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.CHAPTER_TITLE, Set.of(STANDARD, ENHANCED));
         map.put(PromptSubStep.PROOFREAD_PLOT_SUMMARY, Set.of(STANDARD, ENHANCED));
         map.put(PromptSubStep.PROOFREAD_CHARACTER_CHECK, Set.of(STANDARD, ENHANCED));
         map.put(PromptSubStep.PROOFREAD_CONSISTENCY, Set.of(STANDARD, ENHANCED));
@@ -47,7 +46,6 @@ public final class TemplateWorkflowUsage {
         map.put(PromptSubStep.WRITING_RULES, Set.of(ENHANCED));
         map.put(PromptSubStep.STYLE_FINGERPRINT, Set.of(ENHANCED));
         map.put(PromptSubStep.CHARACTER_BEHAVIOR_BOUNDARIES, Set.of(ENHANCED));
-        map.put(PromptSubStep.CHAPTER_EVENT_PLAN, Set.of(ENHANCED));
         map.put(PromptSubStep.CHAPTER_CONTEXT_BRIEFING, Set.of(ENHANCED));
         map.put(PromptSubStep.CHAPTER_PLOT_REASONING, Set.of(ENHANCED));
         map.put(PromptSubStep.CHAPTER_INSTANT_REVIEW, Set.of(ENHANCED));
@@ -58,6 +56,11 @@ public final class TemplateWorkflowUsage {
         // Image-only sub-steps
         map.put(PromptSubStep.IMAGE_PROMPT_AVATAR, Set.of(IMAGE));
         map.put(PromptSubStep.IMAGE_PROMPT_PORTRAIT, Set.of(IMAGE));
+
+        // Side story sub-steps
+        map.put(PromptSubStep.SIDE_STORY_OUTLINE, Set.of(SIDE_STORY));
+        map.put(PromptSubStep.SIDE_STORY_CHAPTER_OUTLINE, Set.of(SIDE_STORY));
+        map.put(PromptSubStep.SIDE_STORY_WRITING, Set.of(SIDE_STORY));
 
         USAGE_MAP = Map.copyOf(map);
     }

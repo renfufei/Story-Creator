@@ -368,6 +368,20 @@ public class AutoRunContext {
                     ? "正在精修第" + active.get().getChapterNumber() + "章大纲..."
                     : "正在生成第" + active.get().getChapterNumber() + "章大纲...";
             updateProgress(WorkflowStep.OUTLINE_GENERATION.name(), active.get().getChapterNumber(), msg);
+        } else {
+            // No actively generating/refining chapter found — show progress based on completed count
+            long refinedCount = outlines.stream().filter(ChapterOutlineEntity::isRefined).count();
+            long totalCount = outlines.size();
+            if (refinedCount > 0 && refinedCount < totalCount) {
+                String msg = "大纲精修中... (" + refinedCount + "/" + totalCount + ")";
+                updateProgress(WorkflowStep.OUTLINE_GENERATION.name(), (int) refinedCount, msg);
+            } else if (refinedCount == 0) {
+                long completedCount = outlines.stream()
+                        .filter(o -> "COMPLETED".equals(o.getStatus()) || "REFINED".equals(o.getStatus()))
+                        .count();
+                String msg = "大纲生成中... (" + completedCount + "/" + totalCount + ")";
+                updateProgress(WorkflowStep.OUTLINE_GENERATION.name(), (int) completedCount, msg);
+            }
         }
     }
 }

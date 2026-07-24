@@ -54,24 +54,20 @@ class PromptSubStepIntegrationTest {
         assertThat(proofreadFixTemplate).contains("{{reportSummary}}");
         assertThat(proofreadFixTemplate).contains("{{originalContent}}");
 
-        // CHAPTER_TITLE template should contain {{contentPreview}}
-        String titleTemplate = registry.getSubStepTemplate(
-                WorkflowStep.POLISHING, PromptSubStep.CHAPTER_TITLE, null);
-        assertThat(titleTemplate).contains("{{contentPreview}}");
     }
 
     @Test
     void resolveTemplateEndToEnd() {
         // Get a real template from DB and resolve it
         String template = registry.getSubStepTemplate(
-                WorkflowStep.POLISHING, PromptSubStep.CHAPTER_TITLE, null);
+                WorkflowStep.PROOFREADING, PromptSubStep.PROOFREAD_FIX, null);
 
-        Map<String, String> vars = Map.of("contentPreview", "这是一段章节内容预览文本");
+        Map<String, String> vars = Map.of("reportSummary", "校对报告内容", "originalContent", "原文内容");
 
         String resolved = registry.resolveTemplate(template, vars);
 
-        assertThat(resolved).doesNotContain("{{contentPreview}}");
-        assertThat(resolved).contains("这是一段章节内容预览文本");
+        assertThat(resolved).doesNotContain("{{reportSummary}}");
+        assertThat(resolved).contains("校对报告内容");
     }
 
     @Test

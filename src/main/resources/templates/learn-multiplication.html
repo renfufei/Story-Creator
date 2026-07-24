@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('九九乘法口诀', ~{::content})}">
+<body>
+<div th:fragment="content">
+<div x-data="multiplicationApp()">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3><i class="bi bi-grid-3x3"></i> 九九乘法口诀</h3>
+        <div>
+            <a th:href="@{/learn/multiplication/settings}" class="btn btn-outline-secondary btn-sm me-2">
+                <i class="bi bi-gear"></i> 音频设置
+            </a>
+            <a th:href="@{/learn}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> 返回
+            </a>
+        </div>
+    </div>
+
+    <!-- Mode Switch -->
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="btn-group btn-group-sm">
+                    <button class="btn" :class="mode === 'auto' ? 'btn-primary' : 'btn-outline-primary'" @click="mode = 'auto'; localStorage.setItem('multiplication_mode', 'auto')">
+                        <i class="bi bi-play-circle"></i> <span class="d-none d-md-inline">自动播放</span><span class="d-md-none">自动</span>
+                    </button>
+                    <button class="btn" :class="mode === 'manual' ? 'btn-primary' : 'btn-outline-primary'" @click="mode = 'manual'; localStorage.setItem('multiplication_mode', 'manual'); stop()">
+                        <i class="bi bi-hand-index"></i> <span class="d-none d-md-inline">手动步进</span><span class="d-md-none">手动</span>
+                    </button>
+                </div>
+                <template x-if="mode === 'auto'">
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-success" @click="startAuto()" x-show="!playing">
+                            <i class="bi bi-play-fill"></i> <span class="d-none d-md-inline">播放</span>
+                        </button>
+                        <button class="btn btn-sm btn-warning" @click="stop()" x-show="playing">
+                            <i class="bi bi-pause-fill"></i> <span class="d-none d-md-inline">暂停</span>
+                        </button>
+                        <button class="btn btn-sm btn-secondary" @click="reset()">
+                            <i class="bi bi-arrow-counterclockwise"></i> <span class="d-none d-md-inline">重置</span>
+                        </button>
+                    </div>
+                </template>
+                <template x-if="mode === 'manual'">
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-outline-secondary" @click="prev()" :disabled="currentIndex <= 0">
+                            <i class="bi bi-chevron-left"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" @click="next()" :disabled="currentIndex >= formulas.length - 1">
+                            <i class="bi bi-chevron-right"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" @click="playCurrentAudio()">
+                            <i class="bi bi-volume-up"></i>
+                        </button>
+                    </div>
+                </template>
+            </div>
+            <template x-if="mode === 'manual'">
+                <div class="text-center mt-2">
+                    <span class="badge bg-secondary" x-text="(currentIndex + 1) + ' / ' + formulas.length"></span>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Formula Display -->
+    <div class="text-center mb-3" style="min-height: 80px;">
+        <div class="fs-5 text-primary fw-bold mb-1" x-text="currentGroupPrefix"></div>
+        <div class="display-6 fw-bold" x-text="currentFormula.chineseText" :style="'color: ' + currentColor"></div>
+        <div class="fs-4 text-muted" x-text="currentFormula.mathExpression"></div>
+    </div>
+
+    <!-- 10x10 Grid -->
+    <div class="d-flex justify-content-center mb-4">
+        <div class="multiplication-grid">
+            <template x-for="row in 10" :key="'r'+row">
+                <template x-for="col in 10" :key="'c'+row+'-'+col">
+                    <div class="grid-cell"
+                         :class="isHighlighted(row, col) ? 'highlighted' : ''"
+                         :style="'grid-row:' + row + '; grid-column:' + col + ';' + (isHighlighted(row, col) ? 'background-color:' + currentColor + '; border-color:' + currentColor : '')">
+                    </div>
+                </template>
+            </template>
+        </div>
+    </div>
+
+</div>
+
+<style>
+@media (max-width: 767.98px) {
+    .navbar { display: none !important; }
+    main.container { padding-top: 0.5rem !important; }
+}
+.multiplication-grid {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    grid-template-rows: repeat(10, 1fr);
+    gap: 3px;
+    width: 100%;
+    max-width: 450px;
+    aspect-ratio: 1;
+}
+.grid-cell {
+    border: 1px solid #dee2e6;
+    border-radius: 3px;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+.grid-cell.highlighted {
+    opacity: 0.85;
+}
+</style>
+
+<script>
+function multiplicationApp() {
+    return {
+        formulas: [
+            // 一的乘法口诀
+            {itemKey:"1x1",a:1,b:1,chineseText:"一一得一",mathExpression:"1×1=1",groupPrefix:"一的乘法口诀"},
+            // 二的乘法口诀
+            {itemKey:"1x2",a:1,b:2,chineseText:"一二得二",mathExpression:"1×2=2",groupPrefix:"二的乘法口诀"},
+            {itemKey:"2x2",a:2,b:2,chineseText:"二二得四",mathExpression:"2×2=4"},
+            // 三的乘法口诀
+            {itemKey:"1x3",a:1,b:3,chineseText:"一三得三",mathExpression:"1×3=3",groupPrefix:"三的乘法口诀"},
+            {itemKey:"2x3",a:2,b:3,chineseText:"二三得六",mathExpression:"2×3=6"},
+            {itemKey:"3x3",a:3,b:3,chineseText:"三三得九",mathExpression:"3×3=9"},
+            // 四的乘法口诀
+            {itemKey:"1x4",a:1,b:4,chineseText:"一四得四",mathExpression:"1×4=4",groupPrefix:"四的乘法口诀"},
+            {itemKey:"2x4",a:2,b:4,chineseText:"二四得八",mathExpression:"2×4=8"},
+            {itemKey:"3x4",a:3,b:4,chineseText:"三四十二",mathExpression:"3×4=12"},
+            {itemKey:"4x4",a:4,b:4,chineseText:"四四十六",mathExpression:"4×4=16"},
+            // 五的乘法口诀
+            {itemKey:"1x5",a:1,b:5,chineseText:"一五得五",mathExpression:"1×5=5",groupPrefix:"五的乘法口诀"},
+            {itemKey:"2x5",a:2,b:5,chineseText:"二五一十",mathExpression:"2×5=10"},
+            {itemKey:"3x5",a:3,b:5,chineseText:"三五十五",mathExpression:"3×5=15"},
+            {itemKey:"4x5",a:4,b:5,chineseText:"四五二十",mathExpression:"4×5=20"},
+            {itemKey:"5x5",a:5,b:5,chineseText:"五五二十五",mathExpression:"5×5=25"},
+            // 六的乘法口诀
+            {itemKey:"1x6",a:1,b:6,chineseText:"一六得六",mathExpression:"1×6=6",groupPrefix:"六的乘法口诀"},
+            {itemKey:"2x6",a:2,b:6,chineseText:"二六十二",mathExpression:"2×6=12"},
+            {itemKey:"3x6",a:3,b:6,chineseText:"三六十八",mathExpression:"3×6=18"},
+            {itemKey:"4x6",a:4,b:6,chineseText:"四六二十四",mathExpression:"4×6=24"},
+            {itemKey:"5x6",a:5,b:6,chineseText:"五六三十",mathExpression:"5×6=30"},
+            {itemKey:"6x6",a:6,b:6,chineseText:"六六三十六",mathExpression:"6×6=36"},
+            // 七的乘法口诀
+            {itemKey:"1x7",a:1,b:7,chineseText:"一七得七",mathExpression:"1×7=7",groupPrefix:"七的乘法口诀"},
+            {itemKey:"2x7",a:2,b:7,chineseText:"二七十四",mathExpression:"2×7=14"},
+            {itemKey:"3x7",a:3,b:7,chineseText:"三七二十一",mathExpression:"3×7=21"},
+            {itemKey:"4x7",a:4,b:7,chineseText:"四七二十八",mathExpression:"4×7=28"},
+            {itemKey:"5x7",a:5,b:7,chineseText:"五七三十五",mathExpression:"5×7=35"},
+            {itemKey:"6x7",a:6,b:7,chineseText:"六七四十二",mathExpression:"6×7=42"},
+            {itemKey:"7x7",a:7,b:7,chineseText:"七七四十九",mathExpression:"7×7=49"},
+            // 八的乘法口诀
+            {itemKey:"1x8",a:1,b:8,chineseText:"一八得八",mathExpression:"1×8=8",groupPrefix:"八的乘法口诀"},
+            {itemKey:"2x8",a:2,b:8,chineseText:"二八十六",mathExpression:"2×8=16"},
+            {itemKey:"3x8",a:3,b:8,chineseText:"三八二十四",mathExpression:"3×8=24"},
+            {itemKey:"4x8",a:4,b:8,chineseText:"四八三十二",mathExpression:"4×8=32"},
+            {itemKey:"5x8",a:5,b:8,chineseText:"五八四十",mathExpression:"5×8=40"},
+            {itemKey:"6x8",a:6,b:8,chineseText:"六八四十八",mathExpression:"6×8=48"},
+            {itemKey:"7x8",a:7,b:8,chineseText:"七八五十六",mathExpression:"7×8=56"},
+            {itemKey:"8x8",a:8,b:8,chineseText:"八八六十四",mathExpression:"8×8=64"},
+            // 九的乘法口诀
+            {itemKey:"1x9",a:1,b:9,chineseText:"一九得九",mathExpression:"1×9=9",groupPrefix:"九的乘法口诀"},
+            {itemKey:"2x9",a:2,b:9,chineseText:"二九十八",mathExpression:"2×9=18"},
+            {itemKey:"3x9",a:3,b:9,chineseText:"三九二十七",mathExpression:"3×9=27"},
+            {itemKey:"4x9",a:4,b:9,chineseText:"四九三十六",mathExpression:"4×9=36"},
+            {itemKey:"5x9",a:5,b:9,chineseText:"五九四十五",mathExpression:"5×9=45"},
+            {itemKey:"6x9",a:6,b:9,chineseText:"六九五十四",mathExpression:"6×9=54"},
+            {itemKey:"7x9",a:7,b:9,chineseText:"七九六十三",mathExpression:"7×9=63"},
+            {itemKey:"8x9",a:8,b:9,chineseText:"八九七十二",mathExpression:"8×9=72"},
+            {itemKey:"9x9",a:9,b:9,chineseText:"九九八十一",mathExpression:"9×9=81"}
+        ],
+        colors: ['#98D8C8', '#96CEB4', '#4ECDC4', '#45B7D1'],
+        currentIndex: 0,
+        mode: localStorage.getItem('multiplication_mode') || 'auto',
+        playing: false,
+        audioCache: {},
+
+        get currentFormula() {
+            return this.formulas[this.currentIndex] || this.formulas[0];
+        },
+        get currentColor() {
+            return this.colors[(this.currentFormula.b - 1) % this.colors.length];
+        },
+        get currentGroupPrefix() {
+            const names = ['一','二','三','四','五','六','七','八','九'];
+            return names[this.currentFormula.b - 1] + '的乘法口诀';
+        },
+
+        isHighlighted(row, col) {
+            const f = this.currentFormula;
+            return row <= f.a && col <= f.b;
+        },
+
+        async playAudioByKey(key) {
+            try {
+                const resp = await fetch('/api/learn/multiplication/audio/' + key);
+                if (!resp.ok) return false;
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const audio = new Audio(url);
+                await audio.play();
+                await new Promise(resolve => {
+                    audio.onended = resolve;
+                    audio.onerror = resolve;
+                });
+                URL.revokeObjectURL(url);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        },
+
+        isFirstInGroup(index) {
+            if (index === 0) return true;
+            return this.formulas[index].b !== this.formulas[index - 1].b;
+        },
+
+        async playCurrentAudio() {
+            // Play prefix audio if this is the first formula in a group
+            if (this.isFirstInGroup(this.currentIndex)) {
+                await this.playAudioByKey('prefix_' + this.currentFormula.b);
+                await this.sleep(300);
+            }
+            await this.playAudioByKey(this.currentFormula.itemKey);
+        },
+
+        async startAuto() {
+            this.playing = true;
+            await this.runAutoLoop();
+        },
+
+        async runAutoLoop() {
+            while (this.playing && this.currentIndex < this.formulas.length) {
+                let audioPlayed = false;
+                // Play prefix audio if first in group
+                if (this.isFirstInGroup(this.currentIndex)) {
+                    const prefixOk = await this.playAudioByKey('prefix_' + this.currentFormula.b);
+                    audioPlayed = audioPlayed || prefixOk;
+                    if (!this.playing) break;
+                    // Extra pause on group change
+                    await this.sleep(600);
+                    if (!this.playing) break;
+                }
+                // Play formula audio
+                const formulaOk = await this.playAudioByKey(this.currentFormula.itemKey);
+                audioPlayed = audioPlayed || formulaOk;
+                if (!this.playing) break;
+
+                // Wait: 0.6s if audio played, 5s if no audio
+                await this.sleep(audioPlayed ? 600 : 2000);
+                if (!this.playing) break;
+
+                if (this.currentIndex < this.formulas.length - 1) {
+                    this.currentIndex++;
+                } else {
+                    this.playing = false;
+                }
+            }
+        },
+
+        stop() {
+            this.playing = false;
+        },
+
+        reset() {
+            this.playing = false;
+            this.currentIndex = 0;
+        },
+
+        prev() {
+            if (this.currentIndex > 0) this.currentIndex--;
+        },
+
+        next() {
+            if (this.currentIndex < this.formulas.length - 1) this.currentIndex++;
+        },
+
+        sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+    };
+}
+</script>
+
+</div>
+</body>
+</html>

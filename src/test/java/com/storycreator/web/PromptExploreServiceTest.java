@@ -8,6 +8,7 @@ import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.image.CharacterImageService;
 import com.storycreator.persistence.entity.*;
 import com.storycreator.persistence.repository.*;
+import com.storycreator.sidestory.SideStoryWorkflowService;
 import com.storycreator.workflow.engine.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,9 +37,9 @@ class PromptExploreServiceTest {
     @Mock private CharacterGenerationService characterGenerationService;
     @Mock private OutlineGenerationService outlineGenerationService;
     @Mock private ProofreadingService proofreadingService;
-    @Mock private TitleGenerationService titleGenerationService;
     @Mock private CharacterStateService characterStateService;
     @Mock private CharacterImageService characterImageService;
+    @Mock private SideStoryWorkflowService sideStoryWorkflowService;
     @Mock private ProjectRepository projectRepository;
     @Mock private PromptTemplateRepository promptTemplateRepository;
     @Mock private WritingRulesRepository writingRulesRepository;
@@ -46,8 +47,8 @@ class PromptExploreServiceTest {
     @Mock private WorldSettingRepository worldSettingRepository;
     @Mock private CharacterRepository characterRepository;
     @Mock private ChapterRepository chapterRepository;
-    @Mock private ChapterOutlineRepository chapterOutlineRepository;
     @Mock private StepGuidanceRepository stepGuidanceRepository;
+    @Mock private SideStoryRepository sideStoryRepository;
 
     private PromptExploreService service;
 
@@ -55,12 +56,13 @@ class PromptExploreServiceTest {
     void setUp() {
         service = new PromptExploreService(promptRegistry, contextBuilder,
                 characterGenerationService, outlineGenerationService,
-                proofreadingService, titleGenerationService,
+                proofreadingService,
                 characterStateService, characterImageService,
+                sideStoryWorkflowService,
                 projectRepository, promptTemplateRepository, writingRulesRepository,
                 styleFingerprintRepository, worldSettingRepository,
                 characterRepository, chapterRepository,
-                chapterOutlineRepository, stepGuidanceRepository);
+                stepGuidanceRepository, sideStoryRepository);
     }
 
     private ProjectEntity mockProject(Genre genre) {
@@ -144,18 +146,6 @@ class PromptExploreServiceTest {
         verify(proofreadingService).buildProofreadFixVariables(1L, 5);
     }
 
-    @Test
-    void resolve_subStep_delegatesToChapterTitleVariables() {
-        mockProject(Genre.LISHI);
-        Map<String, String> vars = Map.of("contentPreview", "preview");
-        when(titleGenerationService.buildChapterTitleVariables(1L, 2)).thenReturn(vars);
-        stubTemplateResolution();
-
-        service.resolve(WorkflowStep.POLISHING, PromptSubStep.CHAPTER_TITLE,
-                ctx(1L, 2, null, null, null, null));
-
-        verify(titleGenerationService).buildChapterTitleVariables(1L, 2);
-    }
 
     @Test
     void resolve_subStep_delegatesToCharacterStateVariables() {
@@ -354,48 +344,6 @@ class PromptExploreServiceTest {
         assertThat(result.variables()).containsEntry("cardContent", "神秘侦探");
     }
 
-    // ═══════ Enhanced Sub-Steps: CHAPTER_EVENT_PLAN ═══════
-
-    @Test
-    void resolve_chapterEventPlan_loadsOutlineAndCharacters() {
-        mockProject(Genre.XUANHUAN);
-        mockWorldSetting("仙侠世界");
-        stubTemplateResolution();
-
-        WritingRulesEntity rules = new WritingRulesEntity();
-        rules.setContent("写作规则内容");
-        when(writingRulesRepository.findByProjectId(1L)).thenReturn(Optional.of(rules));
-
-        StyleFingerprintEntity fp = new StyleFingerprintEntity();
-        fp.setContent("风格指纹内容");
-        when(styleFingerprintRepository.findByProjectId(1L)).thenReturn(Optional.of(fp));
-
-        ChapterOutlineEntity outline = new ChapterOutlineEntity();
-        outline.setSummary("第三章摘要");
-        when(chapterOutlineRepository.findByProjectIdAndChapterNumber(1L, 3)).thenReturn(Optional.of(outline));
-
-        CharacterEntity char1 = new CharacterEntity();
-        char1.setName("主角");
-        char1.setContent("强大的修仙者");
-        char1.setSortOrder(1);
-        when(characterRepository.findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(1L, 0))
-                .thenReturn(List.of(char1));
-
-        mockStepGuidance(WorkflowStep.OUTLINE_GENERATION, "大纲指导");
-
-        PromptExploreService.ExploreResult result = service.resolve(
-                WorkflowStep.OUTLINE_GENERATION, PromptSubStep.CHAPTER_EVENT_PLAN,
-                ctx(1L, 3, null, null, null, null));
-
-        assertThat(result.variables()).containsEntry("chapterNumber", "3");
-        assertThat(result.variables()).containsEntry("chapterSummary", "第三章摘要");
-        assertThat(result.variables()).containsEntry("worldSetting", "仙侠世界");
-        assertThat(result.variables()).containsEntry("writingRules", "写作规则内容");
-        assertThat(result.variables()).containsEntry("styleFingerprint", "风格指纹内容");
-        assertThat(result.variables().get("characters")).contains("主角");
-        assertThat(result.variables().get("stepGuidance")).isEmpty();
-    }
-
     // ═══════ Enhanced Sub-Steps: CHAPTER_CONTEXT_BRIEFING ═══════
 
     @Test
@@ -433,7 +381,7 @@ class PromptExploreServiceTest {
     // ═══════ Enhanced Sub-Steps: CHAPTER_PLOT_REASONING ═══════
 
     @Test
-    void resolve_chapterPlotReasoning_loadsEventPlanAndBriefing() {
+    void resolve_chapterPlotReasoning_loadsContextAndBriefing() {
         mockProject(Genre.YANQING);
         stubTemplateResolution();
 
@@ -441,12 +389,18 @@ class PromptExploreServiceTest {
         when(wfCtx.getTitle()).thenReturn("言情小说");
         when(wfCtx.getGenre()).thenReturn(Genre.YANQING);
         when(wfCtx.getChapterSummary()).thenReturn("摘要");
-        when(wfCtx.getCharacterCards()).thenReturn("角色");
+        when(wfCtx.getCharacterCards()).thenReturn("角色卡片");
+        when(wfCtx.getWorldSetting()).thenReturn("世界设定内容");
+        when(wfCtx.getCharacters()).thenReturn("角色列表");
         when(contextBuilder.build(1L, 3)).thenReturn(wfCtx);
 
-        ChapterOutlineEntity outline = new ChapterOutlineEntity();
-        outline.setEventPlan("事件计划内容");
-        when(chapterOutlineRepository.findByProjectIdAndChapterNumber(1L, 3)).thenReturn(Optional.of(outline));
+        WritingRulesEntity rules = new WritingRulesEntity();
+        rules.setContent("写作规则内容");
+        when(writingRulesRepository.findByProjectId(1L)).thenReturn(Optional.of(rules));
+
+        StyleFingerprintEntity fp = new StyleFingerprintEntity();
+        fp.setContent("风格指纹内容");
+        when(styleFingerprintRepository.findByProjectId(1L)).thenReturn(Optional.of(fp));
 
         ChapterEntity chapter = new ChapterEntity();
         chapter.setWritingBriefing("写作简报内容");
@@ -458,9 +412,14 @@ class PromptExploreServiceTest {
                 WorkflowStep.CHAPTER_WRITING, PromptSubStep.CHAPTER_PLOT_REASONING,
                 ctx(1L, 3, null, null, null, null));
 
-        assertThat(result.variables()).containsEntry("eventPlan", "事件计划内容");
+        assertThat(result.variables()).containsEntry("worldSetting", "世界设定内容");
+        assertThat(result.variables()).containsEntry("characters", "角色列表");
+        assertThat(result.variables()).containsEntry("writingRules", "写作规则内容");
+        assertThat(result.variables()).containsEntry("styleFingerprint", "风格指纹内容");
         assertThat(result.variables()).containsEntry("writingBriefing", "写作简报内容");
+        assertThat(result.variables()).containsEntry("characterCards", "角色卡片");
         assertThat(result.variables()).containsEntry("chapterNumber", "3");
+        assertThat(result.variables()).doesNotContainKey("eventPlan");
     }
 
     // ═══════ Enhanced Sub-Steps: CHAPTER_INSTANT_REVIEW ═══════

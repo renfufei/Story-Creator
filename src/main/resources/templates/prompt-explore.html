@@ -51,6 +51,34 @@
                         </select>
                     </div>
 
+                    <!-- Side story selector -->
+                    <div class="col-md-3" x-show="needsSideStory">
+                        <label class="form-label">番外篇</label>
+                        <select class="form-select form-select-sm" x-model="sideStoryId" @change="onSideStoryChange()">
+                            <option value="">-- 选择番外 --</option>
+                            <template x-for="s in sideStories" :key="s.id">
+                                <option :value="s.id" x-text="s.title"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <!-- Side story chapter number input (for outline generation) -->
+                    <div class="col-md-2" x-show="needsSideStoryChapterNumber && sideStoryId">
+                        <label class="form-label">章节号</label>
+                        <input type="number" class="form-control form-control-sm" x-model.number="sideStoryChapterNumber" min="1" max="99">
+                    </div>
+
+                    <!-- Side story chapter selector (for writing) -->
+                    <div class="col-md-3" x-show="needsSideStoryChapter && sideStoryId">
+                        <label class="form-label">番外章节</label>
+                        <select class="form-select form-select-sm" x-model="sideStoryChapterNumber">
+                            <option value="">-- 选择章节 --</option>
+                            <template x-for="ch in sideStoryChapters" :key="ch.chapterNumber">
+                                <option :value="ch.chapterNumber" x-text="'第' + ch.chapterNumber + '章 ' + ch.title"></option>
+                            </template>
+                        </select>
+                    </div>
+
                     <!-- Volume + Chapter selector (outline) -->
                     <div class="col-md-2" x-show="needsChapterOutline">
                         <label class="form-label">卷</label>
@@ -213,6 +241,10 @@
                 chaptersPerVolume: 10,
                 selectedVolume: '',
                 characters: [],
+                sideStories: [],
+                sideStoryId: '',
+                sideStoryChapters: [],
+                sideStoryChapterNumber: '',
                 resolving: false,
                 resolved: false,
                 renderedPrompt: '',
@@ -234,7 +266,7 @@
                 get needsChapter() {
                     var ss = pageSubStep;
                     if (!ss) return pageStep === 'POLISHING';
-                    return ['CHAPTER_TITLE', 'CHARACTER_STATES',
+                    return ['CHARACTER_STATES',
                             'PROOFREAD_PLOT_SUMMARY', 'PROOFREAD_CHARACTER_CHECK', 'PROOFREAD_CONSISTENCY',
                             'PROOFREAD_CONTINUITY', 'PROOFREAD_FORESHADOWING', 'PROOFREAD_FIX'].includes(ss);
                 },
@@ -250,6 +282,15 @@
                 },
                 get needsVolume() {
                     return pageSubStep === 'VOLUME_ARC';
+                },
+                get needsSideStory() {
+                    return pageSubStep && ['SIDE_STORY_OUTLINE', 'SIDE_STORY_CHAPTER_OUTLINE', 'SIDE_STORY_WRITING'].includes(pageSubStep);
+                },
+                get needsSideStoryChapterNumber() {
+                    return pageSubStep === 'SIDE_STORY_CHAPTER_OUTLINE';
+                },
+                get needsSideStoryChapter() {
+                    return pageSubStep === 'SIDE_STORY_WRITING';
                 },
                 get volumes() {
                     var set = new Set();
@@ -280,6 +321,10 @@
                     this.characters = [];
                     this.chapterNumber = '';
                     this.characterId = '';
+                    this.sideStories = [];
+                    this.sideStoryId = '';
+                    this.sideStoryChapters = [];
+                    this.sideStoryChapterNumber = '';
                     this.resolved = false;
                     this.resolveError = '';
                     this.aiResult = null;
@@ -301,6 +346,18 @@
                             this.characters = data.characters;
                             if (data.totalCards) this.totalCards = data.totalCards;
                         });
+                    fetch('/prompts/explore/side-stories?projectId=' + this.projectId)
+                        .then(r => r.json())
+                        .then(data => { this.sideStories = data; });
+                },
+
+                onSideStoryChange() {
+                    this.sideStoryChapters = [];
+                    this.sideStoryChapterNumber = '';
+                    if (!this.sideStoryId) return;
+                    fetch('/prompts/explore/side-story-chapters?sideStoryId=' + this.sideStoryId)
+                        .then(r => r.json())
+                        .then(data => { this.sideStoryChapters = data; });
                 },
 
                 resolvePrompt() {
@@ -319,7 +376,9 @@
                         cardNumber: this.cardNumber,
                         totalCards: this.totalCards,
                         volumeNumber: this.volumeNumber,
-                        templateId: pageTemplateId
+                        templateId: pageTemplateId,
+                        sideStoryId: this.sideStoryId || null,
+                        sideStoryChapterNumber: this.sideStoryChapterNumber || null
                     };
 
                     fetch('/prompts/explore/resolve', {

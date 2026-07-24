@@ -36,6 +36,35 @@ if [ $? -ne 0 ]; then
 fi
 echo "打包完成"
 
+# 预下载 CDN 静态资源到本地
+STATIC_DIR="${DB_PATH}/static/vendor"
+
+download_if_missing() {
+    local local_path="$1"
+    local cdn_url="$2"
+    if [ ! -f "$local_path" ]; then
+        echo "  下载 $(basename "$local_path")..."
+        mkdir -p "$(dirname "$local_path")"
+        if ! curl -fsSL -o "$local_path" "$cdn_url"; then
+            echo "  Warning: 下载失败 $cdn_url (应用启动后会按需获取)"
+            rm -f "$local_path"
+        fi
+    fi
+}
+
+echo "检查静态资源..."
+download_if_missing "$STATIC_DIR/bootstrap/css/bootstrap.min.css" \
+    "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+download_if_missing "$STATIC_DIR/bootstrap-icons/css/bootstrap-icons.min.css" \
+    "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+download_if_missing "$STATIC_DIR/bootstrap-icons/css/fonts/bootstrap-icons.woff2" \
+    "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2"
+download_if_missing "$STATIC_DIR/bootstrap/js/bootstrap.bundle.min.js" \
+    "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+download_if_missing "$STATIC_DIR/alpinejs/cdn.min.js" \
+    "https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js"
+echo "静态资源就绪"
+
 # 用 java -jar 启动（单进程，避免 Maven daemon 额外开销）
 nohup java -jar "$JAR_FILE" \
     --server.port=$PORT \
@@ -53,11 +82,14 @@ for i in $(seq 1 60); do
         HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$PORT/)
         if [ "$HTTP_CODE" = "200" ]; then
             echo ""
+            # 获取实际监听端口的进程PID
+            REAL_PID=$(lsof -ti :$PORT -sTCP:LISTEN 2>/dev/null)
+            REAL_PID=${REAL_PID:-$APP_PID}
             echo "启动成功!"
             echo "访问地址: http://localhost:$PORT"
             echo "日志文件: $LOG_FILE"
-            echo "停止命令: kill $APP_PID"
-            echo "$APP_PID" > "$PID_FILE"
+            echo "停止命令: kill $REAL_PID"
+            echo "$REAL_PID" > "$PID_FILE"
             exit 0
         fi
     fi

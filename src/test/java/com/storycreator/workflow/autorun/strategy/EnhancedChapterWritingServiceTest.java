@@ -4,9 +4,7 @@ import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.core.service.GlobalSettingService;
 import com.storycreator.persistence.entity.ChapterEntity;
-import com.storycreator.persistence.entity.ChapterOutlineEntity;
 import com.storycreator.persistence.entity.ProjectEntity;
-import com.storycreator.persistence.repository.ChapterOutlineRepository;
 import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.workflow.autorun.AutoRunContext;
@@ -37,7 +35,6 @@ class EnhancedChapterWritingServiceTest {
 
     @Mock private EnhancedSubStepExecutor executor;
     @Mock private ChapterRepository chapterRepository;
-    @Mock private ChapterOutlineRepository chapterOutlineRepository;
     @Mock private WorkflowEngine workflowEngine;
     @Mock private WorkflowContextBuilder contextBuilder;
     @Mock private ContextSummaryService contextSummaryService;
@@ -51,7 +48,7 @@ class EnhancedChapterWritingServiceTest {
     @BeforeEach
     void setUp() {
         service = new EnhancedChapterWritingService(executor, chapterRepository,
-                chapterOutlineRepository, workflowEngine, contextBuilder, contextSummaryService);
+                workflowEngine, contextBuilder, contextSummaryService);
         stopSignals = new ConcurrentHashMap<>();
         observations = new ConcurrentHashMap<>();
     }
@@ -61,7 +58,7 @@ class EnhancedChapterWritingServiceTest {
         ctx.setProjectId(PROJECT_ID);
         ctx.setProjectRepository(projectRepository);
         ctx.setChapterRepository(chapterRepository);
-        ctx.setChapterOutlineRepository(chapterOutlineRepository);
+        ctx.setChapterOutlineRepository(mock(com.storycreator.persistence.repository.ChapterOutlineRepository.class));
         ctx.setCharacterRepository(mock(com.storycreator.persistence.repository.CharacterRepository.class));
         ctx.setWorldSettingRepository(mock(com.storycreator.persistence.repository.WorldSettingRepository.class));
         ctx.setStoryOutlineRepository(mock(com.storycreator.persistence.repository.StoryOutlineRepository.class));
@@ -90,15 +87,11 @@ class EnhancedChapterWritingServiceTest {
         when(wfCtx.getStepGuidance()).thenReturn("");
         when(wfCtx.getTitle()).thenReturn("测试标题");
         when(wfCtx.getPreviousChapterContent()).thenReturn("前文内容");
+        when(wfCtx.getWorldSetting()).thenReturn("世界设定");
+        when(wfCtx.getCharacters()).thenReturn("角色列表");
         when(contextBuilder.build(eq(PROJECT_ID), anyInt())).thenReturn(wfCtx);
     }
 
-    private void setupChapterOutline(int chapterNumber) {
-        ChapterOutlineEntity outline = new ChapterOutlineEntity();
-        outline.setEventPlan("事件计划");
-        lenient().when(chapterOutlineRepository.findByProjectIdAndChapterNumber(PROJECT_ID, chapterNumber))
-                .thenReturn(Optional.of(outline));
-    }
 
     @Test
     void writeChapterEnhanced_fullCycleFromNotStarted() {
@@ -106,7 +99,6 @@ class EnhancedChapterWritingServiceTest {
         when(chapterRepository.findByProjectIdAndChapterNumber(PROJECT_ID, 1))
                 .thenReturn(Optional.of(chapter));
         setupWorkflowContext();
-        setupChapterOutline(1);
 
         // Mock all executor calls
         when(executor.generateContextBriefing(eq(PROJECT_ID), any(), any(), any())).thenReturn("前文梳理");
@@ -145,7 +137,6 @@ class EnhancedChapterWritingServiceTest {
         when(chapterRepository.findByProjectIdAndChapterNumber(PROJECT_ID, 1))
                 .thenReturn(Optional.of(chapter));
         setupWorkflowContext();
-        setupChapterOutline(1);
 
         when(executor.generatePlotReasoning(eq(PROJECT_ID), any(), any(), any())).thenReturn("推演");
         when(executor.runInstantReview(eq(PROJECT_ID), any(), any(), any())).thenReturn("通过");
@@ -174,7 +165,6 @@ class EnhancedChapterWritingServiceTest {
         when(chapterRepository.findByProjectIdAndChapterNumber(PROJECT_ID, 1))
                 .thenReturn(Optional.of(chapter));
         setupWorkflowContext();
-        setupChapterOutline(1);
 
         // Review passes (no "需优化")
         when(executor.runInstantReview(eq(PROJECT_ID), any(), any(), any())).thenReturn("审查通过，质量良好");
@@ -195,7 +185,6 @@ class EnhancedChapterWritingServiceTest {
         when(chapterRepository.findByProjectIdAndChapterNumber(PROJECT_ID, 1))
                 .thenReturn(Optional.of(chapter));
         setupWorkflowContext();
-        setupChapterOutline(1);
 
         // Review fails (contains "需优化")
         when(executor.runInstantReview(eq(PROJECT_ID), any(), any(), any())).thenReturn("需优化：节奏较慢");
@@ -216,7 +205,6 @@ class EnhancedChapterWritingServiceTest {
         when(chapterRepository.findByProjectIdAndChapterNumber(PROJECT_ID, 5))
                 .thenReturn(Optional.of(chapter));
         setupWorkflowContext();
-        setupChapterOutline(5);
 
         when(executor.updateStoryline(eq(PROJECT_ID), any(), any(), any())).thenReturn("故事线");
         when(executor.runDeepReview(eq(PROJECT_ID), any(), any(), any())).thenReturn("深度审查结果");
@@ -236,7 +224,6 @@ class EnhancedChapterWritingServiceTest {
         when(chapterRepository.findByProjectIdAndChapterNumber(PROJECT_ID, 3))
                 .thenReturn(Optional.of(chapter));
         setupWorkflowContext();
-        setupChapterOutline(3);
 
         when(executor.updateStoryline(eq(PROJECT_ID), any(), any(), any())).thenReturn("故事线");
 
@@ -278,7 +265,6 @@ class EnhancedChapterWritingServiceTest {
         when(chapterRepository.findByProjectIdAndChapterNumber(PROJECT_ID, 1))
                 .thenReturn(Optional.of(chapter));
         setupWorkflowContext();
-        setupChapterOutline(1);
 
         // Set stop signal before execution
         stopSignals.put(PROJECT_ID, true);
@@ -297,7 +283,6 @@ class EnhancedChapterWritingServiceTest {
         when(chapterRepository.findByProjectIdAndChapterNumber(PROJECT_ID, 1))
                 .thenReturn(Optional.of(chapter));
         setupWorkflowContext();
-        setupChapterOutline(1);
 
         // Review fails → optimization runs
         when(executor.runInstantReview(eq(PROJECT_ID), any(), any(), any())).thenReturn("需优化：节奏较慢");
@@ -323,7 +308,6 @@ class EnhancedChapterWritingServiceTest {
         when(chapterRepository.findByProjectIdAndChapterNumber(PROJECT_ID, 1))
                 .thenReturn(Optional.of(chapter));
         setupWorkflowContext();
-        setupChapterOutline(1);
 
         // Review passes (no "需优化")
         when(executor.runInstantReview(eq(PROJECT_ID), any(), any(), any())).thenReturn("审查通过");

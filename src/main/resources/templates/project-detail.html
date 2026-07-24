@@ -14,6 +14,9 @@
             <a th:href="@{/projects/{id}/workflow(id=${project.id})}" class="btn btn-primary">
                 <i class="bi bi-pencil-square"></i> 继续创作
             </a>
+            <a th:href="@{/projects/{id}/side-stories(id=${project.id})}" class="btn btn-outline-warning">
+                <i class="bi bi-journal-bookmark"></i> 番外
+            </a>
             <a th:href="@{/projects/{id}/read(id=${project.id})}" class="btn btn-outline-success" target="_blank">
                 <i class="bi bi-book"></i> 全文阅读
             </a>
@@ -38,12 +41,9 @@
             <a th:href="@{/projects/{id}/edit(id=${project.id})}" class="btn btn-outline-secondary">
                 <i class="bi bi-gear"></i> 编辑
             </a>
-            <form th:action="@{/projects/{id}/delete(id=${project.id})}" method="post"
-                  onsubmit="return confirm('确定要删除此项目吗？')">
-                <button type="submit" class="btn btn-outline-danger">
-                    <i class="bi bi-trash"></i> 删除
-                </button>
-            </form>
+            <button type="button" class="btn btn-outline-danger" onclick="deleteProject(this)" th:data-id="${project.id}">
+                <i class="bi bi-trash"></i> 删除
+            </button>
         </div>
     </div>
 
@@ -85,6 +85,19 @@
             </table>
         </div>
     </div>
+<script>
+function deleteProject(btn) {
+    if (!confirm('确定要删除此项目吗？此操作不可撤销。')) return;
+    var id = btn.getAttribute('data-id');
+    fetch('/projects/' + id + '/delete', { method: 'POST' })
+        .then(function(r) {
+            if (r.redirected) { window.location.href = r.url; return; }
+            if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || '删除失败'); });
+            window.location.href = '/';
+        })
+        .catch(function(e) { alert(e.message); });
+}
+</script>
 </div>
 </body>
 </html>

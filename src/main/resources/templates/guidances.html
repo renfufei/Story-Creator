@@ -1,17 +1,38 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('创作指导库', ~{::content})}">
 <body>
-<div th:fragment="content" x-data="{ showAdd: false }">
+<div th:fragment="content" x-data="guidancePage()">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="mb-0">创作指导库</h2>
         <div>
             <a th:href="@{/settings}" class="btn btn-outline-secondary btn-sm me-2">
                 <i class="bi bi-arrow-left"></i> 返回设置
             </a>
+            <button class="btn btn-outline-success btn-sm me-1" @click="doExport()" th:if="${!items.isEmpty()}">
+                <i class="bi bi-download"></i> 导出
+            </button>
+            <button class="btn btn-outline-info btn-sm me-1" @click="$refs.importFile.click()">
+                <i class="bi bi-upload"></i> 导入
+            </button>
             <button class="btn btn-primary btn-sm" @click="showAdd = true">
                 <i class="bi bi-plus"></i> 新建指导
             </button>
         </div>
+    </div>
+
+    <!-- Hidden import form -->
+    <form th:action="@{/settings/guidances/import}" method="post" enctype="multipart/form-data" x-ref="importForm" style="display:none;">
+        <input type="file" name="file" accept=".json" x-ref="importFile" @change="$refs.importForm.submit()">
+    </form>
+
+    <!-- Flash messages -->
+    <div th:if="${success}" class="alert alert-success alert-dismissible fade show" role="alert">
+        <span th:text="${success}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    <div th:if="${error}" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <span th:text="${error}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 
     <!-- Add Form -->
@@ -53,6 +74,10 @@
             <table th:if="${!items.isEmpty()}" class="table table-sm table-hover mb-0">
                 <thead>
                     <tr>
+                        <th style="width: 40px;">
+                            <input type="checkbox" class="form-check-input" @change="toggleAll($event.target.checked)"
+                                   :checked="selectedIds.length === allIds.length && allIds.length > 0">
+                        </th>
                         <th>名称</th>
                         <th style="width: 120px;">步骤</th>
                         <th style="width: 200px;">内容预览</th>
@@ -62,6 +87,12 @@
                 </thead>
                 <tbody>
                     <tr th:each="item : ${items}">
+                        <td>
+                            <input type="checkbox" class="form-check-input item-checkbox"
+                                   :value="'[[${item.id}]]'" th:attr="data-id=${item.id}"
+                                   @change="toggleItem($event.target.dataset.id, $event.target.checked)"
+                                   :checked="selectedIds.includes(String($el.dataset.id))">
+                        </td>
                         <td><strong th:text="${item.name}">名称</strong></td>
                         <td><span class="badge bg-info" th:text="${item.step.displayName}">步骤</span></td>
                         <td class="text-muted small text-truncate" style="max-width: 200px;"
@@ -84,6 +115,60 @@
             </table>
         </div>
     </div>
+
+    <script th:inline="javascript">
+    function guidancePage() {
+    const allIds = (/*[[${itemIds}]]*/ []).map(String);
+    return {
+        showAdd: false,
+        allIds: allIds,
+        selectedIds: [...allIds],
+        toggleAll(checked) {
+            this.selectedIds = checked ? [...this.allIds] : [];
+        },
+        toggleItem(id, checked) {
+            id = String(id);
+            if (checked) {
+                if (!this.selectedIds.includes(id)) this.selectedIds.push(id);
+            } else {
+                this.selectedIds = this.selectedIds.filter(i => i !== id);
+            }
+        },
+        async doExport() {
+            if (this.selectedIds.length === 0) {
+                alert('请至少选择一个指导条目');
+                return;
+            }
+            try {
+                const resp = await fetch('/settings/guidances/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.selectedIds.map(Number))
+                });
+                if (!resp.ok) {
+                    alert('导出失败');
+                    return;
+                }
+                const blob = await resp.blob();
+                const disposition = resp.headers.get('Content-Disposition');
+                let filename = 'guidances-export.json';
+                if (disposition) {
+                    const match = disposition.match(/filename=(.+)/);
+                    if (match) filename = match[1];
+                }
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                alert('导出失败: ' + e.message);
+            }
+        }
+        };
+    }
+    </script>
 </div>
 </body>
 </html>

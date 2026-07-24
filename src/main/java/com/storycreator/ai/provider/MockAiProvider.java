@@ -64,7 +64,6 @@ public class MockAiProvider implements AiProvider {
         POLISHING,
         PROOFREADING_REPORT,
         PROOFREAD_FIX,
-        CHAPTER_TITLE,
         CHARACTER_STATES,
         VOLUME_ARC,
         PROOFREAD_PLOT_SUMMARY,
@@ -101,11 +100,7 @@ public class MockAiProvider implements AiProvider {
         if (combined.contains("伏笔") || combined.contains("悬念")) {
             return PromptCategory.PROOFREAD_FORESHADOWING;
         }
-        // 7. Chapter title
-        if (combined.contains("简短的章节标题") || (combined.contains("章节标题") && combined.contains("4-12"))) {
-            return PromptCategory.CHAPTER_TITLE;
-        }
-        // 8. Character states
+        // 7. Character states
         if (combined.contains("角色状态") || (combined.contains("当前状态") && combined.contains("角色名"))) {
             return PromptCategory.CHARACTER_STATES;
         }
@@ -173,7 +168,6 @@ public class MockAiProvider implements AiProvider {
             case POLISHING -> generatePolishedContent(combinedPrompt);
             case PROOFREADING_REPORT -> generateProofreadingReport();
             case PROOFREAD_FIX -> generateProofreadFix(combinedPrompt);
-            case CHAPTER_TITLE -> generateChapterTitle();
             case CHARACTER_STATES -> generateCharacterStates();
             case VOLUME_ARC -> generateVolumeArc();
             case PROOFREAD_PLOT_SUMMARY -> generatePlotSummary();
@@ -383,10 +377,6 @@ public class MockAiProvider implements AiProvider {
         }
 
         return sb.toString();
-    }
-
-    private String generateChapterTitle() {
-        return "命运初启";
     }
 
     private String generateCharacterStates() {
