@@ -64,6 +64,11 @@
                                         'bg-warning text-dark': ch.status === 'REFINING',
                                         'bg-success': ch.status === 'REFINED'
                                     }" x-text="ch.status === 'PENDING' ? '待生成' : ch.status === 'GENERATED' ? '已生成' : ch.status === 'REFINING' ? '精修中' : ch.status === 'REFINED' ? '已精修' : ''" style="font-size: 0.7rem;"></span>
+                                    <span class="badge ms-1" :class="{
+                                        'bg-primary': ch.characterType === 'INITIAL' || !ch.characterType,
+                                        'bg-purple': ch.characterType === 'VOLUME_RECURRING',
+                                        'bg-orange text-dark': ch.characterType === 'VOLUME_TEMP'
+                                    }" x-text="ch.characterType === 'VOLUME_RECURRING' ? '第'+ch.startVolume+'卷引入' : ch.characterType === 'VOLUME_TEMP' ? '第'+ch.startVolume+'卷临时' : '核心'" style="font-size: 0.65rem;" x-show="ch.characterType"></span>
                                 </span>
                                 <div class="d-flex gap-1">
                                     <button class="btn btn-sm btn-outline-info py-0 px-1" title="生成图片"

@@ -20,10 +20,11 @@ public class PromptTemplateRegistry {
     private static final int LONG_VALUE_THRESHOLD = 50;
     private static final Set<String> SHORT_VARIABLES = Set.of(
             "title", "genre", "chapterNumber", "totalChapters", "cardNumber", "totalCards",
-            "volumeNumber", "chapterStart", "chapterEnd", "dimList", "characterNames",
+            "volumeNumber", "totalVolumes", "chapterStart", "chapterEnd", "dimList", "characterNames",
             "charNames", "phaseHint", "gender", "age", "role",
             "stepGuidance", "referenceMaterials",
-            "sideStoryTitle", "chapterWordCount"
+            "sideStoryTitle", "chapterWordCount",
+            "recurringCount", "tempCount"
     );
 
     public static final Map<PromptSubStep, List<String>> SUB_STEP_VARIABLES = Map.ofEntries(
@@ -34,30 +35,24 @@ public class PromptTemplateRegistry {
             Map.entry(PromptSubStep.CHARACTER_OVERVIEW, List.of("title", "genre", "description", "previousSummaries", "stepGuidance")),
             Map.entry(PromptSubStep.CHARACTER_REFINE, List.of("title", "genre", "description", "worldSetting", "allSummaries", "cardContent", "stepGuidance")),
             Map.entry(PromptSubStep.VOLUME_ARC, List.of("title", "genre", "description", "worldSetting", "characters", "allCharacters", "storySummary", "totalChapters", "volumeNumber", "chapterStart", "chapterEnd", "previousArcs", "stepGuidance")),
+            Map.entry(PromptSubStep.VOLUME_CHARACTERS, List.of("title", "genre", "worldSetting", "volumeArc", "existingCharacters", "volumeNumber", "totalVolumes", "recurringCount", "tempCount", "stepGuidance")),
             Map.entry(PromptSubStep.CHAPTER_OUTLINE, List.of("title", "genre", "characters", "allCharacters", "storySummary", "chapterNumber", "totalChapters", "chapterStart", "chapterEnd", "phaseHint", "contextInfo", "stepGuidance")),
             Map.entry(PromptSubStep.CHAPTER_OUTLINE_REFINE, List.of("title", "genre", "chapterNumber", "totalChapters", "contextInfo", "currentOutline", "allCharacters")),
             Map.entry(PromptSubStep.STORY_SUMMARY, List.of("title", "genre", "description", "totalChapters", "arcsInfo", "stepGuidance")),
             Map.entry(PromptSubStep.PROOFREAD_PLOT_SUMMARY, List.of("chapterContent")),
-            Map.entry(PromptSubStep.PROOFREAD_CHARACTER_CHECK, List.of("characterNames", "chapterContent")),
-            Map.entry(PromptSubStep.PROOFREAD_CONSISTENCY, List.of("characterSummaries", "previousPlotSummary", "chapterContent")),
-            Map.entry(PromptSubStep.PROOFREAD_CONTINUITY, List.of("previousEnd", "currentStart")),
             Map.entry(PromptSubStep.PROOFREAD_FORESHADOWING, List.of("accumulatedForeshadowing", "chapterNumber", "chapterContent")),
             Map.entry(PromptSubStep.PROOFREAD_FIX, List.of("reportSummary", "originalContent")),
             Map.entry(PromptSubStep.CHARACTER_STATES, List.of("dimList", "charNames", "prevStates", "chapterExcerpt")),
             Map.entry(PromptSubStep.IMAGE_PROMPT_AVATAR, List.of("gender", "age", "appearance", "personality", "role")),
             Map.entry(PromptSubStep.IMAGE_PROMPT_PORTRAIT, List.of("gender", "age", "appearance", "personality", "role", "background", "motivation")),
-            Map.entry(PromptSubStep.WRITING_RULES, List.of("title", "genre", "description", "worldSetting")),
-            Map.entry(PromptSubStep.STYLE_FINGERPRINT, List.of("title", "genre", "description", "worldSetting")),
-            Map.entry(PromptSubStep.CHARACTER_BEHAVIOR_BOUNDARIES, List.of("title", "genre", "characterName", "cardContent", "worldSetting", "stepGuidance")),
             Map.entry(PromptSubStep.CHAPTER_CONTEXT_BRIEFING, List.of("title", "genre", "chapterNumber", "previousChapterContent", "chapterSummary", "writingRules", "characterCards", "stepGuidance")),
-            Map.entry(PromptSubStep.CHAPTER_PLOT_REASONING, List.of("title", "genre", "chapterNumber", "chapterSummary", "worldSetting", "characters", "writingRules", "styleFingerprint", "writingBriefing", "characterCards", "stepGuidance")),
-            Map.entry(PromptSubStep.CHAPTER_INSTANT_REVIEW, List.of("chapterNumber", "writingReasoning", "contentDraft")),
-            Map.entry(PromptSubStep.CHAPTER_CONTENT_OPTIMIZATION, List.of("chapterNumber", "contentDraft", "instantReview", "writingRules", "styleFingerprint")),
-            Map.entry(PromptSubStep.CHAPTER_STORYLINE_UPDATE, List.of("chapterNumber", "optimizedContent", "previousStorylineSnapshot")),
-            Map.entry(PromptSubStep.CHAPTER_DEEP_REVIEW, List.of("chapterNumber", "finalContent", "writingRules", "styleFingerprint", "previousPlotSummary")),
             Map.entry(PromptSubStep.SIDE_STORY_OUTLINE, List.of("worldSetting", "allCharacters", "storySummary", "sideStoryTitle", "sideStoryDescription", "creativeGuidance", "attachedVolumeContext")),
             Map.entry(PromptSubStep.SIDE_STORY_CHAPTER_OUTLINE, List.of("sideStoryTitle", "sideStoryOutline", "allCharacters", "chapterNumber", "totalChapters", "previousOutlines")),
-            Map.entry(PromptSubStep.SIDE_STORY_WRITING, List.of("characterCards", "sideStoryTitle", "sideStoryOutline", "chapterNumber", "chapterTitle", "chapterSummary", "previousContext", "chapterWordCount"))
+            Map.entry(PromptSubStep.SIDE_STORY_WRITING, List.of("characterCards", "sideStoryTitle", "sideStoryOutline", "chapterNumber", "chapterTitle", "chapterSummary", "previousContext", "chapterWordCount")),
+            Map.entry(PromptSubStep.CHAPTER_EXPANSION, List.of("title", "genre", "chapterNumber", "chapterTitle", "originalContent", "expansionGuidance", "chapterWordCount")),
+            Map.entry(PromptSubStep.REVERSE_WORLD_BUILDING, List.of("title", "genre", "sampledChapters", "chapterCount")),
+            Map.entry(PromptSubStep.REVERSE_CHARACTER_EXTRACTION, List.of("title", "genre", "sampledChapters", "chapterCount", "worldSetting")),
+            Map.entry(PromptSubStep.REVERSE_OUTLINE_GENERATION, List.of("title", "genre", "sampledChapters", "chapterCount", "worldSetting", "characters"))
     );
 
     public PromptTemplateRegistry(PromptTemplateRepository repository, BuiltinTemplateLoader builtinLoader) {

@@ -89,7 +89,7 @@ class AutoRunHttpIntegrationTest {
         project.setChapterWordCountMax(600);
         project.setCharacterCount(3);
         project.setCurrentStep(WorkflowStep.WORLD_BUILDING);
-        project.setAutoRunStrategy("DEFAULT");
+
         project.setDefaultModelConfigId(mockConfigId);
         project = projectRepository.save(project);
         projectId = project.getId();

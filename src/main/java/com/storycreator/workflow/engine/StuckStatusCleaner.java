@@ -5,6 +5,7 @@ import com.storycreator.persistence.entity.ProjectEntity;
 import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.SideStoryChapterRepository;
+import com.storycreator.persistence.repository.TxtImportJobRepository;
 import com.storycreator.persistence.repository.WorkflowStateRepository;
 import com.storycreator.workflow.autorun.AutoRunStatus;
 import org.slf4j.Logger;
@@ -27,15 +28,18 @@ public class StuckStatusCleaner {
     private final ChapterRepository chapterRepository;
     private final ProjectRepository projectRepository;
     private final SideStoryChapterRepository sideStoryChapterRepository;
+    private final TxtImportJobRepository txtImportJobRepository;
 
     public StuckStatusCleaner(WorkflowStateRepository workflowStateRepository,
                               ChapterRepository chapterRepository,
                               ProjectRepository projectRepository,
-                              SideStoryChapterRepository sideStoryChapterRepository) {
+                              SideStoryChapterRepository sideStoryChapterRepository,
+                              TxtImportJobRepository txtImportJobRepository) {
         this.workflowStateRepository = workflowStateRepository;
         this.chapterRepository = chapterRepository;
         this.projectRepository = projectRepository;
         this.sideStoryChapterRepository = sideStoryChapterRepository;
+        this.txtImportJobRepository = txtImportJobRepository;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -50,9 +54,13 @@ public class StuckStatusCleaner {
 
         int sideStoryChaptersReset = sideStoryChapterRepository.resetGeneratingStatuses();
 
-        if (stepsReset > 0 || chaptersReset > 0 || fixReset > 0 || sideStoryChaptersReset > 0) {
-            log.info("Reset stuck GENERATING statuses: {} workflow steps, {} chapters, {} proofread fix, {} side story chapters",
-                    stepsReset, chaptersReset, fixReset, sideStoryChaptersReset);
+        int expansionReset = chapterRepository.updateExpansionStatusByStatus("GENERATING", "PENDING");
+
+        int txtImportReset = txtImportJobRepository.resetStuckStatuses();
+
+        if (stepsReset > 0 || chaptersReset > 0 || fixReset > 0 || sideStoryChaptersReset > 0 || expansionReset > 0 || txtImportReset > 0) {
+            log.info("Reset stuck GENERATING statuses: {} workflow steps, {} chapters, {} proofread fix, {} side story chapters, {} expansion, {} txt import",
+                    stepsReset, chaptersReset, fixReset, sideStoryChaptersReset, expansionReset, txtImportReset);
         }
 
         // Reset stuck auto-run statuses

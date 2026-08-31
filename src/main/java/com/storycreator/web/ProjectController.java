@@ -163,9 +163,10 @@ public class ProjectController {
         project.setChapterWordCountMax(form.getChapterWordCountMax() > 0 ? form.getChapterWordCountMax() : 6000);
         project.setCharacterCount(form.getCharacterCount() > 0 ? form.getCharacterCount() : 5);
         project.setChaptersPerVolume(form.getChaptersPerVolume() > 0 ? form.getChaptersPerVolume() : 10);
+        project.setRecurringCharacterRate(form.getRecurringCharacterRate() > 0 ? form.getRecurringCharacterRate() : 0.5);
+        project.setTempCharacterRate(form.getTempCharacterRate() > 0 ? form.getTempCharacterRate() : 3.0);
         project.setDefaultModelConfigId(form.getDefaultModelConfigId());
         project.setAutoMode(form.isAutoMode());
-        project.setAutoRunStrategy(form.getAutoRunStrategy() != null ? form.getAutoRunStrategy() : "DEFAULT");
         project.setCurrentStep(WorkflowStep.WORLD_BUILDING);
         project = projectRepository.save(project);
 
@@ -267,9 +268,10 @@ public class ProjectController {
         form.setChapterWordCountMax(project.getChapterWordCountMax());
         form.setCharacterCount(project.getCharacterCount());
         form.setChaptersPerVolume(project.getChaptersPerVolume());
+        form.setRecurringCharacterRate(project.getRecurringCharacterRate());
+        form.setTempCharacterRate(project.getTempCharacterRate());
         form.setDefaultModelConfigId(project.getDefaultModelConfigId());
         form.setAutoMode(project.isAutoMode());
-        form.setAutoRunStrategy(project.getAutoRunStrategy());
         form.setProjectStatus(project.getStatus());
 
         // Load step guidances
@@ -323,9 +325,10 @@ public class ProjectController {
         project.setChapterWordCountMax(form.getChapterWordCountMax() > 0 ? form.getChapterWordCountMax() : 6000);
         project.setCharacterCount(form.getCharacterCount() > 0 ? form.getCharacterCount() : 5);
         project.setChaptersPerVolume(form.getChaptersPerVolume() > 0 ? form.getChaptersPerVolume() : 10);
+        project.setRecurringCharacterRate(form.getRecurringCharacterRate() > 0 ? form.getRecurringCharacterRate() : 0.5);
+        project.setTempCharacterRate(form.getTempCharacterRate() > 0 ? form.getTempCharacterRate() : 3.0);
         project.setDefaultModelConfigId(form.getDefaultModelConfigId());
         project.setAutoMode(form.isAutoMode());
-        project.setAutoRunStrategy(form.getAutoRunStrategy() != null ? form.getAutoRunStrategy() : "DEFAULT");
         if (form.getProjectStatus() != null) {
             project.setStatus(form.getProjectStatus());
         }
@@ -357,9 +360,10 @@ public class ProjectController {
         data.put("chapterWordCountMax", project.getChapterWordCountMax());
         data.put("characterCount", project.getCharacterCount());
         data.put("chaptersPerVolume", project.getChaptersPerVolume());
+        data.put("recurringCharacterRate", project.getRecurringCharacterRate());
+        data.put("tempCharacterRate", project.getTempCharacterRate());
         data.put("defaultModelConfigId", project.getDefaultModelConfigId());
         data.put("autoMode", project.isAutoMode());
-        data.put("autoRunStrategy", project.getAutoRunStrategy());
 
         // Load step guidances
         List<StepGuidanceEntity> guidances = stepGuidanceRepository.findByProjectId(id);
@@ -485,11 +489,12 @@ public class ProjectController {
 
         private int chaptersPerVolume = 10;
 
+        private double recurringCharacterRate = 0.5;
+        private double tempCharacterRate = 3.0;
+
         private Long defaultModelConfigId;
 
         private boolean autoMode = true;
-
-        private String autoRunStrategy = "DEFAULT";
 
         private ProjectStatus projectStatus;
 
@@ -524,14 +529,17 @@ public class ProjectController {
         public int getChaptersPerVolume() { return chaptersPerVolume; }
         public void setChaptersPerVolume(int chaptersPerVolume) { this.chaptersPerVolume = chaptersPerVolume; }
 
+        public double getRecurringCharacterRate() { return recurringCharacterRate; }
+        public void setRecurringCharacterRate(double recurringCharacterRate) { this.recurringCharacterRate = recurringCharacterRate; }
+
+        public double getTempCharacterRate() { return tempCharacterRate; }
+        public void setTempCharacterRate(double tempCharacterRate) { this.tempCharacterRate = tempCharacterRate; }
+
         public Long getDefaultModelConfigId() { return defaultModelConfigId; }
         public void setDefaultModelConfigId(Long defaultModelConfigId) { this.defaultModelConfigId = defaultModelConfigId; }
 
         public boolean isAutoMode() { return autoMode; }
         public void setAutoMode(boolean autoMode) { this.autoMode = autoMode; }
-
-        public String getAutoRunStrategy() { return autoRunStrategy; }
-        public void setAutoRunStrategy(String autoRunStrategy) { this.autoRunStrategy = autoRunStrategy; }
 
         public ProjectStatus getProjectStatus() { return projectStatus; }
         public void setProjectStatus(ProjectStatus projectStatus) { this.projectStatus = projectStatus; }

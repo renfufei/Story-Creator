@@ -4,6 +4,7 @@ import com.storycreator.ai.prompt.PromptTemplateRegistry;
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.PromptSubStep;
+import com.storycreator.core.domain.WorldFacetKey;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.core.port.ai.AiRequest;
 import com.storycreator.persistence.entity.*;
@@ -36,6 +37,7 @@ public class OutlineGenerationService {
     private final WorkflowContextBuilder contextBuilder;
     private final AiUsageTracker aiUsageTracker;
     private final AutoRunStepConfigRepository autoRunStepConfigRepository;
+    private final WorldFacetElaborationService worldFacetElaborationService;
 
     public OutlineGenerationService(ProjectRepository projectRepository,
                                     ChapterOutlineRepository chapterOutlineRepository,
@@ -47,7 +49,8 @@ public class OutlineGenerationService {
                                     PromptTemplateRegistry promptRegistry,
                                     WorkflowContextBuilder contextBuilder,
                                     AiUsageTracker aiUsageTracker,
-                                    AutoRunStepConfigRepository autoRunStepConfigRepository) {
+                                    AutoRunStepConfigRepository autoRunStepConfigRepository,
+                                    WorldFacetElaborationService worldFacetElaborationService) {
         this.projectRepository = projectRepository;
         this.chapterOutlineRepository = chapterOutlineRepository;
         this.volumeOutlineRepository = volumeOutlineRepository;
@@ -59,6 +62,7 @@ public class OutlineGenerationService {
         this.contextBuilder = contextBuilder;
         this.aiUsageTracker = aiUsageTracker;
         this.autoRunStepConfigRepository = autoRunStepConfigRepository;
+        this.worldFacetElaborationService = worldFacetElaborationService;
     }
 
     // --- Public API ---
@@ -136,6 +140,60 @@ public class OutlineGenerationService {
                             });
                     return Flux.just(marker).concatWith(arcFlux);
                 });
+
+        // Phase 1.5: Generate volume characters
+        Flux<String> phase15 = Flux.defer(() -> {
+            ProjectEntity freshProject = projectRepository.findById(projectId).orElseThrow();
+            double recurringRate = freshProject.getRecurringCharacterRate();
+            double tempRate = freshProject.getTempCharacterRate();
+            int totalVolumes = volumes.size();
+
+            // Count already introduced volume characters per type
+            List<CharacterEntity> existingVolumeChars = characterRepository.findByProjectIdOrderBySortOrder(projectId)
+                    .stream().filter(c -> c.getSortOrder() > 0).toList();
+            int alreadyRecurring = (int) existingVolumeChars.stream()
+                    .filter(c -> "VOLUME_RECURRING".equals(c.getCharacterType())).count();
+            int alreadyTemp = (int) existingVolumeChars.stream()
+                    .filter(c -> "VOLUME_TEMP".equals(c.getCharacterType())).count();
+
+            return Flux.fromIterable(volumes)
+                    .concatMap(vol -> {
+                        int recurringCount = VolumeCharacterCalculator.calculateForVolume(
+                                vol.volumeNumber(), totalVolumes, recurringRate, alreadyRecurring, true);
+                        int tempCount = VolumeCharacterCalculator.calculateForVolume(
+                                vol.volumeNumber(), totalVolumes, tempRate, alreadyTemp, false);
+
+                        if (recurringCount <= 0 && tempCount <= 0) {
+                            return Flux.empty();
+                        }
+
+                        String marker = "[[SECTION:VOLCHARS:" + vol.volumeNumber() + "]]";
+                        String volumeArc = volumeArcSummaries.get(vol.volumeNumber() - 1);
+
+                        log.info("[P{}] Volume {} generating {} recurring + {} temp characters",
+                                projectId, vol.volumeNumber(), recurringCount, tempCount);
+
+                        long vcStart = System.currentTimeMillis();
+                        StringBuilder vcContent = new StringBuilder();
+                        AiCallConfig aiConfig = new AiCallConfig(resolved, guidanceSuffix);
+
+                        final int rc = recurringCount;
+                        final int tc = tempCount;
+                        Flux<String> vcFlux = generateVolumeCharacters(baseContext, vol, totalVolumes,
+                                volumeArc, rc, tc, aiConfig)
+                                .doOnNext(vcContent::append)
+                                .doOnComplete(() -> {
+                                    String text = vcContent.toString();
+                                    parseAndSaveVolumeCharacters(projectId, vol.volumeNumber(), text, rc, tc);
+                                    long vcElapsed = System.currentTimeMillis() - vcStart;
+                                    log.info("[P{}] Volume {} characters done ({}s, {}chars)",
+                                            projectId, vol.volumeNumber(), vcElapsed / 1000, text.length());
+                                    aiUsageTracker.record(projectId, resolved.modelId(),
+                                            resolved.provider().getProviderName(), vcElapsed);
+                                });
+                        return Flux.just(marker).concatWith(vcFlux);
+                    });
+        });
 
         // Phase 2: Generate chapter outlines
         Map<Integer, String> outlineMap = new java.util.concurrent.ConcurrentHashMap<>();
@@ -291,7 +349,7 @@ public class OutlineGenerationService {
         Flux<String> conditionalRefine = Flux.defer(() ->
             isChapterOutlineRefineEnabled(projectId) ? phase25 : Flux.empty()
         );
-        return phase1.concatWith(phase2).concatWith(conditionalRefine).concatWith(phase3);
+        return phase1.concatWith(phase15).concatWith(phase2).concatWith(conditionalRefine).concatWith(phase3);
     }
 
     public Flux<String> regenerateChapterOutline(Long projectId, int chapterNumber) {
@@ -387,12 +445,28 @@ public class OutlineGenerationService {
         String allCharacters = buildAllCharactersInfo(projectId);
         String storySummary = loadStorySummary(projectId);
 
+        // Use WORLD_BACKGROUND + CONFLICT_ROOTS facets for volume arc (fallback to truncate)
+        String worldSettingForArc;
+        String worldBackground = safeStr(worldFacetElaborationService.getFacet(projectId, WorldFacetKey.WORLD_BACKGROUND));
+        String conflictRoots = safeStr(worldFacetElaborationService.getFacet(projectId, WorldFacetKey.CONFLICT_ROOTS));
+        if (!worldBackground.isEmpty() || !conflictRoots.isEmpty()) {
+            StringBuilder wsSb = new StringBuilder();
+            if (!worldBackground.isEmpty()) wsSb.append("【世界背景】\n").append(worldBackground);
+            if (!conflictRoots.isEmpty()) {
+                if (!wsSb.isEmpty()) wsSb.append("\n\n");
+                wsSb.append("【冲突根源】\n").append(conflictRoots);
+            }
+            worldSettingForArc = wrapContent(wsSb.toString());
+        } else {
+            worldSettingForArc = wrapContent(truncate(baseContext.getWorldSetting(), 400));
+        }
+
         Genre genre = baseContext.getGenre();
         return Map.ofEntries(
                 Map.entry("title", baseContext.getTitle() != null ? baseContext.getTitle() : ""),
                 Map.entry("genre", genre != null ? genre.getDisplayName() : ""),
                 Map.entry("description", baseContext.getDescription() != null ? baseContext.getDescription() : ""),
-                Map.entry("worldSetting", wrapContent(truncate(baseContext.getWorldSetting(), 400))),
+                Map.entry("worldSetting", worldSettingForArc),
                 Map.entry("characters", wrapContent(truncate(baseContext.getCharacters(), 400))),
                 Map.entry("allCharacters", allCharacters),
                 Map.entry("storySummary", storySummary),
@@ -942,6 +1016,171 @@ public class OutlineGenerationService {
         return contextInfo.toString();
     }
 
+    // --- Volume character generation helpers ---
+
+    private Flux<String> generateVolumeCharacters(WorkflowContext baseContext, VolumeRange vol,
+                                                    int totalVolumes, String volumeArc,
+                                                    int recurringCount, int tempCount,
+                                                    AiCallConfig aiConfig) {
+        AiProviderRouter.ResolvedModel resolved = aiConfig.resolved();
+        String guidanceSuffix = aiConfig.guidanceSuffix();
+        Long projectId = baseContext.getProjectId();
+
+        String allCharacters = buildAllCharactersInfo(projectId);
+        String worldSetting = baseContext.getWorldSetting() != null ? baseContext.getWorldSetting() : "";
+
+        Genre genre = baseContext.getGenre();
+        String template = promptRegistry.getSubStepTemplate(WorkflowStep.OUTLINE_GENERATION, PromptSubStep.VOLUME_CHARACTERS, genre);
+        Map<String, String> vars = Map.ofEntries(
+                Map.entry("title", baseContext.getTitle() != null ? baseContext.getTitle() : ""),
+                Map.entry("genre", genre != null ? genre.getDisplayName() : ""),
+                Map.entry("worldSetting", wrapContent(truncate(worldSetting, 400))),
+                Map.entry("volumeArc", wrapContent(volumeArc != null ? volumeArc : "")),
+                Map.entry("existingCharacters", allCharacters),
+                Map.entry("volumeNumber", String.valueOf(vol.volumeNumber())),
+                Map.entry("totalVolumes", String.valueOf(totalVolumes)),
+                Map.entry("recurringCount", String.valueOf(recurringCount)),
+                Map.entry("tempCount", String.valueOf(tempCount)),
+                Map.entry("stepGuidance", guidanceSuffix)
+        );
+        String prompt = promptRegistry.resolveTemplate(template, vars);
+        String systemPrompt = promptRegistry.getSubStepSystemPrompt(WorkflowStep.OUTLINE_GENERATION, PromptSubStep.VOLUME_CHARACTERS, genre);
+        if (systemPrompt == null || systemPrompt.isBlank()) {
+            systemPrompt = "你是一位经验丰富的网络小说策划，擅长设计鲜明有特色的配角。";
+        }
+
+        AiRequest request = AiRequest.builder()
+                .systemPrompt(systemPrompt)
+                .userPrompt(prompt)
+                .maxTokens(2048)
+                .temperature(0.8)
+                .build();
+        applyResolvedConfig(request, resolved);
+
+        return resolved.provider().streamText(request);
+    }
+
+    private void parseAndSaveVolumeCharacters(Long projectId, int volumeNumber, String content, int recurringCount, int tempCount) {
+        content = stripAiFormatting(content);
+        // Parse character blocks delimited by 【角色名】
+        String[] blocks = content.split("(?=【角色名】)");
+        int maxSort = characterRepository.findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0)
+                .stream().mapToInt(CharacterEntity::getSortOrder).max().orElse(0);
+
+        int recurringParsed = 0;
+        int tempParsed = 0;
+
+        for (String block : blocks) {
+            block = block.trim();
+            if (block.isEmpty() || !block.startsWith("【角色名】")) continue;
+
+            String name = extractField(block, "角色名");
+            if (name == null || name.isBlank()) continue;
+
+            String gender = extractField(block, "性别");
+            String role = extractField(block, "身份/职业");
+            String personality = extractField(block, "性格特点");
+            String appearance = extractField(block, "外貌特征");
+            String narrativeFunction = extractField(block, "叙事功能");
+            String typeStr = extractField(block, "角色类型");
+
+            boolean isRecurring = typeStr != null && typeStr.contains("长期");
+
+            // Determine character type based on parsed type and remaining counts
+            String characterType;
+            if (isRecurring && recurringParsed < recurringCount) {
+                characterType = "VOLUME_RECURRING";
+                recurringParsed++;
+            } else {
+                characterType = "VOLUME_TEMP";
+                tempParsed++;
+            }
+
+            CharacterEntity entity = new CharacterEntity();
+            entity.setProjectId(projectId);
+            entity.setName(name);
+            entity.setGender(gender);
+            entity.setRole(role);
+            entity.setPersonality(personality);
+            entity.setAppearance(appearance);
+            entity.setDescription(narrativeFunction);
+            entity.setStatus("GENERATED");
+            entity.setSortOrder(++maxSort);
+            entity.setCharacterType(characterType);
+            entity.setStartVolume(volumeNumber);
+            entity.setEndVolume("VOLUME_TEMP".equals(characterType) ? volumeNumber : null);
+
+            // Build summary from parsed fields
+            StringBuilder summary = new StringBuilder();
+            if (role != null) summary.append("身份：").append(role).append("；");
+            if (personality != null) summary.append("性格：").append(personality).append("；");
+            if (narrativeFunction != null) summary.append("作用：").append(narrativeFunction);
+            entity.setSummary(summary.toString());
+
+            characterRepository.save(entity);
+        }
+        log.info("[P{}] Volume {} saved {} recurring + {} temp characters",
+                projectId, volumeNumber, recurringParsed, tempParsed);
+    }
+
+    private String extractField(String block, String fieldName) {
+        Pattern p = Pattern.compile("【" + Pattern.quote(fieldName) + "】(.+?)(?=【|$)", Pattern.DOTALL);
+        Matcher m = p.matcher(block);
+        if (m.find()) {
+            return m.group(1).trim();
+        }
+        return null;
+    }
+
+    // --- Public variable builder for volume characters (prompt explore) ---
+
+    public Map<String, String> buildVolumeCharactersVariables(Long projectId, int volumeNumber) {
+        ProjectEntity project = projectRepository.findById(projectId).orElseThrow();
+        int totalChapters = project.getTotalChapters();
+        WorkflowContext baseContext = contextBuilder.build(projectId, 0);
+
+        String guidanceSuffix = stepGuidanceRepository.findByProjectIdAndStep(projectId, WorkflowStep.OUTLINE_GENERATION)
+                .filter(sg -> sg.getGuidance() != null && !sg.getGuidance().isBlank())
+                .map(sg -> "\n\n【创作指导】\n" + sg.getGuidance() + "\n请在生成时参考以上指导意见。")
+                .orElse("");
+
+        List<VolumeRange> volumes = computeVolumes(totalChapters, project.getChaptersPerVolume());
+        int totalVolumes = volumes.size();
+
+        String volumeArc = volumeOutlineRepository.findByProjectIdAndVolumeNumber(projectId, volumeNumber)
+                .map(VolumeOutlineEntity::getArcSummary).orElse("");
+
+        String allCharacters = buildAllCharactersInfo(projectId);
+
+        // Calculate counts for display
+        List<CharacterEntity> existingVolumeChars = characterRepository.findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
+        int alreadyRecurring = (int) existingVolumeChars.stream()
+                .filter(c -> "VOLUME_RECURRING".equals(c.getCharacterType())
+                        && c.getStartVolume() != null && c.getStartVolume() < volumeNumber).count();
+        int alreadyTemp = (int) existingVolumeChars.stream()
+                .filter(c -> "VOLUME_TEMP".equals(c.getCharacterType())
+                        && c.getStartVolume() != null && c.getStartVolume() < volumeNumber).count();
+
+        int recurringCount = VolumeCharacterCalculator.calculateForVolume(
+                volumeNumber, totalVolumes, project.getRecurringCharacterRate(), alreadyRecurring, true);
+        int tempCount = VolumeCharacterCalculator.calculateForVolume(
+                volumeNumber, totalVolumes, project.getTempCharacterRate(), alreadyTemp, false);
+
+        Genre genre = baseContext.getGenre();
+        return Map.ofEntries(
+                Map.entry("title", baseContext.getTitle() != null ? baseContext.getTitle() : ""),
+                Map.entry("genre", genre != null ? genre.getDisplayName() : ""),
+                Map.entry("worldSetting", wrapContent(truncate(baseContext.getWorldSetting() != null ? baseContext.getWorldSetting() : "", 400))),
+                Map.entry("volumeArc", wrapContent(volumeArc)),
+                Map.entry("existingCharacters", allCharacters),
+                Map.entry("volumeNumber", String.valueOf(volumeNumber)),
+                Map.entry("totalVolumes", String.valueOf(totalVolumes)),
+                Map.entry("recurringCount", String.valueOf(recurringCount)),
+                Map.entry("tempCount", String.valueOf(tempCount)),
+                Map.entry("stepGuidance", guidanceSuffix)
+        );
+    }
+
     // --- Character & story summary helpers ---
 
     private String buildAllCharactersInfo(Long projectId) {
@@ -1105,5 +1344,9 @@ public class OutlineGenerationService {
                 });
         outline.setContent(content);
         storyOutlineRepository.save(outline);
+    }
+
+    private static String safeStr(String s) {
+        return s != null ? s : "";
     }
 }

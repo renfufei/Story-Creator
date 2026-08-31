@@ -433,6 +433,19 @@ function workflowCoreMixin() {
                 .catch(err => alert('推进步骤失败: ' + err.message));
         },
 
+        regenerateWorldFacets() {
+            fetch(`/projects/${this.projectId}/world-facets/regenerate`, {method:'POST'})
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                    } else {
+                        alert(data.message || '分面展开已启动');
+                    }
+                })
+                .catch(err => alert('操作失败: ' + err.message));
+        },
+
         currentStepLabel() {
             const found = this.stepList.find(s => s.name === this.currentStep);
             return found ? found.label : this.currentStep;

@@ -1,0 +1,6 @@
+id: "chapter-number-arabic"
+name: "阿拉伯数字章节号"
+description: "匹配「第N章」格式，N为阿拉伯数字（1、23、123等）"
+pattern: "(?m)^\\s*第\\s*\\d+\\s*章[\\s　]*(.*)$"
+titleGroup: 1
+includeMatch: false

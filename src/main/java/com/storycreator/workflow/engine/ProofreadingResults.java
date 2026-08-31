@@ -5,8 +5,5 @@ package com.storycreator.workflow.engine;
  */
 public record ProofreadingResults(
     String plotSummary,
-    String characterIssues,
-    String consistencyIssues,
-    String continuityIssues,
     String foreshadowing
 ) {}

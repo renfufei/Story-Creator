@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
@@ -30,6 +31,14 @@ public class GlobalExceptionHandler {
         log.warn("Conflict [{}]: {}", request.getRequestURI(), ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    @ResponseBody
+    public ResponseEntity<Map<String, String>> handleNoResource(NoResourceFoundException ex, HttpServletRequest request) {
+        log.warn("No static resource [{}]", request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", "资源不存在"));
     }
 
     @ExceptionHandler(Exception.class)

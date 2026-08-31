@@ -333,6 +333,10 @@
                                     <span x-show="generateElapsed" class="ms-3"><i class="bi bi-clock"></i> 耗时 <span x-text="generateElapsed"></span></span>
                                 </small>
                                 <div class="d-flex gap-2">
+                                    <button x-show="currentStep === 'WORLD_BUILDING'" type="button" class="btn btn-outline-info btn-sm"
+                                            @click="regenerateWorldFacets()" :disabled="fullAutoRunning">
+                                        <i class="bi bi-diagram-3"></i> 展开分面
+                                    </button>
                                     <button type="button" class="btn btn-outline-primary btn-sm" @click="editing = true"
                                             :disabled="fullAutoRunning">
                                         <i class="bi bi-pencil"></i> 编辑

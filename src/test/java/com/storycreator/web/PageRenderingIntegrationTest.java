@@ -89,7 +89,7 @@ class PageRenderingIntegrationTest {
         project.setChapterWordCountMax(1200);
         project.setCharacterCount(2);
         project.setCurrentStep(WorkflowStep.CHAPTER_WRITING);
-        project.setAutoRunStrategy("DEFAULT");
+
         project.setDefaultModelConfigId(configId);
         project = projectRepository.save(project);
         projectId = project.getId();

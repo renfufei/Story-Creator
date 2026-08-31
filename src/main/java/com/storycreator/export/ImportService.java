@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.ModelType;
 import com.storycreator.core.domain.StepStatus;
+import com.storycreator.core.domain.WorldFacetKey;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.persistence.entity.*;
 import com.storycreator.persistence.repository.*;
@@ -30,6 +31,7 @@ public class ImportService {
     private final StepModelConfigRepository stepModelConfigRepository;
     private final AiModelConfigRepository aiModelConfigRepository;
     private final ProofreadingReportRepository proofreadingReportRepository;
+    private final WorldSettingFacetRepository worldSettingFacetRepository;
 
     public ImportService(ObjectMapper objectMapper,
                         ProjectRepository projectRepository,
@@ -43,7 +45,8 @@ public class ImportService {
                         StepGuidanceRepository stepGuidanceRepository,
                         StepModelConfigRepository stepModelConfigRepository,
                         AiModelConfigRepository aiModelConfigRepository,
-                        ProofreadingReportRepository proofreadingReportRepository) {
+                        ProofreadingReportRepository proofreadingReportRepository,
+                        WorldSettingFacetRepository worldSettingFacetRepository) {
         this.objectMapper = objectMapper;
         this.projectRepository = projectRepository;
         this.worldSettingRepository = worldSettingRepository;
@@ -57,6 +60,7 @@ public class ImportService {
         this.stepModelConfigRepository = stepModelConfigRepository;
         this.aiModelConfigRepository = aiModelConfigRepository;
         this.proofreadingReportRepository = proofreadingReportRepository;
+        this.worldSettingFacetRepository = worldSettingFacetRepository;
     }
 
     public ProjectJsonDto parseJson(byte[] data) {
@@ -111,6 +115,22 @@ public class ImportService {
             ws.setContent(dto.worldSetting().content());
             ws.setSummary(dto.worldSetting().summary());
             worldSettingRepository.save(ws);
+
+            // Restore facets
+            if (dto.worldSetting().facets() != null) {
+                dto.worldSetting().facets().forEach((key, content) -> {
+                    try {
+                        WorldFacetKey facetKey = WorldFacetKey.valueOf(key);
+                        var facet = new WorldSettingFacetEntity();
+                        facet.setProjectId(projectId);
+                        facet.setFacetKey(facetKey);
+                        facet.setContent(content);
+                        worldSettingFacetRepository.save(facet);
+                    } catch (IllegalArgumentException ignored) {
+                        // Skip unknown facet keys
+                    }
+                });
+            }
         }
 
         // Characters
@@ -267,6 +287,7 @@ public class ImportService {
         volumeOutlineRepository.deleteByProjectId(projectId);
         storyOutlineRepository.deleteByProjectId(projectId);
         characterRepository.deleteByProjectId(projectId);
+        worldSettingFacetRepository.deleteByProjectId(projectId);
         worldSettingRepository.deleteByProjectId(projectId);
         projectRepository.deleteById(projectId);
     }

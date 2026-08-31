@@ -75,16 +75,6 @@
                         <pre style="white-space:pre-wrap; font-size:0.85rem; margin:0;" th:text="${ch.background}">背景</pre>
                     </div>
 
-                    <!-- Behavior Boundaries (highlighted) -->
-                    <th:block th:if="${ch.behaviorBoundaries}">
-                        <div class="alert alert-info mb-0">
-                            <h6 class="alert-heading mb-2"><i class="bi bi-shield-check"></i> 行为边界</h6>
-                            <pre style="white-space:pre-wrap; font-size:0.85rem; margin:0;" th:text="${ch.behaviorBoundaries}">行为边界</pre>
-                        </div>
-                    </th:block>
-                    <th:block th:unless="${ch.behaviorBoundaries}">
-                        <p class="text-muted small mb-0"><i class="bi bi-info-circle"></i> 无行为边界数据（需使用增强策略生成）</p>
-                    </th:block>
                 </div>
             </div>
         </div>

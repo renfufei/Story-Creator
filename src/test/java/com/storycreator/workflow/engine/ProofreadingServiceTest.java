@@ -5,14 +5,11 @@ import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.core.domain.StepStatus;
 import com.storycreator.core.service.GlobalSettingService;
 import com.storycreator.persistence.entity.ChapterEntity;
-import com.storycreator.persistence.entity.ProofreadingReportEntity;
 import com.storycreator.persistence.repository.ChapterRepository;
-import com.storycreator.persistence.repository.CharacterRepository;
 import com.storycreator.persistence.repository.ProofreadingReportRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -32,7 +29,6 @@ class ProofreadingServiceTest {
     private ProofreadingService service;
 
     @Mock private ChapterRepository chapterRepository;
-    @Mock private CharacterRepository characterRepository;
     @Mock private ProofreadingReportRepository proofreadingReportRepository;
     @Mock private AiProviderRouter providerRouter;
     @Mock private PromptTemplateRegistry promptRegistry;
@@ -41,26 +37,25 @@ class ProofreadingServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ProofreadingService(chapterRepository, characterRepository,
+        service = new ProofreadingService(chapterRepository,
                 proofreadingReportRepository, providerRouter, promptRegistry,
                 aiUsageTracker, globalSettingService);
     }
 
     @Test
     void constructor_doesNotRequireChapterOutlineRepository() {
-        // Verify that ProofreadingService has exactly 7 constructor parameters
-        // (no ChapterOutlineRepository)
+        // Verify that ProofreadingService has exactly 6 constructor parameters
         Constructor<?>[] constructors = ProofreadingService.class.getConstructors();
         assertEquals(1, constructors.length);
-        assertEquals(7, constructors[0].getParameterCount(),
-                "ProofreadingService should have 7 constructor parameters (no ChapterOutlineRepository)");
+        assertEquals(6, constructors[0].getParameterCount(),
+                "ProofreadingService should have 6 constructor parameters");
     }
 
     @Test
     void saveProofreadingResults_savesToReportAndChapter_notOutline() throws Exception {
         // Use reflection to call the private saveProofreadingResults method
         var method = ProofreadingService.class.getDeclaredMethod("saveProofreadingResults",
-                ChapterEntity.class, ProofreadingResults.class);
+                ChapterEntity.class, String.class, String.class);
         method.setAccessible(true);
 
         ChapterEntity chapter = new ChapterEntity();
@@ -71,13 +66,11 @@ class ProofreadingServiceTest {
         when(proofreadingReportRepository.findByProjectIdAndChapterNumber(1L, 3))
                 .thenReturn(Optional.empty());
 
-        ProofreadingResults results = new ProofreadingResults("剧情摘要", "角色问题", "一致性问题", "衔接问题", "伏笔");
-        method.invoke(service, chapter, results);
+        method.invoke(service, chapter, "剧情摘要", "伏笔");
 
-        // Verify report was saved
+        // Verify report was saved with plot summary
         verify(proofreadingReportRepository).save(argThat(report ->
-                "剧情摘要".equals(report.getPlotSummary()) &&
-                "角色问题".equals(report.getCharacterIssues())));
+                "剧情摘要".equals(report.getPlotSummary())));
 
         // Verify chapter was saved with plot summary and proofread status
         assertEquals("剧情摘要", chapter.getPlotSummary());

@@ -2,7 +2,6 @@ package com.storycreator.ai.prompt;
 
 public enum TemplateWorkflowTag {
     STANDARD("标准"),
-    ENHANCED("增强"),
     IMAGE("图像"),
     SIDE_STORY("番外");
 

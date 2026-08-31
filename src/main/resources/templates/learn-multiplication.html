@@ -28,6 +28,14 @@
                         <i class="bi bi-hand-index"></i> <span class="d-none d-md-inline">手动步进</span><span class="d-md-none">手动</span>
                     </button>
                 </div>
+                <div class="btn-group btn-group-sm ms-2">
+                    <button class="btn" :class="gridLayout === 'rect' ? 'btn-secondary' : 'btn-outline-secondary'" @click="gridLayout = 'rect'; localStorage.setItem('multiplication_grid_layout', 'rect')">
+                        矩形
+                    </button>
+                    <button class="btn" :class="gridLayout === 'linear' ? 'btn-secondary' : 'btn-outline-secondary'" @click="gridLayout = 'linear'; localStorage.setItem('multiplication_grid_layout', 'linear')">
+                        累加
+                    </button>
+                </div>
                 <template x-if="mode === 'auto'">
                     <div class="d-flex align-items-center gap-2">
                         <button class="btn btn-sm btn-success" @click="startAuto()" x-show="!playing">
@@ -172,6 +180,7 @@ function multiplicationApp() {
         colors: ['#98D8C8', '#96CEB4', '#4ECDC4', '#45B7D1'],
         currentIndex: 0,
         mode: localStorage.getItem('multiplication_mode') || 'auto',
+        gridLayout: localStorage.getItem('multiplication_grid_layout') || 'rect',
         playing: false,
         audioCache: {},
 
@@ -188,7 +197,14 @@ function multiplicationApp() {
 
         isHighlighted(row, col) {
             const f = this.currentFormula;
-            return row <= f.a && col <= f.b;
+            if (this.gridLayout === 'rect') {
+                return row <= f.a && col <= f.b;
+            } else {
+                // linear: fill left-to-right, top-to-bottom; total = a*b cells
+                const total = f.a * f.b;
+                const cellIndex = (row - 1) * 10 + (col - 1); // 0-based
+                return cellIndex < total;
+            }
         },
 
         async playAudioByKey(key) {

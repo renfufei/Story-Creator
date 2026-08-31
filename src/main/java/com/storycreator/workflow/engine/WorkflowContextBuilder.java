@@ -1,5 +1,6 @@
 package com.storycreator.workflow.engine;
 
+import com.storycreator.core.domain.WorldFacetKey;
 import com.storycreator.persistence.entity.*;
 import com.storycreator.persistence.repository.*;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ public class WorkflowContextBuilder {
     private final ChapterOutlineRepository chapterOutlineRepository;
     private final ChapterRepository chapterRepository;
     private final StepGuidanceRepository stepGuidanceRepository;
+    private final WorldSettingFacetRepository worldSettingFacetRepository;
 
     public WorkflowContextBuilder(ProjectRepository projectRepository,
                                   WorldSettingRepository worldSettingRepository,
@@ -25,7 +27,8 @@ public class WorkflowContextBuilder {
                                   StoryOutlineRepository storyOutlineRepository,
                                   ChapterOutlineRepository chapterOutlineRepository,
                                   ChapterRepository chapterRepository,
-                                  StepGuidanceRepository stepGuidanceRepository) {
+                                  StepGuidanceRepository stepGuidanceRepository,
+                                  WorldSettingFacetRepository worldSettingFacetRepository) {
         this.projectRepository = projectRepository;
         this.worldSettingRepository = worldSettingRepository;
         this.characterRepository = characterRepository;
@@ -33,6 +36,7 @@ public class WorkflowContextBuilder {
         this.chapterOutlineRepository = chapterOutlineRepository;
         this.chapterRepository = chapterRepository;
         this.stepGuidanceRepository = stepGuidanceRepository;
+        this.worldSettingFacetRepository = worldSettingFacetRepository;
     }
 
     public WorkflowContext build(Long projectId) {
@@ -54,11 +58,22 @@ public class WorkflowContextBuilder {
         context.setChapterWordCountMin(project.getChapterWordCountMin());
         context.setChapterWordCountMax(project.getChapterWordCountMax());
 
-        // Load world setting (prefer summary for chapter writing context)
+        // Load world setting (prefer WORLD_BACKGROUND facet for chapter writing, fallback to summary)
         worldSettingRepository.findByProjectId(projectId)
                 .ifPresent(ws -> {
-                    if (chapterNumber > 0 && ws.getSummary() != null && !ws.getSummary().isBlank()) {
-                        context.setWorldSetting(ws.getSummary());
+                    if (chapterNumber > 0) {
+                        String facetContent = worldSettingFacetRepository
+                                .findByProjectIdAndFacetKey(projectId, WorldFacetKey.WORLD_BACKGROUND)
+                                .map(WorldSettingFacetEntity::getContent)
+                                .filter(c -> !c.isBlank())
+                                .orElse(null);
+                        if (facetContent != null) {
+                            context.setWorldSetting(facetContent);
+                        } else if (ws.getSummary() != null && !ws.getSummary().isBlank()) {
+                            context.setWorldSetting(ws.getSummary());
+                        } else {
+                            context.setWorldSetting(ws.getContent());
+                        }
                     } else {
                         context.setWorldSetting(ws.getContent());
                     }
@@ -66,6 +81,15 @@ public class WorkflowContextBuilder {
 
         // Load characters - overview (sort_order=0) goes to characters field
         List<CharacterEntity> chars = characterRepository.findByProjectIdOrderBySortOrder(projectId);
+
+        // Determine current volume number for filtering (only when writing a specific chapter)
+        final int currentVolume;
+        if (chapterNumber > 0 && project.getChaptersPerVolume() > 0) {
+            currentVolume = (chapterNumber - 1) / project.getChaptersPerVolume() + 1;
+        } else {
+            currentVolume = 0;
+        }
+
         if (!chars.isEmpty()) {
             chars.stream().filter(c -> c.getSortOrder() == 0).findFirst()
                     .ifPresent(s -> {
@@ -108,13 +132,17 @@ public class WorkflowContextBuilder {
                         }
                         context.setChapterSummary(summary);
 
-                        // Load character cards for this chapter's characters
+                        // Load character cards for this chapter's characters (filtered by volume)
                         if (co.getCharacterNames() != null && !co.getCharacterNames().isBlank()) {
                             List<String> names = List.of(co.getCharacterNames().split("[,，、]"));
                             List<CharacterEntity> cards = characterRepository
                                     .findByProjectIdAndSortOrderGreaterThanOrderBySortOrder(projectId, 0);
                             StringBuilder cardSb = new StringBuilder();
                             for (CharacterEntity card : cards) {
+                                // Volume filtering: skip characters not active in current volume
+                                if (currentVolume > 0 && !isCharacterActiveInVolume(card, currentVolume)) {
+                                    continue;
+                                }
                                 boolean matched = names.stream()
                                         .anyMatch(n -> n.trim().equals(card.getName()));
                                 if (matched && card.getContent() != null) {
@@ -168,5 +196,20 @@ public class WorkflowContextBuilder {
                 .ifPresent(sg -> context.setStepGuidance(sg.getGuidance()));
 
         return context;
+    }
+
+    /**
+     * Check if a character is active in the given volume.
+     * Characters with null startVolume/endVolume are considered permanent (always active).
+     */
+    private boolean isCharacterActiveInVolume(CharacterEntity character, int volumeNumber) {
+        Integer start = character.getStartVolume();
+        Integer end = character.getEndVolume();
+        // null start means permanent (INITIAL characters or legacy data)
+        if (start == null) return true;
+        if (start > volumeNumber) return false;
+        // null end means active from startVolume onwards permanently
+        if (end == null) return true;
+        return end >= volumeNumber;
     }
 }

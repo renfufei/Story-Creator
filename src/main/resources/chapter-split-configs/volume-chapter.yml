@@ -1,0 +1,6 @@
+id: "volume-chapter"
+name: "卷章格式"
+description: "匹配「第X卷 第Y章」或「卷X 章Y」格式，支持中文和阿拉伯数字"
+pattern: "(?m)^\\s*(?:第[零一二三四五六七八九十百千万\\d]+卷)?\\s*第[零一二三四五六七八九十百千万\\d]+章[\\s　]*(.*)$"
+titleGroup: 1
+includeMatch: false

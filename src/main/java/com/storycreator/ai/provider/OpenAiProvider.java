@@ -258,15 +258,29 @@ public class OpenAiProvider implements AiProvider {
 
             ArrayNode messages = root.putArray("messages");
 
-            if (request.getSystemPrompt() != null && !request.getSystemPrompt().isEmpty()) {
-                ObjectNode sysMsg = messages.addObject();
-                sysMsg.put("role", "system");
-                sysMsg.put("content", request.getSystemPrompt());
+            if (request.getMessages() != null && !request.getMessages().isEmpty()) {
+                // Multi-turn: use provided messages array
+                if (request.getSystemPrompt() != null && !request.getSystemPrompt().isEmpty()) {
+                    ObjectNode sysMsg = messages.addObject();
+                    sysMsg.put("role", "system");
+                    sysMsg.put("content", request.getSystemPrompt());
+                }
+                for (java.util.Map<String, String> msg : request.getMessages()) {
+                    ObjectNode msgNode = messages.addObject();
+                    msgNode.put("role", msg.get("role"));
+                    msgNode.put("content", msg.get("content"));
+                }
+            } else {
+                // Single-turn: legacy behavior
+                if (request.getSystemPrompt() != null && !request.getSystemPrompt().isEmpty()) {
+                    ObjectNode sysMsg = messages.addObject();
+                    sysMsg.put("role", "system");
+                    sysMsg.put("content", request.getSystemPrompt());
+                }
+                ObjectNode userMsg = messages.addObject();
+                userMsg.put("role", "user");
+                userMsg.put("content", request.getUserPrompt());
             }
-
-            ObjectNode userMsg = messages.addObject();
-            userMsg.put("role", "user");
-            userMsg.put("content", request.getUserPrompt());
 
             // Merge extra params (e.g. {"enable_thinking": false, "reasoning_effort": "none"})
             mergeExtraParams(root, request.getExtraParams());

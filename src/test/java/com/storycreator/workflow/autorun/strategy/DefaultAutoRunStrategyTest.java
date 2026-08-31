@@ -12,6 +12,7 @@ import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.workflow.autorun.AutoRunContext;
 import com.storycreator.workflow.autorun.AutoRunObservation;
 import com.storycreator.workflow.autorun.AutoRunStatus;
+import com.storycreator.workflow.engine.WorkflowContextBuilder;
 import com.storycreator.workflow.engine.WorkflowEngine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +40,8 @@ class DefaultAutoRunStrategyTest {
     @Mock private CharacterRepository characterRepository;
     @Mock private WorkflowEngine workflowEngine;
     @Mock private GlobalSettingService globalSettingService;
+    @Mock private SubStepExecutor subStepExecutor;
+    @Mock private WorkflowContextBuilder contextBuilder;
 
     private ConcurrentHashMap<Long, Boolean> stopSignals;
     private ConcurrentHashMap<Long, AutoRunObservation> observations;
@@ -46,7 +49,7 @@ class DefaultAutoRunStrategyTest {
 
     @BeforeEach
     void setUp() {
-        strategy = new DefaultAutoRunStrategy();
+        strategy = new DefaultAutoRunStrategy(subStepExecutor, contextBuilder);
         stopSignals = new ConcurrentHashMap<>();
         observations = new ConcurrentHashMap<>();
     }

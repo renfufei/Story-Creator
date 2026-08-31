@@ -56,14 +56,20 @@ public class CharacterEntity {
     @Column(length = 20)
     private String status;
 
-    @Column(name = "behavior_boundaries", columnDefinition = "TEXT")
-    private String behaviorBoundaries;
-
     @Column(name = "image_prompt_template", length = 2000)
     private String imagePromptTemplate;
 
     @Column(name = "sort_order")
     private int sortOrder;
+
+    @Column(name = "character_type", length = 20)
+    private String characterType = "INITIAL";
+
+    @Column(name = "start_volume")
+    private Integer startVolume;
+
+    @Column(name = "end_volume")
+    private Integer endVolume;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -130,14 +136,20 @@ public class CharacterEntity {
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
 
-    public String getBehaviorBoundaries() { return behaviorBoundaries; }
-    public void setBehaviorBoundaries(String behaviorBoundaries) { this.behaviorBoundaries = behaviorBoundaries; }
-
     public String getImagePromptTemplate() { return imagePromptTemplate; }
     public void setImagePromptTemplate(String imagePromptTemplate) { this.imagePromptTemplate = imagePromptTemplate; }
 
     public int getSortOrder() { return sortOrder; }
     public void setSortOrder(int sortOrder) { this.sortOrder = sortOrder; }
+
+    public String getCharacterType() { return characterType; }
+    public void setCharacterType(String characterType) { this.characterType = characterType; }
+
+    public Integer getStartVolume() { return startVolume; }
+    public void setStartVolume(Integer startVolume) { this.startVolume = startVolume; }
+
+    public Integer getEndVolume() { return endVolume; }
+    public void setEndVolume(Integer endVolume) { this.endVolume = endVolume; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

@@ -151,6 +151,7 @@
                                              data-base-url=${config.baseUrl},
                                              data-extra-params=${config.extraParams},
                                              data-active=${config.active},
+                                             data-pre-call-delay=${config.preCallDelaySeconds},
                                              data-model-type='TEXT'"
                                     @click="openEditModal($event.currentTarget)">
                                 <i class="bi bi-pencil"></i> 编辑
@@ -210,6 +211,7 @@
                                              data-base-url=${config.baseUrl},
                                              data-extra-params=${config.extraParams},
                                              data-active=${config.active},
+                                             data-pre-call-delay=${config.preCallDelaySeconds},
                                              data-model-type='TTS'"
                                     @click="openEditModal($event.currentTarget)">
                                 <i class="bi bi-pencil"></i> 编辑
@@ -268,6 +270,7 @@
                                              data-base-url=${config.baseUrl},
                                              data-extra-params=${config.extraParams},
                                              data-active=${config.active},
+                                             data-pre-call-delay=${config.preCallDelaySeconds},
                                              data-model-type='IMAGE'"
                                     @click="openEditModal($event.currentTarget)">
                                 <i class="bi bi-pencil"></i> 编辑
@@ -373,6 +376,7 @@
                                              data-base-url=${config.baseUrl},
                                              data-extra-params=${config.extraParams},
                                              data-active=${config.active},
+                                             data-pre-call-delay=${config.preCallDelaySeconds},
                                              data-model-type='TEXT'"
                                     @click="openEditModal($event.currentTarget)">
                                 <i class="bi bi-pencil"></i> 编辑
@@ -434,6 +438,7 @@
                                              data-base-url=${config.baseUrl},
                                              data-extra-params=${config.extraParams},
                                              data-active=${config.active},
+                                             data-pre-call-delay=${config.preCallDelaySeconds},
                                              data-model-type='TTS'"
                                     @click="openEditModal($event.currentTarget)">
                                 <i class="bi bi-pencil"></i> 编辑
@@ -529,6 +534,7 @@
                                              data-base-url=${config.baseUrl},
                                              data-extra-params=${config.extraParams},
                                              data-active=${config.active},
+                                             data-pre-call-delay=${config.preCallDelaySeconds},
                                              data-model-type='IMAGE'"
                                     @click="openEditModal($event.currentTarget)">
                                 <i class="bi bi-pencil"></i> 编辑
@@ -689,6 +695,14 @@
                                   x-text="probeMessage" x-show="probeMessage"></span>
                         </div>
 
+                        <!-- Pre-call delay (TEXT only) -->
+                        <div class="mb-3" x-show="form.modelType === 'TEXT'">
+                            <label class="form-label">调用前延迟 (秒)</label>
+                            <input type="number" class="form-control form-control-sm" name="preCallDelaySeconds"
+                                   x-model.number="form.preCallDelaySeconds" min="0" max="600" style="max-width: 120px;">
+                            <small class="text-muted">每次调用该模型前暂停的秒数，用于降低服务区压力；0 表示不延迟</small>
+                        </div>
+
                         <!-- Active -->
                         <div class="form-check">
                             <input type="checkbox" class="form-check-input" name="active" value="true"
@@ -796,6 +810,7 @@
                 apiKey: '',
                 baseUrl: '',
                 extraParams: '',
+                preCallDelaySeconds: 0,
                 active: true,
                 clearApiKey: false
             },
@@ -809,6 +824,7 @@
                 this.form.apiKey = '';
                 this.form.baseUrl = el.dataset.baseUrl || '';
                 this.form.extraParams = el.dataset.extraParams || '';
+                this.form.preCallDelaySeconds = parseInt(el.dataset.preCallDelay) || 0;
                 this.form.active = el.dataset.active === 'true';
                 this.form.clearApiKey = false;
                 this.probeMessage = '';
@@ -824,6 +840,7 @@
                 this.form.apiKey = '';
                 this.form.baseUrl = '';
                 this.form.extraParams = '';
+                this.form.preCallDelaySeconds = 0;
                 this.form.active = true;
                 this.form.clearApiKey = false;
                 this.probeMessage = '';

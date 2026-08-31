@@ -27,7 +27,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Shared infrastructure context passed to AutoRunStrategy implementations.
+ * Shared infrastructure context passed to DefaultAutoRunStrategy.
  * Encapsulates repositories, engine, and common operations (generateAndSave, progress, stop checks).
  */
 public class AutoRunContext {
@@ -36,7 +36,7 @@ public class AutoRunContext {
     private static final int CONTENT_MIN_LENGTH = 50;
 
     private static final Pattern SENTINEL_CHAR = Pattern.compile("\\[\\[CHAR:(OVERVIEW|CARD:\\d+)]]");
-    private static final Pattern SENTINEL_SECTION = Pattern.compile("\\[\\[SECTION:(VOLUME:\\d+:\\d+:\\d+|CHAPTER:\\d+:\\d+|REFINE:\\d+:\\d+|SUMMARY)]]");
+    private static final Pattern SENTINEL_SECTION = Pattern.compile("\\[\\[SECTION:(VOLUME:\\d+:\\d+:\\d+|VOLCHARS:\\d+|CHAPTER:\\d+:\\d+|REFINE:\\d+:\\d+|SUMMARY)]]");
     private static final Pattern SENTINEL_PROOFREAD = Pattern.compile("\\[\\[PROOFREAD:CHAPTER:\\d+:(PLOT_SUMMARY|CHARACTER_CHECK|CONSISTENCY|CONTINUITY|FORESHADOWING)]]");
 
     private Long projectId;
@@ -123,6 +123,7 @@ public class AutoRunContext {
         if (m.find()) {
             String val = m.group(1);
             if (val.equals("SUMMARY")) return "STORY_SUMMARY";
+            if (val.startsWith("VOLCHARS")) return "VOLUME_CHARACTERS";
             if (val.startsWith("VOLUME")) return "VOLUME_ARC";
             if (val.startsWith("CHAPTER")) return "CHAPTER_OUTLINE";
             if (val.startsWith("REFINE")) return "CHAPTER_OUTLINE_REFINE";

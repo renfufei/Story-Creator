@@ -11,6 +11,7 @@ import com.storycreator.persistence.repository.*;
 import com.storycreator.persistence.entity.AutoRunStepConfigEntity;
 import com.storycreator.persistence.repository.AutoRunStepConfigRepository;
 import com.storycreator.workflow.background.BackgroundGenerationService;
+import com.storycreator.workflow.engine.WorldFacetElaborationService;
 import com.storycreator.workflow.engine.WorkflowEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +50,7 @@ public class WorkflowController {
     private final BackgroundGenerationService backgroundGenerationService;
     private final AutoRunStepConfigRepository autoRunStepConfigRepository;
     private final CharacterStateDimensionService characterStateDimensionService;
+    private final WorldFacetElaborationService worldFacetElaborationService;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     public WorkflowController(WorkflowEngine workflowEngine,
@@ -67,7 +69,8 @@ public class WorkflowController {
                              GlobalSettingService globalSettingService,
                              BackgroundGenerationService backgroundGenerationService,
                              AutoRunStepConfigRepository autoRunStepConfigRepository,
-                             CharacterStateDimensionService characterStateDimensionService) {
+                             CharacterStateDimensionService characterStateDimensionService,
+                             WorldFacetElaborationService worldFacetElaborationService) {
         this.workflowEngine = workflowEngine;
         this.projectRepository = projectRepository;
         this.workflowStateRepository = workflowStateRepository;
@@ -85,6 +88,7 @@ public class WorkflowController {
         this.backgroundGenerationService = backgroundGenerationService;
         this.autoRunStepConfigRepository = autoRunStepConfigRepository;
         this.characterStateDimensionService = characterStateDimensionService;
+        this.worldFacetElaborationService = worldFacetElaborationService;
     }
 
     @GetMapping("/workflow")
@@ -148,8 +152,8 @@ public class WorkflowController {
                     existingKeys.add(ws.name());
                 }
             }
-            // Ensure sub-steps based on strategy
-            String strategy = project.getAutoRunStrategy() != null ? project.getAutoRunStrategy() : "DEFAULT";
+            // Ensure sub-steps
+            String strategy = "DEFAULT";
             List<String> subSteps = getSubStepsForStrategy(strategy);
             for (String subStep : subSteps) {
                 if (!existingKeys.contains(subStep)) {
@@ -598,6 +602,9 @@ public class WorkflowController {
             map.put("description", ch.getDescription());
             map.put("sortOrder", ch.getSortOrder());
             map.put("status", ch.getStatus() != null ? ch.getStatus() : "GENERATED");
+            map.put("characterType", ch.getCharacterType() != null ? ch.getCharacterType() : "INITIAL");
+            map.put("startVolume", ch.getStartVolume());
+            map.put("endVolume", ch.getEndVolume());
             return map;
         }).toList();
     }
@@ -1293,21 +1300,23 @@ public class WorkflowController {
     }
 
     private List<String> getSubStepsForStrategy(String strategy) {
-        return switch (strategy) {
-            case "ENHANCED" -> List.of(
-                    "WRITING_RULES", "STYLE_FINGERPRINT", "CHARACTER_REFINE", "BEHAVIOR_BOUNDARIES",
-                    "CHAPTER_OUTLINE_REFINE",
-                    "CONTEXT_BRIEFING", "PLOT_REASONING",
-                    "INSTANT_REVIEW", "CONTENT_OPTIMIZATION", "STORYLINE_UPDATE", "DEEP_REVIEW",
-                    "CHARACTER_STATES",
-                    "PROOFREAD_FIX"
-            );
-            default -> List.of(
-                    "CHARACTER_REFINE",
-                    "CHAPTER_OUTLINE_REFINE",
-                    "CHARACTER_STATES",
-                    "PROOFREAD_FIX"
-            );
-        };
+        return List.of(
+                "CHARACTER_REFINE",
+                "CHAPTER_OUTLINE_REFINE",
+                "CONTEXT_BRIEFING",
+                "CHARACTER_STATES",
+                "PROOFREAD_FIX"
+        );
+    }
+
+    @PostMapping("/world-facets/regenerate")
+    @ResponseBody
+    public ResponseEntity<Map<String, String>> regenerateWorldFacets(@PathVariable Long projectId) {
+        var ws = worldSettingRepository.findByProjectId(projectId).orElse(null);
+        if (ws == null || ws.getContent() == null || ws.getContent().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "世界观设定为空，无法生成分面"));
+        }
+        worldFacetElaborationService.elaborateAllFacetsAsync(projectId, ws.getContent());
+        return ResponseEntity.ok(Map.of("message", "分面展开已在后台启动"));
     }
 }

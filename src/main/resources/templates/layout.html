@@ -17,6 +17,9 @@
             </a>
             <ul class="navbar-nav ms-auto">
                 <li class="nav-item">
+                    <a class="nav-link" th:href="@{/chat}"><i class="bi bi-chat-dots"></i> 聊天</a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" th:href="@{/tts-export}">语音导出</a>
                 </li>
                 <li class="nav-item">
@@ -33,6 +36,7 @@
                         <li><a class="dropdown-item" th:href="@{/settings/tts-templates}">TTS替换模板</a></li>
                         <li><a class="dropdown-item" th:href="@{/settings/guidances}">创作指导库</a></li>
                         <li><a class="dropdown-item" th:href="@{/settings/materials}">素材库</a></li>
+                        <li><a class="dropdown-item" th:href="@{/settings/chapter-split-configs}">章节分割配置</a></li>
                     </ul>
                 </li>
             </ul>

@@ -77,13 +77,6 @@
                                                     </span>
                                                     <div class="d-flex gap-1 align-items-center">
                                                         <template x-if="item.proofreadStatus === 'GENERATED' || item.proofreadStatus === 'CONFIRMED'">
-                                                            <span class="small text-muted me-2">
-                                                                <span x-text="'角色:' + parseJson(item.characterIssues).length + '项'"></span>
-                                                                <span class="ms-1" x-text="'一致性:' + parseJson(item.consistencyIssues).length + '项'"></span>
-                                                                <span class="ms-1" x-text="'衔接:' + parseJson(item.continuityIssues).length + '项'"></span>
-                                                            </span>
-                                                        </template>
-                                                        <template x-if="item.proofreadStatus === 'GENERATED' || item.proofreadStatus === 'CONFIRMED'">
                                                             <span class="d-flex gap-1 align-items-center">
                                                                 <button x-show="item.proofreadFixStatus === 'GENERATED' || item.proofreadFixStatus === 'CONFIRMED'"
                                                                         class="btn btn-sm btn-outline-success"
@@ -112,51 +105,6 @@
                                                     <div class="mb-2">
                                                         <small class="fw-bold text-muted"><i class="bi bi-file-text"></i> 情节摘要</small>
                                                         <p class="mb-1 small" x-text="item.plotSummary || '（无）'"></p>
-                                                    </div>
-                                                    <div class="mb-2">
-                                                        <small class="fw-bold text-muted"><i class="bi bi-people"></i> 角色校正</small>
-                                                        <template x-if="parseJson(item.characterIssues).length === 0">
-                                                            <p class="mb-1 small text-success">无问题</p>
-                                                        </template>
-                                                        <template x-if="parseJson(item.characterIssues).length > 0">
-                                                            <ul class="list-unstyled mb-1">
-                                                                <template x-for="issue in parseJson(item.characterIssues)" :key="issue.found">
-                                                                    <li class="small text-warning">
-                                                                        "<span x-text="issue.found"></span>" → "<span x-text="issue.should_be"></span>"
-                                                                        <span x-show="issue.context" class="text-muted" x-text="'(' + issue.context + ')'"></span>
-                                                                    </li>
-                                                                </template>
-                                                            </ul>
-                                                        </template>
-                                                    </div>
-                                                    <div class="mb-2">
-                                                        <small class="fw-bold text-muted"><i class="bi bi-exclamation-triangle"></i> 一致性问题</small>
-                                                        <template x-if="parseJson(item.consistencyIssues).length === 0">
-                                                            <p class="mb-1 small text-success">无问题</p>
-                                                        </template>
-                                                        <template x-if="parseJson(item.consistencyIssues).length > 0">
-                                                            <ul class="list-unstyled mb-1">
-                                                                <template x-for="(issue, idx) in parseJson(item.consistencyIssues)" :key="idx">
-                                                                    <li class="small">
-                                                                        <span class="badge" :class="issue.severity === 'high' ? 'bg-danger' : (issue.severity === 'medium' ? 'bg-warning' : 'bg-info')" x-text="issue.type"></span>
-                                                                        <span x-text="issue.description"></span>
-                                                                    </li>
-                                                                </template>
-                                                            </ul>
-                                                        </template>
-                                                    </div>
-                                                    <div class="mb-2">
-                                                        <small class="fw-bold text-muted"><i class="bi bi-link-45deg"></i> 章节衔接</small>
-                                                        <template x-if="parseJson(item.continuityIssues).length === 0">
-                                                            <p class="mb-1 small text-success">衔接良好</p>
-                                                        </template>
-                                                        <template x-if="parseJson(item.continuityIssues).length > 0">
-                                                            <ul class="list-unstyled mb-1">
-                                                                <template x-for="(issue, idx) in parseJson(item.continuityIssues)" :key="idx">
-                                                                    <li class="small text-warning" x-text="issue.issue"></li>
-                                                                </template>
-                                                            </ul>
-                                                        </template>
                                                     </div>
                                                     <div class="mb-2">
                                                         <small class="fw-bold text-muted"><i class="bi bi-lightbulb"></i> 伏笔追踪</small>
@@ -281,57 +229,6 @@
                             <div class="mb-2">
                                 <small class="fw-bold text-muted"><i class="bi bi-file-text"></i> 情节摘要</small>
                                 <p class="mb-1 small" x-text="item.plotSummary || '（无）'"></p>
-                            </div>
-
-                            <!-- Character Issues -->
-                            <div class="mb-2">
-                                <small class="fw-bold text-muted"><i class="bi bi-people"></i> 角色校正</small>
-                                <template x-if="parseJson(item.characterIssues).length === 0">
-                                    <p class="mb-1 small text-success">无问题</p>
-                                </template>
-                                <template x-if="parseJson(item.characterIssues).length > 0">
-                                    <ul class="list-unstyled mb-1">
-                                        <template x-for="issue in parseJson(item.characterIssues)" :key="issue.found">
-                                            <li class="small text-warning">
-                                                "<span x-text="issue.found"></span>" → "<span x-text="issue.should_be"></span>"
-                                                <span x-show="issue.context" class="text-muted" x-text="'(' + issue.context + ')'"></span>
-                                            </li>
-                                        </template>
-                                    </ul>
-                                </template>
-                            </div>
-
-                            <!-- Consistency Issues -->
-                            <div class="mb-2">
-                                <small class="fw-bold text-muted"><i class="bi bi-exclamation-triangle"></i> 一致性问题</small>
-                                <template x-if="parseJson(item.consistencyIssues).length === 0">
-                                    <p class="mb-1 small text-success">无问题</p>
-                                </template>
-                                <template x-if="parseJson(item.consistencyIssues).length > 0">
-                                    <ul class="list-unstyled mb-1">
-                                        <template x-for="(issue, idx) in parseJson(item.consistencyIssues)" :key="idx">
-                                            <li class="small">
-                                                <span class="badge" :class="issue.severity === 'high' ? 'bg-danger' : (issue.severity === 'medium' ? 'bg-warning' : 'bg-info')" x-text="issue.type"></span>
-                                                <span x-text="issue.description"></span>
-                                            </li>
-                                        </template>
-                                    </ul>
-                                </template>
-                            </div>
-
-                            <!-- Continuity Issues -->
-                            <div class="mb-2">
-                                <small class="fw-bold text-muted"><i class="bi bi-link-45deg"></i> 章节衔接</small>
-                                <template x-if="parseJson(item.continuityIssues).length === 0">
-                                    <p class="mb-1 small text-success">衔接良好</p>
-                                </template>
-                                <template x-if="parseJson(item.continuityIssues).length > 0">
-                                    <ul class="list-unstyled mb-1">
-                                        <template x-for="(issue, idx) in parseJson(item.continuityIssues)" :key="idx">
-                                            <li class="small text-warning" x-text="issue.issue"></li>
-                                        </template>
-                                    </ul>
-                                </template>
                             </div>
 
                             <!-- Foreshadowing -->

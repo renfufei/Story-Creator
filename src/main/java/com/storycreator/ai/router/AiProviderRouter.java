@@ -2,6 +2,7 @@ package com.storycreator.ai.router;
 
 import com.storycreator.core.domain.ModelType;
 import com.storycreator.core.port.ai.AiProvider;
+import com.storycreator.ai.provider.DelayingAiProvider;
 import com.storycreator.persistence.entity.AiModelConfigEntity;
 import com.storycreator.persistence.entity.GlobalSettingEntity;
 import com.storycreator.persistence.entity.ProjectEntity;
@@ -85,7 +86,7 @@ public class AiProviderRouter {
             if (config.getApiKey() != null && !config.getApiKey().isBlank()) {
                 AiProvider provider = providers.get(config.getProvider());
                 if (provider != null) {
-                    return new ResolvedModel(provider, config.getModelId(), config.getBaseUrl(), config.getApiKey(), config.getExtraParams());
+                    return new ResolvedModel(wrapWithDelay(provider, config), config.getModelId(), config.getBaseUrl(), config.getApiKey(), config.getExtraParams());
                 }
             }
         }
@@ -104,10 +105,15 @@ public class AiProviderRouter {
         if (config != null && config.isActive() && config.getModelType() == ModelType.TEXT) {
             AiProvider provider = providers.get(config.getProvider());
             if (provider != null) {
-                return new ResolvedModel(provider, config.getModelId(), config.getBaseUrl(), config.getApiKey(), config.getExtraParams());
+                return new ResolvedModel(wrapWithDelay(provider, config), config.getModelId(), config.getBaseUrl(), config.getApiKey(), config.getExtraParams());
             }
         }
         return null;
+    }
+
+    private AiProvider wrapWithDelay(AiProvider provider, AiModelConfigEntity config) {
+        int delay = config.getPreCallDelaySeconds();
+        return delay > 0 ? new DelayingAiProvider(provider, delay) : provider;
     }
 
     public List<AiModelConfigEntity> getActiveConfigs() {

@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('聊天', ~{::section})}">
+<body>
+<section>
+<div x-data="chatApp()" x-init="init()" style="height: calc(100vh - 120px);">
+    <div class="row h-100 g-0">
+        <!-- Left Sidebar: Sessions -->
+        <div class="col-3 border-end d-flex flex-column h-100">
+            <div class="p-2 border-bottom">
+                <button class="btn btn-primary btn-sm w-100" @click="createSession()">
+                    <i class="bi bi-plus-lg"></i> 新建会话
+                </button>
+            </div>
+            <div class="overflow-auto flex-grow-1">
+                <template x-for="s in sessions" :key="s.id">
+                    <div class="p-2 border-bottom d-flex align-items-center"
+                         :class="{'bg-primary-subtle': activeSessionId == s.id}"
+                         style="cursor: pointer;">
+                        <div class="flex-grow-1 text-truncate" @click="switchSession(s.id)">
+                            <span x-show="editingSessionId !== s.id" x-text="s.title" class="small"></span>
+                            <input x-show="editingSessionId === s.id" x-model="editingTitle"
+                                   @keyup.enter="saveTitle(s)" @blur="saveTitle(s)"
+                                   class="form-control form-control-sm" x-ref="titleInput">
+                        </div>
+                        <div class="dropdown ms-1" @click.stop>
+                            <button class="btn btn-sm p-0 text-muted" data-bs-toggle="dropdown">
+                                <i class="bi bi-three-dots-vertical"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item small" href="#" @click.prevent="startEditTitle(s)">重命名</a></li>
+                                <li><a class="dropdown-item small text-danger" href="#" @click.prevent="deleteSession(s.id)">删除</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="col-9 d-flex flex-column h-100">
+            <!-- Messages -->
+            <div class="flex-grow-1 overflow-auto p-3" x-ref="messageContainer">
+                <template x-if="messages.length === 0 && !streaming">
+                    <div class="text-center text-muted mt-5">
+                        <i class="bi bi-chat-dots" style="font-size: 3rem;"></i>
+                        <p class="mt-2">开始对话吧</p>
+                    </div>
+                </template>
+                <template x-for="msg in messages" :key="msg.id || msg.tempId">
+                    <div class="mb-3" :class="{'text-end': msg.role === 'user'}">
+                        <div class="d-inline-block p-2 rounded-3" style="max-width: 80%;"
+                             :class="msg.role === 'user' ? 'bg-primary text-white' : 'bg-light border'">
+                            <!-- Text content -->
+                            <template x-if="!msg.mediaFilePath">
+                                <div style="white-space: pre-wrap; word-break: break-word;" x-text="msg.content"></div>
+                            </template>
+                            <!-- Image -->
+                            <template x-if="msg.mediaFilePath && msg.modelType === 'IMAGE'">
+                                <div>
+                                    <img :src="'/api/chat/media/' + msg.mediaFilePath" style="max-width: 100%; max-height: 400px; border-radius: 8px;" loading="lazy">
+                                    <div x-show="msg.content" class="mt-1 small" x-text="msg.content"></div>
+                                </div>
+                            </template>
+                            <!-- Audio -->
+                            <template x-if="msg.mediaFilePath && msg.modelType === 'TTS'">
+                                <div>
+                                    <audio controls :src="'/api/chat/media/' + msg.mediaFilePath" style="max-width: 100%;"></audio>
+                                    <div x-show="msg.content" class="mt-1 small" x-text="msg.content"></div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+                <!-- Streaming response -->
+                <template x-if="streaming">
+                    <div class="mb-3">
+                        <div class="d-inline-block p-2 rounded-3 bg-light border" style="max-width: 80%;">
+                            <div style="white-space: pre-wrap; word-break: break-word;" x-text="streamingContent || '...'"></div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Input Area -->
+            <div class="border-top p-3">
+                <!-- Model selector row -->
+                <div class="d-flex gap-2 mb-2 align-items-center">
+                    <select x-model="selectedType" class="form-select form-select-sm" style="width: 100px;" @change="onTypeChange()">
+                        <option value="TEXT">文本</option>
+                        <option value="IMAGE">图像</option>
+                        <option value="TTS">语音</option>
+                    </select>
+                    <select x-model="selectedConfigId" class="form-select form-select-sm" style="width: 200px;">
+                        <template x-for="c in currentConfigs" :key="c.id">
+                            <option :value="c.id" x-text="c.displayName + ' (' + c.modelId + ')'"></option>
+                        </template>
+                    </select>
+                    <!-- TTS options -->
+                    <template x-if="selectedType === 'TTS'">
+                        <div class="d-flex gap-2">
+                            <select x-model="ttsVoice" class="form-select form-select-sm" style="width: 100px;">
+                                <option value="alloy">Alloy</option>
+                                <option value="echo">Echo</option>
+                                <option value="fable">Fable</option>
+                                <option value="onyx">Onyx</option>
+                                <option value="nova">Nova</option>
+                                <option value="shimmer">Shimmer</option>
+                            </select>
+                            <input type="number" x-model="ttsSpeed" class="form-control form-control-sm" style="width: 70px;" min="0.25" max="4.0" step="0.25" title="语速">
+                        </div>
+                    </template>
+                </div>
+                <!-- Text input -->
+                <div class="d-flex gap-2">
+                    <textarea x-model="userInput" class="form-control" rows="2"
+                              placeholder="输入消息..."
+                              @keydown.enter.ctrl="sendMessage()"
+                              @keydown.enter.meta="sendMessage()"
+                              :disabled="streaming || sending"></textarea>
+                    <button class="btn btn-primary" @click="sendMessage()" :disabled="!userInput.trim() || streaming || sending">
+                        <i class="bi bi-send"></i>
+                    </button>
+                </div>
+                <div class="text-muted small mt-1">Ctrl+Enter 发送</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script th:inline="javascript">
+    var initialSessions = /*[[${sessions}]]*/ [];
+    var textConfigs = /*[[${textConfigs}]]*/ [];
+    var ttsConfigs = /*[[${ttsConfigs}]]*/ [];
+    var imageConfigs = /*[[${imageConfigs}]]*/ [];
+</script>
+<script>
+function chatApp() {
+    return {
+        sessions: [],
+        activeSessionId: null,
+        messages: [],
+        userInput: '',
+        streaming: false,
+        sending: false,
+        streamingContent: '',
+        selectedType: 'TEXT',
+        selectedConfigId: null,
+        ttsVoice: 'alloy',
+        ttsSpeed: 1.0,
+        currentConfigs: [],
+        editingSessionId: null,
+        editingTitle: '',
+        _textConfigs: [],
+        _ttsConfigs: [],
+        _imageConfigs: [],
+
+        init: function() {
+            var self = this;
+            // Parse configs
+            self._textConfigs = (textConfigs || []).map(function(c) {
+                return { id: c.id, displayName: c.displayName, modelId: c.modelId };
+            });
+            self._ttsConfigs = (ttsConfigs || []).map(function(c) {
+                return { id: c.id, displayName: c.displayName, modelId: c.modelId };
+            });
+            self._imageConfigs = (imageConfigs || []).map(function(c) {
+                return { id: c.id, displayName: c.displayName, modelId: c.modelId };
+            });
+
+            // Parse sessions
+            self.sessions = (initialSessions || []).map(function(s) {
+                return { id: s.id, title: s.title };
+            });
+
+            self.onTypeChange();
+
+            // Auto-select first session or create one
+            if (self.sessions.length > 0) {
+                self.switchSession(self.sessions[0].id);
+            }
+        },
+
+        onTypeChange: function() {
+            var self = this;
+            if (self.selectedType === 'TEXT') {
+                self.currentConfigs = self._textConfigs;
+            } else if (self.selectedType === 'TTS') {
+                self.currentConfigs = self._ttsConfigs;
+            } else if (self.selectedType === 'IMAGE') {
+                self.currentConfigs = self._imageConfigs;
+            }
+            if (self.currentConfigs.length > 0) {
+                self.selectedConfigId = self.currentConfigs[0].id;
+            } else {
+                self.selectedConfigId = null;
+            }
+        },
+
+        createSession: function() {
+            var self = this;
+            fetch('/api/chat/sessions', { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    self.sessions.unshift({ id: data.id, title: data.title });
+                    self.switchSession(data.id);
+                });
+        },
+
+        switchSession: function(id) {
+            var self = this;
+            self.activeSessionId = id;
+            self.messages = [];
+            self.streamingContent = '';
+            fetch('/api/chat/sessions/' + id + '/messages')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    self.messages = data;
+                    self.$nextTick(function() { self.scrollToBottom(); });
+                });
+        },
+
+        deleteSession: function(id) {
+            var self = this;
+            if (!confirm('确认删除此会话?')) return;
+            fetch('/api/chat/sessions/' + id, { method: 'DELETE' })
+                .then(function() {
+                    self.sessions = self.sessions.filter(function(s) { return s.id !== id; });
+                    if (self.activeSessionId === id) {
+                        if (self.sessions.length > 0) {
+                            self.switchSession(self.sessions[0].id);
+                        } else {
+                            self.activeSessionId = null;
+                            self.messages = [];
+                        }
+                    }
+                });
+        },
+
+        startEditTitle: function(s) {
+            this.editingSessionId = s.id;
+            this.editingTitle = s.title;
+        },
+
+        saveTitle: function(s) {
+            var self = this;
+            if (self.editingTitle.trim()) {
+                s.title = self.editingTitle.trim();
+                fetch('/api/chat/sessions/' + s.id + '/title', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: s.title })
+                });
+            }
+            self.editingSessionId = null;
+        },
+
+        sendMessage: function() {
+            var self = this;
+            if (!self.userInput.trim() || self.streaming || self.sending) return;
+
+            // Auto-create session if none
+            if (!self.activeSessionId) {
+                fetch('/api/chat/sessions', { method: 'POST' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        self.sessions.unshift({ id: data.id, title: data.title });
+                        self.activeSessionId = data.id;
+                        self.doSend();
+                    });
+                return;
+            }
+
+            self.doSend();
+        },
+
+        doSend: function() {
+            var self = this;
+            var input = self.userInput.trim();
+            self.userInput = '';
+
+            if (self.selectedType === 'TEXT') {
+                self.sendTextMessage(input);
+            } else {
+                self.sendMediaMessage(input);
+            }
+        },
+
+        sendTextMessage: function(input) {
+            var self = this;
+            // Show user message immediately
+            self.messages.push({ tempId: Date.now(), role: 'user', content: input });
+            self.streaming = true;
+            self.streamingContent = '';
+            self.$nextTick(function() { self.scrollToBottom(); });
+
+            var url = '/api/chat/sessions/' + self.activeSessionId + '/stream?configId=' + self.selectedConfigId + '&input=' + encodeURIComponent(input);
+
+            fetch(url).then(function(response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                var reader = response.body.getReader();
+                var decoder = new TextDecoder();
+                var buffer = '';
+
+                function pump() {
+                    return reader.read().then(function(result) {
+                        if (result.done) {
+                            self.finishStreaming();
+                            return;
+                        }
+                        buffer += decoder.decode(result.value, { stream: true });
+                        var parts = buffer.split('\n\n');
+                        buffer = parts.pop();
+                        for (var i = 0; i < parts.length; i++) {
+                            var block = parts[i].trim();
+                            if (!block) continue;
+                            var eventName = '', data = '';
+                            var lines = block.split('\n');
+                            for (var j = 0; j < lines.length; j++) {
+                                if (lines[j].startsWith('event:')) eventName = lines[j].substring(6).trim();
+                                else if (lines[j].startsWith('data:')) data = lines[j].substring(5);
+                            }
+                            if (eventName === 'token') {
+                                self.streamingContent += data;
+                                self.$nextTick(function() { self.scrollToBottom(); });
+                            } else if (eventName === 'done') {
+                                self.finishStreaming();
+                                return;
+                            } else if (eventName === 'error') {
+                                self.streamingContent += '\n[错误: ' + (data || '调用失败') + ']';
+                                self.finishStreaming();
+                                return;
+                            }
+                        }
+                        return pump();
+                    });
+                }
+                return pump();
+            }).catch(function(err) {
+                self.streamingContent = '请求失败: ' + err.message;
+                self.finishStreaming();
+            });
+        },
+
+        finishStreaming: function() {
+            var self = this;
+            if (self.streamingContent) {
+                self.messages.push({ tempId: Date.now() + 1, role: 'assistant', content: self.streamingContent, modelType: 'TEXT' });
+            }
+            self.streaming = false;
+            self.streamingContent = '';
+            self.$nextTick(function() { self.scrollToBottom(); });
+        },
+
+        sendMediaMessage: function(input) {
+            var self = this;
+            self.messages.push({ tempId: Date.now(), role: 'user', content: input });
+            self.sending = true;
+            self.$nextTick(function() { self.scrollToBottom(); });
+
+            var body = {
+                configId: self.selectedConfigId,
+                input: input,
+                type: self.selectedType
+            };
+            if (self.selectedType === 'TTS') {
+                body.voice = self.ttsVoice;
+                body.speed = self.ttsSpeed;
+            }
+
+            fetch('/api/chat/sessions/' + self.activeSessionId + '/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                self.sending = false;
+                if (data.success) {
+                    var msg = { tempId: Date.now() + 1, role: 'assistant', modelType: self.selectedType };
+                    if (self.selectedType === 'IMAGE') {
+                        msg.mediaFilePath = data.mediaUrl.replace('/api/chat/media/', '');
+                        msg.content = data.revisedPrompt || '';
+                    } else {
+                        msg.mediaFilePath = data.mediaUrl.replace('/api/chat/media/', '');
+                        msg.content = input;
+                    }
+                    self.messages.push(msg);
+                } else {
+                    self.messages.push({ tempId: Date.now() + 1, role: 'assistant', content: '错误: ' + (data.message || '未知错误'), modelType: 'TEXT' });
+                }
+                self.$nextTick(function() { self.scrollToBottom(); });
+            })
+            .catch(function(err) {
+                self.sending = false;
+                self.messages.push({ tempId: Date.now() + 1, role: 'assistant', content: '请求失败: ' + err.message, modelType: 'TEXT' });
+            });
+        },
+
+        scrollToBottom: function() {
+            var el = this.$refs.messageContainer;
+            if (el) el.scrollTop = el.scrollHeight;
+        }
+    };
+}
+</script>
+</section>
+</body>
+</html>

@@ -333,6 +333,16 @@
                         </span>
                     </button>
                 </span>
+                <!-- Expansion mark button -->
+                <span th:with="cn=${chapter.chapterNumber}, isMarked=${chapter.expansionStatus != null}">
+                    <button class="btn btn-sm"
+                            th:classappend="${chapter.expansionStatus != null} ? 'btn-warning' : 'btn-outline-warning'"
+                            th:data-chapter="${chapter.chapterNumber}"
+                            th:title="${chapter.expansionStatus != null} ? '已标记扩写' : '标记为扩写备选'"
+                            onclick="toggleExpansionMark(this)">
+                        <i class="bi bi-arrows-angle-expand"></i>
+                    </button>
+                </span>
             </div>
             <div class="chapter-content mt-3" th:text="${chapter.content ?: '（暂无内容）'}">
                 章节内容
@@ -806,6 +816,28 @@
             }
         });
     });
+    </script>
+    <script th:inline="javascript">
+    const EXPANSION_PROJECT_ID = /*[[${project.id}]]*/ 0;
+    function toggleExpansionMark(btn) {
+        const chapterNumber = parseInt(btn.dataset.chapter);
+        const isMarked = btn.classList.contains('btn-warning');
+        fetch('/projects/' + EXPANSION_PROJECT_ID + '/expansion/mark', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({chapterNumbers: [chapterNumber], marked: !isMarked})
+        }).then(resp => resp.json()).then(() => {
+            if (isMarked) {
+                btn.classList.remove('btn-warning');
+                btn.classList.add('btn-outline-warning');
+                btn.title = '标记为扩写备选';
+            } else {
+                btn.classList.remove('btn-outline-warning');
+                btn.classList.add('btn-warning');
+                btn.title = '已标记扩写';
+            }
+        });
+    }
     </script>
 </body>
 </html>

@@ -198,9 +198,20 @@ public class ClaudeAiProvider implements AiProvider {
             }
 
             ArrayNode messages = root.putArray("messages");
-            ObjectNode userMsg = messages.addObject();
-            userMsg.put("role", "user");
-            userMsg.put("content", request.getUserPrompt());
+
+            if (request.getMessages() != null && !request.getMessages().isEmpty()) {
+                // Multi-turn: use provided messages array
+                for (java.util.Map<String, String> msg : request.getMessages()) {
+                    ObjectNode msgNode = messages.addObject();
+                    msgNode.put("role", msg.get("role"));
+                    msgNode.put("content", msg.get("content"));
+                }
+            } else {
+                // Single-turn: legacy behavior
+                ObjectNode userMsg = messages.addObject();
+                userMsg.put("role", "user");
+                userMsg.put("content", request.getUserPrompt());
+            }
 
             // Merge extra params (e.g. custom API parameters)
             mergeExtraParams(root, request.getExtraParams());

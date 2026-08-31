@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('情节拓展', ~{::content})}">
+<body>
+<div th:fragment="content">
+<div x-data="expansionPage()" x-init="init()">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-0">情节拓展</h4>
+            <small class="text-muted" th:text="${project.title}">项目名</small>
+        </div>
+        <a th:href="@{/projects/{id}/workflow(id=${project.id})}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> 返回创作
+        </a>
+    </div>
+
+    <!-- Guidance Card -->
+    <div class="card mb-3">
+        <div class="card-header">
+            <i class="bi bi-compass"></i> 扩写指导
+        </div>
+        <div class="card-body">
+            <textarea class="form-control mb-2" rows="3" x-model="guidance"
+                      placeholder="输入扩写方向，例如：丰富环境描写和心理活动，补充更多对话细节..."></textarea>
+            <button class="btn btn-sm btn-primary" @click="saveGuidance()" :disabled="savingGuidance">
+                <span x-show="savingGuidance" class="spinner-border spinner-border-sm"></span>
+                保存
+            </button>
+        </div>
+    </div>
+
+    <!-- Chapter Queue Card -->
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-list-check"></i> 扩写队列</span>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="badge bg-warning" x-text="pendingCount + ' 待扩写'"></span>
+                <span class="badge bg-success" x-text="expandedCount + ' 已扩写'"></span>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="d-flex gap-2 mb-3">
+                <button class="btn" :class="active ? 'btn-outline-danger' : 'btn-primary'"
+                        @click="active ? stopExpansion() : startExpansion()"
+                        :disabled="!active && pendingCount === 0">
+                    <i :class="active ? 'bi bi-pause-fill' : 'bi bi-play-fill'"></i>
+                    <span x-text="active ? '暂停' : '开始批量扩写'"></span>
+                </button>
+                <button class="btn btn-outline-success" @click="confirmAll()" :disabled="expandedCount === 0">
+                    <i class="bi bi-check2-all"></i> 批量确认
+                </button>
+                <button class="btn btn-outline-warning" @click="removeAllPending()" :disabled="pendingCount === 0 || active">
+                    <i class="bi bi-x-circle"></i> 批量移除
+                </button>
+                <button class="btn btn-outline-secondary" @click="refreshStatus()">
+                    <i class="bi bi-arrow-clockwise"></i> 刷新
+                </button>
+            </div>
+
+            <!-- SSE Progress -->
+            <div x-show="active || streamContent" class="mb-3">
+                <div class="d-flex align-items-center mb-2" x-show="active">
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                    <span>扩写进行中...</span>
+                </div>
+                <div class="border rounded p-2 bg-light" style="max-height:200px; overflow-y:auto; font-size:0.85rem; white-space:pre-wrap;"
+                     x-ref="streamBox" x-text="streamContent"></div>
+            </div>
+
+            <!-- Chapter Table -->
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:60px;">章节</th>
+                            <th>标题</th>
+                            <th style="width:80px;">字数</th>
+                            <th style="width:100px;">状态</th>
+                            <th style="width:160px;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="ch in filteredChapters" :key="ch.chapterNumber">
+                            <tr>
+                                <td x-text="'第' + ch.chapterNumber + '章'"></td>
+                                <td x-text="ch.title || '-'"></td>
+                                <td x-text="ch.wordCount"></td>
+                                <td>
+                                    <span class="badge" :class="statusBadgeClass(ch.expansionStatus)"
+                                          x-text="statusLabel(ch.expansionStatus)"></span>
+                                </td>
+                                <td>
+                                    <template x-if="ch.expansionStatus === 'PENDING'">
+                                        <button class="btn btn-sm btn-outline-secondary" @click="unmarkChapter(ch.chapterNumber)">
+                                            <i class="bi bi-x"></i> 移除
+                                        </button>
+                                    </template>
+                                    <template x-if="ch.expansionStatus === 'EXPANDED'">
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-warning" @click="rollbackChapter(ch.chapterNumber)">
+                                                <i class="bi bi-arrow-counterclockwise"></i> 回滚
+                                            </button>
+                                            <button class="btn btn-outline-success" @click="confirmChapter(ch.chapterNumber)">
+                                                <i class="bi bi-check"></i> 确认
+                                            </button>
+                                        </div>
+                                    </template>
+                                    <template x-if="ch.expansionStatus === 'GENERATING'">
+                                        <span class="spinner-border spinner-border-sm"></span>
+                                    </template>
+                                </td>
+                            </tr>
+                        </template>
+                        <tr x-show="filteredChapters.length === 0">
+                            <td colspan="5" class="text-center text-muted">暂无待扩写章节，请从全文阅读页面标记章节</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- All chapters for batch marking -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-book"></i> 全部章节</span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-primary" @click="markAllUnmarked()">
+                    <i class="bi bi-plus-circle"></i> 全部标记
+                </button>
+                <button class="btn btn-sm btn-primary" @click="addSelectedToQueue()"
+                        :disabled="selectedChapters.length === 0">
+                    <i class="bi bi-plus-lg"></i> 加入队列
+                    <span x-show="selectedChapters.length" x-text="'(' + selectedChapters.length + ')'"></span>
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:40px;">
+                                <input type="checkbox" class="form-check-input"
+                                       :checked="allSelectableSelected"
+                                       :disabled="selectableChapters.length === 0"
+                                       @change="toggleSelectAll($event.target.checked)">
+                            </th>
+                            <th style="width:60px;">章节</th>
+                            <th>标题</th>
+                            <th style="width:80px;">字数</th>
+                            <th style="width:100px;">扩写状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="ch in allChapters" :key="ch.chapterNumber">
+                            <tr>
+                                <td>
+                                    <input type="checkbox" class="form-check-input"
+                                           :checked="selectedChapters.includes(ch.chapterNumber)"
+                                           :disabled="ch.expansionStatus === 'GENERATING' || ch.expansionStatus === 'EXPANDED' || !ch.hasContent"
+                                           @change="onChapterCheck(ch, $event.target.checked)">
+                                </td>
+                                <td x-text="ch.chapterNumber"></td>
+                                <td x-text="ch.title || '-'"></td>
+                                <td x-text="ch.wordCount"></td>
+                                <td>
+                                    <span x-show="ch.expansionStatus" class="badge"
+                                          :class="statusBadgeClass(ch.expansionStatus)"
+                                          x-text="statusLabel(ch.expansionStatus)"></span>
+                                    <span x-show="!ch.expansionStatus && !ch.hasContent" class="text-muted" style="font-size:0.8rem;">无内容</span>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script th:inline="javascript">
+    const PROJECT_ID = /*[[${project.id}]]*/ 0;
+    const INITIAL_GUIDANCE = /*[[${project.expansionGuidance ?: ''}]]*/ '';
+    const INITIAL_CHAPTERS = /*[[${chapters}]]*/ [];
+
+    function expansionPage() {
+        return {
+            guidance: INITIAL_GUIDANCE,
+            savingGuidance: false,
+            active: false,
+            pendingCount: 0,
+            expandedCount: 0,
+            streamContent: '',
+            allChapters: [],
+            selectedChapters: [],
+            eventSource: null,
+            pollTimer: null,
+
+            init() {
+                this.allChapters = INITIAL_CHAPTERS.map(ch => ({
+                    chapterNumber: ch.chapterNumber,
+                    title: ch.title,
+                    wordCount: ch.wordCount,
+                    expansionStatus: ch.expansionStatus,
+                    hasContent: ch.content != null
+                }));
+                this.updateCounts();
+                // 首次拉真实状态，恢复后台任务时按钮可用
+                this.pollStatus();
+                this.pollTimer = setInterval(() => this.pollStatus(), 5000);
+            },
+
+            destroy() {
+                if (this.pollTimer) clearInterval(this.pollTimer);
+                if (this.eventSource) this.eventSource.close();
+            },
+
+            get filteredChapters() {
+                return this.allChapters.filter(ch => ch.expansionStatus != null);
+            },
+
+            get selectableChapters() {
+                // 可勾选加入队列的章节：有内容且不在 GENERATING/EXPANDED
+                return this.allChapters.filter(ch =>
+                    ch.hasContent && ch.expansionStatus !== 'GENERATING' && ch.expansionStatus !== 'EXPANDED');
+            },
+
+            get allSelectableSelected() {
+                const sel = this.selectableChapters;
+                return sel.length > 0 && sel.every(ch => this.selectedChapters.includes(ch.chapterNumber));
+            },
+
+            statusBadgeClass(status) {
+                switch(status) {
+                    case 'PENDING': return 'bg-warning text-dark';
+                    case 'GENERATING': return 'bg-info';
+                    case 'EXPANDED': return 'bg-success';
+                    default: return 'bg-secondary';
+                }
+            },
+
+            statusLabel(status) {
+                switch(status) {
+                    case 'PENDING': return '待扩写';
+                    case 'GENERATING': return '扩写中';
+                    case 'EXPANDED': return '已扩写';
+                    default: return status || '-';
+                }
+            },
+
+            async saveGuidance() {
+                this.savingGuidance = true;
+                try {
+                    await fetch(`/projects/${PROJECT_ID}/expansion/guidance`, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({guidance: this.guidance})
+                    });
+                } finally {
+                    this.savingGuidance = false;
+                }
+            },
+
+            async refreshStatus() {
+                await this.pollStatus();
+                // 完整重载以拿到最新章节状态
+                window.location.reload();
+            },
+
+            async pollStatus() {
+                try {
+                    const resp = await fetch(`/projects/${PROJECT_ID}/expansion/status`);
+                    const data = await resp.json();
+                    this.active = data.active;
+                    this.pendingCount = data.pendingCount;
+                    this.expandedCount = data.expandedCount;
+                    // 后台在跑但前端没连 SSE，补连
+                    if (data.active && !this.eventSource) {
+                        this.connectStream();
+                    }
+                    // 后台已停但还连着 SSE，关闭
+                    if (!data.active && this.eventSource) {
+                        this.eventSource.close();
+                        this.eventSource = null;
+                    }
+                } catch (e) {
+                    // 忽略瞬时网络错误，下次轮询重试
+                }
+            },
+
+            async startExpansion() {
+                await fetch(`/projects/${PROJECT_ID}/expansion/start`, {method: 'POST'});
+                this.active = true;
+                this.streamContent = '';
+                this.connectStream();
+            },
+
+            async stopExpansion() {
+                await fetch(`/projects/${PROJECT_ID}/expansion/stop`, {method: 'POST'});
+                this.active = false;
+                // 不主动关 EventSource，让后台 stopped 事件驱动 refreshStatus
+            },
+
+            async confirmAll() {
+                if (this.expandedCount === 0) return;
+                if (!confirm('确认全部 ' + this.expandedCount + ' 章已扩写？将清空扩写状态。')) return;
+                await fetch(`/projects/${PROJECT_ID}/expansion/confirm-all`, {method: 'POST'});
+                this.allChapters.forEach(ch => {
+                    if (ch.expansionStatus === 'EXPANDED') ch.expansionStatus = null;
+                });
+                this.updateCounts();
+            },
+
+            connectStream() {
+                if (this.eventSource) this.eventSource.close();
+                this.eventSource = new EventSource(`/projects/${PROJECT_ID}/expansion/stream`);
+
+                this.eventSource.addEventListener('token', (e) => {
+                    this.streamContent += e.data;
+                    this.scrollStream();
+                });
+                this.eventSource.addEventListener('replay-buffer', (e) => {
+                    this.streamContent = e.data;
+                    this.scrollStream();
+                });
+                this.eventSource.addEventListener('expand-section', (e) => {
+                    const match = e.data.match(/\[\[EXPAND:CHAPTER:(\d+)\]\]/);
+                    if (match) {
+                        this.streamContent += '\n\n--- 正在扩写第' + match[1] + '章 ---\n';
+                        const chNum = parseInt(match[1]);
+                        const ch = this.allChapters.find(c => c.chapterNumber === chNum);
+                        if (ch) ch.expansionStatus = 'GENERATING';
+                    }
+                    this.scrollStream();
+                });
+                this.eventSource.addEventListener('done', (e) => {
+                    this.active = false;
+                    this.eventSource.close();
+                    this.eventSource = null;
+                    this.refreshStatus();
+                });
+                this.eventSource.addEventListener('stopped', (e) => {
+                    this.active = false;
+                    this.eventSource.close();
+                    this.eventSource = null;
+                    this.refreshStatus();
+                });
+                this.eventSource.addEventListener('error', (e) => {
+                    this.active = false;
+                    if (this.eventSource) {
+                        this.eventSource.close();
+                        this.eventSource = null;
+                    }
+                    if (e.data) this.streamContent += '\n[错误] ' + e.data;
+                });
+            },
+
+            scrollStream() {
+                this.$nextTick(() => {
+                    const box = this.$refs.streamBox;
+                    if (box) box.scrollTop = box.scrollHeight;
+                });
+            },
+
+            async toggleMark(chapterNumber, checked) {
+                await fetch(`/projects/${PROJECT_ID}/expansion/mark`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({chapterNumbers: [chapterNumber], marked: checked})
+                });
+                const ch = this.allChapters.find(c => c.chapterNumber === chapterNumber);
+                if (ch) ch.expansionStatus = checked ? 'PENDING' : null;
+                this.updateCounts();
+            },
+
+            async unmarkChapter(chapterNumber) {
+                await this.toggleMark(chapterNumber, false);
+            },
+
+            onChapterCheck(ch, checked) {
+                // 已在队列的章勾选状态由 toggleMark 管理；这里只维护 selectedChapters
+                if (checked) {
+                    if (!this.selectedChapters.includes(ch.chapterNumber)) {
+                        this.selectedChapters.push(ch.chapterNumber);
+                    }
+                } else {
+                    this.selectedChapters = this.selectedChapters.filter(n => n !== ch.chapterNumber);
+                }
+            },
+
+            toggleSelectAll(checked) {
+                if (checked) {
+                    const nums = this.selectableChapters.map(ch => ch.chapterNumber);
+                    const merged = new Set([...this.selectedChapters, ...nums]);
+                    this.selectedChapters = Array.from(merged);
+                } else {
+                    const sel = new Set(this.selectableChapters.map(ch => ch.chapterNumber));
+                    this.selectedChapters = this.selectedChapters.filter(n => !sel.has(n));
+                }
+            },
+
+            async addSelectedToQueue() {
+                // 只提交尚未在队列(PENDING)的选中章
+                const toAdd = this.selectedChapters.filter(num => {
+                    const ch = this.allChapters.find(c => c.chapterNumber === num);
+                    return ch && !ch.expansionStatus;
+                });
+                if (toAdd.length === 0) {
+                    this.selectedChapters = [];
+                    return;
+                }
+                await fetch(`/projects/${PROJECT_ID}/expansion/mark`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({chapterNumbers: toAdd, marked: true})
+                });
+                toAdd.forEach(num => {
+                    const ch = this.allChapters.find(c => c.chapterNumber === num);
+                    if (ch) ch.expansionStatus = 'PENDING';
+                });
+                this.selectedChapters = [];
+                this.updateCounts();
+            },
+
+            async removeAllPending() {
+                const pending = this.allChapters
+                    .filter(ch => ch.expansionStatus === 'PENDING')
+                    .map(ch => ch.chapterNumber);
+                if (pending.length === 0) return;
+                if (!confirm('移除全部 ' + pending.length + ' 章待扩写？')) return;
+                await fetch(`/projects/${PROJECT_ID}/expansion/mark`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({chapterNumbers: pending, marked: false})
+                });
+                pending.forEach(num => {
+                    const ch = this.allChapters.find(c => c.chapterNumber === num);
+                    if (ch) ch.expansionStatus = null;
+                });
+                this.updateCounts();
+            },
+
+            async markAllUnmarked() {
+                const unmarked = this.allChapters
+                    .filter(ch => !ch.expansionStatus && ch.hasContent)
+                    .map(ch => ch.chapterNumber);
+                if (unmarked.length === 0) return;
+                await fetch(`/projects/${PROJECT_ID}/expansion/mark`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({chapterNumbers: unmarked, marked: true})
+                });
+                unmarked.forEach(num => {
+                    const ch = this.allChapters.find(c => c.chapterNumber === num);
+                    if (ch) ch.expansionStatus = 'PENDING';
+                });
+                this.updateCounts();
+            },
+
+            async rollbackChapter(chapterNumber) {
+                if (!confirm('确认回滚第' + chapterNumber + '章？将恢复扩写前的原文。')) return;
+                await fetch(`/projects/${PROJECT_ID}/expansion/rollback/${chapterNumber}`, {method: 'POST'});
+                const ch = this.allChapters.find(c => c.chapterNumber === chapterNumber);
+                if (ch) ch.expansionStatus = 'PENDING';
+                this.updateCounts();
+            },
+
+            async confirmChapter(chapterNumber) {
+                await fetch(`/projects/${PROJECT_ID}/expansion/confirm/${chapterNumber}`, {method: 'POST'});
+                const ch = this.allChapters.find(c => c.chapterNumber === chapterNumber);
+                if (ch) ch.expansionStatus = null;
+                this.updateCounts();
+            },
+
+            updateCounts() {
+                this.pendingCount = this.allChapters.filter(ch => ch.expansionStatus === 'PENDING').length;
+                this.expandedCount = this.allChapters.filter(ch => ch.expansionStatus === 'EXPANDED').length;
+            }
+        };
+    }
+</script>
+</div>
+</body>
+</html>

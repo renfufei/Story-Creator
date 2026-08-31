@@ -46,15 +46,4 @@ public class GlobalSettingService {
         globalSettingRepository.save(setting);
     }
 
-    private static final String ENHANCED_DEEP_REVIEW_INTERVAL_KEY = "enhanced_deep_review_interval";
-    private static final int DEFAULT_DEEP_REVIEW_INTERVAL = 5;
-
-    public int getEnhancedDeepReviewInterval() {
-        return globalSettingRepository.findById(ENHANCED_DEEP_REVIEW_INTERVAL_KEY)
-                .map(s -> {
-                    try { return Integer.parseInt(s.getValue()); }
-                    catch (Exception e) { return DEFAULT_DEEP_REVIEW_INTERVAL; }
-                })
-                .orElse(DEFAULT_DEEP_REVIEW_INTERVAL);
-    }
 }

@@ -4,7 +4,7 @@
 <div th:fragment="content">
     <div class="row justify-content-center">
         <div class="col-md-6">
-            <h2 class="mb-4">导入项目</h2>
+            <h2 class="mb-4">导入项目 <a th:href="@{/import/txt}" class="btn btn-outline-secondary btn-sm ms-2"><i class="bi bi-file-earmark-arrow-up"></i> TXT导入</a></h2>
 
             <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
             <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>

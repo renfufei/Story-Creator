@@ -30,6 +30,9 @@ public class AiModelConfigEntity {
     @Column(name = "extra_params", columnDefinition = "TEXT")
     private String extraParams;
 
+    @Column(name = "pre_call_delay_seconds", nullable = false)
+    private int preCallDelaySeconds = 0;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "model_type", nullable = false, length = 20)
     private ModelType modelType = ModelType.TEXT;
@@ -74,6 +77,9 @@ public class AiModelConfigEntity {
 
     public String getExtraParams() { return extraParams; }
     public void setExtraParams(String extraParams) { this.extraParams = extraParams; }
+
+    public int getPreCallDelaySeconds() { return preCallDelaySeconds; }
+    public void setPreCallDelaySeconds(int preCallDelaySeconds) { this.preCallDelaySeconds = preCallDelaySeconds; }
 
     public ModelType getModelType() { return modelType; }
     public void setModelType(ModelType modelType) { this.modelType = modelType; }

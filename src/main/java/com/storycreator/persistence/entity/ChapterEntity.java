@@ -64,20 +64,11 @@ public class ChapterEntity {
     @Column(name = "writing_briefing", columnDefinition = "TEXT")
     private String writingBriefing;
 
-    @Column(name = "writing_reasoning", columnDefinition = "TEXT")
-    private String writingReasoning;
+    @Column(name = "expansion_status", length = 20)
+    private String expansionStatus;
 
-    @Column(name = "instant_review", columnDefinition = "TEXT")
-    private String instantReview;
-
-    @Column(name = "storyline_snapshot", columnDefinition = "TEXT")
-    private String storylineSnapshot;
-
-    @Column(name = "deep_review", columnDefinition = "TEXT")
-    private String deepReview;
-
-    @Column(name = "writing_cycle_status", nullable = false, length = 30)
-    private String writingCycleStatus = "NOT_STARTED";
+    @Column(name = "content_before_expansion", columnDefinition = "TEXT")
+    private String contentBeforeExpansion;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -147,20 +138,11 @@ public class ChapterEntity {
     public String getWritingBriefing() { return writingBriefing; }
     public void setWritingBriefing(String writingBriefing) { this.writingBriefing = writingBriefing; }
 
-    public String getWritingReasoning() { return writingReasoning; }
-    public void setWritingReasoning(String writingReasoning) { this.writingReasoning = writingReasoning; }
+    public String getExpansionStatus() { return expansionStatus; }
+    public void setExpansionStatus(String expansionStatus) { this.expansionStatus = expansionStatus; }
 
-    public String getInstantReview() { return instantReview; }
-    public void setInstantReview(String instantReview) { this.instantReview = instantReview; }
-
-    public String getStorylineSnapshot() { return storylineSnapshot; }
-    public void setStorylineSnapshot(String storylineSnapshot) { this.storylineSnapshot = storylineSnapshot; }
-
-    public String getDeepReview() { return deepReview; }
-    public void setDeepReview(String deepReview) { this.deepReview = deepReview; }
-
-    public String getWritingCycleStatus() { return writingCycleStatus; }
-    public void setWritingCycleStatus(String writingCycleStatus) { this.writingCycleStatus = writingCycleStatus; }
+    public String getContentBeforeExpansion() { return contentBeforeExpansion; }
+    public void setContentBeforeExpansion(String contentBeforeExpansion) { this.contentBeforeExpansion = contentBeforeExpansion; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

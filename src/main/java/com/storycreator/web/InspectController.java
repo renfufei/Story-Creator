@@ -17,8 +17,6 @@ public class InspectController {
     private final ChapterOutlineRepository chapterOutlineRepository;
     private final CharacterRepository characterRepository;
     private final VolumeOutlineRepository volumeOutlineRepository;
-    private final WritingRulesRepository writingRulesRepository;
-    private final StyleFingerprintRepository styleFingerprintRepository;
     private final StoryOutlineRepository storyOutlineRepository;
 
     public InspectController(ProjectRepository projectRepository,
@@ -26,16 +24,12 @@ public class InspectController {
                             ChapterOutlineRepository chapterOutlineRepository,
                             CharacterRepository characterRepository,
                             VolumeOutlineRepository volumeOutlineRepository,
-                            WritingRulesRepository writingRulesRepository,
-                            StyleFingerprintRepository styleFingerprintRepository,
                             StoryOutlineRepository storyOutlineRepository) {
         this.projectRepository = projectRepository;
         this.chapterRepository = chapterRepository;
         this.chapterOutlineRepository = chapterOutlineRepository;
         this.characterRepository = characterRepository;
         this.volumeOutlineRepository = volumeOutlineRepository;
-        this.writingRulesRepository = writingRulesRepository;
-        this.styleFingerprintRepository = styleFingerprintRepository;
         this.storyOutlineRepository = storyOutlineRepository;
     }
 
@@ -46,8 +40,6 @@ public class InspectController {
         var outlines = chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId);
         var volumes = volumeOutlineRepository.findByProjectIdOrderByVolumeNumber(projectId);
         var storyOutline = storyOutlineRepository.findByProjectId(projectId).map(StoryOutlineEntity::getContent).orElse(null);
-        var writingRules = writingRulesRepository.findByProjectId(projectId).map(WritingRulesEntity::getContent).orElse(null);
-        var styleFingerprint = styleFingerprintRepository.findByProjectId(projectId).map(StyleFingerprintEntity::getContent).orElse(null);
 
         // Build chapter completeness data
         Map<Integer, String> outlineEventPlans = new HashMap<>();
@@ -65,10 +57,6 @@ public class InspectController {
             item.put("hasContent", hasText(ch.getContent()));
             item.put("hasContentDraft", hasText(ch.getContentDraft()));
             item.put("hasWritingBriefing", hasText(ch.getWritingBriefing()));
-            item.put("hasWritingReasoning", hasText(ch.getWritingReasoning()));
-            item.put("hasInstantReview", hasText(ch.getInstantReview()));
-            item.put("hasDeepReview", hasText(ch.getDeepReview()));
-            item.put("hasStorylineSnapshot", hasText(ch.getStorylineSnapshot()));
             item.put("hasContentSummary", hasText(ch.getContentSummary()));
             item.put("hasCharacterStates", hasText(ch.getCharacterStates()));
             item.put("hasEventPlan", outlineEventPlans.containsKey(ch.getChapterNumber()));
@@ -79,8 +67,6 @@ public class InspectController {
         model.addAttribute("storyOutline", storyOutline);
         model.addAttribute("volumes", volumes);
         model.addAttribute("outlines", outlines);
-        model.addAttribute("writingRules", writingRules);
-        model.addAttribute("styleFingerprint", styleFingerprint);
         model.addAttribute("chapterList", chapterList);
         return "inspect";
     }
@@ -99,13 +85,9 @@ public class InspectController {
         Map<String, Boolean> fieldAvail = new LinkedHashMap<>();
         fieldAvail.put("outlineSummary", outline != null && hasText(outline.getSummary()));
         fieldAvail.put("writingBriefing", chapter != null && hasText(chapter.getWritingBriefing()));
-        fieldAvail.put("writingReasoning", chapter != null && hasText(chapter.getWritingReasoning()));
         fieldAvail.put("eventPlan", outline != null && hasText(outline.getEventPlan()));
         fieldAvail.put("content", chapter != null && hasText(chapter.getContent()));
         fieldAvail.put("contentDraft", chapter != null && hasText(chapter.getContentDraft()));
-        fieldAvail.put("instantReview", chapter != null && hasText(chapter.getInstantReview()));
-        fieldAvail.put("deepReview", chapter != null && hasText(chapter.getDeepReview()));
-        fieldAvail.put("storylineSnapshot", chapter != null && hasText(chapter.getStorylineSnapshot()));
         fieldAvail.put("contentSummary", chapter != null && hasText(chapter.getContentSummary()));
         fieldAvail.put("characterStates", chapter != null && hasText(chapter.getCharacterStates()));
 
@@ -164,12 +146,8 @@ public class InspectController {
 
         switch (fieldName) {
             case "writingBriefing" -> content = chapter != null ? chapter.getWritingBriefing() : null;
-            case "writingReasoning" -> content = chapter != null ? chapter.getWritingReasoning() : null;
             case "content" -> content = chapter != null ? chapter.getContent() : null;
             case "contentDraft" -> content = chapter != null ? chapter.getContentDraft() : null;
-            case "instantReview" -> content = chapter != null ? chapter.getInstantReview() : null;
-            case "deepReview" -> content = chapter != null ? chapter.getDeepReview() : null;
-            case "storylineSnapshot" -> content = chapter != null ? chapter.getStorylineSnapshot() : null;
             case "contentSummary" -> content = chapter != null ? chapter.getContentSummary() : null;
             case "characterStates" -> {
                 content = chapter != null ? chapter.getCharacterStates() : null;

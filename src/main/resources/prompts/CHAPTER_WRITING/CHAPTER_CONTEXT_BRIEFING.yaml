@@ -35,9 +35,6 @@ template: |
   标题：{{title}}
   题材：{{genre}}
 
-  【写作规则】
-  {{writingRules}}
-
   【角色卡片】
   {{characterCards}}
 

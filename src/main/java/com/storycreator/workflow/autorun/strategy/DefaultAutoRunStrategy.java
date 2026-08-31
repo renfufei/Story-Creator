@@ -7,25 +7,32 @@ import com.storycreator.persistence.entity.CharacterEntity;
 import com.storycreator.persistence.entity.ProjectEntity;
 import com.storycreator.workflow.autorun.AutoRunContext;
 import com.storycreator.workflow.autorun.AutoRunStatus;
+import com.storycreator.workflow.engine.WorkflowContextBuilder;
+import com.storycreator.workflow.engine.WorkflowContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Component
-public class DefaultAutoRunStrategy implements AutoRunStrategy {
+public class DefaultAutoRunStrategy {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultAutoRunStrategy.class);
     private static final int CONTENT_MIN_LENGTH = 50;
 
-    @Override
-    public String getName() {
-        return "DEFAULT";
+    private final SubStepExecutor subStepExecutor;
+    private final WorkflowContextBuilder contextBuilder;
+
+    public DefaultAutoRunStrategy(SubStepExecutor subStepExecutor,
+                                  WorkflowContextBuilder contextBuilder) {
+        this.subStepExecutor = subStepExecutor;
+        this.contextBuilder = contextBuilder;
     }
 
-    @Override
     public void execute(AutoRunContext ctx) throws Exception {
         Long projectId = ctx.getProjectId();
         ProjectEntity project = ctx.getProjectRepository().findById(projectId).orElseThrow();
@@ -151,6 +158,28 @@ public class DefaultAutoRunStrategy implements AutoRunStrategy {
 
         for (int num = startNum; num <= totalChapters; num++) {
             if (ctx.shouldStop()) return;
+
+            // Context briefing before chapter writing (if enabled)
+            if (ctx.isSubStepEnabled("CONTEXT_BRIEFING")) {
+                try {
+                    ctx.emitSubStep("CONTEXT_BRIEFING", num);
+                    ctx.updateProgress(WorkflowStep.CHAPTER_WRITING.name(), num,
+                            "前文梳理：第 " + num + "/" + totalChapters + " 章...");
+                    String briefing = generateContextBriefing(ctx, projectId, num);
+                    if (briefing != null && !briefing.isBlank()) {
+                        ChapterEntity ch = ctx.getChapterRepository()
+                                .findByProjectIdAndChapterNumber(projectId, num).orElse(null);
+                        if (ch != null) {
+                            ch.setWritingBriefing(briefing);
+                            ctx.getChapterRepository().save(ch);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("[P{}][AutoRun] Context briefing failed for ch{}: {}", projectId, num, e.getMessage());
+                }
+                if (ctx.shouldStop()) return;
+            }
+
             String prefix = "章节写作：第 " + num + "/" + totalChapters + " 章";
             ctx.updateProgress(WorkflowStep.CHAPTER_WRITING.name(), num, prefix + "...");
             ctx.generateAndSave(WorkflowStep.CHAPTER_WRITING, num, prefix);
@@ -165,6 +194,28 @@ public class DefaultAutoRunStrategy implements AutoRunStrategy {
                 }
             }
         }
+    }
+
+    private String generateContextBriefing(AutoRunContext ctx, Long projectId, int chapterNumber) {
+        ProjectEntity project = ctx.getProjectRepository().findById(projectId).orElseThrow();
+        WorkflowContext wfCtx = contextBuilder.build(projectId, chapterNumber);
+
+        String chapterSummary = wfCtx.getChapterSummary() != null ? wfCtx.getChapterSummary() : "";
+        String chapterCards = wfCtx.getCharacterCards() != null ? wfCtx.getCharacterCards() : "";
+        String prevContent = wfCtx.getPreviousChapterContent() != null ? wfCtx.getPreviousChapterContent() : "";
+
+        Map<String, String> vars = new HashMap<>();
+        vars.put("title", project.getTitle() != null ? project.getTitle() : "");
+        vars.put("genre", project.getGenre() != null ? project.getGenre().getDisplayName() : "");
+        vars.put("chapterNumber", String.valueOf(chapterNumber));
+        vars.put("previousChapterContent", prevContent);
+        vars.put("chapterSummary", chapterSummary);
+        vars.put("writingRules", "");
+        vars.put("characterCards", chapterCards);
+        vars.put("stepGuidance", "");
+
+        return subStepExecutor.generateContextBriefing(projectId, vars, project.getGenre(),
+                ctx::forwardTokenToObservation);
     }
 
     private void runPolishing(AutoRunContext ctx) {

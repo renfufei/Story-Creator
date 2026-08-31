@@ -4,6 +4,7 @@ import com.storycreator.ai.prompt.PromptTemplateRegistry;
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.PromptSubStep;
+import com.storycreator.core.domain.WorldFacetKey;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.core.port.ai.AiRequest;
 import com.storycreator.persistence.entity.CharacterEntity;
@@ -34,6 +35,7 @@ public class CharacterGenerationService {
     private final WorkflowContextBuilder contextBuilder;
     private final ContextSummaryService contextSummaryService;
     private final AiUsageTracker aiUsageTracker;
+    private final WorldFacetElaborationService worldFacetElaborationService;
 
     public CharacterGenerationService(ProjectRepository projectRepository,
                                       CharacterRepository characterRepository,
@@ -42,7 +44,8 @@ public class CharacterGenerationService {
                                       PromptTemplateRegistry promptRegistry,
                                       WorkflowContextBuilder contextBuilder,
                                       ContextSummaryService contextSummaryService,
-                                      AiUsageTracker aiUsageTracker) {
+                                      AiUsageTracker aiUsageTracker,
+                                      WorldFacetElaborationService worldFacetElaborationService) {
         this.projectRepository = projectRepository;
         this.characterRepository = characterRepository;
         this.stepGuidanceRepository = stepGuidanceRepository;
@@ -51,6 +54,7 @@ public class CharacterGenerationService {
         this.contextBuilder = contextBuilder;
         this.contextSummaryService = contextSummaryService;
         this.aiUsageTracker = aiUsageTracker;
+        this.worldFacetElaborationService = worldFacetElaborationService;
     }
 
     public Flux<String> generateCharactersByCards(Long projectId) {
@@ -340,11 +344,28 @@ public class CharacterGenerationService {
         String summariesText = String.join("\n", allSummaries);
 
         Genre genre = ctx.getGenre();
+
+        // Use POWER_SYSTEM + FACTION_MAP facets for character refinement (fallback to truncate)
+        String worldSettingForRefine;
+        String powerSystem = safeStr(worldFacetElaborationService.getFacet(projectId, WorldFacetKey.POWER_SYSTEM));
+        String factionMap = safeStr(worldFacetElaborationService.getFacet(projectId, WorldFacetKey.FACTION_MAP));
+        if (!powerSystem.isEmpty() || !factionMap.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            if (!powerSystem.isEmpty()) sb.append("【力量体系】\n").append(powerSystem);
+            if (!factionMap.isEmpty()) {
+                if (!sb.isEmpty()) sb.append("\n\n");
+                sb.append("【势力格局】\n").append(factionMap);
+            }
+            worldSettingForRefine = sb.toString();
+        } else {
+            worldSettingForRefine = truncate(ctx.getWorldSetting(), 600);
+        }
+
         return Map.of(
                 "title", ctx.getTitle() != null ? ctx.getTitle() : "",
                 "genre", genre != null ? genre.getDisplayName() : "",
                 "description", ctx.getDescription() != null ? ctx.getDescription() : "",
-                "worldSetting", truncate(ctx.getWorldSetting(), 600),
+                "worldSetting", worldSettingForRefine,
                 "allSummaries", summariesText,
                 "cardContent", card.getContent() != null ? card.getContent() : "(无内容)",
                 "stepGuidance", guidanceSuffix
@@ -551,5 +572,9 @@ public class CharacterGenerationService {
         applyResolvedConfig(request, resolved);
 
         return resolved.provider().streamText(request);
+    }
+
+    private static String safeStr(String s) {
+        return s != null ? s : "";
     }
 }

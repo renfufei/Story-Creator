@@ -27,7 +27,6 @@
         <div class="btn-group" role="group">
             <button type="button" class="btn btn-outline-secondary btn-sm active" data-workflow="all">所有流程</button>
             <button type="button" class="btn btn-outline-primary btn-sm" data-workflow="STANDARD">标准</button>
-            <button type="button" class="btn btn-outline-success btn-sm" data-workflow="ENHANCED">增强</button>
             <button type="button" class="btn btn-outline-secondary btn-sm" data-workflow="IMAGE">图像</button>
             <button type="button" class="btn btn-outline-warning btn-sm" data-workflow="SIDE_STORY">番外</button>
         </div>
@@ -59,7 +58,7 @@
                 <td>
                     <span th:each="tag : ${t.workflowTags()}"
                           class="badge me-1"
-                          th:classappend="${tag.name() == 'STANDARD' ? 'bg-primary' : (tag.name() == 'ENHANCED' ? 'bg-success' : (tag.name() == 'SIDE_STORY' ? 'bg-warning text-dark' : 'bg-secondary'))}"
+                          th:classappend="${tag.name() == 'STANDARD' ? 'bg-primary' : (tag.name() == 'SIDE_STORY' ? 'bg-warning text-dark' : 'bg-secondary')}"
                           th:text="${tag.displayName}">标签</span>
                     <span th:if="${t.workflowTags().isEmpty()}" class="text-muted">-</span>
                 </td>

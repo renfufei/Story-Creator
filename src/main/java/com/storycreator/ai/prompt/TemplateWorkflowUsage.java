@@ -10,8 +10,7 @@ import static com.storycreator.ai.prompt.TemplateWorkflowTag.*;
 
 /**
  * Declares which workflow(s) each PromptSubStep is used by.
- * STANDARD = used by the DEFAULT strategy (also used by ENHANCED since it's a superset).
- * ENHANCED = used only by the ENHANCED strategy.
+ * STANDARD = used by the default auto-run strategy.
  * IMAGE = used only by image generation features.
  */
 public final class TemplateWorkflowUsage {
@@ -21,37 +20,25 @@ public final class TemplateWorkflowUsage {
     static {
         var map = new EnumMap<PromptSubStep, Set<TemplateWorkflowTag>>(PromptSubStep.class);
 
-        // Primary steps — used by both standard and enhanced
-        map.put(PromptSubStep.WORLD_BUILDING_PRIMARY, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.CHAPTER_WRITING_PRIMARY, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.POLISHING_PRIMARY, Set.of(STANDARD, ENHANCED));
+        // Primary steps
+        map.put(PromptSubStep.WORLD_BUILDING_PRIMARY, Set.of(STANDARD));
+        map.put(PromptSubStep.CHAPTER_WRITING_PRIMARY, Set.of(STANDARD));
+        map.put(PromptSubStep.POLISHING_PRIMARY, Set.of(STANDARD));
 
-        // Standard sub-steps (used by both)
-        map.put(PromptSubStep.CHARACTER_OVERVIEW, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.CHARACTER_CARD, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.CHARACTER_REFINE, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.VOLUME_ARC, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.CHAPTER_OUTLINE, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.CHAPTER_OUTLINE_REFINE, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.STORY_SUMMARY, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.CHARACTER_STATES, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.PROOFREAD_PLOT_SUMMARY, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.PROOFREAD_CHARACTER_CHECK, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.PROOFREAD_CONSISTENCY, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.PROOFREAD_CONTINUITY, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.PROOFREAD_FORESHADOWING, Set.of(STANDARD, ENHANCED));
-        map.put(PromptSubStep.PROOFREAD_FIX, Set.of(STANDARD, ENHANCED));
-
-        // Enhanced-only sub-steps
-        map.put(PromptSubStep.WRITING_RULES, Set.of(ENHANCED));
-        map.put(PromptSubStep.STYLE_FINGERPRINT, Set.of(ENHANCED));
-        map.put(PromptSubStep.CHARACTER_BEHAVIOR_BOUNDARIES, Set.of(ENHANCED));
-        map.put(PromptSubStep.CHAPTER_CONTEXT_BRIEFING, Set.of(ENHANCED));
-        map.put(PromptSubStep.CHAPTER_PLOT_REASONING, Set.of(ENHANCED));
-        map.put(PromptSubStep.CHAPTER_INSTANT_REVIEW, Set.of(ENHANCED));
-        map.put(PromptSubStep.CHAPTER_CONTENT_OPTIMIZATION, Set.of(ENHANCED));
-        map.put(PromptSubStep.CHAPTER_STORYLINE_UPDATE, Set.of(ENHANCED));
-        map.put(PromptSubStep.CHAPTER_DEEP_REVIEW, Set.of(ENHANCED));
+        // Standard sub-steps
+        map.put(PromptSubStep.CHARACTER_OVERVIEW, Set.of(STANDARD));
+        map.put(PromptSubStep.CHARACTER_CARD, Set.of(STANDARD));
+        map.put(PromptSubStep.CHARACTER_REFINE, Set.of(STANDARD));
+        map.put(PromptSubStep.VOLUME_ARC, Set.of(STANDARD));
+        map.put(PromptSubStep.VOLUME_CHARACTERS, Set.of(STANDARD));
+        map.put(PromptSubStep.CHAPTER_OUTLINE, Set.of(STANDARD));
+        map.put(PromptSubStep.CHAPTER_OUTLINE_REFINE, Set.of(STANDARD));
+        map.put(PromptSubStep.STORY_SUMMARY, Set.of(STANDARD));
+        map.put(PromptSubStep.CHAPTER_CONTEXT_BRIEFING, Set.of(STANDARD));
+        map.put(PromptSubStep.CHARACTER_STATES, Set.of(STANDARD));
+        map.put(PromptSubStep.PROOFREAD_PLOT_SUMMARY, Set.of(STANDARD));
+        map.put(PromptSubStep.PROOFREAD_FORESHADOWING, Set.of(STANDARD));
+        map.put(PromptSubStep.PROOFREAD_FIX, Set.of(STANDARD));
 
         // Image-only sub-steps
         map.put(PromptSubStep.IMAGE_PROMPT_AVATAR, Set.of(IMAGE));

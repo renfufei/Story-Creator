@@ -9,7 +9,9 @@ import com.storycreator.persistence.repository.SideStoryRepository;
 import com.storycreator.persistence.repository.SideStoryChapterRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class ExportService {
@@ -28,6 +30,7 @@ public class ExportService {
     private final ProofreadingReportRepository proofreadingReportRepository;
     private final SideStoryRepository sideStoryRepository;
     private final SideStoryChapterRepository sideStoryChapterRepository;
+    private final WorldSettingFacetRepository worldSettingFacetRepository;
     private final ObjectMapper objectMapper;
 
     public ExportService(ProjectRepository projectRepository,
@@ -44,6 +47,7 @@ public class ExportService {
                         ProofreadingReportRepository proofreadingReportRepository,
                         SideStoryRepository sideStoryRepository,
                         SideStoryChapterRepository sideStoryChapterRepository,
+                        WorldSettingFacetRepository worldSettingFacetRepository,
                         ObjectMapper objectMapper) {
         this.projectRepository = projectRepository;
         this.worldSettingRepository = worldSettingRepository;
@@ -59,6 +63,7 @@ public class ExportService {
         this.proofreadingReportRepository = proofreadingReportRepository;
         this.sideStoryRepository = sideStoryRepository;
         this.sideStoryChapterRepository = sideStoryChapterRepository;
+        this.worldSettingFacetRepository = worldSettingFacetRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -357,8 +362,12 @@ public class ExportService {
                 project.isAutoMode()
         );
 
+        Map<String, String> facetsMap = new LinkedHashMap<>();
+        worldSettingFacetRepository.findByProjectId(projectId).forEach(f ->
+                facetsMap.put(f.getFacetKey().name(), f.getContent()));
         var worldSetting = worldSettingRepository.findByProjectId(projectId)
-                .map(ws -> new ProjectJsonDto.WorldSettingData(ws.getContent(), ws.getSummary()))
+                .map(ws -> new ProjectJsonDto.WorldSettingData(ws.getContent(), ws.getSummary(),
+                        facetsMap.isEmpty() ? null : facetsMap))
                 .orElse(null);
 
         var characters = characterRepository.findByProjectIdOrderBySortOrder(projectId).stream()

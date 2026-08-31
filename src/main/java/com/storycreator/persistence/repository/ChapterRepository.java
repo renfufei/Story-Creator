@@ -26,6 +26,17 @@ public interface ChapterRepository extends JpaRepository<ChapterEntity, Long> {
     int updateProofreadFixStatusByStatus(StepStatus oldStatus, StepStatus newStatus);
 
     @Modifying
+    @Query("UPDATE ChapterEntity c SET c.expansionStatus = :newStatus WHERE c.expansionStatus = :oldStatus")
+    int updateExpansionStatusByStatus(String oldStatus, String newStatus);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE ChapterEntity c SET c.expansionStatus = :newStatus WHERE c.projectId = :projectId AND c.expansionStatus = :oldStatus")
+    int updateExpansionStatusByProjectAndStatus(Long projectId, String oldStatus, String newStatus);
+
+    List<ChapterEntity> findByProjectIdAndExpansionStatusOrderByChapterNumber(Long projectId, String status);
+
+    @Modifying
     @Transactional
     void deleteByProjectId(Long projectId);
 }

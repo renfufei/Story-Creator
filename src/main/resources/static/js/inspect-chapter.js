@@ -10,13 +10,9 @@ function inspectChapter() {
         tabs: [
             { field: 'outlineSummary', label: '章节大纲', available: fieldAvail.outlineSummary },
             { field: 'writingBriefing', label: '写作简报', available: fieldAvail.writingBriefing },
-            { field: 'writingReasoning', label: '推理规划', available: fieldAvail.writingReasoning },
             { field: 'eventPlan', label: '事件计划', available: fieldAvail.eventPlan },
             { field: 'content', label: '正文内容', available: fieldAvail.content },
             { field: 'contentDraft', label: '原稿对比', available: fieldAvail.contentDraft },
-            { field: 'instantReview', label: '即时审查', available: fieldAvail.instantReview },
-            { field: 'deepReview', label: '深度复盘', available: fieldAvail.deepReview },
-            { field: 'storylineSnapshot', label: '故事线快照', available: fieldAvail.storylineSnapshot },
             { field: 'contentSummary', label: '内容摘要', available: fieldAvail.contentSummary },
             { field: 'characterStates', label: '角色状态', available: fieldAvail.characterStates },
         ],

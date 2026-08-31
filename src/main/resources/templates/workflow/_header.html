@@ -8,6 +8,9 @@
             <a th:href="@{/projects/{id}/side-stories(id=${project.id})}" class="btn btn-sm btn-outline-warning">
                 <i class="bi bi-journal-bookmark"></i> 番外
             </a>
+            <a th:href="@{/projects/{id}/expansion(id=${project.id})}" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-arrows-angle-expand"></i> 扩写
+            </a>
             <a th:href="@{/projects/{id}/read(id=${project.id})}" class="btn btn-sm btn-outline-success" target="_blank">
                 <i class="bi bi-book"></i> 全文阅读
             </a>

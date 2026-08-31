@@ -103,10 +103,33 @@
                 </div>
 
                 <div class="mb-3">
-                    <label for="characterCount" class="form-label">主要角色数</label>
+                    <label for="characterCount" class="form-label">初始角色数量</label>
                     <input type="number" class="form-control" id="characterCount" th:field="*{characterCount}"
                            min="1" max="20" placeholder="5">
-                    <div class="form-text">AI将为每个主要角色生成独立角色卡，默认5个</div>
+                    <div class="form-text">AI将在角色设计阶段为每个初始角色生成独立角色卡，默认5个</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">分卷角色引入速率</label>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">长期角色</span>
+                                <input type="number" class="form-control" id="recurringCharacterRate"
+                                       th:field="*{recurringCharacterRate}"
+                                       min="0.1" max="10.0" step="0.1">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">临时角色</span>
+                                <input type="number" class="form-control" id="tempCharacterRate"
+                                       th:field="*{tempCharacterRate}"
+                                       min="0.1" max="10.0" step="0.1">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-text">0.5表示平均每2卷引入1个长期角色；3.0表示每卷约3个临时角色。大纲生成时自动按卷引入补充角色。</div>
                 </div>
 
                 <div class="mb-3">
@@ -156,15 +179,6 @@
                         <label class="form-check-label" for="autoMode">全自动模式</label>
                     </div>
                     <div class="form-text">开启后可在创作页面一键执行全流程，自动完成所有步骤</div>
-                </div>
-
-                <div class="mb-3">
-                    <label for="autoRunStrategy" class="form-label">创作策略</label>
-                    <select class="form-select" id="autoRunStrategy" th:field="*{autoRunStrategy}">
-                        <option value="DEFAULT">标准创作模式</option>
-                        <option value="ENHANCED">精品创作模式</option>
-                    </select>
-                    <div class="form-text">精品模式增加前文梳理、剧情推演、即时审查、故事线更新等步骤，质量更高但耗时更长</div>
                 </div>
 
                 <div class="mb-3" th:if="${projectId != null}">
@@ -256,6 +270,8 @@
                         form.querySelector('#totalChapters').value = data.totalChapters || 10;
                         form.querySelector('#chaptersPerVolume').value = data.chaptersPerVolume || 10;
                         form.querySelector('#characterCount').value = data.characterCount || 5;
+                        form.querySelector('#recurringCharacterRate').value = data.recurringCharacterRate || 0.5;
+                        form.querySelector('#tempCharacterRate').value = data.tempCharacterRate || 3.0;
                         form.querySelector('[name="chapterWordCount"]').value = data.chapterWordCount || 5000;
                         form.querySelector('[name="chapterWordCountMin"]').value = data.chapterWordCountMin || 4000;
                         form.querySelector('[name="chapterWordCountMax"]').value = data.chapterWordCountMax || 6000;

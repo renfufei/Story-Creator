@@ -4,6 +4,8 @@ import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.core.domain.StepStatus;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.persistence.entity.ProjectEntity;
+import com.storycreator.persistence.entity.AutoRunStepConfigEntity;
+import com.storycreator.persistence.repository.AutoRunStepConfigRepository;
 import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.ProofreadingReportRepository;
@@ -22,6 +24,7 @@ import reactor.core.publisher.Flux;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -53,6 +56,7 @@ public class WorkflowEngine {
     private final OutlineGenerationService outlineGenerationService;
     private final ProofreadingService proofreadingService;
     private final MaterialLibraryService materialLibraryService;
+    private final AutoRunStepConfigRepository autoRunStepConfigRepository;
 
     public WorkflowEngine(List<WorkflowStepHandler> handlerList,
                          AiProviderRouter providerRouter,
@@ -67,7 +71,8 @@ public class WorkflowEngine {
                          CharacterGenerationService characterGenerationService,
                          OutlineGenerationService outlineGenerationService,
                          ProofreadingService proofreadingService,
-                         @Lazy MaterialLibraryService materialLibraryService) {
+                         @Lazy MaterialLibraryService materialLibraryService,
+                         AutoRunStepConfigRepository autoRunStepConfigRepository) {
         this.handlers = handlerList.stream()
                 .collect(Collectors.toMap(WorkflowStepHandler::getStep, Function.identity()));
         this.providerRouter = providerRouter;
@@ -83,6 +88,7 @@ public class WorkflowEngine {
         this.outlineGenerationService = outlineGenerationService;
         this.proofreadingService = proofreadingService;
         this.materialLibraryService = materialLibraryService;
+        this.autoRunStepConfigRepository = autoRunStepConfigRepository;
     }
 
     // --- Model resolution ---
@@ -145,9 +151,10 @@ public class WorkflowEngine {
 
         // Dispatch to specialized services
         if (step == WorkflowStep.PROOFREADING) {
+            Set<String> enabledProofSubSteps = resolveEnabledProofreadSubSteps(projectId);
             Flux<String> proofFlux = (chapterNumber > 0)
-                    ? proofreadingService.runProofreadingSingleChapter(projectId, chapterNumber)
-                    : proofreadingService.runProofreading(projectId);
+                    ? proofreadingService.runProofreadingSingleChapter(projectId, chapterNumber, enabledProofSubSteps)
+                    : proofreadingService.runProofreading(projectId, enabledProofSubSteps);
             return proofFlux
                     .doOnComplete(() -> log.info("[P{}] Generate DONE step={} chapter={} elapsed={}s",
                             projectId, step, chapterNumber, (System.currentTimeMillis() - startTime) / 1000))
@@ -291,5 +298,24 @@ public class WorkflowEngine {
 
     public void proofreadFixSingleChapterSync(Long projectId, int chapterNumber) {
         proofreadingService.proofreadFixSingleChapterSync(projectId, chapterNumber);
+    }
+
+    private static final List<String> PROOFREAD_SUB_STEPS = List.of(
+            "PROOFREAD_PLOT_SUMMARY", "PROOFREAD_FORESHADOWING");
+
+    private Set<String> resolveEnabledProofreadSubSteps(Long projectId) {
+        List<AutoRunStepConfigEntity> configs = autoRunStepConfigRepository.findByProjectId(projectId);
+        // If no configs stored, all sub-steps are enabled (null = all enabled in ProofreadingService)
+        boolean hasAnyProofConfig = configs.stream()
+                .anyMatch(c -> PROOFREAD_SUB_STEPS.contains(c.getStep()));
+        if (!hasAnyProofConfig) {
+            return null;
+        }
+        Map<String, Boolean> configMap = configs.stream()
+                .collect(Collectors.toMap(AutoRunStepConfigEntity::getStep, AutoRunStepConfigEntity::isEnabled,
+                        (a, b) -> b));
+        return PROOFREAD_SUB_STEPS.stream()
+                .filter(s -> configMap.getOrDefault(s, true))
+                .collect(Collectors.toSet());
     }
 }

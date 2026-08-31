@@ -121,6 +121,7 @@ public class SettingsController {
                                    @RequestParam(required = false) String apiKey,
                                    @RequestParam(required = false) String baseUrl,
                                    @RequestParam(required = false) String extraParams,
+                                   @RequestParam(defaultValue = "0") int preCallDelaySeconds,
                                    @RequestParam(defaultValue = "false") boolean active,
                                    @RequestParam(defaultValue = "false") boolean clearApiKey) {
         AiModelConfigEntity config = configRepository.findById(id)
@@ -136,6 +137,7 @@ public class SettingsController {
         }
         config.setBaseUrl(baseUrl != null ? baseUrl.trim() : null);
         config.setExtraParams(extraParams != null && !extraParams.isBlank() ? extraParams.trim() : null);
+        config.setPreCallDelaySeconds(clampDelay(preCallDelaySeconds));
         config.setActive(active);
         configRepository.save(config);
 
@@ -155,6 +157,7 @@ public class SettingsController {
                                 @RequestParam(required = false) String apiKey,
                                 @RequestParam(required = false) String baseUrl,
                                 @RequestParam(required = false) String extraParams,
+                                @RequestParam(defaultValue = "0") int preCallDelaySeconds,
                                 @RequestParam(defaultValue = "TEXT") String modelType) {
         AiModelConfigEntity config = new AiModelConfigEntity();
         config.setProvider(provider);
@@ -163,6 +166,7 @@ public class SettingsController {
         config.setApiKey(apiKey);
         config.setBaseUrl(baseUrl);
         config.setExtraParams(extraParams != null && !extraParams.isBlank() ? extraParams.trim() : null);
+        config.setPreCallDelaySeconds(clampDelay(preCallDelaySeconds));
         config.setModelType(ModelType.valueOf(modelType));
         config.setActive(true);
         config = configRepository.save(config);
@@ -406,6 +410,12 @@ public class SettingsController {
             return raw.replaceAll("[\"']", "").trim();
         }
         return null;
+    }
+
+    private int clampDelay(int seconds) {
+        if (seconds < 0) return 0;
+        if (seconds > 600) return 600;
+        return seconds;
     }
 
     private String extractVoiceFromExtraParams(String extraParams) {

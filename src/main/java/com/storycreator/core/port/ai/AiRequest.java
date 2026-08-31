@@ -1,5 +1,8 @@
 package com.storycreator.core.port.ai;
 
+import java.util.List;
+import java.util.Map;
+
 public class AiRequest {
 
     private String model;
@@ -10,6 +13,7 @@ public class AiRequest {
     private String baseUrl;
     private String apiKey;
     private String extraParams;
+    private List<Map<String, String>> messages;
 
     public AiRequest() {}
 
@@ -48,6 +52,9 @@ public class AiRequest {
     public String getExtraParams() { return extraParams; }
     public void setExtraParams(String extraParams) { this.extraParams = extraParams; }
 
+    public List<Map<String, String>> getMessages() { return messages; }
+    public void setMessages(List<Map<String, String>> messages) { this.messages = messages; }
+
     public static class Builder {
         private final AiRequest request = new AiRequest();
 
@@ -59,6 +66,7 @@ public class AiRequest {
         public Builder baseUrl(String baseUrl) { request.baseUrl = baseUrl; return this; }
         public Builder apiKey(String apiKey) { request.apiKey = apiKey; return this; }
         public Builder extraParams(String extraParams) { request.extraParams = extraParams; return this; }
+        public Builder messages(List<Map<String, String>> messages) { request.messages = messages; return this; }
 
         public AiRequest build() { return request; }
     }

@@ -32,6 +32,7 @@ public class WorkflowStateService {
     private final ChapterRepository chapterRepository;
     private final BackgroundGenerationService backgroundGenerationService;
     private final ContextSummaryService contextSummaryService;
+    private final WorldFacetElaborationService worldFacetElaborationService;
 
     public WorkflowStateService(WorkflowStateRepository workflowStateRepository,
                                 ProjectRepository projectRepository,
@@ -41,7 +42,8 @@ public class WorkflowStateService {
                                 ChapterOutlineRepository chapterOutlineRepository,
                                 ChapterRepository chapterRepository,
                                 @Lazy BackgroundGenerationService backgroundGenerationService,
-                                ContextSummaryService contextSummaryService) {
+                                ContextSummaryService contextSummaryService,
+                                WorldFacetElaborationService worldFacetElaborationService) {
         this.workflowStateRepository = workflowStateRepository;
         this.projectRepository = projectRepository;
         this.worldSettingRepository = worldSettingRepository;
@@ -51,6 +53,7 @@ public class WorkflowStateService {
         this.chapterRepository = chapterRepository;
         this.backgroundGenerationService = backgroundGenerationService;
         this.contextSummaryService = contextSummaryService;
+        this.worldFacetElaborationService = worldFacetElaborationService;
     }
 
     @Transactional
@@ -232,6 +235,8 @@ public class WorkflowStateService {
             ws.setSummary(summary);
         }
         worldSettingRepository.save(ws);
+        // Asynchronously generate world facets (does not block)
+        worldFacetElaborationService.elaborateAllFacetsAsync(projectId, content);
     }
 
     void saveChapter(Long projectId, int chapterNumber, String content) {

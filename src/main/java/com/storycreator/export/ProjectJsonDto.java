@@ -1,6 +1,7 @@
 package com.storycreator.export;
 
 import java.util.List;
+import java.util.Map;
 
 public record ProjectJsonDto(
     int version,
@@ -32,7 +33,8 @@ public record ProjectJsonDto(
 
     public record WorldSettingData(
         String content,
-        String summary
+        String summary,
+        Map<String, String> facets
     ) {}
 
     public record CharacterData(

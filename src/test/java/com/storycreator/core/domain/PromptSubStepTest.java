@@ -26,8 +26,8 @@ class PromptSubStepTest {
     }
 
     @Test
-    void totalSubStepCountIs31() {
-        assertThat(PromptSubStep.values()).hasSize(31);
+    void totalSubStepCountIs25() {
+        assertThat(PromptSubStep.values()).hasSize(25);
     }
 
     @Test
@@ -37,7 +37,6 @@ class PromptSubStepTest {
         assertThat(PromptSubStep.CHARACTER_REFINE.getParentStep()).isEqualTo(WorkflowStep.CHARACTER_DESIGN);
         assertThat(PromptSubStep.IMAGE_PROMPT_AVATAR.getParentStep()).isEqualTo(WorkflowStep.CHARACTER_DESIGN);
         assertThat(PromptSubStep.IMAGE_PROMPT_PORTRAIT.getParentStep()).isEqualTo(WorkflowStep.CHARACTER_DESIGN);
-        assertThat(PromptSubStep.CHARACTER_BEHAVIOR_BOUNDARIES.getParentStep()).isEqualTo(WorkflowStep.CHARACTER_DESIGN);
     }
 
     @Test
@@ -49,27 +48,13 @@ class PromptSubStepTest {
     }
 
     @Test
-    void worldBuildingSubStepsMapCorrectly() {
-        assertThat(PromptSubStep.WRITING_RULES.getParentStep()).isEqualTo(WorkflowStep.WORLD_BUILDING);
-        assertThat(PromptSubStep.STYLE_FINGERPRINT.getParentStep()).isEqualTo(WorkflowStep.WORLD_BUILDING);
-    }
-
-    @Test
     void chapterWritingSubStepsMapCorrectly() {
         assertThat(PromptSubStep.CHAPTER_CONTEXT_BRIEFING.getParentStep()).isEqualTo(WorkflowStep.CHAPTER_WRITING);
-        assertThat(PromptSubStep.CHAPTER_PLOT_REASONING.getParentStep()).isEqualTo(WorkflowStep.CHAPTER_WRITING);
-        assertThat(PromptSubStep.CHAPTER_INSTANT_REVIEW.getParentStep()).isEqualTo(WorkflowStep.CHAPTER_WRITING);
-        assertThat(PromptSubStep.CHAPTER_CONTENT_OPTIMIZATION.getParentStep()).isEqualTo(WorkflowStep.CHAPTER_WRITING);
-        assertThat(PromptSubStep.CHAPTER_STORYLINE_UPDATE.getParentStep()).isEqualTo(WorkflowStep.CHAPTER_WRITING);
-        assertThat(PromptSubStep.CHAPTER_DEEP_REVIEW.getParentStep()).isEqualTo(WorkflowStep.CHAPTER_WRITING);
     }
 
     @Test
     void proofreadingSubStepsMapCorrectly() {
         assertThat(PromptSubStep.PROOFREAD_PLOT_SUMMARY.getParentStep()).isEqualTo(WorkflowStep.PROOFREADING);
-        assertThat(PromptSubStep.PROOFREAD_CHARACTER_CHECK.getParentStep()).isEqualTo(WorkflowStep.PROOFREADING);
-        assertThat(PromptSubStep.PROOFREAD_CONSISTENCY.getParentStep()).isEqualTo(WorkflowStep.PROOFREADING);
-        assertThat(PromptSubStep.PROOFREAD_CONTINUITY.getParentStep()).isEqualTo(WorkflowStep.PROOFREADING);
         assertThat(PromptSubStep.PROOFREAD_FORESHADOWING.getParentStep()).isEqualTo(WorkflowStep.PROOFREADING);
         assertThat(PromptSubStep.PROOFREAD_FIX.getParentStep()).isEqualTo(WorkflowStep.PROOFREADING);
     }

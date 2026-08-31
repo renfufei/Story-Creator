@@ -67,9 +67,6 @@ public class MockAiProvider implements AiProvider {
         CHARACTER_STATES,
         VOLUME_ARC,
         PROOFREAD_PLOT_SUMMARY,
-        PROOFREAD_CHARACTER_CHECK,
-        PROOFREAD_CONSISTENCY,
-        PROOFREAD_CONTINUITY,
         PROOFREAD_FORESHADOWING,
         GENERIC
     }
@@ -84,19 +81,7 @@ public class MockAiProvider implements AiProvider {
         if (combined.contains("情节摘要") || combined.contains("主要情节摘要")) {
             return PromptCategory.PROOFREAD_PLOT_SUMMARY;
         }
-        // 3. Character name check
-        if (combined.contains("角色名单") || combined.contains("人物姓名")) {
-            return PromptCategory.PROOFREAD_CHARACTER_CHECK;
-        }
-        // 4. Consistency check
-        if ((combined.contains("一致性") && combined.contains("角色")) || combined.contains("前一章情节摘要")) {
-            return PromptCategory.PROOFREAD_CONSISTENCY;
-        }
-        // 5. Continuity check
-        if (combined.contains("上章结尾") || combined.contains("衔接检查")) {
-            return PromptCategory.PROOFREAD_CONTINUITY;
-        }
-        // 6. Foreshadowing
+        // 3. Foreshadowing
         if (combined.contains("伏笔") || combined.contains("悬念")) {
             return PromptCategory.PROOFREAD_FORESHADOWING;
         }
@@ -171,9 +156,6 @@ public class MockAiProvider implements AiProvider {
             case CHARACTER_STATES -> generateCharacterStates();
             case VOLUME_ARC -> generateVolumeArc();
             case PROOFREAD_PLOT_SUMMARY -> generatePlotSummary();
-            case PROOFREAD_CHARACTER_CHECK -> generateCharacterCheck();
-            case PROOFREAD_CONSISTENCY -> generateConsistencyCheck();
-            case PROOFREAD_CONTINUITY -> generateContinuityCheck();
             case PROOFREAD_FORESHADOWING -> generateForeshadowing();
             case GENERIC -> generateGeneric();
         };
@@ -399,18 +381,6 @@ public class MockAiProvider implements AiProvider {
 
     private String generatePlotSummary() {
         return "本章讲述陈轩参加宗门大比，连胜多场后与萧无极展开最终对决，展现出混沌灵根的强大潜力。";
-    }
-
-    private String generateCharacterCheck() {
-        return "[]";
-    }
-
-    private String generateConsistencyCheck() {
-        return "[]";
-    }
-
-    private String generateContinuityCheck() {
-        return "[]";
     }
 
     private String generateForeshadowing() {

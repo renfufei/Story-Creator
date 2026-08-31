@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('TXT导入', ~{::content})}">
+<body>
+<div th:fragment="content" x-data="txtImport()" x-init="init()">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0"><i class="bi bi-file-earmark-text"></i> TXT导入 & 逆向工程</h2>
+    </div>
+
+    <!-- Step Indicator -->
+    <div class="d-flex align-items-center justify-content-center mb-4">
+        <template x-for="s in [1,2,3,4]" :key="s">
+            <div class="d-flex align-items-center">
+                <div class="rounded-circle d-flex align-items-center justify-content-center"
+                     :class="step >= s ? 'bg-primary text-white' : 'bg-light text-muted border'"
+                     style="width:36px;height:36px;font-size:14px;font-weight:bold;"
+                     x-text="s"></div>
+                <div x-show="s < 4" class="mx-2" style="width:40px;height:2px;"
+                     :class="step > s ? 'bg-primary' : 'bg-light'"></div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Step 1: Upload & Config -->
+    <div x-show="step === 1">
+        <div class="card">
+            <div class="card-header"><strong>第一步：上传文件 & 选择分割配置</strong></div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">选择 TXT 文件</label>
+                    <input type="file" class="form-control" accept=".txt" @change="onFileSelect($event)">
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">项目标题</label>
+                        <input type="text" class="form-control" x-model="title" placeholder="默认取文件名">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">题材</label>
+                        <select class="form-select" x-model="genre">
+                            <option value="">未指定</option>
+                            <option th:each="g : ${genres}" th:value="${g.name()}" th:text="${g.displayName}">题材</option>
+                        </select>
+                    </div>
+                </div>
+
+                <label class="form-label">章节分割配置</label>
+                <div class="border rounded p-3 mb-3" style="max-height:200px;overflow-y:auto;">
+                    <div th:each="config : ${splitConfigs}" class="form-check">
+                        <input class="form-check-input split-config-check" type="checkbox"
+                               th:id="'config-' + ${config.id}"
+                               th:value="${config.id}"
+                               th:checked="${config.enabled}"
+                               @change="toggleConfig($el.value, $el.checked)">
+                        <label class="form-check-label" th:for="'config-' + ${config.id}">
+                            <span th:if="${config.builtin}" class="badge bg-secondary me-1" title="内置"><i class="bi bi-shield-check"></i></span>
+                            <span th:text="${config.name}">名称</span>
+                            <small class="text-muted" th:text="${config.description}">描述</small>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Quick custom pattern -->
+                <div class="border rounded p-3 mb-3">
+                    <label class="form-label">快速自定义正则（可选）</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" x-model="customPattern" placeholder="输入正则表达式...">
+                        <button class="btn btn-outline-secondary" @click="testCustomPattern()" :disabled="!customPattern">
+                            测试
+                        </button>
+                    </div>
+                    <div x-show="testResult" class="mt-2 alert alert-info small" x-text="testResult"></div>
+                </div>
+
+                <div class="text-end">
+                    <button class="btn btn-primary" @click="uploadAndSplit()" :disabled="!file || uploading">
+                        <span x-show="uploading" class="spinner-border spinner-border-sm me-1"></span>
+                        上传并分割
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 2: Preview & Adjust -->
+    <div x-show="step === 2">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>第二步：预览 & 调整章节</strong>
+                <div>
+                    <span class="badge bg-info me-2" x-text="'共 ' + chapters.length + ' 章'"></span>
+                    <span class="badge bg-secondary" x-text="formatWordCount(totalWordCount) + ' 字'"></span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="mb-3 d-flex gap-2">
+                    <button class="btn btn-outline-secondary btn-sm" @click="step = 1">
+                        <i class="bi bi-arrow-left"></i> 返回
+                    </button>
+                    <button class="btn btn-outline-primary btn-sm" @click="resplit()">
+                        <i class="bi bi-arrow-clockwise"></i> 重新分割
+                    </button>
+                </div>
+
+                <div class="table-responsive" style="max-height:500px;overflow-y:auto;">
+                    <table class="table table-sm table-hover">
+                        <thead class="sticky-top bg-white">
+                            <tr>
+                                <th style="width:50px">#</th>
+                                <th style="width:200px">标题</th>
+                                <th style="width:80px">字数</th>
+                                <th>预览</th>
+                                <th style="width:100px">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="ch in chapters" :key="ch.number">
+                                <tr>
+                                    <td x-text="ch.number"></td>
+                                    <td>
+                                        <input type="text" class="form-control form-control-sm"
+                                               x-model="ch.title"
+                                               @blur="updateChapterTitle(ch.number, ch.title)">
+                                    </td>
+                                    <td><small x-text="formatWordCount(ch.wordCount)"></small></td>
+                                    <td><small class="text-muted" x-text="ch.preview" style="font-size:12px"></small></td>
+                                    <td>
+                                        <button class="btn btn-outline-secondary btn-sm"
+                                                @click="mergeNext(ch.number)"
+                                                x-show="ch.number < chapters.length"
+                                                title="合并下一章">
+                                            <i class="bi bi-arrows-collapse"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="text-end mt-3">
+                    <button class="btn btn-primary" @click="step = 3">
+                        下一步：逆向选项 <i class="bi bi-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 3: Reverse Engineering Options -->
+    <div x-show="step === 3">
+        <div class="card">
+            <div class="card-header"><strong>第三步：逆向工程选项</strong></div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <button class="btn btn-outline-secondary btn-sm" @click="step = 2">
+                        <i class="bi bi-arrow-left"></i> 返回
+                    </button>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>逆向工程内容</h6>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" x-model="runWorldBuilding" id="sw-world">
+                            <label class="form-check-label" for="sw-world">反推世界观</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" x-model="runCharacters" id="sw-chars">
+                            <label class="form-check-label" for="sw-chars">反推角色</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" x-model="runOutline" id="sw-outline">
+                            <label class="form-check-label" for="sw-outline">反推大纲</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>采样设置</h6>
+                        <div class="mb-3">
+                            <label class="form-label">采样策略</label>
+                            <select class="form-select" x-model="samplingStrategy">
+                                <option value="UNIFORM">均匀采样</option>
+                                <option value="FIRST_N">前N章</option>
+                                <option value="ALL">全部</option>
+                            </select>
+                        </div>
+                        <div class="mb-3" x-show="samplingStrategy !== 'ALL'">
+                            <label class="form-label">采样数量</label>
+                            <input type="number" class="form-control" x-model.number="samplingN" min="1" max="50">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">AI模型</label>
+                            <select class="form-select" x-model="modelConfigId">
+                                <option value="">默认</option>
+                                <option th:each="mc : ${modelConfigs}" th:value="${mc.id}"
+                                        th:text="${mc.displayName + ' (' + mc.provider + ')'}">模型</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-end mt-3">
+                    <button class="btn btn-primary" @click="startReverse()" :disabled="reversing">
+                        <span x-show="reversing" class="spinner-border spinner-border-sm me-1"></span>
+                        开始逆向工程 <i class="bi bi-play-fill"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 4: Execution & Monitor -->
+    <div x-show="step === 4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>第四步：逆向工程执行</strong>
+                <div>
+                    <span class="badge" :class="phaseBadgeClass" x-text="phaseText"></span>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Phase Progress -->
+                <div class="d-flex justify-content-between mb-3">
+                    <template x-for="p in phases" :key="p.key">
+                        <div class="text-center flex-fill">
+                            <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-1"
+                                 :class="p.done ? 'bg-success text-white' : (p.active ? 'bg-primary text-white' : 'bg-light text-muted border')"
+                                 style="width:30px;height:30px;font-size:12px;">
+                                <i class="bi" :class="p.done ? 'bi-check' : 'bi-circle'"></i>
+                            </div>
+                            <div style="font-size:11px;" x-text="p.label"></div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- SSE Output -->
+                <div class="border rounded p-3 bg-dark text-light font-monospace" style="height:350px;overflow-y:auto;font-size:12px;white-space:pre-wrap;" x-ref="output" x-text="output">
+                </div>
+
+                <div class="mt-3 d-flex justify-content-between">
+                    <button class="btn btn-outline-danger btn-sm" @click="stopReverse()" x-show="active">
+                        <i class="bi bi-stop-fill"></i> 停止
+                    </button>
+                    <a x-show="done && projectId" :href="'/projects/' + projectId + '/workflow'" class="btn btn-success btn-sm">
+                        <i class="bi bi-arrow-right"></i> 进入项目创作
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+function txtImport() {
+    return {
+        step: 1,
+        // Step 1
+        file: null,
+        title: '',
+        genre: '',
+        selectedConfigIds: [],
+        customPattern: '',
+        testResult: '',
+        uploading: false,
+        jobId: null,
+        // Step 2
+        chapters: [],
+        totalWordCount: 0,
+        // Step 3
+        runWorldBuilding: true,
+        runCharacters: true,
+        runOutline: true,
+        samplingStrategy: 'UNIFORM',
+        samplingN: 10,
+        modelConfigId: '',
+        reversing: false,
+        // Step 4
+        output: '',
+        active: false,
+        done: false,
+        projectId: null,
+        phaseText: '等待中',
+        phaseBadgeClass: 'bg-secondary',
+        phases: [
+            {key: 'world', label: '世界观', done: false, active: false},
+            {key: 'chars', label: '角色', done: false, active: false},
+            {key: 'outline', label: '大纲', done: false, active: false}
+        ],
+
+        init() {
+            // Initialize selectedConfigIds from checked checkboxes rendered in HTML
+            this.selectedConfigIds = Array.from(
+                document.querySelectorAll('.split-config-check:checked')
+            ).map(el => parseInt(el.value));
+        },
+
+        onFileSelect(event) {
+            this.file = event.target.files[0];
+            if (this.file && !this.title) {
+                let name = this.file.name;
+                if (name.includes('.')) name = name.substring(0, name.lastIndexOf('.'));
+                this.title = name;
+            }
+        },
+
+        toggleConfig(id, checked) {
+            id = parseInt(id);
+            if (checked) {
+                if (!this.selectedConfigIds.includes(id)) this.selectedConfigIds.push(id);
+            } else {
+                this.selectedConfigIds = this.selectedConfigIds.filter(x => x !== id);
+            }
+        },
+
+        async testCustomPattern() {
+            if (!this.customPattern) return;
+            try {
+                const resp = await fetch('/import/txt/test-pattern', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({pattern: this.customPattern, sampleText: '第一章 开端\n内容...\n第二章 发展\n更多内容...'})
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    this.testResult = '错误: ' + data.error;
+                } else {
+                    this.testResult = '匹配 ' + data.matchCount + ' 处: ' + data.matches.join(', ');
+                }
+            } catch(e) {
+                this.testResult = '测试失败: ' + e.message;
+            }
+        },
+
+        async uploadAndSplit() {
+            if (!this.file) return;
+            this.uploading = true;
+            try {
+                const formData = new FormData();
+                formData.append('file', this.file);
+                if (this.title) formData.append('title', this.title);
+                if (this.genre) formData.append('genre', this.genre);
+
+                const uploadResp = await fetch('/import/txt/upload', {method: 'POST', body: formData});
+                const uploadData = await uploadResp.json();
+                if (uploadData.error) { alert(uploadData.error); return; }
+
+                this.jobId = uploadData.jobId;
+                this.title = uploadData.title;
+
+                // Split
+                const splitResp = await fetch('/import/txt/' + this.jobId + '/split', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({configIds: this.selectedConfigIds})
+                });
+                const splitData = await splitResp.json();
+                if (splitData.error) { alert(splitData.error); return; }
+
+                this.chapters = splitData.chapters;
+                this.totalWordCount = this.chapters.reduce((s, c) => s + c.wordCount, 0);
+                this.step = 2;
+            } catch(e) {
+                alert('上传失败: ' + e.message);
+            } finally {
+                this.uploading = false;
+            }
+        },
+
+        async resplit() {
+            const resp = await fetch('/import/txt/' + this.jobId + '/resplit', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({configIds: this.selectedConfigIds})
+            });
+            const data = await resp.json();
+            if (data.error) { alert(data.error); return; }
+            this.chapters = data.chapters;
+            this.totalWordCount = this.chapters.reduce((s, c) => s + c.wordCount, 0);
+        },
+
+        async updateChapterTitle(num, title) {
+            await fetch('/import/txt/' + this.jobId + '/chapter/' + num + '/title', {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({title})
+            });
+        },
+
+        async mergeNext(num) {
+            await fetch('/import/txt/' + this.jobId + '/chapter/' + num + '/merge-next', {method: 'POST'});
+            // Refresh chapters
+            const resp = await fetch('/import/txt/' + this.jobId + '/chapters');
+            const data = await resp.json();
+            this.chapters = data.chapters;
+            this.totalWordCount = data.totalWordCount;
+        },
+
+        async startReverse() {
+            this.reversing = true;
+            try {
+                const resp = await fetch('/import/txt/' + this.jobId + '/start-reverse', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        runWorldBuilding: this.runWorldBuilding,
+                        runCharacters: this.runCharacters,
+                        runOutline: this.runOutline,
+                        samplingStrategy: this.samplingStrategy,
+                        samplingN: this.samplingN,
+                        modelConfigId: this.modelConfigId ? parseInt(this.modelConfigId) : null
+                    })
+                });
+                const data = await resp.json();
+                if (data.error) { alert(data.error); return; }
+
+                this.projectId = data.projectId;
+                this.step = 4;
+                this.active = true;
+                this.connectSSE();
+            } catch(e) {
+                alert('启动失败: ' + e.message);
+            } finally {
+                this.reversing = false;
+            }
+        },
+
+        connectSSE() {
+            const es = new EventSource('/import/txt/' + this.jobId + '/stream');
+            es.addEventListener('token', (e) => {
+                this.output += e.data;
+                this.scrollOutput();
+            });
+            es.addEventListener('replay-buffer', (e) => {
+                this.output = e.data;
+                this.scrollOutput();
+            });
+            es.addEventListener('phase', (e) => {
+                const phase = e.data;
+                if (phase.includes('WORLD')) {
+                    this.setPhase('world');
+                    this.phaseText = '逆向世界观';
+                    this.phaseBadgeClass = 'bg-primary';
+                } else if (phase.includes('CHARS')) {
+                    this.setPhase('chars');
+                    this.phaseText = '逆向角色';
+                    this.phaseBadgeClass = 'bg-info';
+                } else if (phase.includes('OUTLINE')) {
+                    this.setPhase('outline');
+                    this.phaseText = '逆向大纲';
+                    this.phaseBadgeClass = 'bg-warning';
+                }
+                this.output += '\n\n=== ' + this.phaseText + ' ===\n\n';
+                this.scrollOutput();
+            });
+            es.addEventListener('done', () => {
+                this.active = false;
+                this.done = true;
+                this.phaseText = '完成';
+                this.phaseBadgeClass = 'bg-success';
+                this.phases.forEach(p => p.done = true);
+                es.close();
+            });
+            es.addEventListener('error', (e) => {
+                this.active = false;
+                this.phaseText = '错误';
+                this.phaseBadgeClass = 'bg-danger';
+                this.output += '\n\n[错误] ' + (e.data || '未知错误') + '\n';
+                es.close();
+            });
+            es.addEventListener('stopped', () => {
+                this.active = false;
+                this.phaseText = '已停止';
+                this.phaseBadgeClass = 'bg-warning';
+                es.close();
+            });
+            es.onerror = () => { es.close(); };
+        },
+
+        setPhase(key) {
+            this.phases.forEach(p => {
+                if (p.key === key) { p.active = true; p.done = false; }
+                else if (p.active) { p.active = false; p.done = true; }
+            });
+        },
+
+        async stopReverse() {
+            await fetch('/import/txt/' + this.jobId + '/stop', {method: 'POST'});
+        },
+
+        scrollOutput() {
+            this.$nextTick(() => {
+                const el = this.$refs.output;
+                if (el) el.scrollTop = el.scrollHeight;
+            });
+        },
+
+        formatWordCount(n) {
+            if (n >= 10000) return (n / 10000).toFixed(1) + '万';
+            return n;
+        }
+    };
+}
+</script>
+</div>
+</body>
+</html>
+

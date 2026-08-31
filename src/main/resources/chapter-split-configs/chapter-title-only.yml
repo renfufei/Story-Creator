@@ -1,0 +1,6 @@
+id: "chapter-title-only"
+name: "独立标题行"
+description: "匹配前后有空行的短行（≤20字）作为章节标题"
+pattern: "(?m)(?<=\\n\\n|\\A)(.{1,20})(?=\\n\\n)"
+titleGroup: 1
+includeMatch: false

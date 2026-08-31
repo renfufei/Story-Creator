@@ -9,8 +9,7 @@ import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.StoryOutlineRepository;
 import com.storycreator.persistence.repository.WorldSettingRepository;
-import com.storycreator.workflow.autorun.strategy.AutoRunStrategy;
-import com.storycreator.workflow.autorun.strategy.AutoRunStrategyRegistry;
+import com.storycreator.workflow.autorun.strategy.DefaultAutoRunStrategy;
 import com.storycreator.workflow.engine.WorkflowEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +36,7 @@ public class AutoRunService {
     private final WorkflowEngine workflowEngine;
     private final GlobalSettingService globalSettingService;
     private final AutoRunStepConfigRepository autoRunStepConfigRepository;
-    private final AutoRunStrategyRegistry strategyRegistry;
+    private final DefaultAutoRunStrategy strategy;
 
     private final ConcurrentHashMap<Long, Boolean> stopSignals = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Boolean> runningProjects = new ConcurrentHashMap<>();
@@ -54,7 +53,7 @@ public class AutoRunService {
                           WorkflowEngine workflowEngine,
                           GlobalSettingService globalSettingService,
                           AutoRunStepConfigRepository autoRunStepConfigRepository,
-                          AutoRunStrategyRegistry strategyRegistry) {
+                          DefaultAutoRunStrategy strategy) {
         this.projectRepository = projectRepository;
         this.chapterRepository = chapterRepository;
         this.chapterOutlineRepository = chapterOutlineRepository;
@@ -64,7 +63,7 @@ public class AutoRunService {
         this.workflowEngine = workflowEngine;
         this.globalSettingService = globalSettingService;
         this.autoRunStepConfigRepository = autoRunStepConfigRepository;
-        this.strategyRegistry = strategyRegistry;
+        this.strategy = strategy;
     }
 
     public void startAutoRun(Long projectId) {
@@ -95,11 +94,7 @@ public class AutoRunService {
         obs.setActive(true);
         observations.put(projectId, obs);
 
-        // Resolve strategy
-        String strategyName = project.getAutoRunStrategy();
-        AutoRunStrategy strategy = strategyRegistry.resolve(strategyName);
-
-        executor.submit(() -> executeAutoRun(projectId, strategy));
+        executor.submit(() -> executeAutoRun(projectId));
     }
 
     public void stopAutoRun(Long projectId) {
@@ -133,7 +128,7 @@ public class AutoRunService {
         );
     }
 
-    private void executeAutoRun(Long projectId, AutoRunStrategy strategy) {
+    private void executeAutoRun(Long projectId) {
         try {
             AutoRunContext ctx = buildContext(projectId);
             strategy.execute(ctx);

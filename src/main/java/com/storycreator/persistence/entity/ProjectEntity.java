@@ -73,8 +73,14 @@ public class ProjectEntity {
     @Column(name = "auto_run_progress", length = 200)
     private String autoRunProgress;
 
-    @Column(name = "auto_run_strategy", nullable = false, length = 50)
-    private String autoRunStrategy = "DEFAULT";
+    @Column(name = "expansion_guidance", columnDefinition = "TEXT")
+    private String expansionGuidance;
+
+    @Column(name = "recurring_character_rate", nullable = false)
+    private double recurringCharacterRate = 0.5;
+
+    @Column(name = "temp_character_rate", nullable = false)
+    private double tempCharacterRate = 3.0;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -157,6 +163,12 @@ public class ProjectEntity {
     public String getAutoRunProgress() { return autoRunProgress; }
     public void setAutoRunProgress(String autoRunProgress) { this.autoRunProgress = autoRunProgress; }
 
-    public String getAutoRunStrategy() { return autoRunStrategy; }
-    public void setAutoRunStrategy(String autoRunStrategy) { this.autoRunStrategy = autoRunStrategy; }
+    public String getExpansionGuidance() { return expansionGuidance; }
+    public void setExpansionGuidance(String expansionGuidance) { this.expansionGuidance = expansionGuidance; }
+
+    public double getRecurringCharacterRate() { return recurringCharacterRate; }
+    public void setRecurringCharacterRate(double recurringCharacterRate) { this.recurringCharacterRate = recurringCharacterRate; }
+
+    public double getTempCharacterRate() { return tempCharacterRate; }
+    public void setTempCharacterRate(double tempCharacterRate) { this.tempCharacterRate = tempCharacterRate; }
 }
