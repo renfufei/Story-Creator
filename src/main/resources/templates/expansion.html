@@ -119,13 +119,19 @@
         </div>
     </div>
 
-    <!-- All chapters for batch marking -->
+    <!-- All chapters for batch marking, grouped by volume -->
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-book"></i> 全部章节</span>
+            <span><i class="bi bi-book"></i> 全部章节（按分卷）</span>
             <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-outline-primary" @click="markAllUnmarked()">
-                    <i class="bi bi-plus-circle"></i> 全部标记
+                <button class="btn btn-sm btn-outline-secondary" @click="toggleAllVolumes()">
+                    <i class="bi" :class="allVolumesExpanded ? 'bi-chevron-contract' : 'bi-chevron-expand'"></i>
+                    <span x-text="allVolumesExpanded ? '全部折叠' : '全部展开'"></span>
+                </button>
+                <button class="btn btn-sm btn-outline-primary" @click="toggleSelectAllChapters()"
+                        :disabled="selectableChapters.length === 0">
+                    <i class="bi" :class="allSelectableSelected ? 'bi-square' : 'bi-check-all'"></i>
+                    <span x-text="allSelectableSelected ? '全部取消' : '全部选中'"></span>
                 </button>
                 <button class="btn btn-sm btn-primary" @click="addSelectedToQueue()"
                         :disabled="selectedChapters.length === 0">
@@ -135,45 +141,61 @@
             </div>
         </div>
         <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-sm table-hover mb-0">
-                    <thead>
-                        <tr>
-                            <th style="width:40px;">
-                                <input type="checkbox" class="form-check-input"
-                                       :checked="allSelectableSelected"
-                                       :disabled="selectableChapters.length === 0"
-                                       @change="toggleSelectAll($event.target.checked)">
-                            </th>
-                            <th style="width:60px;">章节</th>
-                            <th>标题</th>
-                            <th style="width:80px;">字数</th>
-                            <th style="width:100px;">扩写状态</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <template x-for="ch in allChapters" :key="ch.chapterNumber">
-                            <tr>
-                                <td>
-                                    <input type="checkbox" class="form-check-input"
-                                           :checked="selectedChapters.includes(ch.chapterNumber)"
-                                           :disabled="ch.expansionStatus === 'GENERATING' || ch.expansionStatus === 'EXPANDED' || !ch.hasContent"
-                                           @change="onChapterCheck(ch, $event.target.checked)">
-                                </td>
-                                <td x-text="ch.chapterNumber"></td>
-                                <td x-text="ch.title || '-'"></td>
-                                <td x-text="ch.wordCount"></td>
-                                <td>
-                                    <span x-show="ch.expansionStatus" class="badge"
-                                          :class="statusBadgeClass(ch.expansionStatus)"
-                                          x-text="statusLabel(ch.expansionStatus)"></span>
-                                    <span x-show="!ch.expansionStatus && !ch.hasContent" class="text-muted" style="font-size:0.8rem;">无内容</span>
-                                </td>
-                            </tr>
-                        </template>
-                    </tbody>
-                </table>
-            </div>
+            <div class="p-3 text-muted" x-show="groupedVolumes.length === 0">暂无章节</div>
+            <template x-for="vol in groupedVolumes" :key="vol.volume">
+                <div class="volume-group border-bottom">
+                    <div class="d-flex align-items-center gap-2 px-2 py-2 bg-light">
+                        <button class="btn btn-sm btn-link p-0 text-dark" type="button"
+                                @click="toggleVolume(vol.volume)" style="text-decoration:none;">
+                            <i class="bi" :class="isVolumeExpanded(vol.volume) ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
+                        </button>
+                        <input type="checkbox" class="form-check-input"
+                               :checked="isVolumeSelected(vol.volume)"
+                               x-effect="$el.indeterminate = volumeIndeterminate(vol.volume)"
+                               :disabled="volumeSelectableChapters(vol.volume).length === 0"
+                               @change="toggleVolumeSelect(vol.volume, $event.target.checked)"
+                               :title="'级联选择' + vol.label + '内的章节'">
+                        <span class="fw-bold" x-text="vol.label"></span>
+                        <span class="text-muted small" x-text="'（' + vol.chapters.length + ' 章）'"></span>
+                        <span class="text-muted small ms-auto"
+                              x-text="volumeSelectedCount(vol.volume) + '/' + volumeSelectableChapters(vol.volume).length + ' 可加入'"></span>
+                    </div>
+                    <div x-show="isVolumeExpanded(vol.volume)" class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width:40px;"></th>
+                                    <th style="width:60px;">章节</th>
+                                    <th>标题</th>
+                                    <th style="width:80px;">字数</th>
+                                    <th style="width:100px;">扩写状态</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="ch in vol.chapters" :key="ch.chapterNumber">
+                                    <tr>
+                                        <td>
+                                            <input type="checkbox" class="form-check-input"
+                                                   :checked="selectedChapters.includes(ch.chapterNumber)"
+                                                   :disabled="ch.expansionStatus === 'GENERATING' || ch.expansionStatus === 'EXPANDED' || !ch.hasContent"
+                                                   @change="onChapterCheck(ch, $event.target.checked)">
+                                        </td>
+                                        <td x-text="ch.chapterNumber"></td>
+                                        <td x-text="ch.title || '-'"></td>
+                                        <td x-text="ch.wordCount"></td>
+                                        <td>
+                                            <span x-show="ch.expansionStatus" class="badge"
+                                                  :class="statusBadgeClass(ch.expansionStatus)"
+                                                  x-text="statusLabel(ch.expansionStatus)"></span>
+                                            <span x-show="!ch.expansionStatus && !ch.hasContent" class="text-muted" style="font-size:0.8rem;">无内容</span>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </template>
         </div>
     </div>
 </div>
@@ -182,6 +204,7 @@
     const PROJECT_ID = /*[[${project.id}]]*/ 0;
     const INITIAL_GUIDANCE = /*[[${project.expansionGuidance ?: ''}]]*/ '';
     const INITIAL_CHAPTERS = /*[[${chapters}]]*/ [];
+    const CHAPTERS_PER_VOLUME = /*[[${project.chaptersPerVolume}]]*/ 10;
 
     function expansionPage() {
         return {
@@ -191,19 +214,29 @@
             pendingCount: 0,
             expandedCount: 0,
             streamContent: '',
-            allChapters: [],
+            allChapters: INITIAL_CHAPTERS.map(ch => ({
+                chapterNumber: ch.chapterNumber,
+                title: ch.title,
+                wordCount: ch.wordCount,
+                expansionStatus: ch.expansionStatus,
+                hasContent: ch.content != null
+            })),
             selectedChapters: [],
+            chaptersPerVolume: CHAPTERS_PER_VOLUME,
+            // 默认展开全部分卷：在 x-data 创建时即初始化，保证首屏按钮文案正确
+            expandedVolumes: (function () {
+                const per = CHAPTERS_PER_VOLUME || 10;
+                const m = {};
+                INITIAL_CHAPTERS.forEach(ch => {
+                    const vol = Math.ceil(ch.chapterNumber / per);
+                    m[vol] = true;
+                });
+                return m;
+            })(),
             eventSource: null,
             pollTimer: null,
 
             init() {
-                this.allChapters = INITIAL_CHAPTERS.map(ch => ({
-                    chapterNumber: ch.chapterNumber,
-                    title: ch.title,
-                    wordCount: ch.wordCount,
-                    expansionStatus: ch.expansionStatus,
-                    hasContent: ch.content != null
-                }));
                 this.updateCounts();
                 // 首次拉真实状态，恢复后台任务时按钮可用
                 this.pollStatus();
@@ -228,6 +261,79 @@
             get allSelectableSelected() {
                 const sel = this.selectableChapters;
                 return sel.length > 0 && sel.every(ch => this.selectedChapters.includes(ch.chapterNumber));
+            },
+
+            // 按分卷（每 chaptersPerVolume 章为一卷）对全部章节分组
+            get groupedVolumes() {
+                const perVol = this.chaptersPerVolume || 10;
+                const map = new Map();
+                for (const ch of this.allChapters) {
+                    const vol = Math.ceil(ch.chapterNumber / perVol);
+                    if (!map.has(vol)) map.set(vol, []);
+                    map.get(vol).push(ch);
+                }
+                const vols = [];
+                Array.from(map.keys()).sort((a, b) => a - b).forEach(k => {
+                    vols.push({volume: k, label: '第' + k + '卷', chapters: map.get(k)});
+                });
+                return vols;
+            },
+
+            isVolumeExpanded(vol) {
+                return this.expandedVolumes[vol] === undefined ? true : this.expandedVolumes[vol];
+            },
+
+            toggleVolume(vol) {
+                this.expandedVolumes[vol] = !this.isVolumeExpanded(vol);
+            },
+
+            get allVolumesExpanded() {
+                const vols = this.groupedVolumes;
+                return vols.length > 0 && vols.every(v => this.isVolumeExpanded(v.volume));
+            },
+
+            toggleAllVolumes() {
+                const expand = !this.allVolumesExpanded;
+                this.groupedVolumes.forEach(v => { this.expandedVolumes[v.volume] = expand; });
+            },
+
+            // 某卷内「可被加入队列」的章节（有内容且未在 GENERATING/EXPANDED）
+            volumeSelectableChapters(vol) {
+                const group = this.groupedVolumes.find(v => v.volume === vol);
+                if (!group) return [];
+                return group.chapters.filter(ch =>
+                    ch.hasContent && ch.expansionStatus !== 'GENERATING' && ch.expansionStatus !== 'EXPANDED');
+            },
+
+            // 该卷是否整卷（全部可选项）已选
+            isVolumeSelected(vol) {
+                const sel = this.volumeSelectableChapters(vol);
+                return sel.length > 0 && sel.every(ch => this.selectedChapters.includes(ch.chapterNumber));
+            },
+
+            // 该卷是否处于部分选中（半选）状态
+            volumeIndeterminate(vol) {
+                const sel = this.volumeSelectableChapters(vol);
+                if (sel.length === 0) return false;
+                const count = sel.filter(ch => this.selectedChapters.includes(ch.chapterNumber)).length;
+                return count > 0 && count < sel.length;
+            },
+
+            volumeSelectedCount(vol) {
+                const sel = this.volumeSelectableChapters(vol);
+                return sel.filter(ch => this.selectedChapters.includes(ch.chapterNumber)).length;
+            },
+
+            // 级联选择：勾选分卷复选框 → 选中/取消该卷内所有可选项章节
+            toggleVolumeSelect(vol, checked) {
+                if (checked) {
+                    const nums = this.volumeSelectableChapters(vol).map(ch => ch.chapterNumber);
+                    const merged = new Set([...this.selectedChapters, ...nums]);
+                    this.selectedChapters = Array.from(merged);
+                } else {
+                    const sel = new Set(this.volumeSelectableChapters(vol).map(ch => ch.chapterNumber));
+                    this.selectedChapters = this.selectedChapters.filter(n => !sel.has(n));
+                }
             },
 
             statusBadgeClass(status) {
@@ -440,21 +546,15 @@
                 this.updateCounts();
             },
 
-            async markAllUnmarked() {
-                const unmarked = this.allChapters
-                    .filter(ch => !ch.expansionStatus && ch.hasContent)
-                    .map(ch => ch.chapterNumber);
-                if (unmarked.length === 0) return;
-                await fetch(`/projects/${PROJECT_ID}/expansion/mark`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({chapterNumbers: unmarked, marked: true})
-                });
-                unmarked.forEach(num => {
-                    const ch = this.allChapters.find(c => c.chapterNumber === num);
-                    if (ch) ch.expansionStatus = 'PENDING';
-                });
-                this.updateCounts();
+            // 全部选中 / 全部取消：仅切换勾选状态，不涉及后端标记与队列
+            toggleSelectAllChapters() {
+                if (this.allSelectableSelected) {
+                    this.selectedChapters = [];
+                } else {
+                    const nums = this.selectableChapters.map(ch => ch.chapterNumber);
+                    const merged = new Set([...this.selectedChapters, ...nums]);
+                    this.selectedChapters = Array.from(merged);
+                }
             },
 
             async rollbackChapter(chapterNumber) {
