@@ -129,6 +129,12 @@
         </div>
         <h6 class="text-muted mb-2" th:text="${project.title}">书名</h6>
         <hr>
+        <!-- 全部折叠/展开 -->
+        <button class="btn btn-sm btn-outline-secondary w-100 mb-2" x-show="hasCollapsibleGroups"
+                @click="toggleAllGroups()">
+            <i class="bi" :class="allGroupsExpanded ? 'bi-chevron-contract' : 'bi-chevron-expand'"></i>
+            <span x-text="allGroupsExpanded ? '全部折叠' : '全部展开'"></span>
+        </button>
         <!-- Volume-grouped TOC -->
         <nav th:if="${!#lists.isEmpty(volumes)}">
             <template x-for="vol in volumes" :key="vol.volumeNumber">
@@ -396,6 +402,26 @@
                     this.openVolumes = vol ? [vol.volumeNumber] : [this.volumes[0].volumeNumber];
                 } else if (this.volumes.length > 0) {
                     this.openVolumes = [this.volumes[0].volumeNumber];
+                }
+            },
+            get hasCollapsibleGroups() {
+                return (this.volumes && this.volumes.length > 0) ||
+                       (this.sideStoriesData && this.sideStoriesData.length > 0);
+            },
+            get allGroupsExpanded() {
+                const volsOk = !this.volumes || this.volumes.length === 0 ||
+                    this.volumes.every(v => this.openVolumes.includes(v.volumeNumber));
+                const ssOk = !this.sideStoriesData || this.sideStoriesData.length === 0 ||
+                    this.sideStoriesData.every(ss => this.openSideStories.includes(String(ss.id)));
+                return volsOk && ssOk;
+            },
+            toggleAllGroups() {
+                if (this.allGroupsExpanded) {
+                    this.openVolumes = [];
+                    this.openSideStories = [];
+                } else {
+                    this.openVolumes = this.volumes.map(v => v.volumeNumber);
+                    this.openSideStories = this.sideStoriesData.map(ss => String(ss.id));
                 }
             },
             toggleVolume(volNum) {
