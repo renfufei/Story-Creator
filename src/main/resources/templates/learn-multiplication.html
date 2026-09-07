@@ -84,7 +84,7 @@
             <template x-for="row in 10" :key="'r'+row">
                 <template x-for="col in 10" :key="'c'+row+'-'+col">
                     <div class="grid-cell"
-                         :class="isHighlighted(row, col) ? 'highlighted' : ''"
+                         :class="{ 'highlighted': isHighlighted(row, col), 'changed': isChanged(row, col) }"
                          :style="'grid-row:' + row + '; grid-column:' + col + ';' + (isHighlighted(row, col) ? 'background-color:' + currentColor + '; border-color:' + currentColor : '')">
                     </div>
                 </template>
@@ -115,6 +115,21 @@
 }
 .grid-cell.highlighted {
     opacity: 0.85;
+}
+.grid-cell.changed {
+    z-index: 2;
+    position: relative;
+    animation: gold-flash 0.9s ease-in-out infinite;
+}
+@keyframes gold-flash {
+    0%, 100% {
+        border-color: rgba(255, 215, 0, 0.4);
+        box-shadow: 0 0 0 1px rgba(255, 215, 0, 0.4);
+    }
+    50% {
+        border-color: rgba(255, 215, 0, 1);
+        box-shadow: 0 0 0 1px rgba(255, 215, 0, 1);
+    }
 }
 </style>
 
@@ -184,6 +199,23 @@ function multiplicationApp() {
         playing: false,
         audioCache: {},
 
+        init() {
+            // 切换步骤/布局时，强制让所有变化格子的闪烁动画从同一帧 0% 同步起步
+            this.$watch('currentIndex', () => this.$nextTick(() => this.syncFlash()));
+            this.$watch('gridLayout', () => this.$nextTick(() => this.syncFlash()));
+            this.$nextTick(() => this.syncFlash());
+        },
+        syncFlash() {
+            if (!this.$root) return;
+            const cells = this.$root.querySelectorAll('.grid-cell.changed');
+            // 1) 先清除旧动画
+            cells.forEach(c => { c.style.animation = 'none'; });
+            // 2) 强制一次重排，落实“清除”状态（否则同名动画不会从头重播）
+            void this.$root.offsetWidth;
+            // 3) 恢复为类定义的动画，使其从 0% 同步重新开始
+            cells.forEach(c => { c.style.animation = ''; });
+        },
+
         get currentFormula() {
             return this.formulas[this.currentIndex] || this.formulas[0];
         },
@@ -195,8 +227,9 @@ function multiplicationApp() {
             return names[this.currentFormula.b - 1] + '的乘法口诀';
         },
 
-        isHighlighted(row, col) {
-            const f = this.currentFormula;
+        isHighlightedAt(row, col, index) {
+            const f = this.formulas[index];
+            if (!f) return false;
             if (this.gridLayout === 'rect') {
                 return row <= f.a && col <= f.b;
             } else {
@@ -205,6 +238,17 @@ function multiplicationApp() {
                 const cellIndex = (row - 1) * 10 + (col - 1); // 0-based
                 return cellIndex < total;
             }
+        },
+        isHighlighted(row, col) {
+            return this.isHighlightedAt(row, col, this.currentIndex);
+        },
+        isChanged(row, col) {
+            if (!this.isHighlightedAt(row, col, this.currentIndex)) return false;
+            // 新一组的第一句口诀：整片高亮都视为“变化”，全部闪烁（如「一四得四」应 4 格全闪）
+            if (this.isFirstInGroup(this.currentIndex)) return true;
+            const prevIndex = this.currentIndex - 1;
+            if (prevIndex < 0) return true; // 第一步：所有高亮单元格都是新增
+            return !this.isHighlightedAt(row, col, prevIndex);
         },
 
         async playAudioByKey(key) {
