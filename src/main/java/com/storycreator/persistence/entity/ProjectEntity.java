@@ -25,6 +25,9 @@ public class ProjectEntity {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @Column(length = 200)
+    private String author;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "current_step", nullable = false, length = 50)
     private WorkflowStep currentStep = WorkflowStep.WORLD_BUILDING;
@@ -111,6 +114,9 @@ public class ProjectEntity {
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public String getAuthor() { return author; }
+    public void setAuthor(String author) { this.author = author; }
 
     public WorkflowStep getCurrentStep() { return currentStep; }
     public void setCurrentStep(WorkflowStep currentStep) { this.currentStep = currentStep; }

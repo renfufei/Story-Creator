@@ -73,6 +73,19 @@
         </div>
     </div>
 
+    <!-- Default Author -->
+    <div class="card mb-4">
+        <div class="card-header"><strong>默认作者</strong></div>
+        <div class="card-body">
+            <form th:action="@{/settings/default-author}" method="post" class="d-flex gap-2 align-items-center">
+                <input type="text" class="form-control form-control-sm" name="author"
+                       th:value="${defaultAuthor}" placeholder="例如：佚名" style="max-width: 240px;">
+                <button type="submit" class="btn btn-sm btn-primary">保存</button>
+            </form>
+            <small class="text-muted mt-1 d-block">创建项目、TXT导入时若未填写作者，将自动使用此处设置的默认作者。</small>
+        </div>
+    </div>
+
     <div class="card mb-4">
         <div class="card-header"><strong>TTS 调试模式</strong></div>
         <div class="card-body">

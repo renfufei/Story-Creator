@@ -4,12 +4,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.Map;
 
 @ControllerAdvice
@@ -39,6 +41,21 @@ public class GlobalExceptionHandler {
         log.warn("No static resource [{}]", request.getRequestURI());
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("error", "资源不存在"));
+    }
+
+    // Async SSE timeout. The underlying stream is already gone (or completing). Do NOT try to
+    // serialize a JSON error body — the response is text/event-stream and may already be
+    // committed, which would itself throw HttpMessageNotWritableException ("No converter for
+    // ImmutableCollections$Map1 with preset Content-Type 'text/event-stream'"). The SSE layer
+    // already handles this gracefully via emitter.onTimeout, so we simply avoid the crash here.
+    @ExceptionHandler(AsyncRequestTimeoutException.class)
+    public void handleAsyncTimeout(AsyncRequestTimeoutException ex, HttpServletResponse response) {
+        if (!response.isCommitted()) {
+            try {
+                response.setStatus(HttpStatus.NO_CONTENT.value());
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     @ExceptionHandler(Exception.class)

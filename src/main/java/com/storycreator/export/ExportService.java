@@ -73,6 +73,9 @@ public class ExportService {
 
         StringBuilder sb = new StringBuilder();
         sb.append("# ").append(project.getTitle()).append("\n\n");
+        if (project.getAuthor() != null && !project.getAuthor().isBlank()) {
+            sb.append("> 作者：").append(project.getAuthor()).append("\n\n");
+        }
         sb.append("> 题材：").append(project.getGenre().getDisplayName()).append("\n\n");
 
         if (project.getDescription() != null) {
@@ -146,6 +149,9 @@ public class ExportService {
 
         StringBuilder sb = new StringBuilder();
         sb.append(project.getTitle()).append("\n");
+        if (project.getAuthor() != null && !project.getAuthor().isBlank()) {
+            sb.append("作者：").append(project.getAuthor()).append("\n");
+        }
         sb.append("=".repeat(40)).append("\n\n");
 
         List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
@@ -212,6 +218,12 @@ public class ExportService {
                     "题材：" + project.getGenre().getDisplayName(), bodyFont);
             genre.setAlignment(com.lowagie.text.Element.ALIGN_CENTER);
             document.add(genre);
+            if (project.getAuthor() != null && !project.getAuthor().isBlank()) {
+                com.lowagie.text.Paragraph authorP = new com.lowagie.text.Paragraph(
+                        "作者：" + project.getAuthor(), bodyFont);
+                authorP.setAlignment(com.lowagie.text.Element.ALIGN_CENTER);
+                document.add(authorP);
+            }
             document.newPage();
 
             // Chapters
@@ -296,6 +308,9 @@ public class ExportService {
             var metadata = book.getMetadata();
             metadata.addTitle(project.getTitle());
             metadata.setLanguage("zh-CN");
+            if (project.getAuthor() != null && !project.getAuthor().isBlank()) {
+                metadata.addAuthor(new io.documentnode.epub4j.domain.Author(project.getAuthor()));
+            }
 
             // Add chapters
             List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
@@ -352,6 +367,7 @@ public class ExportService {
                 project.getTitle(),
                 project.getGenre().name(),
                 project.getDescription(),
+                project.getAuthor(),
                 project.getCurrentStep().name(),
                 project.getTotalChapters(),
                 project.getChapterWordCount(),

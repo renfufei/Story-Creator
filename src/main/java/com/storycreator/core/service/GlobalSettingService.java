@@ -10,6 +10,7 @@ public class GlobalSettingService {
     private static final String AI_TIMEOUT_KEY = "ai_timeout_seconds";
     private static final int DEFAULT_TIMEOUT_SECONDS = 300;
     private static final String TTS_DEBUG_MODE_KEY = "tts_debug_mode";
+    private static final String DEFAULT_AUTHOR_KEY = "default_author";
 
     private final GlobalSettingRepository globalSettingRepository;
 
@@ -43,6 +44,20 @@ public class GlobalSettingService {
         GlobalSettingEntity setting = globalSettingRepository.findById(TTS_DEBUG_MODE_KEY)
                 .orElse(new GlobalSettingEntity(TTS_DEBUG_MODE_KEY, ""));
         setting.setValue(String.valueOf(enabled));
+        globalSettingRepository.save(setting);
+    }
+
+    public String getDefaultAuthor() {
+        return globalSettingRepository.findById(DEFAULT_AUTHOR_KEY)
+                .map(GlobalSettingEntity::getValue)
+                .filter(v -> v != null && !v.isBlank())
+                .orElse("");
+    }
+
+    public void setDefaultAuthor(String author) {
+        GlobalSettingEntity setting = globalSettingRepository.findById(DEFAULT_AUTHOR_KEY)
+                .orElse(new GlobalSettingEntity(DEFAULT_AUTHOR_KEY, ""));
+        setting.setValue(author == null ? "" : author);
         globalSettingRepository.save(setting);
     }
 

@@ -26,8 +26,9 @@ class PromptSubStepTest {
     }
 
     @Test
-    void totalSubStepCountIs25() {
-        assertThat(PromptSubStep.values()).hasSize(25);
+    void totalSubStepCountIs30() {
+        // 25 个通用子步骤 + 3 个旧版逆向子步骤 + 5 个 TXT 导入逐级汇总子步骤
+        assertThat(PromptSubStep.values()).hasSize(30);
     }
 
     @Test

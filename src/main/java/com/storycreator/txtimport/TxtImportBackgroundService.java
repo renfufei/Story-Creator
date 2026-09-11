@@ -17,6 +17,8 @@ public class TxtImportBackgroundService {
     private static final Logger log = LoggerFactory.getLogger(TxtImportBackgroundService.class);
     private static final int DISPLAY_BUFFER_MAX = 20_000;
     private static final int DISPLAY_BUFFER_TRIM_TO = 10_000;
+    /** 停止任务后等待其退出的最长时间。 */
+    private static final long STOP_WAIT_MS = 90_000L;
 
     public static class GenerationTask {
         final Sinks.Many<String> sink = Sinks.many().multicast().onBackpressureBuffer(4096, false);
@@ -48,15 +50,18 @@ public class TxtImportBackgroundService {
     public void startTask(Long jobId, Flux<String> flux) {
         GenerationTask task = new GenerationTask();
 
-        GenerationTask existing = activeTasks.compute(jobId, (k, prev) -> {
-            if (prev != null && !prev.completed && !prev.errored) {
-                return prev;
+        GenerationTask prev = activeTasks.get(jobId);
+        if (prev != null && !prev.completed && !prev.errored) {
+            if (!prev.stopRequested) {
+                throw new IllegalStateException("该任务已在运行中");
             }
-            return task;
-        });
-        if (existing != task) {
-            throw new IllegalStateException("该任务已在运行中");
+            // 上一个任务正在停止（可能仍在等当前这一次 LLM 调用返回）——
+            // 等它退出后再接管，避免两个任务并发写同一批数据。
+            if (!awaitExit(jobId, prev)) {
+                throw new IllegalStateException("上一个任务正在停止中，请稍候再试");
+            }
         }
+        activeTasks.put(jobId, task);
 
         executor.submit(() -> {
             log.info("TXT import reverse-engineering started jobId={}", jobId);
@@ -126,6 +131,26 @@ public class TxtImportBackgroundService {
         if (task != null && !task.completed && !task.errored) {
             task.stopRequested = true;
         }
+    }
+
+    /**
+     * 等待上一个任务完全退出（最多 {@value #STOP_WAIT_MS} 毫秒）。
+     * 阻塞式 LLM 调用无法中断，因此停止最多要等「当前这一次调用」返回。
+     */
+    private boolean awaitExit(Long jobId, GenerationTask prev) {
+        long deadline = System.currentTimeMillis() + STOP_WAIT_MS;
+        while (System.currentTimeMillis() < deadline) {
+            if (prev.completed || prev.errored || activeTasks.get(jobId) != prev) {
+                return true;
+            }
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
     }
 
     public GenerationTask getActiveTask(Long jobId) {

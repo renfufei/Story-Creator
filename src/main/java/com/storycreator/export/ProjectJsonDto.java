@@ -21,6 +21,7 @@ public record ProjectJsonDto(
         String title,
         String genre,
         String description,
+        String author,
         String currentStep,
         int totalChapters,
         int chapterWordCount,

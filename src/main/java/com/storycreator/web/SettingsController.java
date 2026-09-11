@@ -80,6 +80,7 @@ public class SettingsController {
         model.addAttribute("globalDefaultImageId", imageProviderRegistry.getGlobalDefaultImageConfigId());
         model.addAttribute("aiTimeoutSeconds", globalSettingService.getAiTimeoutSeconds());
         model.addAttribute("ttsDebugMode", globalSettingService.isTtsDebugMode());
+        model.addAttribute("defaultAuthor", globalSettingService.getDefaultAuthor());
         return "settings";
     }
 
@@ -112,6 +113,12 @@ public class SettingsController {
     @PostMapping("/tts-debug-mode")
     public String setTtsDebugMode(@RequestParam(defaultValue = "false") boolean enabled) {
         globalSettingService.setTtsDebugMode(enabled);
+        return "redirect:/settings";
+    }
+
+    @PostMapping("/default-author")
+    public String setDefaultAuthor(@RequestParam(required = false) String author) {
+        globalSettingService.setDefaultAuthor(author == null ? "" : author.trim());
         return "redirect:/settings";
     }
 

@@ -16,4 +16,6 @@ public interface ChapterSplitConfigRepository extends JpaRepository<ChapterSplit
     List<ChapterSplitConfigEntity> findByBuiltinTrueOrderBySortOrder();
 
     boolean existsByNameAndBuiltinTrue(String name);
+
+    java.util.Optional<ChapterSplitConfigEntity> findByName(String name);
 }

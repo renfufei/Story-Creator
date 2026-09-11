@@ -89,6 +89,13 @@
                 </div>
 
                 <div class="mb-3">
+                    <label for="author" class="form-label">作者</label>
+                    <input type="text" class="form-control" id="author" th:field="*{author}"
+                           placeholder="例如：佚名（留空则使用全局默认作者）">
+                    <div class="form-text">导出、全文阅读与导入时均会携带该作者信息；留空将回退到「设置」中的全局默认作者。</div>
+                </div>
+
+                <div class="mb-3">
                     <label for="totalChapters" class="form-label">章节数</label>
                     <input type="number" class="form-control" id="totalChapters" th:field="*{totalChapters}"
                            min="5" max="1000" placeholder="10">

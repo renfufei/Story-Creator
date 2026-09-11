@@ -39,7 +39,17 @@ public class ChapterSplitConfigBuiltinLoader {
                     if (data == null) continue;
 
                     String name = (String) data.get("name");
-                    if (repository.existsByNameAndBuiltinTrue(name)) {
+                    ChapterSplitConfigEntity existing = repository.findByName(name).orElse(null);
+                    if (existing != null) {
+                        if (existing.isBuiltin()) {
+                            // 内置配置以 YAML 为准：刷新其正则/标题分组等定义，
+                            // 但保留用户在界面上调整的「启用状态」与「排序」。
+                            existing.setPattern((String) data.get("pattern"));
+                            existing.setTitleGroup(data.get("titleGroup") != null ? ((Number) data.get("titleGroup")).intValue() : 0);
+                            existing.setIncludeMatch(Boolean.TRUE.equals(data.get("includeMatch")));
+                            existing.setDescription((String) data.get("description"));
+                            repository.save(existing);
+                        }
                         continue;
                     }
 

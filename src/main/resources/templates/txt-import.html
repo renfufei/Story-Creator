@@ -30,16 +30,20 @@
                     <input type="file" class="form-control" accept=".txt" @change="onFileSelect($event)">
                 </div>
                 <div class="row">
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <label class="form-label">项目标题</label>
                         <input type="text" class="form-control" x-model="title" placeholder="默认取文件名">
                     </div>
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <label class="form-label">题材</label>
                         <select class="form-select" x-model="genre">
                             <option value="">未指定</option>
                             <option th:each="g : ${genres}" th:value="${g.name()}" th:text="${g.displayName}">题材</option>
                         </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">作者</label>
+                        <input type="text" class="form-control" x-model="author" placeholder="留空使用全局默认作者">
                     </div>
                 </div>
 
@@ -138,7 +142,7 @@
                 </div>
 
                 <div class="text-end mt-3">
-                    <button class="btn btn-primary" @click="step = 3">
+                    <button class="btn btn-primary" @click="goToOptions()">
                         下一步：逆向选项 <i class="bi bi-arrow-right"></i>
                     </button>
                 </div>
@@ -155,6 +159,39 @@
                     <button class="btn btn-outline-secondary btn-sm" @click="step = 2">
                         <i class="bi bi-arrow-left"></i> 返回
                     </button>
+                </div>
+
+                <!-- 流程控制：进度扫描结果 -->
+                <div class="card border-info mb-3" x-show="plan" x-cloak>
+                    <div class="card-body py-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong x-text="planHeadline"></strong>
+                                <div class="small text-muted" x-text="planSubline"></div>
+                            </div>
+                            <div class="text-end">
+                                <button class="btn btn-sm btn-outline-secondary me-2" @click="refreshPlan()"
+                                        :disabled="reversing">
+                                    <i class="bi bi-arrow-clockwise"></i> 重新扫描
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger me-2" @click="resetPlan()"
+                                        :disabled="reversing || !plan || plan.completedUnits === 0">
+                                    <i class="bi bi-eraser"></i> 清空进度
+                                </button>
+                                <span class="badge bg-secondary"
+                                      x-text="(plan.completedUnits || 0) + ' / ' + (plan.totalUnits || 0)"></span>
+                            </div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 mt-2">
+                            <template x-for="p in plan.phases" :key="p.phase">
+                                <span class="badge" :class="phaseBadge(p)">
+                                    <span x-text="p.label"></span>
+                                    <span x-show="p.runnable"
+                                          x-text="' ' + p.completedUnits + '/' + p.totalUnits"></span>
+                                </span>
+                            </template>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="row">
@@ -174,18 +211,11 @@
                         </div>
                     </div>
                     <div class="col-md-6">
-                        <h6>采样设置</h6>
+                        <h6>汇总设置</h6>
                         <div class="mb-3">
-                            <label class="form-label">采样策略</label>
-                            <select class="form-select" x-model="samplingStrategy">
-                                <option value="UNIFORM">均匀采样</option>
-                                <option value="FIRST_N">前N章</option>
-                                <option value="ALL">全部</option>
-                            </select>
-                        </div>
-                        <div class="mb-3" x-show="samplingStrategy !== 'ALL'">
-                            <label class="form-label">采样数量</label>
-                            <input type="number" class="form-control" x-model.number="samplingN" min="1" max="50">
+                            <label class="form-label">每卷章节数</label>
+                            <input type="number" class="form-control" x-model.number="chaptersPerVolume" min="1" max="200">
+                            <div class="form-text">逆向工程按「章节大纲 → 故事弧线 → 世界观/角色/总纲」逐级汇总，此处决定每多少章归为一卷推断故事弧线。</div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">AI模型</label>
@@ -199,9 +229,11 @@
                 </div>
 
                 <div class="text-end mt-3">
-                    <button class="btn btn-primary" @click="startReverse()" :disabled="reversing">
+                    <button class="btn btn-primary" @click="startReverse()"
+                            :disabled="reversing || (plan && plan.completed)">
                         <span x-show="reversing" class="spinner-border spinner-border-sm me-1"></span>
-                        开始逆向工程 <i class="bi bi-play-fill"></i>
+                        <span x-text="startButtonText"></span>
+                        <i class="bi bi-play-fill"></i>
                     </button>
                 </div>
             </div>
@@ -214,41 +246,57 @@
             <div class="card-header d-flex justify-content-between align-items-center">
                 <strong>第四步：逆向工程执行</strong>
                 <div>
-                    <span class="badge" :class="phaseBadgeClass" x-text="phaseText"></span>
+                    <span class="badge" :class="phaseBadgeClass"
+                          x-text="phaseText + (progressText ? ' ' + progressText : '')"></span>
                 </div>
             </div>
             <div class="card-body">
-                <!-- Phase Progress -->
+                <!-- Phase Progress：状态来自服务端扫描（COMPLETED / PARTIAL / RUNNING / SKIPPED） -->
                 <div class="d-flex justify-content-between mb-3">
-                    <template x-for="p in phases" :key="p.key">
+                    <template x-for="p in phases" :key="p.phase">
                         <div class="text-center flex-fill">
                             <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-1"
-                                 :class="p.done ? 'bg-success text-white' : (p.active ? 'bg-primary text-white' : 'bg-light text-muted border')"
+                                 :class="phaseCircleClass(p)"
                                  style="width:30px;height:30px;font-size:12px;">
-                                <i class="bi" :class="p.done ? 'bi-check' : 'bi-circle'"></i>
+                                <i class="bi" :class="phaseCircleIcon(p)"></i>
                             </div>
                             <div style="font-size:11px;" x-text="p.label"></div>
+                            <div style="font-size:10px;" class="text-muted"
+                                 x-text="p.runnable ? (p.completedUnits + '/' + p.totalUnits) : '跳过'"></div>
                         </div>
                     </template>
                 </div>
 
-                <!-- SSE Output -->
-                <div class="border rounded p-3 bg-dark text-light font-monospace" style="height:350px;overflow-y:auto;font-size:12px;white-space:pre-wrap;" x-ref="output" x-text="output">
+                <!-- 实时产出（阶段 1/2 的条目 + 阶段 3 的流式文本） -->
+                <div class="border rounded p-3 bg-dark text-light font-monospace" style="height:380px;overflow-y:auto;font-size:12px;white-space:pre-wrap;" x-ref="output" x-text="output">
                 </div>
 
-                <div class="mt-3 d-flex justify-content-between">
-                    <button class="btn btn-outline-danger btn-sm" @click="stopReverse()" x-show="active">
-                        <i class="bi bi-stop-fill"></i> 停止
-                    </button>
-                    <a x-show="done && projectId" :href="'/projects/' + projectId + '/workflow'" class="btn btn-success btn-sm">
-                        <i class="bi bi-arrow-right"></i> 进入项目创作
-                    </a>
+                <div class="mt-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <button class="btn btn-outline-danger btn-sm" @click="stopReverse()" x-show="active">
+                            <i class="bi bi-stop-fill"></i> 停止（已完成的进度会保留）
+                        </button>
+                        <span class="text-muted small ms-2" x-show="!active && interrupted">
+                            <i class="bi bi-info-circle"></i> 上次执行被中断，可返回上一步继续
+                        </span>
+                    </div>
+                    <div>
+                        <button class="btn btn-outline-primary btn-sm me-2" x-show="!active" @click="goToOptions()">
+                            <i class="bi bi-arrow-left"></i> 返回选项
+                        </button>
+                        <a x-show="projectId" :href="'/projects/' + projectId + '/workflow'" class="btn btn-success btn-sm">
+                            <i class="bi bi-arrow-right"></i> 进入项目创作
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-<script>
+<!-- 必须保留 th:inline="none"：本脚本内含逆向工程协议标记字面量（双左方括号开头的标签），
+     Thymeleaf 3 在 HTML 模式下默认会把双左方括号开头的文本当作内联表达式解析，
+     会在此处中断渲染、导致页面被静默截断。详见 ReProtocol 协议说明。 -->
+<script th:inline="none">
 function txtImport() {
     return {
         step: 1,
@@ -256,6 +304,7 @@ function txtImport() {
         file: null,
         title: '',
         genre: '',
+        author: '',
         selectedConfigIds: [],
         customPattern: '',
         testResult: '',
@@ -268,8 +317,7 @@ function txtImport() {
         runWorldBuilding: true,
         runCharacters: true,
         runOutline: true,
-        samplingStrategy: 'UNIFORM',
-        samplingN: 10,
+        chaptersPerVolume: 30,
         modelConfigId: '',
         reversing: false,
         // Step 4
@@ -279,17 +327,173 @@ function txtImport() {
         projectId: null,
         phaseText: '等待中',
         phaseBadgeClass: 'bg-secondary',
-        phases: [
-            {key: 'world', label: '世界观', done: false, active: false},
-            {key: 'chars', label: '角色', done: false, active: false},
-            {key: 'outline', label: '大纲', done: false, active: false}
-        ],
+        progressText: '',
+        interrupted: false,
+        // 流程控制：来自 /reverse-plan 的扫描结果
+        plan: null,
+        phases: [],
+        phaseLabels: {
+            'CHAPTER_OUTLINE': '章节大纲',
+            'STORY_ARC': '故事弧线',
+            'WORLD': '世界观',
+            'CHARACTERS': '角色',
+            'STORY_OUTLINE': '总纲'
+        },
 
         init() {
             // Initialize selectedConfigIds from checked checkboxes rendered in HTML
             this.selectedConfigIds = Array.from(
                 document.querySelectorAll('.split-config-check:checked')
             ).map(el => parseInt(el.value));
+        },
+
+        // ---------- 流程控制 ----------
+
+        /** 进入第 3 步：先扫描完成度，再展示选项。 */
+        async goToOptions() {
+            this.step = 3;
+            await this.refreshPlan();
+        },
+
+        /** 进入第 3 步时扫描一次完成度，决定按钮文案与提示。 */
+        async refreshPlan() {
+            if (!this.jobId) return;
+            try {
+                const resp = await fetch('/import/txt/' + this.jobId + '/reverse-plan');
+                const p = await resp.json();
+                if (p.error) { this.plan = null; return; }
+                this.plan = p;
+                this.interrupted = !!p.interrupted;
+                this.chaptersPerVolume = p.chaptersPerVolume || this.chaptersPerVolume;
+                this.applyPlanPhases(p.phases);
+                if (p.totalUnits) {
+                    this.phaseText = p.completed ? '已完成' : (p.resumable ? '可继续' : '等待中');
+                    this.phaseBadgeClass = p.completed ? 'bg-success' : (p.resumable ? 'bg-warning' : 'bg-secondary');
+                }
+            } catch (e) {
+                this.plan = null;
+            }
+        },
+
+        /** 清空已完成的逆向工程产出，回到未开始状态。 */
+        async resetPlan() {
+            if (!confirm('确定清空已生成的章节大纲、故事弧线、世界观、角色与总纲吗？此操作不可撤销。')) return;
+            const resp = await fetch('/import/txt/' + this.jobId + '/reverse-reset', {method: 'POST'});
+            const data = await resp.json();
+            if (data.error) { alert(data.error); return; }
+            await this.refreshPlan();
+        },
+
+        applyPlanPhases(phases) {
+            this.phases = (phases || []).map(p => ({
+                phase: p.phase,
+                label: this.phaseLabels[p.phase] || p.label,
+                fullLabel: p.label,
+                status: p.status,
+                totalUnits: p.totalUnits,
+                completedUnits: p.completedUnits,
+                runnable: p.runnable
+            }));
+        },
+
+        get planHeadline() {
+            if (!this.plan) return '';
+            if (this.plan.completed) return '该任务的逆向工程已全部完成';
+            if (this.interrupted) return '上次执行被中断，可继续完成剩余部分';
+            if (this.plan.resumable) return '检测到未完成的进度';
+            return '尚未开始';
+        },
+
+        get planSubline() {
+            if (!this.plan) return '';
+            return '已完成 ' + (this.plan.completedUnits || 0) + ' / ' + (this.plan.totalUnits || 0)
+                + ' 项 · 共 ' + (this.plan.totalChapters || 0) + ' 章 / '
+                + (this.plan.totalVolumes || 0) + ' 卷（每卷 ' + (this.plan.chaptersPerVolume || 0) + ' 章）';
+        },
+
+        get startButtonText() {
+            if (!this.plan) return '开始逆向工程';
+            if (this.plan.completed) return '全部已完成（可清空进度重跑）';
+            if (this.plan.resumable || this.interrupted) {
+                const remain = (this.plan.totalUnits || 0) - (this.plan.completedUnits || 0);
+                return '继续执行（剩余 ' + remain + ' 项）';
+            }
+            return '开始逆向工程';
+        },
+
+        phaseBadge(p) {
+            if (!p.runnable) return 'bg-light text-muted border';
+            switch (p.status) {
+                case 'COMPLETED': return 'bg-success';
+                case 'RUNNING': return 'bg-primary';
+                case 'PARTIAL': return 'bg-warning text-dark';
+                case 'FAILED': return 'bg-danger';
+                default: return 'bg-secondary';
+            }
+        },
+
+        phaseCircleClass(p) {
+            switch (p.status) {
+                case 'COMPLETED': return 'bg-success text-white';
+                case 'RUNNING': return 'bg-primary text-white';
+                case 'PARTIAL': return 'bg-warning text-dark';
+                case 'FAILED': return 'bg-danger text-white';
+                case 'SKIPPED': return 'bg-light text-muted border';
+                default: return 'bg-light text-muted border';
+            }
+        },
+
+        phaseCircleIcon(p) {
+            switch (p.status) {
+                case 'COMPLETED': return 'bi-check';
+                case 'RUNNING': return 'bi-arrow-repeat';
+                case 'FAILED': return 'bi-x';
+                case 'SKIPPED': return 'bi-dash';
+                default: return 'bi-circle';
+            }
+        },
+
+        /** 阶段流转：把当前阶段标为运行中，之前的未完成阶段视为已完成。 */
+        advancePhase(name) {
+            let reached = false;
+            this.phases.forEach(p => {
+                if (p.phase === name) {
+                    p.status = 'RUNNING';
+                    reached = true;
+                } else if (!reached && p.runnable && p.status === 'RUNNING') {
+                    p.status = 'COMPLETED';
+                }
+            });
+        },
+
+        markPhaseDone(name) {
+            const p = this.phases.find(x => x.phase === name);
+            if (p) { p.status = 'COMPLETED'; p.completedUnits = p.totalUnits; }
+        },
+
+        markPhaseSkipped(name) {
+            const p = this.phases.find(x => x.phase === name);
+            if (p) { p.status = p.completedUnits > 0 ? 'COMPLETED' : 'SKIPPED'; }
+        },
+
+        // ---------- SSE 载荷解码 ----------
+
+        decodePayload(b64) {
+            try {
+                const bin = atob(b64);
+                const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+                const text = new TextDecoder('utf-8').decode(bytes);
+                try { return JSON.parse(text); } catch (e) { return text; }
+            } catch (e) {
+                return null;
+            }
+        },
+
+        /** 断线重连的 replay-buffer 是原始标记流，去掉控制标记只保留正文。 */
+        stripControlMarkers(s) {
+            return (s || '')
+                .replace(/\[\[RE_[A-Z_]+:[^\]]*\]\]/g, '')
+                .replace(/\[\[BG_[A-Z_]+\]\]/g, '');
         },
 
         onFileSelect(event) {
@@ -337,6 +541,7 @@ function txtImport() {
                 formData.append('file', this.file);
                 if (this.title) formData.append('title', this.title);
                 if (this.genre) formData.append('genre', this.genre);
+                if (this.author) formData.append('author', this.author);
 
                 const uploadResp = await fetch('/import/txt/upload', {method: 'POST', body: formData});
                 const uploadData = await uploadResp.json();
@@ -403,8 +608,7 @@ function txtImport() {
                         runWorldBuilding: this.runWorldBuilding,
                         runCharacters: this.runCharacters,
                         runOutline: this.runOutline,
-                        samplingStrategy: this.samplingStrategy,
-                        samplingN: this.samplingN,
+                        chaptersPerVolume: this.chaptersPerVolume,
                         modelConfigId: this.modelConfigId ? parseInt(this.modelConfigId) : null
                     })
                 });
@@ -414,6 +618,10 @@ function txtImport() {
                 this.projectId = data.projectId;
                 this.step = 4;
                 this.active = true;
+                this.done = false;
+                this.interrupted = false;
+                this.output = '';
+                this.progressText = '';
                 this.connectSSE();
             } catch(e) {
                 alert('启动失败: ' + e.message);
@@ -429,33 +637,98 @@ function txtImport() {
                 this.scrollOutput();
             });
             es.addEventListener('replay-buffer', (e) => {
-                this.output = e.data;
+                this.output = this.stripControlMarkers(e.data);
+                this.scrollOutput();
+            });
+            // 任务计划（各阶段完成度）——进入流程时下发一次
+            es.addEventListener('plan', (e) => {
+                const p = this.decodePayload(e.data);
+                if (!p) return;
+                this.plan = {
+                    completedUnits: p.completedUnits,
+                    totalUnits: p.totalUnits,
+                    chaptersPerVolume: p.chaptersPerVolume,
+                    totalChapters: p.totalChapters,
+                    totalVolumes: p.totalVolumes,
+                    resumable: p.resumable,
+                    completed: p.completed
+                };
+                this.interrupted = false;
+                this.applyPlanPhases(p.phases);
+                this.output += '=== 执行计划：已完成 ' + p.completedUnits + '/' + p.totalUnits
+                    + ' 项，本章节数 ' + p.totalChapters + '，分 ' + p.totalVolumes + ' 卷 ===\n';
                 this.scrollOutput();
             });
             es.addEventListener('phase', (e) => {
-                const phase = e.data;
-                if (phase.includes('WORLD')) {
-                    this.setPhase('world');
-                    this.phaseText = '逆向世界观';
-                    this.phaseBadgeClass = 'bg-primary';
-                } else if (phase.includes('CHARS')) {
-                    this.setPhase('chars');
-                    this.phaseText = '逆向角色';
-                    this.phaseBadgeClass = 'bg-info';
-                } else if (phase.includes('OUTLINE')) {
-                    this.setPhase('outline');
-                    this.phaseText = '逆向大纲';
-                    this.phaseBadgeClass = 'bg-warning';
-                }
-                this.output += '\n\n=== ' + this.phaseText + ' ===\n\n';
+                const name = (e.data || '').replace('[[RE_PHASE:', '').replace(']]', '').trim();
+                this.advancePhase(name);
+                const p = this.phases.find(x => x.phase === name);
+                this.phaseText = p ? p.label : name;
+                this.phaseBadgeClass = 'bg-primary';
+                this.progressText = '';
+                this.output += '\n\n===== ' + (p ? p.fullLabel : name) + ' =====\n';
                 this.scrollOutput();
+            });
+            es.addEventListener('phase-done', (e) => {
+                const parts = (e.data || '').split('|');
+                this.markPhaseDone(parts[0]);
+                this.progressText = '';
+                this.output += '\n[阶段完成] ' + parts[0] + ' ' + parts[1] + '/' + parts[2] + '\n';
+                this.scrollOutput();
+            });
+            es.addEventListener('phase-skip', (e) => {
+                const name = (e.data || '').trim();
+                this.markPhaseSkipped(name);
+                const p = this.phases.find(x => x.phase === name);
+                this.output += '\n[跳过] ' + (p ? p.fullLabel : name) + '\n';
+                this.scrollOutput();
+            });
+            es.addEventListener('note', (e) => {
+                const n = this.decodePayload(e.data);
+                const text = typeof n === 'string' ? n : (n && n.text) || '';
+                if (text) {
+                    this.output += '· ' + text + '\n';
+                    this.scrollOutput();
+                }
+            });
+            // 单元产出：实时展示章节大纲 / 故事弧线 / 汇总分块
+            es.addEventListener('item', (e) => {
+                const it = this.decodePayload(e.data);
+                if (!it) return;
+                let block = '\n';
+                if (it.phase === 'CHAPTER_OUTLINE') {
+                    block += '【' + (it.skipped ? '已跳过 ' : '') + '第' + it.index + '章】' + (it.key || '') + '\n';
+                    block += '标题：' + (it.title || '（无）') + '\n';
+                    if (it.characters) block += '角色：' + it.characters + '\n';
+                    block += '大纲：' + (it.body || '') + '\n';
+                } else {
+                    block += '【' + (it.skipped ? '已跳过 ' : '') + it.index + '/' + it.total + '】' + (it.key || '') + '\n';
+                    if (it.title) block += '名称：' + it.title + '\n';
+                    block += (it.body || '') + '\n';
+                }
+                this.output += block;
+                this.scrollOutput();
+            });
+            es.addEventListener('progress', (e) => {
+                this.progressText = e.data;
+                const parts = (e.data || '').split('/');
+                if (parts.length === 2) {
+                    const idx = this.phases.findIndex(p => p.status === 'RUNNING');
+                    if (idx >= 0) {
+                        this.phases[idx].completedUnits = parseInt(parts[0]) || 0;
+                        this.phases[idx].totalUnits = parseInt(parts[1]) || this.phases[idx].totalUnits;
+                    }
+                }
             });
             es.addEventListener('done', () => {
                 this.active = false;
                 this.done = true;
                 this.phaseText = '完成';
                 this.phaseBadgeClass = 'bg-success';
-                this.phases.forEach(p => p.done = true);
+                this.progressText = '';
+                this.phases.forEach(p => { if (p.runnable) p.status = 'COMPLETED'; });
+                this.output += '\n\n=== 逆向工程完成 ===\n';
+                this.scrollOutput();
                 es.close();
             });
             es.addEventListener('error', (e) => {
@@ -463,26 +736,42 @@ function txtImport() {
                 this.phaseText = '错误';
                 this.phaseBadgeClass = 'bg-danger';
                 this.output += '\n\n[错误] ' + (e.data || '未知错误') + '\n';
+                this.scrollOutput();
                 es.close();
             });
             es.addEventListener('stopped', () => {
                 this.active = false;
-                this.phaseText = '已停止';
+                this.interrupted = true;
+                this.phaseText = '已停止（可继续）';
                 this.phaseBadgeClass = 'bg-warning';
+                this.output += '\n\n[已停止] 已完成的进度已保留，可返回上一步「继续执行」。\n';
+                this.scrollOutput();
                 es.close();
             });
-            es.onerror = () => { es.close(); };
-        },
-
-        setPhase(key) {
-            this.phases.forEach(p => {
-                if (p.key === key) { p.active = true; p.done = false; }
-                else if (p.active) { p.active = false; p.done = true; }
-            });
+            es.onerror = () => {
+                // Connection dropped / stream ended unexpectedly. The project already exists
+                // (projectId is set), so keep the link and just end live monitoring gracefully.
+                if (!this.done) {
+                    this.active = false;
+                    if (this.phaseText === '等待中' || this.phaseText === '错误') {
+                        this.phaseText = '监控已结束';
+                        this.phaseBadgeClass = 'bg-secondary';
+                        this.output += '\n\n[提示] 实时监控连接已断开，但项目已创建，可点击下方按钮进入。\n';
+                        this.scrollOutput();
+                    }
+                }
+                es.close();
+            };
         },
 
         async stopReverse() {
             await fetch('/import/txt/' + this.jobId + '/stop', {method: 'POST'});
+            this.active = false;
+            this.interrupted = true;
+            this.phaseText = '已停止（可继续）';
+            this.phaseBadgeClass = 'bg-warning';
+            // 稍等后台线程收尾，再重新扫描一次真实完成度
+            setTimeout(() => this.refreshPlan(), 1500);
         },
 
         scrollOutput() {

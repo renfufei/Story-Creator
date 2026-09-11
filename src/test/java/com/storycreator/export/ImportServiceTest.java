@@ -265,7 +265,7 @@ class ImportServiceTest {
     void importProject_chaptersPerVolumeDefaultsTo10WhenZero() {
         // chaptersPerVolume=0 should be replaced with 10
         var projectData = new ProjectJsonDto.ProjectData(
-                "标题", "QIHUAN", null, "WORLD_BUILDING",
+                "标题", "QIHUAN", null, null, "WORLD_BUILDING",
                 10, 2000, 0, 0, 3, 0, false);
         var dto = new ProjectJsonDto(1, projectData, null, null, null,
                 null, null, null, null, null, List.of(), null);
@@ -305,7 +305,7 @@ class ImportServiceTest {
 
     private ProjectJsonDto buildMinimalDto(String title, String genre) {
         var projectData = new ProjectJsonDto.ProjectData(
-                title, genre, null, "WORLD_BUILDING",
+                title, genre, null, null, "WORLD_BUILDING",
                 10, 2000, 0, 0, 3, 10, false);
         return new ProjectJsonDto(1, projectData, null, null, null,
                 null, null, null, null, null, List.of(), null);
@@ -313,7 +313,7 @@ class ImportServiceTest {
 
     private ProjectJsonDto buildDtoWithWorldSetting(ProjectJsonDto.WorldSettingData worldSetting) {
         var projectData = new ProjectJsonDto.ProjectData(
-                "项目", "QIHUAN", null, "WORLD_BUILDING",
+                "项目", "QIHUAN", null, null, "WORLD_BUILDING",
                 10, 2000, 0, 0, 3, 10, false);
         return new ProjectJsonDto(1, projectData, worldSetting, null, null,
                 null, null, null, null, null, List.of(), null);
@@ -321,7 +321,7 @@ class ImportServiceTest {
 
     private ProjectJsonDto buildDtoWithStepModelConfig(ProjectJsonDto.StepModelConfigData smcData) {
         var projectData = new ProjectJsonDto.ProjectData(
-                "项目", "QIHUAN", null, "WORLD_BUILDING",
+                "项目", "QIHUAN", null, null, "WORLD_BUILDING",
                 10, 2000, 0, 0, 3, 10, false);
         return new ProjectJsonDto(1, projectData, null, null, null,
                 null, null, null, null, null, List.of(smcData), null);

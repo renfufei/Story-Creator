@@ -26,6 +26,7 @@ import com.storycreator.persistence.repository.StoryOutlineRepository;
 import com.storycreator.persistence.repository.VolumeOutlineRepository;
 import com.storycreator.persistence.repository.WorkflowStateRepository;
 import com.storycreator.persistence.repository.WorldSettingRepository;
+import com.storycreator.core.service.GlobalSettingService;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -62,6 +63,7 @@ public class ProjectController {
     private final AutoRunStepConfigRepository autoRunStepConfigRepository;
     private final SideStoryRepository sideStoryRepository;
     private final SideStoryChapterRepository sideStoryChapterRepository;
+    private final GlobalSettingService globalSettingService;
 
     public ProjectController(ProjectRepository projectRepository,
                            WorkflowStateRepository workflowStateRepository,
@@ -78,7 +80,8 @@ public class ProjectController {
                            WorldSettingRepository worldSettingRepository,
                            AutoRunStepConfigRepository autoRunStepConfigRepository,
                            SideStoryRepository sideStoryRepository,
-                           SideStoryChapterRepository sideStoryChapterRepository) {
+                           SideStoryChapterRepository sideStoryChapterRepository,
+                           GlobalSettingService globalSettingService) {
         this.projectRepository = projectRepository;
         this.workflowStateRepository = workflowStateRepository;
         this.modelConfigRepository = modelConfigRepository;
@@ -95,6 +98,7 @@ public class ProjectController {
         this.autoRunStepConfigRepository = autoRunStepConfigRepository;
         this.sideStoryRepository = sideStoryRepository;
         this.sideStoryChapterRepository = sideStoryChapterRepository;
+        this.globalSettingService = globalSettingService;
     }
 
     @GetMapping("/")
@@ -157,6 +161,11 @@ public class ProjectController {
         project.setTitle(form.getTitle());
         project.setGenre(form.getGenre());
         project.setDescription(form.getDescription());
+        String author = form.getAuthor();
+        if (author == null || author.isBlank()) {
+            author = globalSettingService.getDefaultAuthor();
+        }
+        project.setAuthor(author);
         project.setTotalChapters(form.getTotalChapters() > 0 ? form.getTotalChapters() : 10);
         project.setChapterWordCount(form.getChapterWordCount() > 0 ? form.getChapterWordCount() : 5000);
         project.setChapterWordCountMin(form.getChapterWordCountMin() > 0 ? form.getChapterWordCountMin() : 4000);
@@ -262,6 +271,7 @@ public class ProjectController {
         form.setTitle(project.getTitle());
         form.setGenre(project.getGenre());
         form.setDescription(project.getDescription());
+        form.setAuthor(project.getAuthor());
         form.setTotalChapters(project.getTotalChapters());
         form.setChapterWordCount(project.getChapterWordCount());
         form.setChapterWordCountMin(project.getChapterWordCountMin());
@@ -319,6 +329,7 @@ public class ProjectController {
         project.setTitle(form.getTitle());
         project.setGenre(form.getGenre());
         project.setDescription(form.getDescription());
+        project.setAuthor(form.getAuthor());
         project.setTotalChapters(form.getTotalChapters() > 0 ? form.getTotalChapters() : 10);
         project.setChapterWordCount(form.getChapterWordCount() > 0 ? form.getChapterWordCount() : 5000);
         project.setChapterWordCountMin(form.getChapterWordCountMin() > 0 ? form.getChapterWordCountMin() : 4000);
@@ -354,6 +365,7 @@ public class ProjectController {
         data.put("title", project.getTitle());
         data.put("genre", project.getGenre() != null ? project.getGenre().name() : "");
         data.put("description", project.getDescription());
+        data.put("author", project.getAuthor());
         data.put("totalChapters", project.getTotalChapters());
         data.put("chapterWordCount", project.getChapterWordCount());
         data.put("chapterWordCountMin", project.getChapterWordCountMin());
@@ -479,6 +491,8 @@ public class ProjectController {
 
         private String description;
 
+        private String author;
+
         private int totalChapters = 10;
 
         private int chapterWordCount = 5000;
@@ -510,6 +524,9 @@ public class ProjectController {
 
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }
+
+        public String getAuthor() { return author; }
+        public void setAuthor(String author) { this.author = author; }
 
         public int getTotalChapters() { return totalChapters; }
         public void setTotalChapters(int totalChapters) { this.totalChapters = totalChapters; }

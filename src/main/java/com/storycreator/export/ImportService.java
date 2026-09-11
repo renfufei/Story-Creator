@@ -96,6 +96,7 @@ public class ImportService {
         project.setTitle(title);
         project.setGenre(Genre.valueOf(dto.project().genre()));
         project.setDescription(dto.project().description());
+        project.setAuthor(dto.project().author());
         project.setCurrentStep(WorkflowStep.valueOf(dto.project().currentStep()));
         project.setTotalChapters(dto.project().totalChapters());
         project.setChapterWordCount(dto.project().chapterWordCount());

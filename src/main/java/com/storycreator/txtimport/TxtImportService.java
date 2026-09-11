@@ -2,6 +2,7 @@ package com.storycreator.txtimport;
 
 import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.WorkflowStep;
+import com.storycreator.core.service.GlobalSettingService;
 import com.storycreator.persistence.entity.ChapterEntity;
 import com.storycreator.persistence.entity.ChapterSplitConfigEntity;
 import com.storycreator.persistence.entity.ProjectEntity;
@@ -30,26 +31,30 @@ public class TxtImportService {
     private final ProjectRepository projectRepository;
     private final ChapterRepository chapterRepository;
     private final TxtChapterSplitter splitter;
+    private final GlobalSettingService globalSettingService;
 
     public TxtImportService(TxtImportJobRepository jobRepository,
                             TxtImportChapterRepository importChapterRepository,
                             ChapterSplitConfigRepository configRepository,
                             ProjectRepository projectRepository,
                             ChapterRepository chapterRepository,
-                            TxtChapterSplitter splitter) {
+                            TxtChapterSplitter splitter,
+                            GlobalSettingService globalSettingService) {
         this.jobRepository = jobRepository;
         this.importChapterRepository = importChapterRepository;
         this.configRepository = configRepository;
         this.projectRepository = projectRepository;
         this.chapterRepository = chapterRepository;
         this.splitter = splitter;
+        this.globalSettingService = globalSettingService;
     }
 
     @Transactional
-    public TxtImportJobEntity createJob(String title, String genre, String rawContent) {
+    public TxtImportJobEntity createJob(String title, String genre, String author, String rawContent) {
         TxtImportJobEntity job = new TxtImportJobEntity();
         job.setTitle(title);
         job.setGenre(genre);
+        job.setAuthor(author);
         job.setRawContent(rawContent);
         job.setStatus("PENDING");
         job.setTotalWordCount(rawContent.length());
@@ -77,7 +82,7 @@ public class TxtImportService {
         }
 
         // Split
-        List<TxtChapterSplitter.SplitChapter> splitResult = splitter.split(job.getRawContent(), configs);
+        List<SplitChapter> splitResult = splitter.split(job.getRawContent(), configs);
 
         // Save chapters
         List<TxtImportChapterEntity> chapters = splitResult.stream().map(sc -> {
@@ -144,6 +149,29 @@ public class TxtImportService {
         jobRepository.save(job);
     }
 
+    /**
+     * 取得导入任务对应的项目：首次创建，后续（断点续跑）复用同一个项目。
+     * <p>复用是断点续跑的前提 —— 已完成的大纲/弧线/汇总都挂在项目上，
+     * 每次重建项目会导致完成度扫描结果为 0。
+     */
+    @Transactional
+    public Long ensureProjectFromJob(Long jobId) {
+        TxtImportJobEntity job = getJob(jobId);
+        Long existingId = job.getProjectId();
+        if (existingId != null && projectRepository.findById(existingId).isPresent()) {
+            ProjectEntity project = projectRepository.findById(existingId).get();
+            if (job.getChaptersPerVolume() > 0) {
+                project.setChaptersPerVolume(job.getChaptersPerVolume());
+            }
+            project.setTotalChapters(importChapterRepository
+                    .findByJobIdOrderByChapterNumber(jobId).size());
+            projectRepository.save(project);
+            log.info("Reuse project {} for TXT import job {} (断点续跑)", existingId, jobId);
+            return existingId;
+        }
+        return createProjectFromJob(jobId);
+    }
+
     @Transactional
     public Long createProjectFromJob(Long jobId) {
         TxtImportJobEntity job = getJob(jobId);
@@ -161,8 +189,14 @@ public class TxtImportService {
         } else {
             project.setGenre(Genre.OTHER);
         }
+        String author = job.getAuthor();
+        if (author == null || author.isBlank()) {
+            author = globalSettingService.getDefaultAuthor();
+        }
+        project.setAuthor(author);
         project.setDescription("由TXT导入生成");
         project.setTotalChapters(chapters.size());
+        project.setChaptersPerVolume(job.getChaptersPerVolume() > 0 ? job.getChaptersPerVolume() : 30);
         project.setCurrentStep(WorkflowStep.WORLD_BUILDING);
         project = projectRepository.save(project);
 
@@ -189,6 +223,11 @@ public class TxtImportService {
     public TxtImportJobEntity getJob(Long jobId) {
         return jobRepository.findById(jobId)
                 .orElseThrow(() -> new IllegalArgumentException("导入任务不存在: " + jobId));
+    }
+
+    /** 回写导入任务（Controller 修改 job 选项后必须调用，否则改动会丢失）。 */
+    public TxtImportJobEntity saveJob(TxtImportJobEntity job) {
+        return jobRepository.save(job);
     }
 
     public List<TxtImportChapterEntity> getChapters(Long jobId) {

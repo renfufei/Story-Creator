@@ -128,6 +128,8 @@
             </a>
         </div>
         <h6 class="text-muted mb-2" th:text="${project.title}">书名</h6>
+        <div class="small text-muted mb-2" th:if="${project.author != null && !project.author.isEmpty()}"
+             th:text="'作者：' + ${project.author}"></div>
         <hr>
         <!-- 全部折叠/展开 -->
         <button class="btn btn-sm btn-outline-secondary w-100 mb-2" x-show="hasCollapsibleGroups"
@@ -225,7 +227,9 @@
     </aside>
 
     <main class="reader-main" :class="{ 'expanded': !sidebarOpen }">
-        <h2 class="mb-4" th:text="${project.title}">书名</h2>
+        <h2 class="mb-2" th:text="${project.title}">书名</h2>
+        <p class="text-muted mb-4" th:if="${project.author != null && !project.author.isEmpty()}"
+           th:text="'作者：' + ${project.author}"></p>
 
         <!-- TTS Controls -->
         <div class="tts-toolbar mb-4" x-show="tts.configs.length > 0" x-cloak>

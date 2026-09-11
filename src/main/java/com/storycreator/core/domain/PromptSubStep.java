@@ -44,7 +44,14 @@ public enum PromptSubStep {
     // TXT IMPORT reverse engineering sub-steps
     REVERSE_WORLD_BUILDING("逆向世界观", 370),
     REVERSE_CHARACTER_EXTRACTION("逆向角色提取", 380),
-    REVERSE_OUTLINE_GENERATION("逆向大纲生成", 390);
+    REVERSE_OUTLINE_GENERATION("逆向大纲生成", 390),
+
+    // TXT IMPORT 多阶段逆向工程（逐级汇总）：章节级 → 故事弧线 → 全局汇总
+    REVERSE_CHAPTER_OUTLINE("逆向章节大纲与角色", 400),
+    REVERSE_STORY_ARC("逆向故事弧线", 410),
+    REVERSE_FINAL_STORY_OUTLINE("逆向故事总纲汇总", 420),
+    REVERSE_FINAL_WORLD("逆向世界观汇总", 430),
+    REVERSE_FINAL_CHARACTERS("逆向角色汇总", 440);
 
     private final String displayName;
     private final int sortOrder;
@@ -93,7 +100,12 @@ public enum PromptSubStep {
             Map.entry(CHAPTER_EXPANSION, WorkflowStep.CHAPTER_WRITING),
             Map.entry(REVERSE_WORLD_BUILDING, WorkflowStep.WORLD_BUILDING),
             Map.entry(REVERSE_CHARACTER_EXTRACTION, WorkflowStep.CHARACTER_DESIGN),
-            Map.entry(REVERSE_OUTLINE_GENERATION, WorkflowStep.OUTLINE_GENERATION)
+            Map.entry(REVERSE_OUTLINE_GENERATION, WorkflowStep.OUTLINE_GENERATION),
+            Map.entry(REVERSE_CHAPTER_OUTLINE, WorkflowStep.OUTLINE_GENERATION),
+            Map.entry(REVERSE_STORY_ARC, WorkflowStep.OUTLINE_GENERATION),
+            Map.entry(REVERSE_FINAL_STORY_OUTLINE, WorkflowStep.OUTLINE_GENERATION),
+            Map.entry(REVERSE_FINAL_WORLD, WorkflowStep.WORLD_BUILDING),
+            Map.entry(REVERSE_FINAL_CHARACTERS, WorkflowStep.CHARACTER_DESIGN)
     );
 
     public WorkflowStep getParentStep() {

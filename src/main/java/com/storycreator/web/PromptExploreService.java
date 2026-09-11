@@ -170,6 +170,26 @@ public class PromptExploreService {
                             "chapterCount", String.valueOf(project.getTotalChapters()),
                             "worldSetting", "(导入时自动填充)",
                             "characters", "(导入时自动填充)");
+            case REVERSE_CHAPTER_OUTLINE -> Map.of("title", safe(project.getTitle()),
+                    "genre", project.getGenre() != null ? project.getGenre().getDisplayName() : "",
+                    "chapterNumber", String.valueOf(chapterNumber != null ? chapterNumber : 1),
+                    "chapterTitle", "(导入时自动填充)",
+                    "totalChapters", String.valueOf(project.getTotalChapters()),
+                    "chapterContent", "(导入时自动填充)");
+            case REVERSE_STORY_ARC -> Map.of("title", safe(project.getTitle()),
+                    "genre", project.getGenre() != null ? project.getGenre().getDisplayName() : "",
+                    "volumeNumber", String.valueOf(volumeNumber != null ? volumeNumber : 1),
+                    "totalVolumes", String.valueOf(Math.max(1,
+                            (project.getTotalChapters() + project.getChaptersPerVolume() - 1)
+                                    / Math.max(1, project.getChaptersPerVolume()))),
+                    "chapterStart", "1",
+                    "chapterEnd", String.valueOf(Math.max(1, project.getChaptersPerVolume())),
+                    "chapterOutlines", "(导入时自动填充)");
+            case REVERSE_FINAL_STORY_OUTLINE, REVERSE_FINAL_WORLD, REVERSE_FINAL_CHARACTERS ->
+                    Map.of("title", safe(project.getTitle()),
+                            "genre", project.getGenre() != null ? project.getGenre().getDisplayName() : "",
+                            "totalChapters", String.valueOf(project.getTotalChapters()),
+                            "arcsInfo", "(导入时自动填充)");
             case WORLD_BUILDING_PRIMARY, CHAPTER_WRITING_PRIMARY, POLISHING_PRIMARY ->
                     throw new IllegalStateException("PRIMARY sub-steps should be intercepted before reaching switch");
         };

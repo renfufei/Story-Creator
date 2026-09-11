@@ -20,6 +20,9 @@ public class TxtImportJobEntity {
     @Column(length = 50)
     private String genre;
 
+    @Column(length = 200)
+    private String author;
+
     @Column(nullable = false, length = 30)
     private String status = "PENDING";
 
@@ -56,6 +59,9 @@ public class TxtImportJobEntity {
     @Column(name = "model_config_id")
     private Long modelConfigId;
 
+    @Column(name = "chapters_per_volume", nullable = false)
+    private int chaptersPerVolume = 30;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -84,6 +90,9 @@ public class TxtImportJobEntity {
 
     public String getGenre() { return genre; }
     public void setGenre(String genre) { this.genre = genre; }
+
+    public String getAuthor() { return author; }
+    public void setAuthor(String author) { this.author = author; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
@@ -120,6 +129,9 @@ public class TxtImportJobEntity {
 
     public Long getModelConfigId() { return modelConfigId; }
     public void setModelConfigId(Long modelConfigId) { this.modelConfigId = modelConfigId; }
+
+    public int getChaptersPerVolume() { return chaptersPerVolume; }
+    public void setChaptersPerVolume(int chaptersPerVolume) { this.chaptersPerVolume = chaptersPerVolume; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

@@ -348,6 +348,36 @@ class PageRenderingIntegrationTest {
         assertPageOk(response, "import");
     }
 
+    /**
+     * TXT 导入页（含逆向工程流程控制与 SSE 实时显示脚本）。
+     *
+     * <p>回归保护：该模板脚本内含逆向工程协议标记字面量（形如双左方括号开头的标签），
+     * Thymeleaf 3 在 HTML 模式下默认把这类文本当作内联表达式解析。若脚本所在的
+     * {@code <script>} 缺少 {@code th:inline="none"}，模板会在遇到该字面量的位置
+     * 静默中断渲染，返回一个被截断的 200 响应（页面尾部监听器全部丢失）。
+     * 由于响应缓冲区已 flush，状态码无法改为 500，因此这类故障只能靠内容断言发现。
+     */
+    @Test
+    void txtImport_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/import/txt"), String.class);
+        assertPageOk(response, "txt-import");
+
+        String body = response.getBody();
+        assertThat(body).as("txt-import 页面必须完整渲染到 </script> 结束").contains("</script>");
+        // 位于协议标记字面量之后的监听器——若模板被截断，这些会全部缺失
+        for (String listener : new String[] {
+                "addEventListener('phase'",
+                "addEventListener('phase-done'",
+                "addEventListener('phase-skip'",
+                "addEventListener('note'",
+                "addEventListener('item'",
+                "addEventListener('progress'",
+                "addEventListener('done'",
+                "addEventListener('stopped'" }) {
+            assertThat(body).as("txt-import 页面应包含 SSE 监听器 %s", listener).contains(listener);
+        }
+    }
+
     // ==================== TTS Export Pages ====================
 
     @Test
@@ -373,10 +403,13 @@ class PageRenderingIntegrationTest {
         assertThat(response.getStatusCode())
                 .as("%s page should return HTTP 200", pageName)
                 .isEqualTo(HttpStatus.OK);
+        // 断言文档完整：Thymeleaf 渲染中途出错时，响应缓冲区可能已 flush，
+        // 状态码仍是 200 但正文被截断，只有校验尾部闭合标签才能发现。
         assertThat(response.getBody())
-                .as("%s page should have non-empty HTML body", pageName)
+                .as("%s page should be a fully rendered HTML document", pageName)
                 .isNotNull()
                 .isNotEmpty()
-                .contains("<html");
+                .contains("<html")
+                .contains("</html>");
     }
 }

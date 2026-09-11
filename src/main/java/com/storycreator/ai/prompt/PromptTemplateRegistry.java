@@ -51,6 +51,11 @@ public class PromptTemplateRegistry {
             Map.entry(PromptSubStep.SIDE_STORY_WRITING, List.of("characterCards", "sideStoryTitle", "sideStoryOutline", "chapterNumber", "chapterTitle", "chapterSummary", "previousContext", "chapterWordCount")),
             Map.entry(PromptSubStep.CHAPTER_EXPANSION, List.of("title", "genre", "chapterNumber", "chapterTitle", "originalContent", "expansionGuidance", "chapterWordCount")),
             Map.entry(PromptSubStep.REVERSE_WORLD_BUILDING, List.of("title", "genre", "sampledChapters", "chapterCount")),
+            Map.entry(PromptSubStep.REVERSE_CHAPTER_OUTLINE, List.of("title", "genre", "chapterNumber", "chapterTitle", "totalChapters", "chapterContent")),
+            Map.entry(PromptSubStep.REVERSE_STORY_ARC, List.of("title", "genre", "volumeNumber", "totalVolumes", "chapterStart", "chapterEnd", "chapterOutlines")),
+            Map.entry(PromptSubStep.REVERSE_FINAL_STORY_OUTLINE, List.of("title", "genre", "totalChapters", "arcsInfo")),
+            Map.entry(PromptSubStep.REVERSE_FINAL_WORLD, List.of("title", "genre", "arcsInfo")),
+            Map.entry(PromptSubStep.REVERSE_FINAL_CHARACTERS, List.of("title", "genre", "arcsInfo")),
             Map.entry(PromptSubStep.REVERSE_CHARACTER_EXTRACTION, List.of("title", "genre", "sampledChapters", "chapterCount", "worldSetting")),
             Map.entry(PromptSubStep.REVERSE_OUTLINE_GENERATION, List.of("title", "genre", "sampledChapters", "chapterCount", "worldSetting", "characters"))
     );
