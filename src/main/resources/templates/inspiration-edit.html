@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('编辑灵感', ~{::content})}">
+<body>
+<div th:fragment="content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-pencil"></i> 编辑灵感</h2>
+            <small class="text-muted">
+                所属项目：
+                <a class="text-decoration-none" th:href="@{/projects/{id}(id=${project.id})}"
+                   th:text="${project.title}">项目名</a>
+            </small>
+        </div>
+        <a th:href="@{/projects/{pid}/inspirations/{iid}(pid=${project.id}, iid=${inspiration.id})}"
+           class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> 返回详情
+        </a>
+    </div>
+
+    <div class="alert alert-danger py-2" th:if="${error}" th:text="${error}">错误</div>
+
+    <div class="card">
+        <div class="card-body">
+            <form th:action="@{/projects/{pid}/inspirations/{iid}/update(pid=${project.id}, iid=${inspiration.id})}"
+                  method="post">
+                <div class="mb-3">
+                    <label class="form-label small mb-1">标题 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control form-control-sm" name="title"
+                           required maxlength="200" th:value="${inspiration.title}"
+                           placeholder="一句话概括这条灵感">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small mb-1">内容</label>
+                    <textarea class="form-control form-control-sm" name="content" rows="14"
+                              placeholder="记录灵感片段、想法、场景、对白、设定……"
+                              th:text="${inspiration.content}"></textarea>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">保存修改</button>
+                <a th:href="@{/projects/{pid}/inspirations/{iid}(pid=${project.id}, iid=${inspiration.id})}"
+                   class="btn btn-sm btn-secondary">取消</a>
+                <span class="text-muted small ms-3"
+                      th:if="${inspiration.createdAt != null}"
+                      th:text="'创建于 ' + ${#temporals.format(inspiration.createdAt, 'yyyy-MM-dd HH:mm')}">创建时间</span>
+            </form>
+        </div>
+    </div>
+</div>
+</body>
+</html>

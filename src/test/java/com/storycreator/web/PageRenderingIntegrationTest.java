@@ -17,6 +17,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -54,11 +56,13 @@ class PageRenderingIntegrationTest {
     @Autowired private CharacterStateDimensionRepository characterStateDimensionRepository;
     @Autowired private SideStoryRepository sideStoryRepository;
     @Autowired private SideStoryChapterRepository sideStoryChapterRepository;
+    @Autowired private InspirationRepository inspirationRepository;
     @Autowired private TransactionTemplate transactionTemplate;
 
     private Long projectId;
     private Long configId;
     private Long sideStoryId;
+    private Long inspirationId;
 
     @BeforeEach
     void setUp() {
@@ -177,12 +181,21 @@ class PageRenderingIntegrationTest {
         ssCh.setWordCount(100);
         ssCh.setStatus("COMPLETED");
         sideStoryChapterRepository.save(ssCh);
+
+        // Create inspiration
+        InspirationEntity inspiration = new InspirationEntity();
+        inspiration.setProjectId(projectId);
+        inspiration.setTitle("灵感：主角的第一次顿悟");
+        inspiration.setContent("可以让主角在雨夜的山道上，从一道雷光里悟出剑意。");
+        inspiration = inspirationRepository.save(inspiration);
+        inspirationId = inspiration.getId();
     }
 
     @AfterEach
     void tearDown() {
         if (projectId != null) {
             transactionTemplate.executeWithoutResult(status -> {
+                inspirationRepository.deleteByProjectId(projectId);
                 sideStoryChapterRepository.deleteByProjectId(projectId);
                 sideStoryRepository.deleteByProjectId(projectId);
                 workflowStateRepository.deleteByProjectId(projectId);
@@ -227,6 +240,11 @@ class PageRenderingIntegrationTest {
     void projectDetail_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/projects/" + projectId), String.class);
         assertPageOk(response, "project-detail");
+        // 灵感入口：必须以新标签页打开独立页面
+        assertThat(response.getBody())
+                .as("项目信息页应包含以新标签页打开的灵感入口")
+                .contains("/projects/" + projectId + "/inspirations")
+                .contains("target=\"_blank\"");
     }
 
     @Test
@@ -248,6 +266,11 @@ class PageRenderingIntegrationTest {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/workflow"), String.class);
         assertPageOk(response, "workflow");
+        // 灵感入口：创作页头部同样以新标签页打开
+        assertThat(response.getBody())
+                .as("创作页应包含以新标签页打开的灵感入口")
+                .contains("/projects/" + projectId + "/inspirations")
+                .contains("target=\"_blank\"");
     }
 
     @Test
@@ -275,6 +298,188 @@ class PageRenderingIntegrationTest {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/side-stories/" + sideStoryId), String.class);
         assertPageOk(response, "side-story");
+    }
+
+    // ==================== Inspiration Pages ====================
+
+    @Test
+    void inspirationsList_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/inspirations"), String.class);
+        assertPageOk(response, "inspirations");
+        assertThat(response.getBody())
+                .as("灵感列表应展示已有条目")
+                .contains("灵感：主角的第一次顿悟");
+    }
+
+    @Test
+    void inspirationDetail_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/inspirations/" + inspirationId), String.class);
+        assertPageOk(response, "inspiration-detail");
+        assertThat(response.getBody())
+                .as("灵感详情应展示正文")
+                .contains("雨夜的山道");
+    }
+
+    @Test
+    void inspirationEdit_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/inspirations/" + inspirationId + "/edit"), String.class);
+        assertPageOk(response, "inspiration-edit");
+        assertThat(response.getBody())
+                .as("灵感编辑页应回填标题")
+                .contains("灵感：主角的第一次顿悟");
+    }
+
+    /** 跨项目访问同一条灵感必须被拒绝（不能通过换 projectId 读到别人的数据）。 */
+    @Test
+    void inspirationDetail_rejectsCrossProjectAccess() {
+        ProjectEntity other = new ProjectEntity();
+        other.setTitle("另一个项目");
+        other.setGenre(Genre.XUANHUAN);
+        Long otherId = projectRepository.save(other).getId();
+        try {
+            ResponseEntity<String> response = restTemplate.getForEntity(
+                    url("/projects/" + otherId + "/inspirations/" + inspirationId), String.class);
+            assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        } finally {
+            transactionTemplate.executeWithoutResult(status -> projectRepository.deleteById(otherId));
+        }
+    }
+
+    /**
+     * 走一遍真实 HTTP 的新增 → 详情 → 更新 → 列表 → 删除 链路。
+     *
+     * <p>断言以「实际效果」为准，不依赖 302 具体形态：测试用的 RestTemplate 会跟随重定向，
+     * 因此创建/更新/删除的响应可能是 3xx 也可能是重定向后的 2xx。
+     */
+    @Test
+    void inspiration_crudRoundTripOverHttp() {
+        MultiValueMap<String, String> createForm = new LinkedMultiValueMap<>();
+        createForm.add("title", "HTTP 往返灵感");
+        createForm.add("content", "第一行\n第二行");
+        ResponseEntity<String> created = restTemplate.postForEntity(
+                url("/projects/" + projectId + "/inspirations"), createForm, String.class);
+        assertThat(created.getStatusCode().is2xxSuccessful() || created.getStatusCode().is3xxRedirection())
+                .as("创建请求应成功（直接重定向或跟随重定向落到详情页）")
+                .isTrue();
+
+        Long newId = inspirationRepository.findByProjectIdOrderByCreatedAtDescIdDesc(projectId).stream()
+                .filter(i -> "HTTP 往返灵感".equals(i.getTitle()))
+                .map(InspirationEntity::getId)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("新建的灵感未落库"));
+
+        // 详情页能看到新建内容（换行原样保留）
+        ResponseEntity<String> detail = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/inspirations/" + newId), String.class);
+        assertPageOk(detail, "inspiration-detail (created)");
+        assertThat(detail.getBody()).contains("HTTP 往返灵感").contains("第二行");
+
+        // 更新
+        MultiValueMap<String, String> updateForm = new LinkedMultiValueMap<>();
+        updateForm.add("title", "HTTP 往返灵感（已改）");
+        updateForm.add("content", "改后的内容");
+        ResponseEntity<String> updated = restTemplate.postForEntity(
+                url("/projects/" + projectId + "/inspirations/" + newId + "/update"), updateForm, String.class);
+        assertThat(updated.getStatusCode().is2xxSuccessful() || updated.getStatusCode().is3xxRedirection()).isTrue();
+        assertThat(restTemplate.getForEntity(
+                url("/projects/" + projectId + "/inspirations/" + newId), String.class).getBody())
+                .contains("HTTP 往返灵感（已改）")
+                .contains("改后的内容");
+
+        // 列表里出现新标题，且原内容已被覆盖
+        ResponseEntity<String> list = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/inspirations"), String.class);
+        assertPageOk(list, "inspirations (after update)");
+        assertThat(list.getBody()).contains("HTTP 往返灵感（已改）").contains("改后的内容").doesNotContain("第一行");
+
+        // 删除
+        ResponseEntity<String> deleted = restTemplate.postForEntity(
+                url("/projects/" + projectId + "/inspirations/" + newId + "/delete"), null, String.class);
+        assertThat(deleted.getStatusCode().is2xxSuccessful() || deleted.getStatusCode().is3xxRedirection()).isTrue();
+        assertThat(restTemplate.getForEntity(
+                url("/projects/" + projectId + "/inspirations/" + newId), String.class).getBody())
+                .as("删除后再访问详情应返回错误而非页面")
+                .doesNotContain("<html");
+        assertThat(restTemplate.getForEntity(
+                url("/projects/" + projectId + "/inspirations"), String.class).getBody())
+                .doesNotContain("HTTP 往返灵感（已改）");
+    }
+
+    /** 标题为空白（或干脆没传 title 参数）时不应落库，也不应 500。 */
+    @Test
+    void inspiration_blankTitleIsRejected() {
+        long before = inspirationRepository.countByProjectId(projectId);
+
+        // 只有空白字符
+        MultiValueMap<String, String> blank = new LinkedMultiValueMap<>();
+        blank.add("title", "   ");
+        blank.add("content", "没有标题的灵感");
+        restTemplate.postForEntity(url("/projects/" + projectId + "/inspirations"), blank, String.class);
+
+        // 完全没传 title 参数：应友好回退，而不是 500
+        MultiValueMap<String, String> missing = new LinkedMultiValueMap<>();
+        missing.add("content", "缺少标题参数");
+        ResponseEntity<String> missingResp = restTemplate.postForEntity(
+                url("/projects/" + projectId + "/inspirations"), missing, String.class);
+        assertThat(missingResp.getStatusCode().is5xxServerError())
+                .as("缺少 title 参数时应友好回退而非 500")
+                .isFalse();
+
+        assertThat(inspirationRepository.countByProjectId(projectId))
+                .as("标题无效时不应落库")
+                .isEqualTo(before);
+        assertThat(restTemplate.getForEntity(
+                url("/projects/" + projectId + "/inspirations"), String.class).getBody())
+                .doesNotContain("没有标题的灵感")
+                .doesNotContain("缺少标题参数");
+    }
+
+    // ==================== Character Design ====================
+
+    /** 手工新增角色后，状态应为「已生成」(GENERATED)，以便后续精修，而不是「未生成」(PENDING)。 */
+    @Test
+    void addCharacter_marksStatusAsGenerated() {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("name", "手工角色-测试");
+        ResponseEntity<String> resp = restTemplate.postForEntity(
+                url("/projects/" + projectId + "/characters/add"), form, String.class);
+        assertThat(resp.getStatusCode().is2xxSuccessful())
+                .as("新增角色请求应成功")
+                .isTrue();
+
+        CharacterEntity created = characterRepository.findByProjectIdOrderBySortOrder(projectId).stream()
+                .filter(c -> "手工角色-测试".equals(c.getName()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("手工新增的角色未落库"));
+        assertThat(created.getStatus())
+                .as("手工新增角色应为已生成状态（而非 PENDING）")
+                .isEqualTo("GENERATED");
+    }
+
+    /** 对仍处于「未生成」(PENDING) 的角色手工保存后，应升级为「已生成」(GENERATED)。 */
+    @Test
+    void updateCharacter_upgradesPendingToGenerated() {
+        CharacterEntity legacy = new CharacterEntity();
+        legacy.setProjectId(projectId);
+        legacy.setName("遗留待生成角色");
+        legacy.setStatus("PENDING");
+        legacy.setSortOrder(99);
+        legacy = characterRepository.save(legacy);
+
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("personality", "沉稳");
+        ResponseEntity<String> resp = restTemplate.postForEntity(
+                url("/projects/" + projectId + "/characters/" + legacy.getId()), form, String.class);
+        assertThat(resp.getStatusCode().is2xxSuccessful())
+                .as("保存角色请求应成功")
+                .isTrue();
+
+        assertThat(characterRepository.findById(legacy.getId()).orElseThrow().getStatus())
+                .as("手工保存后应升级为已生成状态")
+                .isEqualTo("GENERATED");
     }
 
     // ==================== Inspect Pages ====================

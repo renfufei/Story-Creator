@@ -98,15 +98,15 @@
                 <div class="mb-3">
                     <label for="totalChapters" class="form-label">章节数</label>
                     <input type="number" class="form-control" id="totalChapters" th:field="*{totalChapters}"
-                           min="5" max="1000" placeholder="10">
-                    <div class="form-text">计划写多少章（5~1000章），默认10章</div>
+                           min="1" max="1000" placeholder="10">
+                    <div class="form-text">计划写多少章（1~1000章），默认10章</div>
                 </div>
 
                 <div class="mb-3">
                     <label for="chaptersPerVolume" class="form-label">每卷章节数</label>
                     <input type="number" class="form-control" id="chaptersPerVolume" th:field="*{chaptersPerVolume}"
-                           min="5" max="50" placeholder="10">
-                    <div class="form-text">每卷包含多少章（5~50章），用于大纲分卷生成，默认10章</div>
+                           min="1" max="100" placeholder="10">
+                    <div class="form-text">每卷包含多少章（1~100章），用于大纲分卷生成，默认10章</div>
                 </div>
 
                 <div class="mb-3">

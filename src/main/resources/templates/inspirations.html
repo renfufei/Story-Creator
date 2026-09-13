@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: layout('灵感', ~{::content})}">
+<body>
+<div th:fragment="content" x-data="{ showAdd: false }">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0"><i class="bi bi-lightbulb"></i> 灵感</h2>
+            <small class="text-muted">
+                所属项目：
+                <a class="text-decoration-none" th:href="@{/projects/{id}(id=${project.id})}"
+                   th:text="${project.title}">项目名</a>
+                <span class="ms-2">共 <strong th:text="${inspirations.size()}">0</strong> 条</span>
+            </small>
+        </div>
+        <div>
+            <a th:href="@{/projects/{id}/workflow(id=${project.id})}" class="btn btn-outline-secondary btn-sm me-2">
+                <i class="bi bi-arrow-left"></i> 返回创作
+            </a>
+            <button type="button" class="btn btn-primary btn-sm" @click="showAdd = !showAdd">
+                <i class="bi bi-plus"></i> 新建灵感
+            </button>
+        </div>
+    </div>
+
+    <div class="alert alert-danger py-2" th:if="${error}" th:text="${error}">错误</div>
+    <div class="alert alert-success py-2" th:if="${message}" th:text="${message}">提示</div>
+
+    <!-- 新增表单 -->
+    <div class="card mb-4" x-show="showAdd" x-cloak>
+        <div class="card-body">
+            <form th:action="@{/projects/{id}/inspirations(id=${project.id})}" method="post">
+                <div class="mb-3">
+                    <label class="form-label small mb-1">标题 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control form-control-sm" name="title"
+                           required maxlength="200" placeholder="一句话概括这条灵感">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small mb-1">内容</label>
+                    <textarea class="form-control form-control-sm" name="content" rows="6"
+                              placeholder="记录灵感片段、想法、场景、对白、设定……"></textarea>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">保存</button>
+                <button type="button" class="btn btn-sm btn-secondary" @click="showAdd = false">取消</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 空状态 -->
+    <div class="text-center text-muted py-5" th:if="${inspirations.isEmpty()}">
+        <i class="bi bi-lightbulb" style="font-size: 2.5rem;"></i>
+        <p class="mt-2 mb-0">还没有记录任何灵感，点击右上角「新建灵感」开始记录。</p>
+    </div>
+
+    <!-- 列表：每条灵感是一个卡片，操作按钮内嵌在卡片上 -->
+    <div class="d-flex flex-column gap-3" th:if="${!inspirations.isEmpty()}">
+        <div class="card" th:each="item : ${inspirations}">
+            <div class="card-body pb-2">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <a class="text-decoration-none fw-semibold fs-5"
+                       th:href="@{/projects/{pid}/inspirations/{iid}(pid=${project.id}, iid=${item.id})}"
+                       th:text="${item.title}">标题</a>
+                </div>
+                <div class="text-muted small mb-2">
+                    <i class="bi bi-clock"></i>
+                    <span th:text="${item.createdAt != null ? #temporals.format(item.createdAt, 'yyyy-MM-dd HH:mm') : ''}">时间</span>
+                </div>
+                <p class="card-text text-muted mb-0"
+                   style="white-space: pre-wrap; word-break: break-word;"
+                   th:text="${item.contentPreview}">内容预览</p>
+            </div>
+            <div class="card-footer bg-transparent d-flex gap-2">
+                <a th:href="@{/projects/{pid}/inspirations/{iid}(pid=${project.id}, iid=${item.id})}"
+                   class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-eye"></i> 查看
+                </a>
+                <a th:href="@{/projects/{pid}/inspirations/{iid}/edit(pid=${project.id}, iid=${item.id})}"
+                   class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-pencil"></i> 编辑
+                </a>
+                <form th:action="@{/projects/{pid}/inspirations/{iid}/delete(pid=${project.id}, iid=${item.id})}"
+                      method="post" class="d-inline"
+                      onsubmit="return confirm('确定删除这条灵感？此操作不可撤销。')">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <i class="bi bi-trash"></i> 删除
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

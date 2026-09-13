@@ -730,6 +730,11 @@ public class WorkflowController {
         if (abilities != null) ch.setAbilities(abilities);
         if (relationships != null) ch.setRelationships(relationships);
         if (description != null) ch.setDescription(description);
+        // 手工保存后，若角色仍处于「未生成」状态（PENDING 或空），升级为「已生成」，
+        // 使其与 AI 生成的角色一致，可参与后续精修。
+        if (ch.getStatus() == null || ch.getStatus().isBlank() || "PENDING".equals(ch.getStatus())) {
+            ch.setStatus("GENERATED");
+        }
         characterRepository.save(ch);
         return ResponseEntity.ok(Map.of("status", "ok"));
     }
@@ -748,7 +753,9 @@ public class WorkflowController {
         CharacterEntity ch = new CharacterEntity();
         ch.setProjectId(projectId);
         ch.setName(name);
-        ch.setStatus("PENDING");
+        // 手工创建的角色即视为「已生成」（由用户人工撰写），可直接参与后续 AI 精修；
+        // 不再标记为 PENDING，避免界面显示成「未生成」而误导为待 AI 生成。
+        ch.setStatus("GENERATED");
         ch.setSortOrder(maxOrder + 1);
         characterRepository.save(ch);
 
