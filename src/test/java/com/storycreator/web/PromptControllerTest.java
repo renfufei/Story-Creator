@@ -240,7 +240,7 @@ class PromptControllerTest {
 
     @Test
     void hasCustomDefault_checksCorrectRepositoryMethod() {
-        // Verify indirectly via list() — when a custom template is default for same step,
+        // Verify indirectly via listData() — when a custom template is default for same step,
         // the builtin's isDefault becomes false
         BuiltinTemplate bt = new BuiltinTemplate("WORLD_BUILDING||", WorkflowStep.WORLD_BUILDING,
                 null, null, "builtin", null, "tmpl");
@@ -255,16 +255,12 @@ class PromptControllerTest {
         when(repository.findByStepAndGenreIsNullAndIsDefaultTrue(WorkflowStep.WORLD_BUILDING))
                 .thenReturn(Optional.of(customDefault));
 
-        org.springframework.ui.Model model = mock(org.springframework.ui.Model.class);
-        controller.list(model);
+        Map<String, Object> data = controller.listData();
 
-        // The builtin template should have isDefault=false (because custom override exists)
-        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
-        verify(model).addAttribute(eq("templates"), captor.capture());
         @SuppressWarnings("unchecked")
-        List<PromptController.TemplateListItem> items = (List<PromptController.TemplateListItem>) captor.getValue();
+        List<Map<String, Object>> templates = (List<Map<String, Object>>) data.get("templates");
         // First item is the builtin
-        assertThat(items.get(0).builtin()).isTrue();
-        assertThat(items.get(0).isDefault()).isFalse();
+        assertThat(templates.get(0)).containsEntry("builtin", true);
+        assertThat(templates.get(0)).containsEntry("isDefault", false);
     }
 }

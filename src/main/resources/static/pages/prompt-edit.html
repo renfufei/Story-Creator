@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>编辑Prompt模板 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="sc-page" data-nav="prompts">
+
+<script>
+/* 引导数据：同步 XHR，确保下面的渲染脚本读取时已就绪 */
+window.__PROMPT_EDIT_DATA__ = (function () {
+    var d = {};
+    try {
+        var parts = location.pathname.split('/');
+        var url;
+        if (parts[2] === 'builtin') {
+            // /prompts/builtin/{key}
+            var key = decodeURIComponent(parts[3] || '');
+            url = '/prompts/builtin/' + encodeURIComponent(key) + '/edit-data';
+        } else {
+            // /prompts/{id}/edit
+            url = '/prompts/' + (parts[2] || '') + '/edit-data';
+        }
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url, false);
+        xhr.send();
+        if (xhr.status === 200) {
+            d = JSON.parse(xhr.responseText || '{}');
+        }
+    } catch (e) { console.error('__PROMPT_EDIT_DATA__ load failed', e); }
+    return d;
+})();
+</script>
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <a href="/prompts" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> 返回
+            </a>
+            <h2 class="mb-0" id="pageTitle">编辑Prompt模板</h2>
+        </div>
+        <button type="button" class="btn btn-outline-danger btn-sm" id="btnDelete" style="display:none">
+            <i class="bi bi-trash"></i> 删除
+        </button>
+    </div>
+
+    <div class="alert alert-danger" id="loadError" style="display:none">模板加载失败（可能已被删除）。</div>
+
+    <!-- Builtin template view (read-only) -->
+    <div id="builtinView" style="display:none">
+        <div class="mb-3">
+            <label class="form-label">步骤</label>
+            <input type="text" class="form-control" id="bStep" disabled>
+        </div>
+        <div class="mb-3" id="bSubStepWrap" style="display:none">
+            <label class="form-label">子步骤</label>
+            <input type="text" class="form-control" id="bSubStep" disabled>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">题材</label>
+            <input type="text" class="form-control" id="bGenre" disabled>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">名称</label>
+            <input type="text" class="form-control" id="bName" readonly>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">System Prompt</label>
+            <textarea class="form-control" rows="3" id="bSystem" readonly></textarea>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">模板内容</label>
+            <textarea class="form-control" rows="20" id="bTemplate" readonly></textarea>
+            <div class="form-text">可用变量: <span id="bVars"></span></div>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/prompts" class="btn btn-outline-secondary">返回</a>
+        </div>
+    </div>
+
+    <!-- Custom template edit form -->
+    <form id="customForm" method="post" style="display:none">
+        <div class="mb-3">
+            <label class="form-label">步骤</label>
+            <input type="text" class="form-control" id="cStep" disabled>
+        </div>
+        <div class="mb-3" id="cSubStepWrap" style="display:none">
+            <label class="form-label">子步骤</label>
+            <input type="text" class="form-control" id="cSubStep" disabled>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">题材</label>
+            <input type="text" class="form-control" id="cGenre" disabled>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">名称</label>
+            <input type="text" class="form-control" name="name" id="cName" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">System Prompt</label>
+            <textarea class="form-control" name="systemPrompt" id="cSystem" rows="3"></textarea>
+            <div class="form-text">AI的角色设定提示词，会作为system消息发送。留空则使用内置默认值。</div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">模板内容</label>
+            <textarea class="form-control" name="template" id="cTemplate" rows="20" required></textarea>
+            <div class="form-text">可用变量: <span id="cVars"></span></div>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">保存</button>
+            <a href="/prompts" class="btn btn-outline-secondary">取消</a>
+        </div>
+    </form>
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+(function () {
+    var d = window.__PROMPT_EDIT_DATA__ || {};
+    var DEFAULT_VARS = ['title', 'genre', 'description', 'worldSetting', 'characters',
+        'characterCards', 'outline', 'overallOutline', 'chapterNumber', 'totalChapters',
+        'chapterTitle', 'chapterSummary', 'nextChapterTitle', 'nextChapterSummary',
+        'previousContext', 'content', 'chapterWordCount', 'chapterWordCountMin', 'chapterWordCountMax'];
+
+    /** 渲染“可用变量”提示：优先用后端 variableHints，缺失时回退到默认清单。 */
+    function renderVars(el, hints) {
+        if (!el) return;
+        el.textContent = '';
+        var list = (hints && hints.length) ? hints : DEFAULT_VARS;
+        list.forEach(function (v, i) {
+            if (i > 0) el.appendChild(document.createTextNode(', '));
+            var code = document.createElement('code');
+            code.textContent = '{{' + v + '}}';
+            el.appendChild(code);
+        });
+    }
+
+    if (!d || (d.isBuiltin !== true && !d.id)) {
+        document.getElementById('loadError').style.display = '';
+        return;
+    }
+
+    if (d.isBuiltin) {
+        document.getElementById('pageTitle').textContent = '查看内置Prompt模板';
+        document.getElementById('bStep').value = d.stepDisplayName || '';
+        if (d.subStepDisplayName) {
+            document.getElementById('bSubStepWrap').style.display = '';
+            document.getElementById('bSubStep').value = d.subStepDisplayName;
+        }
+        document.getElementById('bGenre').value = d.genreDisplayName || '通用';
+        document.getElementById('bName').value = d.name || '';
+        document.getElementById('bSystem').value = d.systemPrompt || '';
+        document.getElementById('bTemplate').value = d.template || '';
+        renderVars(document.getElementById('bVars'), d.variableHints);
+        document.getElementById('builtinView').style.display = '';
+        return;
+    }
+
+    document.getElementById('cStep').value = d.stepDisplayName || '';
+    if (d.subStepDisplayName) {
+        document.getElementById('cSubStepWrap').style.display = '';
+        document.getElementById('cSubStep').value = d.subStepDisplayName;
+    }
+    document.getElementById('cGenre').value = d.genreDisplayName || '通用';
+    document.getElementById('cName').value = d.name || '';
+    document.getElementById('cSystem').value = d.systemPrompt || '';
+    document.getElementById('cTemplate').value = d.template || '';
+    renderVars(document.getElementById('cVars'), d.variableHints);
+
+    var form = document.getElementById('customForm');
+    form.setAttribute('action', '/prompts/' + d.id);
+    form.style.display = '';
+
+    var btnDelete = document.getElementById('btnDelete');
+    btnDelete.style.display = '';
+    btnDelete.addEventListener('click', function () {
+        if (!confirm('确定要删除此模板吗？此操作不可恢复。')) return;
+        fetch('/prompts/' + d.id + '/delete', { method: 'POST' })
+            .then(function (r) {
+                if (!r.ok) throw new Error('删除失败');
+                return r.json();
+            })
+            .then(function () { window.location.href = '/prompts'; })
+            .catch(function (err) { alert(err.message || '删除失败'); });
+    });
+})();
+</script>
+</body>
+</html>

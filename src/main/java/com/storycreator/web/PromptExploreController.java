@@ -33,7 +33,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -92,10 +91,22 @@ public class PromptExploreController {
         this.sideStoryChapterRepository = sideStoryChapterRepository;
     }
 
+    /**
+     * 提示词探索页：转发到静态页。
+     * 引导数据由 {@link #exploreData(String, Long)} 以 JSON 提供。
+     */
     @GetMapping
     public String explorePage(@RequestParam(required = false) String templateKey,
-                             @RequestParam(required = false) Long templateId,
-                             Model model) {
+                             @RequestParam(required = false) Long templateId) {
+        return "forward:/pages/prompt-explore.html";
+    }
+
+    /** 提示词探索页的引导数据（模板原文/System Prompt + 变量提示 + 项目/模型下拉）。 */
+    @GetMapping("/data")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> exploreData(
+            @RequestParam(required = false) String templateKey,
+            @RequestParam(required = false) Long templateId) {
         String templateContent = "";
         String systemPromptContent = "";
         WorkflowStep step = null;
@@ -106,15 +117,20 @@ public class PromptExploreController {
             BuiltinTemplate bt = builtinLoader.getAll().stream()
                     .filter(t -> t.key().equals(templateKey))
                     .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("Builtin template not found: " + templateKey));
+                    .orElse(null);
+            if (bt == null) {
+                return ResponseEntity.notFound().build();
+            }
             templateContent = bt.template() != null ? bt.template() : "";
             systemPromptContent = bt.systemPrompt() != null ? bt.systemPrompt() : "";
             step = bt.step();
             subStep = bt.subStep();
             templateName = bt.name();
         } else if (templateId != null) {
-            PromptTemplateEntity entity = promptTemplateRepository.findById(templateId)
-                    .orElseThrow(() -> new IllegalArgumentException("Template not found: " + templateId));
+            PromptTemplateEntity entity = promptTemplateRepository.findById(templateId).orElse(null);
+            if (entity == null) {
+                return ResponseEntity.notFound().build();
+            }
             templateContent = entity.getTemplate() != null ? entity.getTemplate() : "";
             systemPromptContent = entity.getSystemPrompt() != null ? entity.getSystemPrompt() : "";
             step = entity.getStep();
@@ -127,18 +143,40 @@ public class PromptExploreController {
             variableNames = PromptTemplateRegistry.SUB_STEP_VARIABLES.get(subStep);
         }
 
-        model.addAttribute("templateContent", templateContent);
-        model.addAttribute("systemPromptContent", systemPromptContent);
-        model.addAttribute("step", step);
-        model.addAttribute("subStep", subStep);
-        model.addAttribute("templateName", templateName);
-        model.addAttribute("variableNames", variableNames);
-        model.addAttribute("projects", projectRepository.findAllByOrderByUpdatedAtDesc());
-        model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrue());
-        model.addAttribute("templateKey", templateKey);
-        model.addAttribute("templateId", templateId);
+        List<Map<String, Object>> projects = new ArrayList<>();
+        projectRepository.findAllByOrderByUpdatedAtDesc().forEach(p -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", p.getId());
+            item.put("title", p.getTitle());
+            projects.add(item);
+        });
 
-        return "prompt-explore";
+        List<Map<String, Object>> modelConfigs = new ArrayList<>();
+        for (AiModelConfigEntity c : modelConfigRepository.findByActiveTrue()) {
+            if (c.getModelType() != com.storycreator.core.domain.ModelType.TEXT) {
+                continue;
+            }
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", c.getId());
+            item.put("displayName", c.getDisplayName());
+            item.put("modelId", c.getModelId());
+            modelConfigs.add(item);
+        }
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("templateContent", templateContent);
+        data.put("systemPromptContent", systemPromptContent);
+        data.put("step", step != null ? step.name() : null);
+        data.put("stepDisplayName", step != null ? step.getDisplayName() : null);
+        data.put("subStep", subStep != null ? subStep.name() : null);
+        data.put("subStepDisplayName", subStep != null ? subStep.getDisplayName() : null);
+        data.put("templateName", templateName);
+        data.put("variableNames", variableNames);
+        data.put("projects", projects);
+        data.put("modelConfigs", modelConfigs);
+        data.put("templateKey", templateKey);
+        data.put("templateId", templateId);
+        return ResponseEntity.ok(data);
     }
 
     @GetMapping("/chapters")

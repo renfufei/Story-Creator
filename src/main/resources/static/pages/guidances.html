@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>创作指导库 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="sc-page">
+
+<script>
+/* 引导数据：同步 XHR，确保下方渲染脚本读取时已就绪 */
+window.__GUIDANCES_DATA__ = (function () {
+    var d = { items: [], itemIds: [], steps: [] };
+    try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/settings/guidances/data', false);
+        xhr.send();
+        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
+    } catch (e) { console.error('__GUIDANCES_DATA__ load failed', e); }
+    return d;
+})();
+</script>
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4" id="main">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <h2 class="mb-0">创作指导库</h2>
+        <div>
+            <a href="/settings" class="btn btn-outline-secondary btn-sm me-2">
+                <i class="bi bi-arrow-left"></i> 返回设置
+            </a>
+            <button type="button" id="btnExport" class="btn btn-outline-success btn-sm me-1" style="display:none;">
+                <i class="bi bi-download"></i> 导出
+            </button>
+            <button type="button" id="btnImport" class="btn btn-outline-info btn-sm me-1">
+                <i class="bi bi-upload"></i> 导入
+            </button>
+            <button type="button" id="btnNew" class="btn btn-primary btn-sm">
+                <i class="bi bi-plus"></i> 新建指导
+            </button>
+        </div>
+    </div>
+
+    <!-- 隐藏的导入表单（原生 multipart POST） -->
+    <form id="importForm" action="/settings/guidances/import" method="post" enctype="multipart/form-data" style="display:none;">
+        <input type="file" id="importFile" name="file" accept=".json">
+    </form>
+
+    <div id="flashArea"></div>
+
+    <!-- 新建表单 -->
+    <div class="card mb-4" id="addCard" style="display:none;">
+        <div class="card-body">
+            <form action="/settings/guidances" method="post">
+                <div class="row g-2 mb-2">
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">名称</label>
+                        <input type="text" class="form-control form-control-sm" name="name" required placeholder="指导名称">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">步骤</label>
+                        <select class="form-select form-select-sm" name="step" id="addStep" required></select>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small mb-1">指导内容</label>
+                    <textarea class="form-control form-control-sm" name="guidance" rows="4" placeholder="创作指导内容..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">创建</button>
+                <button type="button" class="btn btn-sm btn-secondary" id="btnCancelAdd">取消</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 列表 -->
+    <div class="card">
+        <div class="card-header">
+            <strong><i class="bi bi-journal-text"></i> 指导列表</strong>
+            <small class="text-muted ms-2">可从工作流页面"存为通用"按钮快速保存，也可在此手动管理</small>
+        </div>
+        <div class="card-body p-0" id="listArea"></div>
+    </div>
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    var data = window.__GUIDANCES_DATA__ || { items: [], itemIds: [], steps: [] };
+    var items = data.items || [];
+    var allIds = (data.itemIds || []).map(String);
+    var selectedIds = allIds.slice();
+    var main = document.getElementById('main');
+    var listArea = document.getElementById('listArea');
+
+    /* ===================== 步骤下拉 ===================== */
+    function fillSteps() {
+        document.getElementById('addStep').innerHTML = (data.steps || []).map(function (s) {
+            return '<option value="' + SC.escape(s.name) + '">' + SC.escape(s.displayName) + '</option>';
+        }).join('');
+    }
+
+    /* ===================== Flash（信息走 query 串） ===================== */
+    var ERR_TEXT = {
+        empty: '请选择要导入的文件',
+        invalid: 'JSON格式无效：缺少items字段',
+        io: '导入失败，请检查文件格式'
+    };
+
+    function alertHtml(type, msg) {
+        return '<div class="alert alert-' + type + ' alert-dismissible fade show" role="alert">' + msg +
+            '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+    }
+
+    function renderFlash() {
+        var p = SC.params();
+        var html = '';
+        if (p.imported !== undefined) {
+            html += alertHtml('success', '成功导入 ' + SC.escape(p.imported) + ' 条创作指导');
+        }
+        if (p.err) {
+            html += alertHtml('danger', ERR_TEXT[p.err] || '导入失败');
+        }
+        document.getElementById('flashArea').innerHTML = html;
+    }
+
+    /* ===================== 列表渲染 ===================== */
+    function renderList() {
+        if (!items.length) {
+            listArea.innerHTML = '<div class="p-3"><p class="text-muted small mb-0">' +
+                '暂无创作指导。可在工作流页面中将某步骤的创作指导存为通用，或点击"新建指导"创建。</p></div>';
+            return;
+        }
+        var rows = items.map(function (it) {
+            return '<tr>' +
+                '<td><input type="checkbox" class="form-check-input item-checkbox" data-id="' + it.id + '"' +
+                    (selectedIds.indexOf(String(it.id)) >= 0 ? ' checked' : '') + '></td>' +
+                '<td><strong>' + SC.escape(it.name) + '</strong></td>' +
+                '<td><span class="badge bg-info">' + SC.escape(it.stepLabel) + '</span></td>' +
+                '<td class="text-muted small text-truncate" style="max-width:200px;">' + SC.escape(it.preview) + '</td>' +
+                '<td class="small text-muted">' + SC.escape(SC.fmt.datetime(it.updatedAt)) + '</td>' +
+                '<td>' +
+                    '<a href="/settings/guidances/' + it.id + '/edit" class="btn btn-sm btn-outline-primary me-1" title="编辑">' +
+                        '<i class="bi bi-pencil"></i></a>' +
+                    '<form action="/settings/guidances/' + it.id + '/delete" method="post" class="d-inline" ' +
+                        'data-confirm="确定删除此创作指导？">' +
+                        '<button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>' +
+                    '</form>' +
+                '</td>' +
+                '</tr>';
+        }).join('');
+
+        listArea.innerHTML =
+            '<table class="table table-sm table-hover mb-0">' +
+            '<thead><tr>' +
+            '<th style="width:40px;">' +
+                '<input type="checkbox" class="form-check-input" id="checkAll"' +
+                (selectedIds.length === allIds.length && allIds.length > 0 ? ' checked' : '') + '>' +
+            '</th>' +
+            '<th>名称</th><th style="width:120px;">步骤</th><th style="width:200px;">内容预览</th>' +
+            '<th style="width:160px;">更新时间</th><th style="width:140px;">操作</th>' +
+            '</tr></thead><tbody>' + rows + '</tbody></table>';
+    }
+
+    /* ===================== 导出 ===================== */
+    async function doExport() {
+        if (selectedIds.length === 0) {
+            alert('请至少选择一个指导条目');
+            return;
+        }
+        try {
+            var resp = await fetch('/settings/guidances/export', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(selectedIds.map(Number))
+            });
+            if (!resp.ok) { alert('导出失败'); return; }
+            var blob = await resp.blob();
+            var disposition = resp.headers.get('Content-Disposition');
+            var filename = 'guidances-export.json';
+            if (disposition) {
+                var match = disposition.match(/filename=(.+)/);
+                if (match) filename = match[1];
+            }
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            alert('导出失败: ' + err.message);
+        }
+    }
+
+    /* ===================== 事件绑定 ===================== */
+    document.getElementById('btnNew').addEventListener('click', function () {
+        document.getElementById('addCard').style.display = '';
+    });
+    document.getElementById('btnCancelAdd').addEventListener('click', function () {
+        document.getElementById('addCard').style.display = 'none';
+    });
+    document.getElementById('btnImport').addEventListener('click', function () {
+        document.getElementById('importFile').click();
+    });
+    document.getElementById('importFile').addEventListener('change', function () {
+        if (this.files && this.files.length) document.getElementById('importForm').submit();
+    });
+    document.getElementById('btnExport').addEventListener('click', doExport);
+
+    listArea.addEventListener('change', function (e) {
+        var cb = e.target.closest('.item-checkbox');
+        if (cb) {
+            var id = String(cb.dataset.id);
+            if (cb.checked) {
+                if (selectedIds.indexOf(id) < 0) selectedIds.push(id);
+            } else {
+                selectedIds = selectedIds.filter(function (i) { return i !== id; });
+            }
+        } else if (e.target.id === 'checkAll') {
+            selectedIds = e.target.checked ? allIds.slice() : [];
+        }
+        renderList();
+    });
+
+    main.addEventListener('submit', function (e) {
+        var form = e.target.closest('form[data-confirm]');
+        if (form && !confirm(form.dataset.confirm)) e.preventDefault();
+    });
+
+    /* ===================== 初始化 ===================== */
+    fillSteps();
+    renderFlash();
+    renderList();
+    if (items.length) document.getElementById('btnExport').style.display = '';
+})();
+</script>
+</body>
+</html>

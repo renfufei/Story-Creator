@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>编辑模板 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="sc-page">
+
+<script>
+/* 引导数据：模板 id 取自路径 /settings/tts-templates/{id}/edit，同步 XHR 拉取 */
+window.__TTS_TEMPLATE_EDIT_DATA__ = (function () {
+    var d = { templateId: null, template: null, rules: [] };
+    try {
+        var m = location.pathname.match(/\/settings\/tts-templates\/(\d+)\/edit/);
+        var id = m ? m[1] : '';
+        d.templateId = id ? parseInt(id) : null;
+        if (id) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/settings/tts-templates/' + id + '/edit-data', false);
+            xhr.send();
+            if (xhr.status === 200) {
+                // 保留从路径解析出的 templateId（接口只返回 template/rules）
+                var parsed = JSON.parse(xhr.responseText || '{}');
+                parsed.templateId = d.templateId;
+                d = parsed;
+            }
+        }
+    } catch (e) { console.error('__TTS_TEMPLATE_EDIT_DATA__ load failed', e); }
+    return d;
+})();
+</script>
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+<div x-data="{ showAdd: false }">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0" id="pageTitle">编辑模板</h2>
+            <small class="text-muted" id="pageDesc"></small>
+        </div>
+        <a href="/settings/tts-templates" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> 返回列表
+        </a>
+    </div>
+
+    <!-- Template Info -->
+    <div class="card mb-4">
+        <div class="card-header"><strong>模板信息</strong></div>
+        <div class="card-body">
+            <form id="updateForm" method="post" class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">名称</label>
+                    <input type="text" class="form-control form-control-sm" name="name" id="tplName" required>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small mb-1">描述</label>
+                    <input type="text" class="form-control form-control-sm" name="description" id="tplDesc">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-sm btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Rules List -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong><i class="bi bi-list-ol"></i> 替换规则</strong>
+            <button class="btn btn-sm btn-outline-primary" @click="showAdd = true">
+                <i class="bi bi-plus"></i> 添加规则
+            </button>
+        </div>
+        <div class="card-body">
+            <!-- Add Rule Form -->
+            <div class="border rounded p-3 mb-3 bg-light" x-show="showAdd" x-cloak>
+                <form id="addRuleForm" method="post">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">匹配模式</label>
+                            <input type="text" class="form-control form-control-sm" name="pattern" required placeholder="要匹配的文字或正则">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">替换为</label>
+                            <input type="text" class="form-control form-control-sm" name="replacement" placeholder="留空则删除">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">描述</label>
+                            <input type="text" class="form-control form-control-sm" name="description" placeholder="可选">
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label small mb-1">排序</label>
+                            <input type="number" class="form-control form-control-sm" name="sortOrder" value="0">
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" name="isRegex" value="true" id="newIsRegex">
+                            <label class="form-check-label small" for="newIsRegex">正则表达式</label>
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-primary">添加</button>
+                        <button type="button" class="btn btn-sm btn-secondary" @click="showAdd = false">取消</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Rules Table -->
+            <div id="rulesArea"></div>
+        </div>
+    </div>
+</div>
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+(function () {
+    'use strict';
+    var data = window.__TTS_TEMPLATE_EDIT_DATA__ || {};
+    var tid = data.templateId;
+    var tpl = data.template || {};
+    var rules = data.rules || [];
+    var main = document.querySelector('main');
+
+    function fillInfo() {
+        document.getElementById('pageTitle').textContent = '编辑模板: ' + (tpl.name || '');
+        document.getElementById('pageDesc').textContent = tpl.description || '';
+        document.getElementById('tplName').value = tpl.name || '';
+        document.getElementById('tplDesc').value = tpl.description || '';
+        if (tid) {
+            document.getElementById('updateForm').action = '/settings/tts-templates/' + tid + '/update';
+            document.getElementById('addRuleForm').action = '/settings/tts-templates/' + tid + '/rules';
+        }
+    }
+
+    function renderRules() {
+        var area = document.getElementById('rulesArea');
+        if (!rules.length) {
+            area.innerHTML = '<p class="text-muted small mb-0">暂无规则，点击"添加规则"开始配置</p>';
+            return;
+        }
+        var rows = rules.map(function (r) {
+            var repl = (r.replacement && r.replacement.length)
+                ? '<code>' + SC.escape(r.replacement) + '</code>'
+                : '<span class="text-muted small">(删除)</span>';
+            return '<tr>' +
+                '<td>' + r.sortOrder + '</td>' +
+                '<td><code class="small" style="word-break: break-all;">' + SC.escape(r.pattern) + '</code></td>' +
+                '<td>' + repl + '</td>' +
+                '<td><span class="badge ' + (r.regex ? 'bg-info' : 'bg-secondary') + '">' +
+                    (r.regex ? '正则' : '文本') + '</span></td>' +
+                '<td class="text-muted small">' + SC.escape(r.description) + '</td>' +
+                '<td><form action="/settings/tts-templates/' + tid + '/rules/' + r.id + '/delete" method="post" ' +
+                    'class="d-inline" data-confirm="确定删除此规则？">' +
+                    '<button type="submit" class="btn btn-sm btn-outline-danger" title="删除">' +
+                    '<i class="bi bi-trash"></i></button></form></td>' +
+                '</tr>';
+        }).join('');
+        area.innerHTML =
+            '<table class="table table-sm table-hover mb-0">' +
+            '<thead><tr><th style="width:50px;">序号</th><th>匹配模式</th><th>替换为</th>' +
+            '<th style="width:60px;">类型</th><th>描述</th><th style="width:80px;">操作</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody></table>';
+    }
+
+    main.addEventListener('submit', function (e) {
+        var form = e.target.closest('form[data-confirm]');
+        if (form && !confirm(form.dataset.confirm)) e.preventDefault();
+    });
+
+    fillInfo();
+    renderRules();
+})();
+</script>
+<script src="/vendor/alpinejs/cdn.min.js" defer></script>
+</body>
+</html>

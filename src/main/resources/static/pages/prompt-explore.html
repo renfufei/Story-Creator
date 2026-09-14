@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>提示词探索 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="sc-page" data-nav="prompts">
+
+<script>
+/* 引导数据：同步 XHR，确保 exploreApp() 构造时已就绪 */
+window.__PROMPT_EXPLORE_DATA__ = (function () {
+    var d = {};
+    try {
+        var params = new URLSearchParams(location.search);
+        var qs = [];
+        if (params.get('templateKey')) qs.push('templateKey=' + encodeURIComponent(params.get('templateKey')));
+        if (params.get('templateId')) qs.push('templateId=' + encodeURIComponent(params.get('templateId')));
+        var url = '/prompts/explore/data' + (qs.length ? '?' + qs.join('&') : '');
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url, false);
+        xhr.send();
+        if (xhr.status === 200) {
+            d = JSON.parse(xhr.responseText || '{}');
+        }
+    } catch (e) { console.error('__PROMPT_EXPLORE_DATA__ load failed', e); }
+    return d;
+})();
+</script>
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+    <div x-data="exploreApp()" x-init="init()">
+        <!-- Section A: Header + Template Info -->
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <a href="/prompts" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> 返回
+            </a>
+            <h4 class="mb-0" x-text="templateName || '提示词探索'">模板名称</h4>
+            <span class="badge bg-primary" x-show="pageStep" x-text="stepDisplayName"></span>
+            <span class="badge bg-warning text-dark" x-show="pageSubStep" x-text="subStepDisplayName"></span>
+        </div>
+
+        <!-- Template content preview -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>模板原文</span>
+                <button class="btn btn-sm btn-outline-secondary" @click="showTemplate = !showTemplate"
+                        x-text="showTemplate ? '收起' : '展开'">展开</button>
+            </div>
+            <div class="card-body" x-show="showTemplate" x-transition>
+                <div class="mb-2">
+                    <template x-for="v in variableNames" :key="v">
+                        <span class="badge bg-info me-1" x-text="'{{' + v + '}}'"></span>
+                    </template>
+                </div>
+                <div class="mb-3" x-show="systemPromptContent && systemPromptContent.length > 0">
+                    <label class="form-label fw-bold">System Prompt</label>
+                    <pre class="bg-light p-2 rounded" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;font-size:0.85rem;" x-text="systemPromptContent"></pre>
+                </div>
+                <div>
+                    <label class="form-label fw-bold">User Prompt</label>
+                    <pre class="bg-light p-2 rounded" style="max-height:300px;overflow-y:auto;white-space:pre-wrap;font-size:0.85rem;" x-text="templateContent"></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section B: Context Parameters -->
+        <div class="card mb-3">
+            <div class="card-header">上下文参数</div>
+            <div class="card-body">
+                <div class="row g-2 align-items-end">
+                    <!-- Project selector (always shown) -->
+                    <div class="col-md-3">
+                        <label class="form-label">项目</label>
+                        <select class="form-select form-select-sm" x-model="projectId" @change="onProjectChange()">
+                            <option value="">-- 选择项目 --</option>
+                            <template x-for="p in projects" :key="p.id">
+                                <option :value="p.id" x-text="p.title"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <!-- Side story selector -->
+                    <div class="col-md-3" x-show="needsSideStory">
+                        <label class="form-label">番外篇</label>
+                        <select class="form-select form-select-sm" x-model="sideStoryId" @change="onSideStoryChange()">
+                            <option value="">-- 选择番外 --</option>
+                            <template x-for="s in sideStories" :key="s.id">
+                                <option :value="s.id" x-text="s.title"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <!-- Side story chapter number input (for outline generation) -->
+                    <div class="col-md-2" x-show="needsSideStoryChapterNumber && sideStoryId">
+                        <label class="form-label">章节号</label>
+                        <input type="number" class="form-control form-control-sm" x-model.number="sideStoryChapterNumber" min="1" max="99">
+                    </div>
+
+                    <!-- Side story chapter selector (for writing) -->
+                    <div class="col-md-3" x-show="needsSideStoryChapter && sideStoryId">
+                        <label class="form-label">番外章节</label>
+                        <select class="form-select form-select-sm" x-model="sideStoryChapterNumber">
+                            <option value="">-- 选择章节 --</option>
+                            <template x-for="ch in sideStoryChapters" :key="ch.chapterNumber">
+                                <option :value="ch.chapterNumber" x-text="'第' + ch.chapterNumber + '章 ' + ch.title"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <!-- Volume + Chapter selector (outline) -->
+                    <div class="col-md-2" x-show="needsChapterOutline">
+                        <label class="form-label">卷</label>
+                        <select class="form-select form-select-sm" x-model="selectedVolume" @change="chapterNumber = ''">
+                            <option value="">-- 选择卷 --</option>
+                            <template x-for="v in volumes" :key="v">
+                                <option :value="v" x-text="'第' + v + '卷'"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div class="col-md-3" x-show="needsChapterOutline && selectedVolume">
+                        <label class="form-label">章节（大纲）</label>
+                        <select class="form-select form-select-sm" x-model="chapterNumber">
+                            <option value="">-- 选择章节 --</option>
+                            <template x-for="ch in filteredOutlines" :key="ch.chapterNumber">
+                                <option :value="ch.chapterNumber" x-text="'第' + ch.chapterNumber + '章 ' + ch.title"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <div class="col-md-3" x-show="needsChapter">
+                        <label class="form-label">章节</label>
+                        <select class="form-select form-select-sm" x-model="chapterNumber">
+                            <option value="">-- 选择章节 --</option>
+                            <template x-for="ch in chapters" :key="ch.chapterNumber">
+                                <option :value="ch.chapterNumber" x-text="'第' + ch.chapterNumber + '章 ' + ch.title"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <!-- Character selector -->
+                    <div class="col-md-3" x-show="needsCharacter">
+                        <label class="form-label">角色</label>
+                        <select class="form-select form-select-sm" x-model="characterId">
+                            <option value="">-- 选择角色 --</option>
+                            <template x-for="c in characters" :key="c.id">
+                                <option :value="c.id" x-text="c.name"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <!-- Card number (CHARACTER_CARD) -->
+                    <div class="col-md-2" x-show="needsCardNumber">
+                        <label class="form-label">卡序号</label>
+                        <input type="number" class="form-control form-control-sm" x-model.number="cardNumber" min="1" max="20">
+                    </div>
+                    <div class="col-md-2" x-show="needsCardNumber">
+                        <label class="form-label">总卡数</label>
+                        <input type="number" class="form-control form-control-sm" x-model.number="totalCards" min="1" max="20">
+                    </div>
+
+                    <!-- Volume number (VOLUME_ARC) -->
+                    <div class="col-md-2" x-show="needsVolume">
+                        <label class="form-label">卷号</label>
+                        <input type="number" class="form-control form-control-sm" x-model.number="volumeNumber" min="1" max="50">
+                    </div>
+
+                    <!-- Chapter number input (for outline sub-steps) -->
+                    <div class="col-md-2" x-show="needsChapterNumber">
+                        <label class="form-label">章节号</label>
+                        <input type="number" class="form-control form-control-sm" x-model.number="chapterNumber" min="1" max="999">
+                    </div>
+
+                    <!-- Resolve button -->
+                    <div class="col-md-2">
+                        <button class="btn btn-success btn-sm w-100" @click="resolvePrompt()" :disabled="resolving || !projectId">
+                            <span x-show="!resolving"><i class="bi bi-compass"></i> 探索提示词</span>
+                            <span x-show="resolving" x-cloak><span class="spinner-border spinner-border-sm"></span> 解析中...</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section C: Rendered Result -->
+        <div class="card mb-3" x-show="resolved" x-transition>
+            <div class="card-header">渲染结果</div>
+            <div class="card-body">
+                <!-- System Prompt -->
+                <div class="mb-3" x-show="resolvedSystemPrompt">
+                    <label class="form-label fw-bold">System Prompt</label>
+                    <pre class="bg-light p-2 rounded" style="max-height:200px;overflow-y:auto;white-space:pre-wrap;font-size:0.85rem;" x-text="resolvedSystemPrompt"></pre>
+                </div>
+                <!-- User Prompt -->
+                <div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label fw-bold mb-0">User Prompt</label>
+                        <button class="btn btn-sm btn-outline-secondary" @click="editingPrompt = !editingPrompt"
+                                x-text="editingPrompt ? '只读' : '编辑'">编辑</button>
+                    </div>
+                    <pre x-show="!editingPrompt" class="bg-light p-2 rounded" style="max-height:400px;overflow-y:auto;white-space:pre-wrap;font-size:0.85rem;" x-text="renderedPrompt"></pre>
+                    <textarea x-show="editingPrompt" class="form-control" rows="12" x-model="renderedPrompt" style="font-size:0.85rem;"></textarea>
+                </div>
+                <div class="text-muted small mt-2" x-show="resolved">
+                    【字数统计】System: <span x-text="(resolvedSystemPrompt||'').length"></span> 字 | User: <span x-text="(renderedPrompt||'').length"></span> 字 | 合计: <span x-text="(resolvedSystemPrompt||'').length + (renderedPrompt||'').length"></span> 字
+                </div>
+            </div>
+        </div>
+
+        <!-- Section D: Call AI -->
+        <div class="card mb-3" x-show="resolved" x-transition>
+            <div class="card-header">调用模型</div>
+            <div class="card-body">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label">选择模型</label>
+                        <select class="form-select form-select-sm" x-model="selectedConfigId">
+                            <option value="">-- 选择模型 --</option>
+                            <template x-for="c in modelConfigs" :key="c.id">
+                                <option :value="c.id" x-text="c.displayName + ' (' + c.modelId + ')'"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <div class="col-md-2">
+                        <button class="btn btn-primary btn-sm w-100" @click="callAi()" :disabled="calling || !selectedConfigId">
+                            <span x-show="!calling"><i class="bi bi-play-fill"></i> 实际调用</span>
+                            <span x-show="calling"><span class="spinner-border spinner-border-sm"></span> 调用中...</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Result display -->
+                <div class="mt-3" x-show="aiResult !== null">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label fw-bold mb-0">AI 输出 <span class="text-muted fw-normal" x-show="aiResult" x-text="'(' + aiResult.length + ' 字)'"></span></label>
+                        <button class="btn btn-sm btn-outline-secondary" @click="copyResult()">
+                            <i class="bi bi-clipboard"></i> 复制
+                        </button>
+                    </div>
+                    <pre x-ref="aiOutput" class="bg-light p-2 rounded" style="min-height:8em;max-height:30em;overflow-y:auto;white-space:pre-wrap;font-size:0.85rem;" x-text="aiResult"></pre>
+                </div>
+
+                <!-- Error display -->
+                <div class="alert alert-danger mt-3" x-show="aiError" x-text="aiError"></div>
+            </div>
+        </div>
+
+        <!-- Resolve error -->
+        <div class="alert alert-danger" x-show="resolveError" x-text="resolveError"></div>
+    </div>
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+    var PAGE = window.__PROMPT_EXPLORE_DATA__ || {};
+
+    var pageStep = PAGE.step || null;
+    var pageSubStep = PAGE.subStep || null;
+    var pageTemplateKey = PAGE.templateKey || null;
+    var pageTemplateId = PAGE.templateId || null;
+
+    function exploreApp() {
+        return {
+            // 页面级（来自引导数据）
+            pageStep: pageStep,
+            pageSubStep: pageSubStep,
+            templateName: PAGE.templateName || '',
+            stepDisplayName: PAGE.stepDisplayName || '',
+            subStepDisplayName: PAGE.subStepDisplayName || '',
+            variableNames: PAGE.variableNames || [],
+            templateContent: PAGE.templateContent || '',
+            systemPromptContent: PAGE.systemPromptContent || '',
+            projects: PAGE.projects || [],
+            modelConfigs: PAGE.modelConfigs || [],
+
+            showTemplate: false,
+            projectId: '',
+            chapterNumber: '',
+            characterId: '',
+            cardNumber: 1,
+            totalCards: 5,
+            volumeNumber: 1,
+            chapters: [],
+            chapterOutlines: [],
+            chaptersPerVolume: 10,
+            selectedVolume: '',
+            characters: [],
+            sideStories: [],
+            sideStoryId: '',
+            sideStoryChapters: [],
+            sideStoryChapterNumber: '',
+            resolving: false,
+            resolved: false,
+            renderedPrompt: '',
+            resolvedSystemPrompt: '',
+            editingPrompt: false,
+            resolveError: '',
+            selectedConfigId: '',
+            calling: false,
+            aiResult: null,
+            aiError: '',
+
+            get needsChapterOutline() {
+                var ss = pageSubStep;
+                if (!ss) return pageStep === 'CHAPTER_WRITING';
+                return ['CHAPTER_WRITING_PRIMARY', 'CHAPTER_CONTEXT_BRIEFING', 'CHAPTER_PLOT_REASONING',
+                        'CHAPTER_INSTANT_REVIEW', 'CHAPTER_CONTENT_OPTIMIZATION', 'CHAPTER_STORYLINE_UPDATE',
+                        'CHAPTER_DEEP_REVIEW', 'CHAPTER_EVENT_PLAN'].includes(ss);
+            },
+            get needsChapter() {
+                var ss = pageSubStep;
+                if (!ss) return pageStep === 'POLISHING';
+                return ['CHARACTER_STATES',
+                        'PROOFREAD_PLOT_SUMMARY', 'PROOFREAD_CHARACTER_CHECK', 'PROOFREAD_CONSISTENCY',
+                        'PROOFREAD_CONTINUITY', 'PROOFREAD_FORESHADOWING', 'PROOFREAD_FIX'].includes(ss);
+            },
+            get needsChapterNumber() {
+                return pageSubStep && ['CHAPTER_OUTLINE', 'CHAPTER_OUTLINE_REFINE'].includes(pageSubStep);
+            },
+            get needsCharacter() {
+                var ss = pageSubStep;
+                return ss && ['CHARACTER_REFINE', 'CHARACTER_BEHAVIOR_BOUNDARIES', 'IMAGE_PROMPT_AVATAR', 'IMAGE_PROMPT_PORTRAIT'].includes(ss);
+            },
+            get needsCardNumber() {
+                return pageSubStep === 'CHARACTER_CARD';
+            },
+            get needsVolume() {
+                return pageSubStep === 'VOLUME_ARC';
+            },
+            get needsSideStory() {
+                return pageSubStep && ['SIDE_STORY_OUTLINE', 'SIDE_STORY_CHAPTER_OUTLINE', 'SIDE_STORY_WRITING'].includes(pageSubStep);
+            },
+            get needsSideStoryChapterNumber() {
+                return pageSubStep === 'SIDE_STORY_CHAPTER_OUTLINE';
+            },
+            get needsSideStoryChapter() {
+                return pageSubStep === 'SIDE_STORY_WRITING';
+            },
+            get volumes() {
+                var set = new Set();
+                var cpv = this.chaptersPerVolume || 10;
+                this.chapterOutlines.forEach(o => {
+                    var v = o.volumeNumber != null ? o.volumeNumber : Math.ceil(o.chapterNumber / cpv);
+                    set.add(v);
+                });
+                return Array.from(set).sort((a, b) => a - b);
+            },
+            get filteredOutlines() {
+                if (!this.selectedVolume) return [];
+                var sv = parseInt(this.selectedVolume);
+                var cpv = this.chaptersPerVolume || 10;
+                return this.chapterOutlines.filter(o => {
+                    var v = o.volumeNumber != null ? o.volumeNumber : Math.ceil(o.chapterNumber / cpv);
+                    return v === sv;
+                });
+            },
+
+            init() {},
+
+            onProjectChange() {
+                this.chapters = [];
+                this.chapterOutlines = [];
+                this.chaptersPerVolume = 10;
+                this.selectedVolume = '';
+                this.characters = [];
+                this.chapterNumber = '';
+                this.characterId = '';
+                this.sideStories = [];
+                this.sideStoryId = '';
+                this.sideStoryChapters = [];
+                this.sideStoryChapterNumber = '';
+                this.resolved = false;
+                this.resolveError = '';
+                this.aiResult = null;
+                this.aiError = '';
+                if (!this.projectId) return;
+
+                fetch('/prompts/explore/chapters?projectId=' + this.projectId)
+                    .then(r => r.json())
+                    .then(data => { this.chapters = data; });
+                fetch('/prompts/explore/chapter-outlines?projectId=' + this.projectId)
+                    .then(r => r.json())
+                    .then(data => {
+                        this.chapterOutlines = data.outlines || [];
+                        this.chaptersPerVolume = data.chaptersPerVolume || 10;
+                    });
+                fetch('/prompts/explore/characters?projectId=' + this.projectId)
+                    .then(r => r.json())
+                    .then(data => {
+                        this.characters = data.characters;
+                        if (data.totalCards) this.totalCards = data.totalCards;
+                    });
+                fetch('/prompts/explore/side-stories?projectId=' + this.projectId)
+                    .then(r => r.json())
+                    .then(data => { this.sideStories = data; });
+            },
+
+            onSideStoryChange() {
+                this.sideStoryChapters = [];
+                this.sideStoryChapterNumber = '';
+                if (!this.sideStoryId) return;
+                fetch('/prompts/explore/side-story-chapters?sideStoryId=' + this.sideStoryId)
+                    .then(r => r.json())
+                    .then(data => { this.sideStoryChapters = data; });
+            },
+
+            resolvePrompt() {
+                this.resolving = true;
+                this.resolveError = '';
+                this.resolved = false;
+                this.aiResult = null;
+                this.aiError = '';
+
+                var payload = {
+                    step: pageStep,
+                    subStep: pageSubStep || '',
+                    projectId: this.projectId,
+                    chapterNumber: this.chapterNumber || null,
+                    characterId: this.characterId || null,
+                    cardNumber: this.cardNumber,
+                    totalCards: this.totalCards,
+                    volumeNumber: this.volumeNumber,
+                    templateId: pageTemplateId,
+                    sideStoryId: this.sideStoryId || null,
+                    sideStoryChapterNumber: this.sideStoryChapterNumber || null
+                };
+
+                fetch('/prompts/explore/resolve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                .then(r => r.json())
+                .then(data => {
+                    this.resolving = false;
+                    if (data.success) {
+                        this.resolved = true;
+                        this.renderedPrompt = data.renderedPrompt || '';
+                        this.resolvedSystemPrompt = data.systemPrompt || '';
+                    } else {
+                        this.resolveError = data.error || '解析失败';
+                    }
+                })
+                .catch(err => {
+                    this.resolving = false;
+                    this.resolveError = '请求失败: ' + err.message;
+                });
+            },
+
+            callAi() {
+                this.calling = true;
+                this.aiResult = '';
+                this.aiError = '';
+
+                var payload = {
+                    renderedPrompt: this.renderedPrompt,
+                    systemPrompt: this.resolvedSystemPrompt,
+                    configId: this.selectedConfigId
+                };
+                var self = this;
+
+                fetch('/prompts/explore/call-ai-stream', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                }).then(function(response) {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    var reader = response.body.getReader();
+                    var decoder = new TextDecoder();
+                    var buffer = '';
+
+                    function pump() {
+                        return reader.read().then(function(result) {
+                            if (result.done) { self.calling = false; return; }
+                            buffer += decoder.decode(result.value, {stream: true});
+                            var parts = buffer.split('\n\n');
+                            buffer = parts.pop();
+                            for (var i = 0; i < parts.length; i++) {
+                                var block = parts[i].trim();
+                                if (!block) continue;
+                                var eventName = '';
+                                var data = '';
+                                var lines = block.split('\n');
+                                for (var j = 0; j < lines.length; j++) {
+                                    if (lines[j].startsWith('event:')) {
+                                        eventName = lines[j].substring(6).trim();
+                                    } else if (lines[j].startsWith('data:')) {
+                                        data = lines[j].substring(5);
+                                    }
+                                }
+                                if (eventName === 'token') {
+                                    self.aiResult += data;
+                                    var el = self.$refs.aiOutput;
+                                    if (el) self.$nextTick(function() { el.scrollTop = el.scrollHeight; });
+                                } else if (eventName === 'done') {
+                                    self.calling = false;
+                                    return;
+                                } else if (eventName === 'error') {
+                                    self.aiError = data || '调用失败';
+                                    self.calling = false;
+                                    return;
+                                }
+                            }
+                            return pump();
+                        });
+                    }
+                    return pump();
+                }).catch(function(err) {
+                    self.calling = false;
+                    self.aiError = '请求失败: ' + err.message;
+                });
+            },
+
+            copyResult() {
+                if (this.aiResult) {
+                    navigator.clipboard.writeText(this.aiResult);
+                }
+            }
+        };
+    }
+</script>
+<script src="/vendor/alpinejs/cdn.min.js" defer></script>
+</body>
+</html>

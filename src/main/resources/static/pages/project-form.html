@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目设置 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="sc-page">
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="d-flex align-items-center gap-2">
+                    <a id="backLink" href="/" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-arrow-left"></i> 返回
+                    </a>
+                    <h2 class="mb-0" id="pageTitle">新建创作项目</h2>
+                </div>
+                <button type="button" class="btn btn-outline-info btn-sm" id="btnRef" hidden>
+                    <i class="bi bi-clipboard-data"></i> 参考已有项目
+                </button>
+            </div>
+
+            <div id="formContainer">
+                <div class="sc-loading"><div class="sc-loading-row"></div><div class="sc-loading-row"></div></div>
+            </div>
+
+        </div>
+    </div>
+</main>
+
+<!-- 参考已有项目 -->
+<div class="sc-modal-backdrop" id="refModal" hidden>
+    <div class="sc-modal card shadow-lg" style="max-width:34rem;">
+        <div class="card-body">
+            <h6 class="card-title mb-1">选择参考项目</h6>
+            <p class="text-muted small">选择一个项目，其配置信息将填入当前表单（不包括标题）</p>
+            <div style="max-height:320px; overflow-y:auto;" class="border rounded mb-3">
+                <table class="table table-hover table-sm mb-0 align-middle">
+                    <thead class="table-light sticky-top">
+                        <tr><th style="width:44px"></th><th>项目名称</th><th>题材类型</th></tr>
+                    </thead>
+                    <tbody id="refTableBody"></tbody>
+                </table>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="refCancel">取消</button>
+                <button type="button" class="btn btn-sm btn-primary" id="refApply">确认</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    var isEdit = /\/projects\/\d+\/edit$/.test(location.pathname);
+    var projectId = isEdit ? (location.pathname.match(/\/projects\/(\d+)\/edit/) || [])[1] : null;
+    var container = document.getElementById('formContainer');
+
+    var meta = null;      // 下拉选项
+    var form = null;      // 表单数据
+    var refId = null;     // 参考项目
+
+    var DEFAULTS = {
+        totalChapters: 10,
+        chaptersPerVolume: 10,
+        characterCount: 5,
+        chapterWordCount: 5000,
+        chapterWordCountMin: 4000,
+        chapterWordCountMax: 6000,
+        recurringCharacterRate: 0.5,
+        tempCharacterRate: 3.0
+    };
+
+    function num(v, d) { return (v === null || v === undefined || v === '') ? d : v; }
+
+    function optionsHtml(list, selected, placeholder) {
+        var html = placeholder ? '<option value="">' + SC.escape(placeholder) + '</option>' : '';
+        (list || []).forEach(function (o) {
+            html += '<option value="' + SC.escape(o.code) + '"' +
+                (String(o.code) === String(selected) ? ' selected' : '') + '>' +
+                SC.escape(o.displayName) + '</option>';
+        });
+        return html;
+    }
+
+    function modelOptionsHtml(list, selected, placeholder) {
+        var html = '<option value="">' + SC.escape(placeholder || '-- 使用全局默认模型 --') + '</option>';
+        (list || []).forEach(function (mc) {
+            var label = mc.displayName + ' (' + mc.provider + '/' + mc.modelId + ')';
+            html += '<option value="' + mc.id + '"' +
+                (String(mc.id) === String(selected) ? ' selected' : '') + '>' + SC.escape(label) + '</option>';
+        });
+        return html;
+    }
+
+    function stepSectionHtml() {
+        var steps = meta.workflowSteps || [];
+        var hasValue = false;
+        var html = steps.map(function (s) {
+            var g = (form.stepGuidances || {})[s.code] || '';
+            var mc = (form.stepModelConfigs || {})[s.code];
+            if (g || (mc && mc !== 0)) hasValue = true;
+            return '<div class="mb-3">' +
+                '<label class="form-label small fw-bold mb-1">' + SC.escape(s.displayName) + '</label>' +
+                '<select class="form-select form-select-sm mb-1" data-step-model="' + SC.escape(s.code) + '">' +
+                modelOptionsHtml(meta.modelConfigs, mc || '', '-- 使用项目/全局默认模型 --') +
+                '</select>' +
+                '<textarea class="form-control form-control-sm" rows="2" data-step-guidance="' + SC.escape(s.code) + '"' +
+                ' placeholder="为【' + SC.escape(s.displayName) + '】环节提供创作指导...">' + SC.escape(g) + '</textarea>' +
+                '</div>';
+        }).join('');
+        return { html: html, expanded: hasValue };
+    }
+
+    function renderForm() {
+        var back = document.getElementById('backLink');
+        back.href = isEdit ? '/projects/' + projectId : '/';
+        document.getElementById('pageTitle').textContent = isEdit ? '编辑项目' : '新建创作项目';
+        document.getElementById('btnRef').hidden = isEdit;
+        document.title = (isEdit ? '编辑项目' : '新建创作项目') + ' - AI故事创作';
+
+        var steps = stepSectionHtml();
+
+        container.innerHTML = '' +
+            '<form id="projectForm" novalidate>' +
+            fieldText('title', '小说标题', form.title, '例如：星辰大海', true) +
+            fieldSelect('genre', '题材类型', optionsHtml(meta.genres, form.genre, '-- 请选择题材 --')) +
+            fieldTextarea('description', '故事简介', form.description, '简单描述你想写的故事，AI将基于此生成世界观和角色...') +
+            fieldText('author', '作者', form.author, '例如：佚名（留空则使用全局默认作者）', false,
+                '导出、全文阅读与导入时均会携带该作者信息；留空将回退到「设置」中的全局默认作者。') +
+            fieldNumber('totalChapters', '章节数', num(form.totalChapters, DEFAULTS.totalChapters), 1, 1000, '计划写多少章（1~1000章），默认10章') +
+            fieldNumber('chaptersPerVolume', '每卷章节数', num(form.chaptersPerVolume, DEFAULTS.chaptersPerVolume), 1, 100, '每卷包含多少章（1~100章），用于大纲分卷生成，默认10章') +
+            fieldNumber('characterCount', '初始角色数量', num(form.characterCount, DEFAULTS.characterCount), 1, 20, 'AI将在角色设计阶段为每个初始角色生成独立角色卡，默认5个') +
+            rateSection() +
+            wordCountSection() +
+            fieldSelect('defaultModelConfigId', '项目默认模型', modelOptionsHtml(meta.modelConfigs, form.defaultModelConfigId || ''), null, '不选择则使用全局默认模型') +
+            autoModeSection() +
+            (isEdit ? fieldSelect('projectStatus', '项目状态', optionsHtml(meta.projectStatuses, form.projectStatus, null)) : '') +
+            stepConfigSection(steps) +
+            '<div class="d-flex gap-2">' +
+            '  <button type="submit" class="btn btn-primary" id="btnSubmit"><i class="bi bi-check-lg"></i> ' +
+            (isEdit ? '保存修改' : '创建并开始创作') + '</button>' +
+            '  <a class="btn btn-outline-secondary" href="' + (isEdit ? '/projects/' + projectId : '/') + '">取消</a>' +
+            (isEdit && form.projectStatus === 'ABANDONED'
+                ? '<button type="button" class="btn btn-danger ms-auto" id="btnDelete"><i class="bi bi-trash"></i> 删除项目</button>'
+                : '') +
+            '</div>' +
+            '</form>';
+
+        wireForm();
+    }
+
+    function fieldText(id, label, value, placeholder, required, help) {
+        return '<div class="mb-3">' +
+            '<label for="' + id + '" class="form-label">' + SC.escape(label) + '</label>' +
+            '<input type="text" class="form-control" id="' + id + '" name="' + id + '" value="' + SC.escape(value || '') + '"' +
+            ' placeholder="' + SC.escape(placeholder || '') + '"' + (required ? ' required' : '') + '>' +
+            (help ? '<div class="form-text">' + SC.escape(help) + '</div>' : '') +
+            '<div class="invalid-feedback"></div></div>';
+    }
+
+    function fieldTextarea(id, label, value, placeholder) {
+        return '<div class="mb-3">' +
+            '<label for="' + id + '" class="form-label">' + SC.escape(label) + '</label>' +
+            '<textarea class="form-control" id="' + id + '" name="' + id + '" rows="4" placeholder="' +
+            SC.escape(placeholder || '') + '">' + SC.escape(value || '') + '</textarea></div>';
+    }
+
+    function fieldNumber(id, label, value, min, max, help) {
+        return '<div class="mb-3">' +
+            '<label for="' + id + '" class="form-label">' + SC.escape(label) + '</label>' +
+            '<input type="number" class="form-control" id="' + id + '" name="' + id + '" value="' + SC.escape(value) +
+            '" min="' + min + '" max="' + max + '">' +
+            (help ? '<div class="form-text">' + SC.escape(help) + '</div>' : '') + '</div>';
+    }
+
+    function fieldSelect(id, label, optionsHtmlStr, help) {
+        return '<div class="mb-3">' +
+            '<label for="' + id + '" class="form-label">' + SC.escape(label) + '</label>' +
+            '<select class="form-select" id="' + id + '" name="' + id + '">' + optionsHtmlStr + '</select>' +
+            (help ? '<div class="form-text">' + SC.escape(help) + '</div>' : '') + '</div>';
+    }
+
+    function rateSection() {
+        return '<div class="mb-3">' +
+            '<label class="form-label">分卷角色引入速率</label>' +
+            '<div class="row g-2">' +
+            '  <div class="col-md-6"><div class="input-group input-group-sm">' +
+            '    <span class="input-group-text">长期角色</span>' +
+            '    <input type="number" class="form-control" id="recurringCharacterRate" name="recurringCharacterRate" ' +
+            '           value="' + num(form.recurringCharacterRate, DEFAULTS.recurringCharacterRate) + '" min="0.1" max="10.0" step="0.1">' +
+            '  </div></div>' +
+            '  <div class="col-md-6"><div class="input-group input-group-sm">' +
+            '    <span class="input-group-text">临时角色</span>' +
+            '    <input type="number" class="form-control" id="tempCharacterRate" name="tempCharacterRate" ' +
+            '           value="' + num(form.tempCharacterRate, DEFAULTS.tempCharacterRate) + '" min="0.1" max="10.0" step="0.1">' +
+            '  </div></div>' +
+            '</div>' +
+            '<div class="form-text">0.5表示平均每2卷引入1个长期角色；3.0表示每卷约3个临时角色。大纲生成时自动按卷引入补充角色。</div>' +
+            '</div>';
+    }
+
+    function wordCountSection() {
+        function cell(id, label, value, min, max) {
+            return '<div class="col-md-4"><div class="input-group input-group-sm">' +
+                '<span class="input-group-text">' + SC.escape(label) + '</span>' +
+                '<input type="number" class="form-control" id="' + id + '" name="' + id + '" value="' + value +
+                '" min="' + min + '" max="' + max + '" step="500">' +
+                '<span class="input-group-text">字</span></div></div>';
+        }
+        return '<div class="mb-3">' +
+            '<label class="form-label">每章字数设置</label>' +
+            '<div class="row g-2">' +
+            cell('chapterWordCount', '目标', num(form.chapterWordCount, DEFAULTS.chapterWordCount), 1000, 20000) +
+            cell('chapterWordCountMin', '下限', num(form.chapterWordCountMin, DEFAULTS.chapterWordCountMin), 500, 20000) +
+            cell('chapterWordCountMax', '上限', num(form.chapterWordCountMax, DEFAULTS.chapterWordCountMax), 1000, 30000) +
+            '</div>' +
+            '<div class="form-text">控制AI生成每章的大致字数，默认5000字（4000-6000）</div></div>';
+    }
+
+    function autoModeSection() {
+        return '<div class="mb-3">' +
+            '<div class="form-check form-switch">' +
+            '<input type="checkbox" class="form-check-input" id="autoMode" name="autoMode"' +
+            (form.autoMode === false ? '' : ' checked') + '>' +
+            '<label class="form-check-label" for="autoMode">全自动模式</label></div>' +
+            '<div class="form-text">开启后可在创作页面一键执行全流程，自动完成所有步骤</div></div>';
+    }
+
+    function stepConfigSection(steps) {
+        return '<div class="mb-3">' +
+            '<div class="d-flex align-items-center mb-2">' +
+            '<label class="form-label mb-0">步骤配置</label>' +
+            '<button type="button" class="btn btn-sm btn-link text-decoration-none" id="toggleSteps">' +
+            '<i class="bi bi-chevron-down"></i> 展开/收起</button></div>' +
+            '<div class="form-text mb-2">为每个创作环节配置模型和AI生成时的指导信息（可选）</div>' +
+            '<div id="stepConfigBody" class="border rounded p-3 bg-light"' + (steps.expanded ? '' : ' hidden') + '>' +
+            steps.html + '</div></div>';
+    }
+
+    /* ==================== 交互 ==================== */
+
+    function wireForm() {
+        var el = document.getElementById('projectForm');
+
+        document.getElementById('toggleSteps').addEventListener('click', function () {
+            var body = document.getElementById('stepConfigBody');
+            body.hidden = !body.hidden;
+        });
+
+        el.addEventListener('submit', function (e) {
+            e.preventDefault();
+            submit();
+        });
+
+        var del = document.getElementById('btnDelete');
+        if (del) del.addEventListener('click', doDelete);
+
+        document.getElementById('btnRef').addEventListener('click', openRefModal);
+    }
+
+    function collectPayload() {
+        var val = function (id) { var e = document.getElementById(id); return e ? e.value : null; };
+        var payload = {
+            title: (val('title') || '').trim(),
+            genre: val('genre'),
+            description: val('description'),
+            author: val('author'),
+            totalChapters: parseInt(val('totalChapters'), 10),
+            chaptersPerVolume: parseInt(val('chaptersPerVolume'), 10),
+            characterCount: parseInt(val('characterCount'), 10),
+            chapterWordCount: parseInt(val('chapterWordCount'), 10),
+            chapterWordCountMin: parseInt(val('chapterWordCountMin'), 10),
+            chapterWordCountMax: parseInt(val('chapterWordCountMax'), 10),
+            recurringCharacterRate: parseFloat(val('recurringCharacterRate')),
+            tempCharacterRate: parseFloat(val('tempCharacterRate')),
+            defaultModelConfigId: val('defaultModelConfigId') ? parseInt(val('defaultModelConfigId'), 10) : null,
+            autoMode: document.getElementById('autoMode').checked,
+            stepGuidances: {},
+            stepModelConfigs: {}
+        };
+        if (isEdit) payload.projectStatus = val('projectStatus');
+
+        SC.qsa('[data-step-guidance]').forEach(function (t) {
+            payload.stepGuidances[t.getAttribute('data-step-guidance')] = t.value;
+        });
+        SC.qsa('[data-step-model]').forEach(function (s) {
+            payload.stepModelConfigs[s.getAttribute('data-step-model')] = s.value ? parseInt(s.value, 10) : 0;
+        });
+        return payload;
+    }
+
+    function showFieldError(id, message) {
+        var input = document.getElementById(id);
+        if (!input) return;
+        input.classList.add('is-invalid');
+        var fb = input.parentNode.querySelector('.invalid-feedback');
+        if (fb) fb.textContent = message;
+        input.focus();
+    }
+
+    function clearErrors() {
+        SC.qsa('.is-invalid').forEach(function (e) { e.classList.remove('is-invalid'); });
+    }
+
+    async function submit() {
+        clearErrors();
+        var payload = collectPayload();
+        if (!payload.title) { showFieldError('title', '标题不能为空'); return; }
+        if (!payload.genre) { showFieldError('genre', '请选择题材'); return; }
+
+        var btn = document.getElementById('btnSubmit');
+        btn.disabled = true;
+        var original = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>保存中...';
+        try {
+            var res = isEdit
+                ? await SC.api.put('/api/projects/' + projectId, payload)
+                : await SC.api.post('/api/projects', payload);
+            SC.toast.success(isEdit ? '已保存修改' : '项目创建成功');
+            location.href = res.redirect || (isEdit ? '/projects/' + projectId : '/');
+        } catch (e) {
+            // 后端 400 的 message 通常指向具体字段
+            if (/标题/.test(e.message)) showFieldError('title', e.message);
+            else if (/题材/.test(e.message)) showFieldError('genre', e.message);
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+
+    async function doDelete() {
+        var ok = await SC.confirm({
+            title: '确认删除项目',
+            message: '确定要永久删除项目「' + (form.title || '') + '」吗？此操作不可撤销，项目的所有数据（章节、角色、大纲等）都将被永久删除。',
+            confirmText: '确认删除',
+            danger: true
+        });
+        if (!ok) return;
+        try {
+            await SC.api.del('/api/projects/' + projectId);
+            SC.toast.success('项目已删除');
+            location.href = '/';
+        } catch (e) { /* SC.api 已提示 */ }
+    }
+
+    /* ---------- 参考已有项目 ---------- */
+
+    async function openRefModal() {
+        var modal = document.getElementById('refModal');
+        var body = document.getElementById('refTableBody');
+        body.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">加载中...</td></tr>';
+        modal.hidden = false;
+        try {
+            var list = await SC.api.get('/api/projects');
+            if (!list.length) {
+                body.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">暂无可选项目</td></tr>';
+                return;
+            }
+            body.innerHTML = list.map(function (p) {
+                return '<tr style="cursor:pointer" data-pid="' + p.id + '">' +
+                    '<td><input type="radio" class="form-check-input" name="refProject" value="' + p.id + '"></td>' +
+                    '<td>' + SC.escape(p.title) + '</td>' +
+                    '<td>' + SC.escape(p.genre || '') + '</td></tr>';
+            }).join('');
+            refId = null;
+        } catch (e) {
+            body.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-3">加载失败</td></tr>';
+        }
+    }
+
+    function closeRefModal() { document.getElementById('refModal').hidden = true; }
+
+    SC.on(document.getElementById('refTableBody'), 'click', 'tr[data-pid]', function (e, tr) {
+        refId = tr.getAttribute('data-pid');
+        var radio = tr.querySelector('input[type=radio]');
+        if (radio) radio.checked = true;
+    });
+    document.getElementById('refCancel').addEventListener('click', closeRefModal);
+    document.getElementById('refModal').addEventListener('click', function (e) {
+        if (e.target === this) closeRefModal();
+    });
+    document.getElementById('refApply').addEventListener('click', async function () {
+        if (!refId) { SC.toast.warn('请先选择一个项目'); return; }
+        closeRefModal();
+        try {
+            var data = await SC.api.get('/api/project-form/' + refId);
+            // 只套用配置，不带标题
+            data.title = form.title;
+            form = data;
+            renderForm();
+            SC.toast.success('已套用参考项目的配置');
+        } catch (e) { /* SC.api 已提示 */ }
+    });
+
+    /* ==================== 启动 ==================== */
+
+    async function load() {
+        try {
+            meta = await SC.api.get('/api/project-form/meta');
+            if (isEdit) {
+                form = await SC.api.get('/api/project-form/' + projectId);
+            } else {
+                form = Object.assign({}, DEFAULTS, { autoMode: true, stepGuidances: {}, stepModelConfigs: {} });
+            }
+            renderForm();
+        } catch (e) {
+            container.innerHTML = SC.skeleton.error('表单加载失败：' + e.message);
+        }
+    }
+
+    load();
+})();
+</script>
+</body>
+</html>

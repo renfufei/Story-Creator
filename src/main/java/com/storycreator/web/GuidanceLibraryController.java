@@ -13,13 +13,13 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -40,12 +40,40 @@ public class GuidanceLibraryController {
     }
 
     @GetMapping
-    public String listPage(Model model) {
+    public String listPage() {
+        return "forward:/pages/guidances.html";
+    }
+
+    /** 列表引导数据（静态页同步 XHR 读取） */
+    @GetMapping("/data")
+    @ResponseBody
+    public Map<String, Object> data() {
         List<GuidanceLibraryEntity> items = guidanceLibraryRepository.findAllByOrderByUpdatedAtDesc();
-        model.addAttribute("items", items);
-        model.addAttribute("itemIds", items.stream().map(GuidanceLibraryEntity::getId).toList());
-        model.addAttribute("steps", WorkflowStep.values());
-        return "guidances";
+
+        List<Map<String, Object>> itemList = items.stream().map(e -> {
+            String guidance = e.getGuidance() != null ? e.getGuidance() : "";
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", e.getId());
+            m.put("name", e.getName());
+            m.put("step", e.getStep().name());
+            m.put("stepLabel", e.getStep().getDisplayName());
+            m.put("guidance", guidance);
+            m.put("preview", guidance.length() > 50 ? guidance.substring(0, 50) + "..." : guidance);
+            m.put("updatedAt", e.getUpdatedAt() != null ? e.getUpdatedAt().toString() : null);
+            return m;
+        }).toList();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("items", itemList);
+        result.put("itemIds", items.stream().map(GuidanceLibraryEntity::getId).toList());
+        result.put("steps", stepOptions());
+        return result;
+    }
+
+    private static List<Map<String, Object>> stepOptions() {
+        return Arrays.stream(WorkflowStep.values())
+                .map(s -> Map.<String, Object>of("name", s.name(), "displayName", s.getDisplayName()))
+                .toList();
     }
 
     @PostMapping
@@ -61,12 +89,29 @@ public class GuidanceLibraryController {
     }
 
     @GetMapping("/{id}/edit")
-    public String editPage(@PathVariable Long id, Model model) {
-        GuidanceLibraryEntity entity = guidanceLibraryRepository.findById(id)
+    public String editPage(@PathVariable Long id) {
+        guidanceLibraryRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Guidance not found: " + id));
-        model.addAttribute("item", entity);
-        model.addAttribute("steps", WorkflowStep.values());
-        return "guidance-edit";
+        return "forward:/pages/guidance-edit.html";
+    }
+
+    /** 编辑页引导数据 */
+    @GetMapping("/{id}/edit-data")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> editData(@PathVariable Long id) {
+        return guidanceLibraryRepository.findById(id)
+                .map(e -> {
+                    String guidance = e.getGuidance() != null ? e.getGuidance() : "";
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", e.getId());
+                    m.put("name", e.getName());
+                    m.put("step", e.getStep().name());
+                    m.put("stepLabel", e.getStep().getDisplayName());
+                    m.put("guidance", guidance);
+                    m.put("steps", stepOptions());
+                    return ResponseEntity.ok(m);
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PostMapping("/{id}/update")
@@ -162,18 +207,16 @@ public class GuidanceLibraryController {
     }
 
     @PostMapping("/import")
-    public String importGuidances(@RequestParam("file") MultipartFile file, RedirectAttributes redirectAttributes) {
+    public String importGuidances(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
-            redirectAttributes.addFlashAttribute("error", "请选择要导入的文件");
-            return "redirect:/settings/guidances";
+            return "redirect:/settings/guidances?err=empty";
         }
         try {
             ObjectMapper mapper = new ObjectMapper();
             Map<String, Object> data = mapper.readValue(file.getInputStream(), new TypeReference<>() {});
             Object itemsObj = data.get("items");
             if (!(itemsObj instanceof List<?> itemsList)) {
-                redirectAttributes.addFlashAttribute("error", "JSON格式无效：缺少items字段");
-                return "redirect:/settings/guidances";
+                return "redirect:/settings/guidances?err=invalid";
             }
 
             int count = 0;
@@ -199,10 +242,9 @@ public class GuidanceLibraryController {
                     count++;
                 }
             }
-            redirectAttributes.addFlashAttribute("success", "成功导入 " + count + " 条创作指导");
+            return "redirect:/settings/guidances?imported=" + count;
         } catch (Exception e) {
-            redirectAttributes.addFlashAttribute("error", "导入失败：" + e.getMessage());
+            return "redirect:/settings/guidances?err=io";
         }
-        return "redirect:/settings/guidances";
     }
 }

@@ -7,6 +7,13 @@ function inspectChapter() {
         activeTab: null,
         loading: false,
         cache: {},
+        projectId: data.projectId,
+        projectTitle: data.projectTitle,
+        chapterNum: data.chapterNum,
+        chapterTitle: data.chapterTitle,
+        chapterMetas: data.chapterMetas || [],
+        prevNum: data.prevNum,
+        nextNum: data.nextNum,
         tabs: [
             { field: 'outlineSummary', label: '章节大纲', available: fieldAvail.outlineSummary },
             { field: 'writingBriefing', label: '写作简报', available: fieldAvail.writingBriefing },

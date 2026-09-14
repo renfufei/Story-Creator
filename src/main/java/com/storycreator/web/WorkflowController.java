@@ -17,7 +17,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -91,49 +90,74 @@ public class WorkflowController {
         this.worldFacetElaborationService = worldFacetElaborationService;
     }
 
-    @GetMapping("/workflow")
-    public String workflow(@PathVariable Long projectId,
-                          @RequestParam(required = false) WorkflowStep step,
-                          Model model) {
+    /**
+     * 静态化后，工作流页面由 /pages/workflow.html 提供，本端点以 JSON 返回原 Thymeleaf 注入的
+     * __WORKFLOW_DATA__ 全部字段（外加静态页所需的新字段）。前端通过同步 XHR 拉取后驱动 Alpine。
+     */
+    @GetMapping(value = "/workflow/data", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> workflowData(@PathVariable Long projectId,
+                                                          @RequestParam(required = false) WorkflowStep step) {
+        return ResponseEntity.ok(buildWorkflowBootstrap(projectId, step));
+    }
+
+    private Map<String, Object> buildWorkflowBootstrap(Long projectId, WorkflowStep step) {
         ProjectEntity project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found"));
-        List<WorkflowStateEntity> states = workflowStateRepository.findByProjectId(projectId);
-        List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
-
         // Allow viewing any step, default to project's current step
         WorkflowStep viewStep = (step != null) ? step : project.getCurrentStep();
 
-        model.addAttribute("project", project);
-        model.addAttribute("steps", WorkflowStep.values());
-        model.addAttribute("states", states);
-        model.addAttribute("chapters", chapters);
-        model.addAttribute("viewStep", viewStep);
-        model.addAttribute("totalChapters", project.getTotalChapters());
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("projectId", projectId);
+        data.put("projectTitle", project.getTitle());
+        data.put("genreDisplayName", project.getGenre() != null ? project.getGenre().getDisplayName() : "");
+        data.put("viewStepDisplayName", viewStep.getDisplayName());
+        data.put("currentStep", viewStep.name());
+        data.put("currentStepOrder", viewStep.getOrder());
+        data.put("projectCurrentStep", project.getCurrentStep().name());
+        data.put("projectCurrentStepOrder", project.getCurrentStep().getOrder());
+        data.put("isCurrentStep", viewStep == project.getCurrentStep());
+        data.put("isLastStep", viewStep.next() == null);
+        data.put("hasNextStep", viewStep.next() != null);
+        data.put("totalChapters", project.getTotalChapters());
+        data.put("chapterWordCount", project.getChapterWordCount());
+        data.put("chapterWordCountMin", project.getChapterWordCountMin());
+        data.put("chapterWordCountMax", project.getChapterWordCountMax());
+        data.put("autoMode", project.isAutoMode());
 
         // Get content for viewed step (skip for chapter-level steps, content loaded via AJAX)
         if (viewStep != WorkflowStep.CHAPTER_WRITING && viewStep != WorkflowStep.POLISHING && viewStep != WorkflowStep.PROOFREADING) {
             workflowStateRepository.findByProjectIdAndStep(projectId, viewStep)
-                    .ifPresent(state -> model.addAttribute("currentContent", state.getEffectiveContent()));
+                    .ifPresent(state -> data.put("currentContent", state.getEffectiveContent()));
+        } else {
+            data.put("currentContent", "");
         }
 
         // Pass step confirmed status
         boolean stepConfirmed = workflowStateRepository.findByProjectIdAndStep(projectId, viewStep)
                 .map(s -> s.getStatus() == StepStatus.CONFIRMED)
                 .orElse(false);
-        model.addAttribute("stepConfirmed", stepConfirmed);
+        data.put("stepConfirmed", stepConfirmed);
 
-        // Model configs for step-level selection (text models only)
-        model.addAttribute("modelConfigs", modelConfigRepository.findByActiveTrueAndModelType(ModelType.TEXT));
+        // Model configs for step-level selection (text models only) — 仅暴露 id + displayName
+        List<Map<String, Object>> modelConfigs = modelConfigRepository.findByActiveTrueAndModelType(ModelType.TEXT)
+                .stream().map(mc -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", mc.getId());
+                    m.put("displayName", mc.getDisplayName());
+                    return m;
+                }).toList();
+        data.put("modelConfigs", modelConfigs);
 
         // Viewed step's model config id (from step_model_configs table)
         stepModelConfigRepository.findByProjectIdAndStep(projectId, viewStep)
-                .ifPresent(smc -> model.addAttribute("stepModelConfigId", smc.getModelConfigId()));
+                .ifPresent(smc -> data.put("stepModelConfigId", smc.getModelConfigId()));
 
         // Load step guidance
         String stepGuidance = stepGuidanceRepository.findByProjectIdAndStep(projectId, viewStep)
                 .map(StepGuidanceEntity::getGuidance)
                 .orElse("");
-        model.addAttribute("stepGuidance", stepGuidance);
+        data.put("stepGuidance", stepGuidance);
 
         // Auto-run step configs: ensure rows exist for main steps + sub-steps, pass to model
         if (project.isAutoMode()) {
@@ -180,11 +204,11 @@ public class WorkflowController {
                     }
                 }
             }
-            model.addAttribute("autoRunStepConfigs", stepConfigMap);
-            model.addAttribute("autoRunStrategy", strategy);
+            data.put("autoRunStepConfigs", stepConfigMap);
+            data.put("autoRunStrategy", strategy);
         } else {
-            model.addAttribute("autoRunStepConfigs", new LinkedHashMap<>());
-            model.addAttribute("autoRunStrategy", "DEFAULT");
+            data.put("autoRunStepConfigs", new LinkedHashMap<>());
+            data.put("autoRunStrategy", "DEFAULT");
         }
 
         // Character state dimension configs
@@ -198,9 +222,9 @@ public class WorkflowController {
             dimMap.put("defaultEnabled", dimEntity.getDimKey().isDefaultEnabled());
             dimConfigs.add(dimMap);
         }
-        model.addAttribute("characterStateDimConfigs", dimConfigs);
+        data.put("characterStateDims", dimConfigs);
 
-        return "workflow";
+        return data;
     }
 
     @PostMapping("/step-model")

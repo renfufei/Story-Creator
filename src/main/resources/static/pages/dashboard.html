@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目列表 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="sc-page" data-nav="projects">
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <h2 class="sc-page-title"><i class="bi bi-journal-text"></i> 我的创作项目</h2>
+        <div class="d-flex gap-2">
+            <a href="/import" class="btn btn-outline-secondary">
+                <i class="bi bi-upload"></i> 导入项目
+            </a>
+            <a href="/projects/new" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i> 新建项目
+            </a>
+        </div>
+    </div>
+
+    <!-- 工具栏：关键字 + 状态筛选 -->
+    <div class="sc-toolbar mb-3">
+        <div class="input-group" style="max-width: 20rem;">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="search" id="keyword" class="form-control" placeholder="搜索项目名或描述" autocomplete="off">
+        </div>
+        <select id="statusFilter" class="form-select" style="max-width: 10rem;">
+            <option value="">全部状态</option>
+            <option value="NOT_STARTED">未开始</option>
+            <option value="IN_PROGRESS">创作中</option>
+            <option value="COMPLETED">已完本</option>
+            <option value="ABANDONED">已废弃</option>
+        </select>
+        <span class="text-muted small ms-auto" id="countText"></span>
+    </div>
+
+    <div id="projectContainer"></div>
+
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    var container = document.getElementById('projectContainer');
+    var keywordInput = document.getElementById('keyword');
+    var statusSelect = document.getElementById('statusFilter');
+    var countText = document.getElementById('countText');
+
+    var allProjects = [];
+
+    var STATUS_CLASS = {
+        NOT_STARTED: 'bg-secondary',
+        IN_PROGRESS: 'bg-primary',
+        COMPLETED: 'bg-success',
+        ABANDONED: 'bg-danger'
+    };
+
+    function statusBadgeClass(code) {
+        return STATUS_CLASS[code] || 'bg-primary';
+    }
+
+    function cardHtml(p) {
+        var desc = SC.fmt.abbreviate(p.description, 80);
+        return '' +
+            '<a href="/projects/' + p.id + '" class="text-decoration-none text-reset">' +
+            '  <div class="card h-100 project-card sc-card">' +
+            '    <div class="card-body">' +
+            '      <h5 class="card-title mb-2">' + SC.escape(p.title) + '</h5>' +
+            '      <span class="badge bg-info mb-2">' + SC.escape(p.genre || '未设置') + '</span> ' +
+            '      <span class="badge mb-2 ' + statusBadgeClass(p.statusCode) + '">' + SC.escape(p.status || '') + '</span> ' +
+            '      <span class="badge bg-secondary mb-2">' + SC.escape(p.currentStep || '') + '</span>' +
+            '      <p class="card-text text-muted small mb-2">' + SC.escape(desc) + '</p>' +
+            '      <div class="mt-2">' +
+            '        <small class="text-muted me-3"><i class="bi bi-journal-text"></i> ' + (p.chapterCount || 0) + ' 章</small>' +
+            '        <small class="text-muted"><i class="bi bi-fonts"></i> ' + SC.escape(p.wordCountText || '0') + ' 字</small>' +
+            '      </div>' +
+            '    </div>' +
+            '    <div class="card-footer bg-transparent">' +
+            '      <div class="d-flex justify-content-between align-items-center">' +
+            '        <small class="text-muted">' + SC.escape(SC.fmt.datetime(p.updatedAt)) + '</small>' +
+            '        <span class="btn btn-sm btn-outline-primary"><i class="bi bi-info-circle"></i> 项目详情</span>' +
+            '      </div>' +
+            '    </div>' +
+            '  </div>' +
+            '</a>';
+    }
+
+    function emptyHtml(matched) {
+        if (allProjects.length === 0) {
+            return '<div class="sc-empty">' +
+                '<i class="bi bi-journal-text"></i>' +
+                '<p class="mt-3">还没有创作项目，开始你的第一部小说吧！</p>' +
+                '<a href="/projects/new" class="btn btn-primary btn-lg mt-2"><i class="bi bi-plus-lg"></i> 创建新项目</a>' +
+                '</div>';
+        }
+        if (matched === 0) {
+            return SC.skeleton.empty('没有符合条件的项目');
+        }
+        return '';
+    }
+
+    function render() {
+        var kw = (keywordInput.value || '').trim().toLowerCase();
+        var status = statusSelect.value;
+
+        var list = allProjects.filter(function (p) {
+            if (status && p.statusCode !== status) return false;
+            if (!kw) return true;
+            var hay = ((p.title || '') + ' ' + (p.description || '') + ' ' + (p.author || '')).toLowerCase();
+            return hay.indexOf(kw) >= 0;
+        });
+
+        var html = list.map(cardHtml).join('');
+        container.innerHTML = html || emptyHtml(list.length);
+        countText.textContent = '共 ' + list.length + ' 个项目';
+    }
+
+    async function load() {
+        container.innerHTML = SC.skeleton.loading(3);
+        countText.textContent = '';
+        try {
+            allProjects = await SC.api.get('/api/projects');
+            if (!Array.isArray(allProjects)) allProjects = [];
+            render();
+        } catch (e) {
+            container.innerHTML = SC.skeleton.error('项目列表加载失败：' + e.message);
+        }
+    }
+
+    keywordInput.addEventListener('input', render);
+    statusSelect.addEventListener('change', render);
+
+    load();
+})();
+</script>
+</body>
+</html>

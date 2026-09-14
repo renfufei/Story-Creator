@@ -1,0 +1,141 @@
+/**
+ * 静态化页面（static/pages/**）通用样式
+ * 与 Bootstrap 5 / style.css 配合使用，不覆盖既有 Thymeleaf 页面样式。
+ */
+
+/* ---------- 页面骨架 ---------- */
+body.sc-page {
+    background-color: #f5f6f8;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+body.sc-page main.sc-main {
+    flex: 1 0 auto;
+    width: 100%;
+}
+
+.sc-page-title {
+    font-size: 1.35rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+/* ---------- 卡片 ---------- */
+.sc-card {
+    transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.sc-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, .1);
+}
+
+.sc-card .card-title {
+    font-weight: 600;
+}
+
+/* ---------- 加载骨架 ---------- */
+.sc-loading {
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+}
+
+.sc-loading-row {
+    height: 76px;
+    border-radius: .5rem;
+    background: linear-gradient(90deg, #ececf1 25%, #f6f6f9 37%, #ececf1 63%);
+    background-size: 400% 100%;
+    animation: sc-shimmer 1.2s ease infinite;
+}
+
+@keyframes sc-shimmer {
+    0% { background-position: 100% 50%; }
+    100% { background-position: 0 50%; }
+}
+
+/* ---------- Toast ---------- */
+.sc-toast-host {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    max-width: 22rem;
+}
+
+.sc-toast {
+    margin-bottom: 0;
+    opacity: 1;
+    transition: opacity .28s ease, transform .28s ease;
+    word-break: break-word;
+}
+
+.sc-toast-out {
+    opacity: 0;
+    transform: translateX(12px);
+}
+
+/* ---------- 确认框 ---------- */
+.sc-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 18, 25, .45);
+    z-index: 2100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.sc-modal {
+    width: 100%;
+    max-width: 26rem;
+    border: none;
+    border-radius: .75rem;
+    animation: sc-pop .16s ease;
+}
+
+@keyframes sc-pop {
+    from { transform: scale(.96); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+/* ---------- 工具栏 ---------- */
+.sc-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+}
+
+.sc-toolbar .form-control,
+.sc-toolbar .form-select {
+    min-width: 8rem;
+}
+
+/* ---------- 徽标 ---------- */
+.sc-badge {
+    font-weight: 500;
+}
+
+/* ---------- 数据区 ---------- */
+.sc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.sc-empty {
+    padding: 4rem 1rem;
+    text-align: center;
+    color: #6c757d;
+}
+
+.sc-empty i {
+    font-size: 3rem;
+}

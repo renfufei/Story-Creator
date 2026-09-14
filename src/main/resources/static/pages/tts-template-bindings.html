@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模板绑定 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="sc-page">
+
+<script>
+/* 引导数据：TTS 模型 configId 取自路径 /settings/tts-templates/bindings/{configId} */
+window.__TTS_BINDINGS_DATA__ = (function () {
+    var d = { configId: null, currentConfig: null, bindings: [], allOptions: [] };
+    try {
+        var m = location.pathname.match(/\/settings\/tts-templates\/bindings\/(\d+)/);
+        var id = m ? m[1] : '';
+        d.configId = id ? parseInt(id) : null;
+        if (id) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/settings/tts-templates/bindings/' + id + '/data', false);
+            xhr.send();
+            if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
+        }
+    } catch (e) { console.error('__TTS_BINDINGS_DATA__ load failed', e); }
+    return d;
+})();
+</script>
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0">模板绑定管理</h2>
+            <small class="text-muted" id="configLabel"></small>
+        </div>
+        <a href="/settings" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> 返回设置
+        </a>
+    </div>
+
+    <div class="row">
+        <!-- Current Bindings -->
+        <div class="col-md-7">
+            <div class="card">
+                <div class="card-header"><strong>已绑定模板</strong>
+                    <small class="text-muted ms-2">按排序顺序依次应用</small>
+                </div>
+                <div class="card-body p-0" id="bindingsArea"></div>
+            </div>
+        </div>
+
+        <!-- Add Binding -->
+        <div class="col-md-5">
+            <div class="card">
+                <div class="card-header"><strong>添加绑定</strong></div>
+                <div class="card-body">
+                    <form id="addBindingForm" method="post">
+                        <div class="mb-3">
+                            <label class="form-label small">选择模板</label>
+                            <select class="form-select form-select-sm" name="templateRef" id="templateRefSelect" required>
+                                <option value="">-- 请选择 --</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small">排序（越小越先执行）</label>
+                            <input type="number" class="form-control form-control-sm" name="sortOrder" value="0">
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-primary">添加绑定</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+(function () {
+    'use strict';
+    var data = window.__TTS_BINDINGS_DATA__ || { bindings: [], allOptions: [] };
+    var configId = data.configId;
+    var bindings = data.bindings || [];
+    var options = data.allOptions || [];
+    var main = document.querySelector('main');
+
+    /* 当前模型说明 */
+    if (data.currentConfig) {
+        document.getElementById('configLabel').textContent =
+            'TTS模型: ' + data.currentConfig.displayName + ' (' + data.currentConfig.modelId + ')';
+    }
+
+    /* 已绑定列表 */
+    var area = document.getElementById('bindingsArea');
+    if (!bindings.length) {
+        area.innerHTML = '<div class="p-3"><p class="text-muted small mb-0">' +
+            '未绑定任何模板。此模型将使用所有内置模板作为默认替换规则。</p></div>';
+    } else {
+        var rows = bindings.map(function (b) {
+            var badge = b.type === 'builtin' ? '<span class="badge bg-success me-1">内置</span>'
+                : (b.type === 'user' ? '<span class="badge bg-primary me-1">自定义</span>' : '');
+            return '<tr>' +
+                '<td>' + b.sortOrder + '</td>' +
+                '<td>' + badge + SC.escape(b.name) + '</td>' +
+                '<td><form action="/settings/tts-templates/bindings/' + configId + '/delete" method="post" class="d-inline">' +
+                    '<input type="hidden" name="templateRef" value="' + SC.escape(b.templateRef) + '">' +
+                    '<button type="submit" class="btn btn-sm btn-outline-danger" title="移除绑定">' +
+                    '<i class="bi bi-x-lg"></i></button></form></td>' +
+                '</tr>';
+        }).join('');
+        area.innerHTML =
+            '<table class="table table-sm table-hover mb-0">' +
+            '<thead><tr><th style="width:60px;">排序</th><th>模板引用</th><th style="width:80px;">操作</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody></table>';
+    }
+
+    /* 可选模板下拉：内置 / 自定义分组 */
+    var sel = document.getElementById('templateRefSelect');
+    function addGroup(label, list) {
+        if (!list.length) return;
+        var group = document.createElement('optgroup');
+        group.label = label;
+        list.forEach(function (o) {
+            var opt = document.createElement('option');
+            opt.value = o.ref;
+            opt.textContent = o.name + (o.enabled === false ? ' (已禁用)' : '');
+            group.appendChild(opt);
+        });
+        sel.appendChild(group);
+    }
+    addGroup('内置模板', options.filter(function (o) { return o.type === '内置'; }));
+    addGroup('自定义模板', options.filter(function (o) { return o.type === '自定义'; }));
+
+    /* 表单 action */
+    if (configId) {
+        document.getElementById('addBindingForm').action = '/settings/tts-templates/bindings/' + configId + '/add';
+    }
+
+    main.addEventListener('submit', function (e) {
+        var form = e.target.closest('form[data-confirm]');
+        if (form && !confirm(form.dataset.confirm)) e.preventDefault();
+    });
+})();
+</script>
+</body>
+</html>

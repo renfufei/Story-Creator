@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>创作透视</title>
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <style>
+        body { margin: 0; }
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body x-data="inspectOverview()" x-cloak>
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a :href="'/projects/' + projectId" x-text="projectTitle">项目</a></li>
+            <li class="breadcrumb-item active">创作透视</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0"><i class="bi bi-eye"></i> 创作透视</h4>
+        <div class="d-flex gap-2">
+            <a :href="'/projects/' + projectId + '/inspect/characters'" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-people"></i> 角色透视
+            </a>
+            <a :href="'/projects/' + projectId + '/workflow'" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> 返回创作
+            </a>
+        </div>
+    </div>
+
+    <!-- Writing Rules & Style Fingerprints -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#rulesCollapse" style="cursor:pointer;">
+                    <span><i class="bi bi-journal-check text-primary"></i> 写作规则</span>
+                    <i class="bi bi-chevron-down"></i>
+                </div>
+                <div class="collapse show" id="rulesCollapse">
+                    <div class="card-body">
+                        <template x-if="writingRules">
+                            <pre style="white-space:pre-wrap; max-height:300px; overflow-y:auto; font-size:0.85rem; margin:0;" x-text="writingRules"></pre>
+                        </template>
+                        <template x-if="!writingRules">
+                            <p class="text-muted mb-0">暂无写作规则数据（需使用增强策略生成）</p>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#styleCollapse" style="cursor:pointer;">
+                    <span><i class="bi bi-palette text-info"></i> 风格指纹</span>
+                    <i class="bi bi-chevron-down"></i>
+                </div>
+                <div class="collapse show" id="styleCollapse">
+                    <div class="card-body">
+                        <template x-if="styleFingerprint">
+                            <pre style="white-space:pre-wrap; max-height:300px; overflow-y:auto; font-size:0.85rem; margin:0;" x-text="styleFingerprint"></pre>
+                        </template>
+                        <template x-if="!styleFingerprint">
+                            <p class="text-muted mb-0">暂无风格指纹数据（需使用增强策略生成）</p>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Outline Overview -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="bi bi-list-nested"></i> 大纲透视
+        </div>
+        <div class="card-body">
+            <!-- Story Outline -->
+            <div class="mb-3">
+                <div class="d-flex align-items-center mb-2" data-bs-toggle="collapse" data-bs-target="#storyOutlineCollapse" style="cursor:pointer;">
+                    <strong class="me-2">总体大纲</strong>
+                    <i class="bi bi-chevron-down text-muted"></i>
+                </div>
+                <div class="collapse" id="storyOutlineCollapse">
+                    <template x-if="storyOutline">
+                        <pre style="white-space:pre-wrap; max-height:400px; overflow-y:auto; font-size:0.85rem; margin:0; background:#f8f9fa; padding:0.75rem; border-radius:4px;" x-text="storyOutline"></pre>
+                    </template>
+                    <template x-if="!storyOutline">
+                        <p class="text-muted mb-0">暂无总体大纲数据</p>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Volume Arcs -->
+            <div class="mb-3">
+                <div class="d-flex align-items-center mb-2" data-bs-toggle="collapse" data-bs-target="#volumeArcsCollapse" style="cursor:pointer;">
+                    <strong class="me-2">卷弧线</strong>
+                    <i class="bi bi-chevron-down text-muted"></i>
+                </div>
+                <div class="collapse" id="volumeArcsCollapse">
+                    <p x-show="!volumes || volumes.length === 0" class="text-muted mb-0">暂无卷弧线数据</p>
+                    <template x-for="vol in volumes" :key="vol.volumeNumber">
+                        <div class="border rounded p-2 mb-2" style="background:#f8f9fa;">
+                            <div class="fw-semibold mb-1" style="font-size:0.9rem;">
+                                <span x-text="'第' + vol.volumeNumber + '卷'"></span>
+                                <span x-show="vol.title" x-text="' — ' + vol.title" class="text-muted"></span>
+                                <small class="text-muted" x-text="'（第' + vol.chapterStart + '-' + vol.chapterEnd + '章）'"></small>
+                            </div>
+                            <template x-if="vol.arcSummary">
+                                <pre style="white-space:pre-wrap; font-size:0.85rem; margin:0;" x-text="vol.arcSummary"></pre>
+                            </template>
+                            <template x-if="!vol.arcSummary">
+                                <p class="text-muted mb-0" style="font-size:0.85rem;">暂无弧线摘要</p>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Chapter Outlines Table -->
+            <div>
+                <div class="d-flex align-items-center mb-2" data-bs-toggle="collapse" data-bs-target="#chapterOutlinesCollapse" style="cursor:pointer;">
+                    <strong class="me-2">分章大纲</strong>
+                    <i class="bi bi-chevron-down text-muted"></i>
+                </div>
+                <div class="collapse" id="chapterOutlinesCollapse">
+                    <p x-show="!outlines || outlines.length === 0" class="text-muted mb-0">暂无分章大纲数据</p>
+                    <template x-if="outlines && outlines.length > 0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width:50px">#</th>
+                                        <th style="width:120px">标题</th>
+                                        <th style="width:150px">出场角色</th>
+                                        <th>大纲摘要</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="ol in outlines" :key="ol.chapterNumber">
+                                        <tr>
+                                            <td x-text="ol.chapterNumber"></td>
+                                            <td x-text="ol.title ? ol.title : '-'"></td>
+                                            <td><small x-text="ol.characterNames ? ol.characterNames : '-'"></small></td>
+                                            <td style="font-size:0.85rem;">
+                                                <span x-show="ol.summary != null" x-text="ol.summary" style="white-space: pre-line;"></span>
+                                                <span x-show="ol.summary == null" class="text-muted">-</span>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chapter Completeness Table -->
+    <div class="card">
+        <div class="card-header">
+            <i class="bi bi-table"></i> 章节数据完整度
+        </div>
+        <div class="card-body p-0">
+            <p x-show="!chapterList || chapterList.length === 0" class="text-muted text-center py-4 mb-0">暂无章节数据</p>
+            <template x-if="chapterList && chapterList.length > 0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:50px">#</th>
+                                <th>标题</th>
+                                <th class="text-center" title="写作简报" style="width:36px"><small>简报</small></th>
+                                <th class="text-center" title="事件计划" style="width:36px"><small>事件</small></th>
+                                <th class="text-center" title="正文内容" style="width:36px"><small>正文</small></th>
+                                <th class="text-center" title="原稿" style="width:36px"><small>原稿</small></th>
+                                <th class="text-center" title="内容摘要" style="width:36px"><small>摘要</small></th>
+                                <th class="text-center" title="角色状态" style="width:36px"><small>角色</small></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="ch in chapterList" :key="ch.number">
+                                <tr style="cursor:pointer;" @click="window.location='/projects/' + projectId + '/inspect/chapters/' + ch.number">
+                                    <td x-text="ch.number"></td>
+                                    <td x-text="ch.title ? ch.title : '(未命名)'"></td>
+                                    <td class="text-center"><span :class="ch.hasWritingBriefing ? 'text-success' : 'text-muted'" x-text="ch.hasWritingBriefing ? '●' : '○'"></span></td>
+                                    <td class="text-center"><span :class="ch.hasEventPlan ? 'text-success' : 'text-muted'" x-text="ch.hasEventPlan ? '●' : '○'"></span></td>
+                                    <td class="text-center"><span :class="ch.hasContent ? 'text-success' : 'text-muted'" x-text="ch.hasContent ? '●' : '○'"></span></td>
+                                    <td class="text-center"><span :class="ch.hasContentDraft ? 'text-success' : 'text-muted'" x-text="ch.hasContentDraft ? '●' : '○'"></span></td>
+                                    <td class="text-center"><span :class="ch.hasContentSummary ? 'text-success' : 'text-muted'" x-text="ch.hasContentSummary ? '●' : '○'"></span></td>
+                                    <td class="text-center"><span :class="ch.hasCharacterStates ? 'text-success' : 'text-muted'" x-text="ch.hasCharacterStates ? '●' : '○'"></span></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <script>
+        window.__INSPECT_OVERVIEW_DATA__ = (function () {
+            var d = {};
+            try {
+                var pid = location.pathname.split('/')[2];
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', '/projects/' + pid + '/inspect/data', false);
+                xhr.send();
+                d = JSON.parse(xhr.responseText || '{}');
+            } catch (e) { console.error('inspect overview data load failed', e); }
+            return d;
+        })();
+    </script>
+    <script>
+        function inspectOverview() {
+            var d = window.__INSPECT_OVERVIEW_DATA__ || {};
+            return {
+                projectId: d.projectId,
+                projectTitle: d.projectTitle,
+                writingRules: d.writingRules,
+                styleFingerprint: d.styleFingerprint,
+                storyOutline: d.storyOutline,
+                volumes: d.volumes || [],
+                outlines: d.outlines || [],
+                chapterList: d.chapterList || []
+            };
+        }
+    </script>
+    <script src="/vendor/alpinejs/cdn.min.js" defer></script>
+</body>
+</html>

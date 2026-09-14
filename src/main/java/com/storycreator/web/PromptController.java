@@ -15,7 +15,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -58,8 +57,54 @@ public class PromptController {
         }
     }
 
+    /**
+     * 页面路由：转发到静态页（前端已从 Thymeleaf 迁到「静态 HTML + JS + Ajax」）。
+     * 引导数据由 {@link #listData()} 以 JSON 提供。
+     */
     @GetMapping
-    public String list(Model model) {
+    public String list() {
+        return "forward:/pages/prompts.html";
+    }
+
+    /** 提示词模板列表页的引导数据（templates + 步骤/题材/子步骤枚举选项）。 */
+    @GetMapping("/data")
+    @ResponseBody
+    public Map<String, Object> listData() {
+        List<Map<String, Object>> templates = new ArrayList<>();
+        for (TemplateListItem it : buildItems()) {
+            templates.add(templateToMap(it));
+        }
+
+        List<Map<String, Object>> steps = new ArrayList<>();
+        for (WorkflowStep s : WorkflowStep.values()) {
+            steps.add(Map.of("value", s.name(), "displayName", s.getDisplayName()));
+        }
+
+        List<Map<String, Object>> genres = new ArrayList<>();
+        for (Genre g : Genre.values()) {
+            genres.add(Map.of("value", g.name(), "displayName", g.getDisplayName()));
+        }
+
+        List<Map<String, Object>> subSteps = new ArrayList<>();
+        for (PromptSubStep ss : PromptSubStep.values()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("value", ss.name());
+            m.put("displayName", ss.getDisplayName());
+            WorkflowStep parent = ss.getParentStep();
+            m.put("parentStep", parent != null ? parent.name() : null);
+            subSteps.add(m);
+        }
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("templates", templates);
+        data.put("steps", steps);
+        data.put("genres", genres);
+        data.put("subSteps", subSteps);
+        return data;
+    }
+
+    /** 汇总内置与自定义模板为统一列表（内置在前、同 sortOrder 时内置优先）。 */
+    private List<TemplateListItem> buildItems() {
         List<TemplateListItem> items = new ArrayList<>();
 
         // Add builtin templates
@@ -89,12 +134,34 @@ public class PromptController {
         // Sort: by sortOrder, then builtin before custom (so custom overrides appear right after their builtin)
         items.sort(Comparator.comparingInt(TemplateListItem::sortOrder)
                 .thenComparing(t -> t.builtin() ? 0 : 1));
+        return items;
+    }
 
-        model.addAttribute("templates", items);
-        model.addAttribute("steps", WorkflowStep.values());
-        model.addAttribute("genres", Genre.values());
-        model.addAttribute("subSteps", PromptSubStep.values());
-        return "prompts";
+    /** 单个模板 -> 前端渲染所需字段（含枚举 displayName，避免前端重复维护映射）。 */
+    private Map<String, Object> templateToMap(TemplateListItem it) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", it.id());
+        m.put("key", it.key());
+        m.put("step", it.step() != null ? it.step().name() : null);
+        m.put("stepDisplayName", it.step() != null ? it.step().getDisplayName() : "");
+        m.put("subStep", it.subStep() != null ? it.subStep().name() : null);
+        m.put("subStepDisplayName", it.subStep() != null ? it.subStep().getDisplayName() : null);
+        m.put("genre", it.genre() != null ? it.genre().name() : null);
+        m.put("genreDisplayName", it.genre() != null ? it.genre().getDisplayName() : "通用");
+        m.put("name", it.name());
+        m.put("builtin", it.builtin());
+        m.put("isDefault", it.isDefault());
+        m.put("updatedAt", it.updatedAt());
+        m.put("workflowTagNamesCsv", it.workflowTagNamesCsv());
+
+        List<Map<String, Object>> tags = new ArrayList<>();
+        if (it.workflowTags() != null) {
+            for (TemplateWorkflowTag tag : it.workflowTags()) {
+                tags.add(Map.of("name", tag.name(), "displayName", tag.getDisplayName()));
+            }
+        }
+        m.put("workflowTags", tags);
+        return m;
     }
 
     private boolean hasCustomDefault(WorkflowStep step, PromptSubStep subStep, Genre genre) {
@@ -113,36 +180,71 @@ public class PromptController {
         }
     }
 
+    /**
+     * 内置模板查看页：转发到静态页（只读展示）。
+     * 引导数据由 {@link #builtinEditData(String)} 以 JSON 提供。
+     */
     @GetMapping("/builtin/{key}")
-    public String viewBuiltin(@PathVariable String key, Model model) {
+    public String viewBuiltin(@PathVariable String key) {
+        return "forward:/pages/prompt-edit.html";
+    }
+
+    /**
+     * 自定义模板编辑页：转发到静态页。
+     * 引导数据由 {@link #customEditData(Long)} 以 JSON 提供。
+     */
+    @GetMapping("/{id}/edit")
+    public String edit(@PathVariable Long id) {
+        return "forward:/pages/prompt-edit.html";
+    }
+
+    /** 内置模板查看页的引导数据（只读）。 */
+    @GetMapping("/builtin/{key}/edit-data")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> builtinEditData(@PathVariable String key) {
         BuiltinTemplate bt = builtinLoader.getAll().stream()
                 .filter(t -> t.key().equals(key))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Builtin template not found: " + key));
-        model.addAttribute("template", bt);
-        model.addAttribute("isBuiltin", true);
-        model.addAttribute("isNew", false);
-        // Provide variable hints based on sub-step
-        if (bt.subStep() != null) {
-            model.addAttribute("variableHints", PromptTemplateRegistry.SUB_STEP_VARIABLES.get(bt.subStep()));
+                .orElse(null);
+        if (bt == null) {
+            return ResponseEntity.notFound().build();
         }
-        return "prompt-edit";
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("isBuiltin", true);
+        m.put("id", null);
+        m.put("key", bt.key());
+        m.put("name", bt.name());
+        m.put("stepDisplayName", bt.step() != null ? bt.step().getDisplayName() : "");
+        m.put("subStepDisplayName", bt.subStep() != null ? bt.subStep().getDisplayName() : null);
+        m.put("genreDisplayName", bt.genre() != null ? bt.genre().getDisplayName() : "通用");
+        m.put("systemPrompt", bt.systemPrompt() != null ? bt.systemPrompt() : "");
+        m.put("template", bt.template() != null ? bt.template() : "");
+        m.put("variableHints", bt.subStep() != null
+                ? PromptTemplateRegistry.SUB_STEP_VARIABLES.get(bt.subStep()) : null);
+        return ResponseEntity.ok(m);
     }
 
-    @GetMapping("/{id}/edit")
-    public String edit(@PathVariable Long id, Model model) {
-        PromptTemplateEntity template = repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Template not found"));
-        model.addAttribute("template", template);
-        model.addAttribute("isBuiltin", false);
-        model.addAttribute("isNew", false);
-        model.addAttribute("steps", WorkflowStep.values());
-        model.addAttribute("genres", Genre.values());
-        // Provide variable hints based on sub-step
-        if (template.getSubStep() != null) {
-            model.addAttribute("variableHints", PromptTemplateRegistry.SUB_STEP_VARIABLES.get(template.getSubStep()));
+    /** 自定义模板编辑页的引导数据。 */
+    @GetMapping("/{id}/edit-data")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> customEditData(@PathVariable Long id) {
+        PromptTemplateEntity entity = repository.findById(id).orElse(null);
+        if (entity == null) {
+            return ResponseEntity.notFound().build();
         }
-        return "prompt-edit";
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("isBuiltin", false);
+        m.put("id", entity.getId());
+        m.put("key", null);
+        m.put("name", entity.getName());
+        m.put("stepDisplayName", entity.getStep() != null ? entity.getStep().getDisplayName() : "");
+        m.put("subStepDisplayName", entity.getSubStep() != null ? entity.getSubStep().getDisplayName() : null);
+        m.put("genreDisplayName", entity.getGenre() != null ? entity.getGenre().getDisplayName() : "通用");
+        m.put("systemPrompt", entity.getSystemPrompt() != null ? entity.getSystemPrompt() : "");
+        m.put("template", entity.getTemplate() != null ? entity.getTemplate() : "");
+        m.put("variableHints", entity.getSubStep() != null
+                ? PromptTemplateRegistry.SUB_STEP_VARIABLES.get(entity.getSubStep()) : null);
+        return ResponseEntity.ok(m);
     }
 
     @GetMapping("/builtin/{key}/json")

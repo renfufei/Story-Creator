@@ -12,7 +12,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.Disposable;
@@ -48,23 +47,32 @@ public class ExpansionController {
         this.bgService = bgService;
     }
 
-    @GetMapping
-    public String page(@PathVariable Long projectId, Model model) {
-        ProjectEntity project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
-        List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
-        List<Map<String, Object>> chaptersJs = chapters.stream().map(ch -> {
-            Map<String, Object> m = new java.util.HashMap<>();
-            m.put("chapterNumber", ch.getChapterNumber());
-            m.put("title", ch.getTitle());
-            m.put("wordCount", ch.getWordCount());
-            m.put("expansionStatus", ch.getExpansionStatus());
-            m.put("content", ch.getContent() != null && !ch.getContent().isEmpty() ? "Y" : null);
-            return m;
-        }).toList();
-        model.addAttribute("project", project);
-        model.addAttribute("chapters", chaptersJs);
-        return "expansion";
+    /** 情节拓展页引导数据（供静态页同步 XHR 拉取）。 */
+    @GetMapping("/data")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> data(@PathVariable Long projectId) {
+        return projectRepository.findById(projectId)
+                .map(project -> {
+                    List<ChapterEntity> chapters = chapterRepository
+                            .findByProjectIdOrderByChapterNumber(projectId);
+                    List<Map<String, Object>> chaptersJs = chapters.stream().map(ch -> {
+                        Map<String, Object> m = new java.util.LinkedHashMap<>();
+                        m.put("chapterNumber", ch.getChapterNumber());
+                        m.put("title", ch.getTitle());
+                        m.put("wordCount", ch.getWordCount());
+                        m.put("expansionStatus", ch.getExpansionStatus());
+                        m.put("content", ch.getContent() != null && !ch.getContent().isEmpty() ? "Y" : null);
+                        return m;
+                    }).toList();
+                    Map<String, Object> data = new java.util.LinkedHashMap<>();
+                    data.put("projectId", projectId);
+                    data.put("projectTitle", project.getTitle() != null ? project.getTitle() : "");
+                    data.put("expansionGuidance", project.getExpansionGuidance());
+                    data.put("chapters", chaptersJs);
+                    data.put("chaptersPerVolume", project.getChaptersPerVolume());
+                    return ResponseEntity.ok(data);
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PostMapping("/mark")

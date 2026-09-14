@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>角色透视</title>
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <style>
+        body { margin: 0; }
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body x-data="inspectCharacters()" x-cloak>
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a :href="'/projects/' + projectId" x-text="projectTitle">项目</a></li>
+            <li class="breadcrumb-item"><a :href="'/projects/' + projectId + '/inspect'">创作透视</a></li>
+            <li class="breadcrumb-item active">角色透视</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0"><i class="bi bi-people"></i> 角色透视</h4>
+        <a :href="'/projects/' + projectId + '/inspect'" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> 返回总览
+        </a>
+    </div>
+
+    <div x-show="!characters || characters.length === 0" class="alert alert-secondary">暂无角色数据</div>
+
+    <div class="row" x-show="characters && characters.length > 0">
+        <!-- Character Index (sidebar-like) -->
+        <div class="col-md-3">
+            <div class="card position-sticky" style="top:1rem;">
+                <div class="card-header"><small class="fw-bold">角色列表</small></div>
+                <div class="list-group list-group-flush">
+                    <template x-for="ch in characters" :key="ch.id">
+                        <a class="list-group-item list-group-item-action" :href="'#char-' + ch.id" x-text="ch.name">角色名</a>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Character Cards -->
+        <div class="col-md-9">
+            <template x-for="ch in characters" :key="ch.id">
+                <div class="card mb-4" :id="'char-' + ch.id">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span class="fw-bold" x-text="ch.name">角色名</span>
+                        <div>
+                            <span class="badge bg-secondary" x-show="ch.role" x-text="ch.role">角色</span>
+                            <span class="badge bg-info" x-show="ch.gender" x-text="ch.gender">性别</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- Basic Info -->
+                        <div class="row mb-3">
+                            <div class="col-sm-6" x-show="ch.personality">
+                                <small class="text-muted d-block">性格</small>
+                                <span x-text="ch.personality">性格</span>
+                            </div>
+                            <div class="col-sm-6" x-show="ch.appearance">
+                                <small class="text-muted d-block">外貌</small>
+                                <span x-text="ch.appearance">外貌</span>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-sm-6" x-show="ch.motivation">
+                                <small class="text-muted d-block">动机</small>
+                                <span x-text="ch.motivation">动机</span>
+                            </div>
+                            <div class="col-sm-6" x-show="ch.relationships">
+                                <small class="text-muted d-block">关系</small>
+                                <span x-text="ch.relationships">关系</span>
+                            </div>
+                        </div>
+                        <div class="mb-3" x-show="ch.abilities">
+                            <small class="text-muted d-block">能力</small>
+                            <span x-text="ch.abilities">能力</span>
+                        </div>
+                        <div x-show="ch.background">
+                            <small class="text-muted d-block">背景</small>
+                            <pre style="white-space:pre-wrap; font-size:0.85rem; margin:0;" x-text="ch.background">背景</pre>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <script>
+        window.__INSPECT_CHARACTERS_DATA__ = (function () {
+            var d = {};
+            try {
+                var pid = location.pathname.split('/')[2];
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', '/projects/' + pid + '/inspect/characters/data', false);
+                xhr.send();
+                d = JSON.parse(xhr.responseText || '{}');
+            } catch (e) { console.error('inspect characters data load failed', e); }
+            return d;
+        })();
+    </script>
+    <script>
+        function inspectCharacters() {
+            var d = window.__INSPECT_CHARACTERS_DATA__ || {};
+            return {
+                projectId: d.projectId,
+                projectTitle: d.projectTitle,
+                characters: d.characters || []
+            };
+        }
+    </script>
+    <script src="/vendor/alpinejs/cdn.min.js" defer></script>
+</body>
+</html>

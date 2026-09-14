@@ -2,13 +2,12 @@ package com.storycreator.web;
 
 import com.storycreator.persistence.entity.*;
 import com.storycreator.persistence.repository.*;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
 
-@Controller
+@RestController
 @RequestMapping("/projects/{projectId}/inspect")
 public class InspectController {
 
@@ -33,109 +32,142 @@ public class InspectController {
         this.storyOutlineRepository = storyOutlineRepository;
     }
 
-    @GetMapping
-    public String inspectOverview(@PathVariable Long projectId, Model model) {
-        var project = projectRepository.findById(projectId).orElseThrow();
-        var chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
-        var outlines = chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId);
-        var volumes = volumeOutlineRepository.findByProjectIdOrderByVolumeNumber(projectId);
-        var storyOutline = storyOutlineRepository.findByProjectId(projectId).map(StoryOutlineEntity::getContent).orElse(null);
+    @GetMapping("/data")
+    public ResponseEntity<Map<String, Object>> inspectOverview(@PathVariable Long projectId) {
+        return projectRepository.findById(projectId).map(project -> {
+            var chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
+            var outlines = chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId);
+            var volumes = volumeOutlineRepository.findByProjectIdOrderByVolumeNumber(projectId);
+            var storyOutline = storyOutlineRepository.findByProjectId(projectId).map(StoryOutlineEntity::getContent).orElse(null);
 
-        // Build chapter completeness data
-        Map<Integer, String> outlineEventPlans = new HashMap<>();
-        for (var o : outlines) {
-            if (o.getEventPlan() != null && !o.getEventPlan().isBlank()) {
-                outlineEventPlans.put(o.getChapterNumber(), "Y");
-            }
-        }
-
-        List<Map<String, Object>> chapterList = new ArrayList<>();
-        for (var ch : chapters) {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("number", ch.getChapterNumber());
-            item.put("title", ch.getTitle());
-            item.put("hasContent", hasText(ch.getContent()));
-            item.put("hasContentDraft", hasText(ch.getContentDraft()));
-            item.put("hasWritingBriefing", hasText(ch.getWritingBriefing()));
-            item.put("hasContentSummary", hasText(ch.getContentSummary()));
-            item.put("hasCharacterStates", hasText(ch.getCharacterStates()));
-            item.put("hasEventPlan", outlineEventPlans.containsKey(ch.getChapterNumber()));
-            chapterList.add(item);
-        }
-
-        model.addAttribute("project", project);
-        model.addAttribute("storyOutline", storyOutline);
-        model.addAttribute("volumes", volumes);
-        model.addAttribute("outlines", outlines);
-        model.addAttribute("chapterList", chapterList);
-        return "inspect";
-    }
-
-    @GetMapping("/chapters/{num}")
-    public String inspectChapter(@PathVariable Long projectId, @PathVariable int num, Model model) {
-        var project = projectRepository.findById(projectId).orElseThrow();
-        var chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
-        var outlines = chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId);
-        var volumes = volumeOutlineRepository.findByProjectIdOrderByVolumeNumber(projectId);
-
-        var chapter = chapterRepository.findByProjectIdAndChapterNumber(projectId, num).orElse(null);
-        var outline = chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, num).orElse(null);
-
-        // Build field availability map for current chapter
-        Map<String, Boolean> fieldAvail = new LinkedHashMap<>();
-        fieldAvail.put("outlineSummary", outline != null && hasText(outline.getSummary()));
-        fieldAvail.put("writingBriefing", chapter != null && hasText(chapter.getWritingBriefing()));
-        fieldAvail.put("eventPlan", outline != null && hasText(outline.getEventPlan()));
-        fieldAvail.put("content", chapter != null && hasText(chapter.getContent()));
-        fieldAvail.put("contentDraft", chapter != null && hasText(chapter.getContentDraft()));
-        fieldAvail.put("contentSummary", chapter != null && hasText(chapter.getContentSummary()));
-        fieldAvail.put("characterStates", chapter != null && hasText(chapter.getCharacterStates()));
-
-        // Lightweight chapter list for sidebar (show volume title only for first chapter in each volume)
-        List<Map<String, Object>> chapterMetas = new ArrayList<>();
-        int lastVolume = -1;
-        for (var ch : chapters) {
-            Map<String, Object> m = new HashMap<>();
-            m.put("number", ch.getChapterNumber());
-            m.put("title", ch.getTitle());
-            for (var v : volumes) {
-                if (ch.getChapterNumber() >= v.getChapterStart() && ch.getChapterNumber() <= v.getChapterEnd()) {
-                    if (v.getVolumeNumber() != lastVolume) {
-                        m.put("volumeTitle", v.getTitle());
-                        lastVolume = v.getVolumeNumber();
-                    }
-                    break;
+            Map<Integer, String> outlineEventPlans = new HashMap<>();
+            for (var o : outlines) {
+                if (o.getEventPlan() != null && !o.getEventPlan().isBlank()) {
+                    outlineEventPlans.put(o.getChapterNumber(), "Y");
                 }
             }
-            chapterMetas.add(m);
-        }
 
-        int maxNum = chapters.isEmpty() ? 0 : chapters.get(chapters.size() - 1).getChapterNumber();
+            List<Map<String, Object>> chapterList = new ArrayList<>();
+            for (var ch : chapters) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("number", ch.getChapterNumber());
+                item.put("title", ch.getTitle());
+                item.put("hasContent", hasText(ch.getContent()));
+                item.put("hasContentDraft", hasText(ch.getContentDraft()));
+                item.put("hasWritingBriefing", hasText(ch.getWritingBriefing()));
+                item.put("hasContentSummary", hasText(ch.getContentSummary()));
+                item.put("hasCharacterStates", hasText(ch.getCharacterStates()));
+                item.put("hasEventPlan", outlineEventPlans.containsKey(ch.getChapterNumber()));
+                chapterList.add(item);
+            }
 
-        model.addAttribute("project", project);
-        model.addAttribute("chapterNum", num);
-        model.addAttribute("chapterTitle", chapter != null ? chapter.getTitle() : "第" + num + "章");
-        model.addAttribute("fieldAvail", fieldAvail);
-        model.addAttribute("chapterMetas", chapterMetas);
-        model.addAttribute("prevNum", num > 1 ? num - 1 : null);
-        model.addAttribute("nextNum", num < maxNum ? num + 1 : null);
-        model.addAttribute("volumes", volumes);
-        return "inspect-chapter";
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("projectId", projectId);
+            out.put("projectTitle", project.getTitle());
+            out.put("writingRules", null);
+            out.put("styleFingerprint", null);
+            out.put("storyOutline", storyOutline);
+            out.put("volumes", volumes.stream().map(v -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("volumeNumber", v.getVolumeNumber());
+                m.put("title", v.getTitle());
+                m.put("chapterStart", v.getChapterStart());
+                m.put("chapterEnd", v.getChapterEnd());
+                m.put("arcSummary", v.getArcSummary());
+                return m;
+            }).toList());
+            out.put("outlines", outlines.stream().map(o -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("chapterNumber", o.getChapterNumber());
+                m.put("title", o.getTitle());
+                m.put("characterNames", o.getCharacterNames());
+                m.put("summary", o.getSummary());
+                return m;
+            }).toList());
+            out.put("chapterList", chapterList);
+            return ResponseEntity.ok(out);
+        }).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    @GetMapping("/characters")
-    public String inspectCharacters(@PathVariable Long projectId, Model model) {
-        var project = projectRepository.findById(projectId).orElseThrow();
-        var characters = characterRepository.findByProjectIdOrderBySortOrder(projectId);
+    @GetMapping("/chapters/{num}/data")
+    public ResponseEntity<Map<String, Object>> inspectChapterData(@PathVariable Long projectId, @PathVariable int num) {
+        return projectRepository.findById(projectId).map(project -> {
+            var chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
+            var outlines = chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId);
+            var volumes = volumeOutlineRepository.findByProjectIdOrderByVolumeNumber(projectId);
+            var chapter = chapterRepository.findByProjectIdAndChapterNumber(projectId, num).orElse(null);
+            var outline = chapterOutlineRepository.findByProjectIdAndChapterNumber(projectId, num).orElse(null);
 
-        model.addAttribute("project", project);
-        model.addAttribute("characters", characters);
-        return "inspect-characters";
+            Map<String, Boolean> fieldAvail = new LinkedHashMap<>();
+            fieldAvail.put("outlineSummary", outline != null && hasText(outline.getSummary()));
+            fieldAvail.put("writingBriefing", chapter != null && hasText(chapter.getWritingBriefing()));
+            fieldAvail.put("eventPlan", outline != null && hasText(outline.getEventPlan()));
+            fieldAvail.put("content", chapter != null && hasText(chapter.getContent()));
+            fieldAvail.put("contentDraft", chapter != null && hasText(chapter.getContentDraft()));
+            fieldAvail.put("contentSummary", chapter != null && hasText(chapter.getContentSummary()));
+            fieldAvail.put("characterStates", chapter != null && hasText(chapter.getCharacterStates()));
+
+            List<Map<String, Object>> chapterMetas = new ArrayList<>();
+            int lastVolume = -1;
+            for (var ch : chapters) {
+                Map<String, Object> m = new HashMap<>();
+                m.put("number", ch.getChapterNumber());
+                m.put("title", ch.getTitle());
+                for (var v : volumes) {
+                    if (ch.getChapterNumber() >= v.getChapterStart() && ch.getChapterNumber() <= v.getChapterEnd()) {
+                        if (v.getVolumeNumber() != lastVolume) {
+                            m.put("volumeTitle", v.getTitle());
+                            lastVolume = v.getVolumeNumber();
+                        }
+                        break;
+                    }
+                }
+                chapterMetas.add(m);
+            }
+
+            int maxNum = chapters.isEmpty() ? 0 : chapters.get(chapters.size() - 1).getChapterNumber();
+
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("projectId", projectId);
+            out.put("projectTitle", project.getTitle());
+            out.put("chapterNum", num);
+            out.put("chapterTitle", chapter != null ? chapter.getTitle() : "第" + num + "章");
+            out.put("fieldAvail", fieldAvail);
+            out.put("chapterMetas", chapterMetas);
+            out.put("prevNum", num > 1 ? num - 1 : null);
+            out.put("nextNum", num < maxNum ? num + 1 : null);
+            return ResponseEntity.ok(out);
+        }).orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/characters/data")
+    public ResponseEntity<Map<String, Object>> inspectCharactersData(@PathVariable Long projectId) {
+        return projectRepository.findById(projectId).map(project -> {
+            var characters = characterRepository.findByProjectIdOrderBySortOrder(projectId);
+            List<Map<String, Object>> list = characters.stream().map(c -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", c.getId());
+                m.put("name", c.getName());
+                m.put("role", c.getRole());
+                m.put("gender", c.getGender());
+                m.put("personality", c.getPersonality());
+                m.put("appearance", c.getAppearance());
+                m.put("motivation", c.getMotivation());
+                m.put("relationships", c.getRelationships());
+                m.put("abilities", c.getAbilities());
+                m.put("background", c.getBackground());
+                return m;
+            }).toList();
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("projectId", projectId);
+            out.put("projectTitle", project.getTitle());
+            out.put("characters", list);
+            return ResponseEntity.ok(out);
+        }).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     // === AJAX endpoint: load single chapter field content ===
     @GetMapping("/chapters/{num}/field/{fieldName}")
-    @ResponseBody
     public Map<String, String> getChapterField(@PathVariable Long projectId,
                                                @PathVariable int num,
                                                @PathVariable String fieldName) {

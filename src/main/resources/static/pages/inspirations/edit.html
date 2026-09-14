@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>编辑灵感</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/css/app.css" rel="stylesheet">
+    <script src="/js/common.js"></script>
+</head>
+<body>
+<header id="site-nav"></header>
+<main class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-pencil"></i> 编辑灵感</h2>
+            <small class="text-muted">
+                所属项目：<a class="text-decoration-none" id="project-link" href="#">项目名</a>
+            </small>
+        </div>
+        <a id="back-detail" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> 返回详情
+        </a>
+    </div>
+
+    <div id="alert" class="alert py-2 d-none"></div>
+
+    <div class="card">
+        <div class="card-body" id="form-body">
+            <div class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm"></div> 加载中…</div>
+        </div>
+    </div>
+</main>
+
+<script>
+(function () {
+    const m = location.pathname.match(/\/projects\/(\d+)\/inspirations\/(\d+)\/edit/);
+    const pid = m[1], inspId = m[2];
+    SC.renderNav();
+    const $ = (id) => document.getElementById(id);
+
+    function esc(s) { return SC.escape(s == null ? '' : String(s)); }
+
+    function showAlert(msg, type) {
+        const el = $('alert');
+        el.textContent = msg;
+        el.className = 'alert alert-' + (type || 'info') + ' py-2';
+    }
+
+    function hideAlert() { $('alert').className = 'alert py-2 d-none'; }
+
+    async function loadProject() {
+        try {
+            const p = await SC.api.get('/api/projects/' + pid);
+            $('project-link').textContent = p.title || ('项目 ' + pid);
+        } catch (e) { /* 非关键 */ }
+        $('project-link').href = '/projects/' + pid;
+        $('back-detail').href = '/projects/' + pid + '/inspirations/' + inspId;
+    }
+
+    function renderForm(it) {
+        $('form-body').innerHTML =
+            '<form id="edit-form">' +
+            '<div class="mb-3">' +
+            '<label class="form-label small mb-1">标题 <span class="text-danger">*</span></label>' +
+            '<input type="text" class="form-control form-control-sm" id="title" maxlength="200" ' +
+            'value="' + esc(it.title) + '" placeholder="一句话概括这条灵感">' +
+            '</div>' +
+            '<div class="mb-3">' +
+            '<label class="form-label small mb-1">内容</label>' +
+            '<textarea class="form-control form-control-sm" id="content" rows="14" ' +
+            'placeholder="记录灵感片段、想法、场景、对白、设定……">' + esc(it.content) + '</textarea>' +
+            '</div>' +
+            '<button type="submit" class="btn btn-sm btn-primary">保存修改</button>' +
+            '<a class="btn btn-sm btn-secondary ms-2" href="/projects/' + pid + '/inspirations/' + inspId + '">取消</a>' +
+            (it.createdAt ? '<span class="text-muted small ms-3">创建于 ' + esc(it.createdAt) + '</span>' : '') +
+            '</form>';
+        $('edit-form').addEventListener('submit', onSubmit);
+    }
+
+    async function onSubmit(ev) {
+        ev.preventDefault();
+        const title = $('title').value.trim();
+        const content = $('content').value;
+        if (!title) { SC.toast.error('标题不能为空'); return; }
+        const btn = ev.target.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        hideAlert();
+        try {
+            await SC.api.put('/api/projects/' + pid + '/inspirations/' + inspId, { title, content });
+            SC.toast.success('灵感已更新');
+            location.href = '/projects/' + pid + '/inspirations/' + inspId;
+        } catch (e) {
+            btn.disabled = false;
+            showAlert('保存失败：' + (e.message || ''), 'danger');
+        }
+    }
+
+    async function loadDetail() {
+        try {
+            const it = await SC.api.get('/api/projects/' + pid + '/inspirations/' + inspId);
+            renderForm(it);
+        } catch (e) {
+            showAlert('灵感加载失败：' + (e.message || ''), 'danger');
+        }
+    }
+
+    loadProject();
+    loadDetail();
+})();
+</script>
+</body>
+</html>

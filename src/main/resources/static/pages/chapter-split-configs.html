@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>章节分割配置 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="sc-page">
+
+<script>
+/* 引导数据：同步 XHR，确保下方渲染脚本读取时已就绪 */
+window.__SPLIT_CONFIG_DATA__ = (function () {
+    var d = { configs: [] };
+    try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/settings/chapter-split-configs/data', false);
+        xhr.send();
+        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
+    } catch (e) { console.error('__SPLIT_CONFIG_DATA__ load failed', e); }
+    return d;
+})();
+</script>
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4" id="main">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <h2 class="mb-0"><i class="bi bi-scissors"></i> 章节分割配置</h2>
+        <div>
+            <a href="/settings" class="btn btn-outline-secondary btn-sm me-2">
+                <i class="bi bi-arrow-left"></i> 返回设置
+            </a>
+            <button type="button" class="btn btn-primary btn-sm" id="btnNew">
+                <i class="bi bi-plus"></i> 新建配置
+            </button>
+        </div>
+    </div>
+
+    <!-- 配置列表 -->
+    <div class="row g-3" id="configList"></div>
+
+    <!-- 正则测试 -->
+    <div class="card mt-4">
+        <div class="card-header"><strong>正则测试</strong></div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label">正则表达式</label>
+                <input type="text" class="form-control" id="testPattern">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">测试文本</label>
+                <textarea class="form-control" id="testText" rows="4" placeholder="粘贴小说文本片段..."></textarea>
+            </div>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="btnTest" disabled>测试</button>
+            <div class="mt-2 alert alert-info" id="testResult" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- 新建/编辑弹窗 -->
+    <div class="modal fade" id="configModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form id="configForm" method="post">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="configModalTitle">新建配置</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">名称</label>
+                            <input type="text" class="form-control" name="name" id="fName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">描述</label>
+                            <input type="text" class="form-control" name="description" id="fDesc">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">正则表达式</label>
+                            <input type="text" class="form-control font-monospace" name="pattern" id="fPattern" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-6 mb-3">
+                                <label class="form-label">标题捕获组索引</label>
+                                <input type="number" class="form-control" name="titleGroup" id="fTitleGroup" value="0">
+                                <small class="text-muted">-1 表示自动编号</small>
+                            </div>
+                            <div class="col-6 mb-3 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="includeMatch" id="fIncludeMatch">
+                                    <label class="form-check-label" for="fIncludeMatch">包含匹配行到章节内容</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-primary">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    var data = window.__SPLIT_CONFIG_DATA__ || { configs: [] };
+    var configs = data.configs || [];
+    var main = document.getElementById('main');
+    var listArea = document.getElementById('configList');
+    var modalEl = document.getElementById('configModal');
+    var modal = new bootstrap.Modal(modalEl);
+    var editingId = null;
+
+    /* ===================== 列表渲染 ===================== */
+    function renderList() {
+        if (!configs.length) {
+            listArea.innerHTML = '<div class="col-12"><div class="card"><div class="card-body">' +
+                '<p class="text-muted small mb-0">暂无分章配置，可点击"新建配置"添加。</p></div></div></div>';
+            return;
+        }
+        listArea.innerHTML = configs.map(function (c) {
+            var badges = '';
+            if (c.builtin) badges += '<span class="badge bg-secondary"><i class="bi bi-shield-check"></i> 内置</span>';
+            if (!c.enabled) badges += '<span class="badge bg-warning">已禁用</span>';
+            var actions =
+                '<form action="/settings/chapter-split-configs/' + c.id + '/toggle" method="post" class="d-inline">' +
+                    '<button type="submit" class="btn btn-sm ' + (c.enabled ? 'btn-outline-warning' : 'btn-outline-success') + '">' +
+                        (c.enabled ? '禁用' : '启用') + '</button>' +
+                '</form>';
+            if (!c.builtin) {
+                actions +=
+                    '<button type="button" class="btn btn-sm btn-outline-primary" data-edit="' + c.id + '">编辑</button>' +
+                    '<form action="/settings/chapter-split-configs/' + c.id + '/delete" method="post" class="d-inline" ' +
+                        'data-confirm="确定删除此配置？">' +
+                        '<button type="submit" class="btn btn-sm btn-outline-danger">删除</button>' +
+                    '</form>';
+            }
+            return '<div class="col-12"><div class="card"><div class="card-body d-flex align-items-center gap-3">' +
+                '<div class="flex-grow-1">' +
+                    '<div class="d-flex align-items-center gap-2 mb-1">' +
+                        '<strong>' + SC.escape(c.name) + '</strong>' + badges +
+                    '</div>' +
+                    '<small class="text-muted">' + SC.escape(c.description) + '</small>' +
+                    '<div class="mt-1"><code class="small">' + SC.escape(c.pattern) + '</code></div>' +
+                '</div>' +
+                '<div class="d-flex gap-1">' + actions + '</div>' +
+                '</div></div></div>';
+        }).join('');
+    }
+
+    /* ===================== 弹窗 ===================== */
+    function resetForm() {
+        document.getElementById('fName').value = '';
+        document.getElementById('fDesc').value = '';
+        document.getElementById('fPattern').value = '';
+        document.getElementById('fTitleGroup').value = 0;
+        document.getElementById('fIncludeMatch').checked = false;
+    }
+
+    function openCreate() {
+        editingId = null;
+        resetForm();
+        document.getElementById('configModalTitle').textContent = '新建配置';
+        document.getElementById('configForm').setAttribute('action', '/settings/chapter-split-configs');
+        modal.show();
+    }
+
+    function openEdit(id) {
+        var c = configs.filter(function (x) { return String(x.id) === String(id); })[0];
+        if (!c) return;
+        editingId = c.id;
+        document.getElementById('configModalTitle').textContent = '编辑配置';
+        document.getElementById('configForm').setAttribute('action', '/settings/chapter-split-configs/' + c.id + '/update');
+        document.getElementById('fName').value = c.name || '';
+        document.getElementById('fDesc').value = c.description || '';
+        document.getElementById('fPattern').value = c.pattern || '';
+        document.getElementById('fTitleGroup').value = c.titleGroup || 0;
+        document.getElementById('fIncludeMatch').checked = !!c.includeMatch;
+        modal.show();
+    }
+
+    /* ===================== 正则测试 ===================== */
+    function updateTestState() {
+        document.getElementById('btnTest').disabled =
+            !document.getElementById('testPattern').value || !document.getElementById('testText').value;
+    }
+
+    async function runTest() {
+        var resultEl = document.getElementById('testResult');
+        try {
+            var resp = await fetch('/settings/chapter-split-configs/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    pattern: document.getElementById('testPattern').value,
+                    sampleText: document.getElementById('testText').value
+                })
+            });
+            var res = await resp.json();
+            resultEl.textContent = res.error
+                ? '错误: ' + res.error
+                : '匹配 ' + res.matchCount + ' 处: ' + (res.matches || []).join(' | ');
+        } catch (e) {
+            resultEl.textContent = '测试失败: ' + e.message;
+        }
+        resultEl.style.display = '';
+    }
+
+    /* ===================== 事件绑定 ===================== */
+    document.getElementById('btnNew').addEventListener('click', openCreate);
+    document.getElementById('btnTest').addEventListener('click', runTest);
+    document.getElementById('testPattern').addEventListener('input', updateTestState);
+    document.getElementById('testText').addEventListener('input', updateTestState);
+
+    listArea.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-edit]');
+        if (btn) openEdit(btn.dataset.edit);
+    });
+
+    main.addEventListener('submit', function (e) {
+        var form = e.target.closest('form[data-confirm]');
+        if (form && !confirm(form.dataset.confirm)) e.preventDefault();
+    });
+
+    /* ===================== 初始化 ===================== */
+    renderList();
+})();
+</script>
+</body>
+</html>

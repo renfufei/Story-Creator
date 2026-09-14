@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>灵感详情</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/css/app.css" rel="stylesheet">
+    <script src="/js/common.js"></script>
+</head>
+<body>
+<header id="site-nav"></header>
+<main class="container py-4">
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-lightbulb"></i> <span id="title">标题</span></h2>
+            <small class="text-muted">
+                所属项目：<a class="text-decoration-none" id="project-link" href="#">项目名</a>
+                <span class="ms-3"><i class="bi bi-clock"></i> 创建于 <span id="created-at">-</span></span>
+                <span class="ms-3" id="updated-wrap"><i class="bi bi-pencil"></i> 更新于 <span id="updated-at">-</span></span>
+            </small>
+        </div>
+        <a id="back-list" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-list-ul"></i> 灵感列表
+        </a>
+    </div>
+
+    <div id="alert" class="alert py-2 d-none"></div>
+
+    <!-- 灵感内容卡片：编辑/删除操作按钮内嵌到卡片底部 -->
+    <div class="card" id="content-card">
+        <div class="card-body" id="content-body">
+            <div class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm"></div> 加载中…</div>
+        </div>
+        <div class="card-footer bg-transparent d-flex gap-2">
+            <a id="edit-link" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> 编辑</a>
+            <button type="button" class="btn btn-outline-danger btn-sm" id="delete-btn"><i class="bi bi-trash"></i> 删除</button>
+        </div>
+    </div>
+</main>
+
+<script>
+(function () {
+    const m = location.pathname.match(/\/projects\/(\d+)\/inspirations\/(\d+)(?:\/edit)?/);
+    const pid = m[1], inspId = m[2];
+    SC.renderNav();
+    const $ = (id) => document.getElementById(id);
+
+    function esc(s) { return SC.escape(s == null ? '' : String(s)); }
+
+    function showAlert(msg, type) {
+        const el = $('alert');
+        el.textContent = msg;
+        el.className = 'alert alert-' + (type || 'info') + ' py-2';
+    }
+
+    async function loadProject() {
+        try {
+            const p = await SC.api.get('/api/projects/' + pid);
+            $('project-link').textContent = p.title || ('项目 ' + pid);
+        } catch (e) { /* 非关键 */ }
+        $('project-link').href = '/projects/' + pid;
+        $('back-list').href = '/projects/' + pid + '/inspirations';
+        $('edit-link').href = '/projects/' + pid + '/inspirations/' + inspId + '/edit';
+    }
+
+    async function loadDetail() {
+        try {
+            const it = await SC.api.get('/api/projects/' + pid + '/inspirations/' + inspId);
+            $('title').textContent = it.title || '';
+            $('created-at').textContent = it.createdAt || '-';
+            if (it.updatedAt && it.updatedAt !== it.createdAt) {
+                $('updated-at').textContent = it.updatedAt;
+            } else {
+                $('updated-wrap').classList.add('d-none');
+            }
+            const content = it.content;
+            $('content-body').innerHTML = (content == null || content.trim() === '')
+                ? '<div class="text-muted fst-italic">（这条灵感还没有填写内容）</div>'
+                : '<div style="white-space:pre-wrap;word-break:break-word;">' + esc(content) + '</div>';
+        } catch (e) {
+            showAlert('灵感加载失败：' + (e.message || ''), 'danger');
+            $('content-card').classList.add('d-none');
+        }
+    }
+
+    $('delete-btn').addEventListener('click', async () => {
+        if (!(await SC.confirm('确定删除这条灵感？此操作不可撤销。'))) return;
+        try {
+            await SC.api.delete('/api/projects/' + pid + '/inspirations/' + inspId);
+            SC.toast.success('灵感已删除');
+            location.href = '/projects/' + pid + '/inspirations';
+        } catch (e) {
+            SC.toast.error('删除失败：' + (e.message || ''));
+        }
+    });
+
+    loadProject();
+    loadDetail();
+})();
+</script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 package com.storycreator.web;
 
 import com.storycreator.core.domain.Genre;
+import com.storycreator.core.domain.MaterialCategory;
 import com.storycreator.core.domain.ModelType;
 import com.storycreator.core.domain.StepStatus;
 import com.storycreator.core.domain.WorkflowStep;
@@ -13,12 +14,19 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -57,12 +65,17 @@ class PageRenderingIntegrationTest {
     @Autowired private SideStoryRepository sideStoryRepository;
     @Autowired private SideStoryChapterRepository sideStoryChapterRepository;
     @Autowired private InspirationRepository inspirationRepository;
+    @Autowired private PromptTemplateRepository promptTemplateRepository;
+    @Autowired private GuidanceLibraryRepository guidanceLibraryRepository;
+    @Autowired private MaterialLibraryRepository materialLibraryRepository;
+    @Autowired private TtsReplacementTemplateRepository ttsReplacementTemplateRepository;
     @Autowired private TransactionTemplate transactionTemplate;
 
     private Long projectId;
     private Long configId;
     private Long sideStoryId;
     private Long inspirationId;
+    private Long customPromptTemplateId;
 
     @BeforeEach
     void setUp() {
@@ -228,35 +241,214 @@ class PageRenderingIntegrationTest {
     void dashboard_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/"), String.class);
         assertPageOk(response, "dashboard");
+        // 首页已改造为静态页：不得再出现 Thymeleaf 痕迹，且须挂载导航栏 + Ajax 数据源
+        assertThat(response.getBody())
+                .as("首页应为静态 HTML，不再使用 Thymeleaf")
+                .doesNotContain("xmlns:th")
+                .doesNotContain("th:href")
+                .as("首页应挂载共享导航栏并引用项目列表 API")
+                .contains("id=\"site-nav\"")
+                .contains("/js/common.js")
+                .contains("/js/nav.js")
+                .contains("/api/projects");
+    }
+
+    @Test
+    void projectApi_returnsProjectListAsJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/api/projects"), String.class);
+        assertThat(response.getStatusCode())
+                .as("/api/projects should return HTTP 200")
+                .isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("项目列表 API 应返回包含本测试项目的 JSON 数组")
+                .isNotNull()
+                .contains("页面渲染测试项目")
+                .contains("\"genre\":\"玄幻\"")
+                .contains("\"wordCountText\"")
+                .contains("\"currentStep\":\"分章节写作\"");
+    }
+
+    @Test
+    void staticDashboardAssetsAreServed() {
+        // 静态页依赖的公共资源必须可访问，否则页面无样式/无脚本
+        for (String asset : new String[]{"/pages/dashboard.html", "/js/common.js", "/js/nav.js", "/css/app.css"}) {
+            ResponseEntity<String> response = restTemplate.getForEntity(url(asset), String.class);
+            assertThat(response.getStatusCode())
+                    .as("静态资源 %s 应可访问", asset)
+                    .isEqualTo(HttpStatus.OK);
+            assertThat(response.getBody()).as("%s 不应为空", asset).isNotEmpty();
+        }
     }
 
     @Test
     void projectNew_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/projects/new"), String.class);
-        assertPageOk(response, "project-form");
+        assertPageOk(response, "project-form (new)");
+        assertThat(response.getBody())
+                .as("新建项目页应为静态 HTML，不再使用 Thymeleaf")
+                .doesNotContain("xmlns:th")
+                .doesNotContain("th:field")
+                .as("新建项目页应引用表单元数据 API")
+                .contains("/api/project-form/meta")
+                .contains("/api/projects");
     }
 
     @Test
     void projectDetail_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/projects/" + projectId), String.class);
         assertPageOk(response, "project-detail");
-        // 灵感入口：必须以新标签页打开独立页面
+        // 项目详情页已改造为静态页：不得再出现 Thymeleaf 痕迹
+        assertThat(response.getBody())
+                .as("项目详情页应为静态 HTML，不再使用 Thymeleaf")
+                .doesNotContain("xmlns:th")
+                .doesNotContain("th:href");
+        // 灵感入口：必须以新标签页打开独立页面（静态页里以模板字符串形式存在）
         assertThat(response.getBody())
                 .as("项目信息页应包含以新标签页打开的灵感入口")
-                .contains("/projects/" + projectId + "/inspirations")
+                .contains("/inspirations")
                 .contains("target=\"_blank\"");
+    }
+
+    @Test
+    void projectDetailApi_returnsDetailAsJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/api/projects/" + projectId), String.class);
+        assertThat(response.getStatusCode())
+                .as("/api/projects/{id} should return HTTP 200")
+                .isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("项目详情 API 应包含标题、工作流进度与 AI 用时统计")
+                .isNotNull()
+                .contains("页面渲染测试项目")
+                .contains("\"workflowStates\"")
+                .contains("\"stepName\":\"世界观设定\"")
+                .contains("\"usageStats\"");
+    }
+
+    @Test
+    void projectDetailApi_unknownId_returns404() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/api/projects/99999999"), String.class);
+        assertThat(response.getStatusCode())
+                .as("不存在的项目应返回 404")
+                .isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test
     void projectEdit_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/projects/" + projectId + "/edit"), String.class);
         assertPageOk(response, "project-form (edit)");
+        assertThat(response.getBody())
+                .as("编辑项目页应为静态 HTML，不再使用 Thymeleaf")
+                .doesNotContain("xmlns:th")
+                .doesNotContain("th:field")
+                .as("编辑项目页应回读项目表单数据")
+                .contains("/api/project-form/");
+    }
+
+    @Test
+    void projectFormMeta_returnsOptionsAsJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/api/project-form/meta"), String.class);
+        assertThat(response.getStatusCode())
+                .as("/api/project-form/meta should return HTTP 200")
+                .isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("表单元数据应包含题材、项目状态、模型配置与工作流步骤")
+                .isNotNull()
+                .contains("\"genres\"")
+                .contains("\"code\":\"XUANHUAN\"")
+                .contains("\"projectStatuses\"")
+                .contains("\"modelConfigs\"")
+                .contains("\"workflowSteps\"")
+                .contains("\"code\":\"CHARACTER_DESIGN\"");
+    }
+
+    @Test
+    void projectFormData_returnsCurrentValues() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/api/project-form/" + projectId), String.class);
+        assertThat(response.getStatusCode())
+                .as("/api/project-form/{id} should return HTTP 200")
+                .isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("表单初值应回显当前项目配置")
+                .isNotNull()
+                .contains("页面渲染测试项目")
+                .contains("\"genre\":\"XUANHUAN\"")
+                .contains("\"totalChapters\":3")
+                .contains("\"stepGuidances\"")
+                .contains("\"stepModelConfigs\"");
+    }
+
+    @Test
+    void projectApi_createUpdateDelete_roundTrip() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        String createBody = "{\"title\":\"ZZ静态化往返测试项目\",\"genre\":\"KEHUAN\"," +
+                "\"description\":\"临时项目，用例结束即删除\",\"totalChapters\":2,\"chaptersPerVolume\":10," +
+                "\"characterCount\":1,\"chapterWordCount\":1000,\"chapterWordCountMin\":800," +
+                "\"chapterWordCountMax\":1200,\"recurringCharacterRate\":0.5,\"tempCharacterRate\":3.0," +
+                "\"autoMode\":true}";
+
+        ResponseEntity<String> created = restTemplate.postForEntity(
+                url("/api/projects"), new HttpEntity<>(createBody, headers), String.class);
+        assertThat(created.getStatusCode()).as("新建项目应成功").isEqualTo(HttpStatus.OK);
+        assertThat(created.getBody()).isNotNull().contains("\"id\"");
+        Long newId = Long.valueOf(created.getBody().replaceAll("(?s).*\"id\":(\\d+).*", "$1"));
+        assertThat(projectRepository.findById(newId)).as("项目应已落库").isPresent();
+
+        // 校验：标题为空应被拒绝
+        ResponseEntity<String> bad = restTemplate.postForEntity(
+                url("/api/projects"), new HttpEntity<>("{\"title\":\"  \",\"genre\":\"KEHUAN\"}", headers), String.class);
+        assertThat(bad.getStatusCode()).as("标题为空应返回 400").isEqualTo(HttpStatus.BAD_REQUEST);
+
+        // 更新（含状态改为「已废弃」，以便后续可删除）
+        String updateBody = "{\"title\":\"ZZ静态化往返测试项目(改)\",\"genre\":\"KEHUAN\",\"totalChapters\":5," +
+                "\"projectStatus\":\"ABANDONED\"}";
+        ResponseEntity<String> updated = restTemplate.exchange(
+                url("/api/projects/" + newId), HttpMethod.PUT, new HttpEntity<>(updateBody, headers), String.class);
+        assertThat(updated.getStatusCode()).as("更新项目应成功").isEqualTo(HttpStatus.OK);
+        assertThat(projectRepository.findById(newId))
+                .as("更新后标题与状态应生效")
+                .isPresent()
+                .get()
+                .satisfies(p -> {
+                    assertThat(p.getTitle()).isEqualTo("ZZ静态化往返测试项目(改)");
+                    assertThat(p.getStatus()).isEqualTo(com.storycreator.core.domain.ProjectStatus.ABANDONED);
+                });
+
+        // 删除（仅「已废弃」状态允许删除）
+        ResponseEntity<String> deleted = restTemplate.exchange(
+                url("/api/projects/" + newId), HttpMethod.DELETE, null, String.class);
+        assertThat(deleted.getStatusCode()).as("删除项目应成功").isEqualTo(HttpStatus.OK);
+        assertThat(projectRepository.findById(newId)).as("项目应已删除").isEmpty();
     }
 
     @Test
     void reader_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/projects/" + projectId + "/read"), String.class);
-        assertPageOk(response, "reader");
+        // 静态化后：阅读页通过同步 XHR 拉取 /api/projects/{id}/read-data，由 Alpine 渲染章节
+        assertStaticPage(response, "reader", "readerApp()");
+        assertThat(response.getBody())
+                .as("阅读页应通过同步 XHR 拉取引导数据")
+                .contains("/read-data");
+    }
+
+    @Test
+    void readerData_returnsBootstrapJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/api/projects/" + projectId + "/read-data"), String.class);
+        assertThat(response.getStatusCode()).as("read-data 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("read-data 应含项目/分卷/章节（含正文）/番外数据")
+                .contains("\"projectId\"")
+                .contains("\"projectTitle\"")
+                .contains("\"volumes\"")
+                .contains("\"chapters\"")
+                .contains("这是第1章的测试内容。")
+                .contains("\"sideStories\"")
+                .contains("番外章节内容");
+
+        ResponseEntity<String> missing = restTemplate.getForEntity(
+                url("/api/projects/999999/read-data"), String.class);
+        assertThat(missing.getStatusCode()).as("未知项目 read-data 应 404").isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     // ==================== Workflow Page ====================
@@ -266,11 +458,12 @@ class PageRenderingIntegrationTest {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/workflow"), String.class);
         assertPageOk(response, "workflow");
-        // 灵感入口：创作页头部同样以新标签页打开
+        // 静态化后：灵感入口以 Alpine 表达式拼出 URL，并以新标签页打开；页面通过同步 XHR 拉取引导数据
         assertThat(response.getBody())
-                .as("创作页应包含以新标签页打开的灵感入口")
-                .contains("/projects/" + projectId + "/inspirations")
-                .contains("target=\"_blank\"");
+                .as("创作页应包含以新标签页打开的灵感入口，并通过同步 XHR 拉取引导数据")
+                .contains("'/inspirations'")
+                .contains("target=\"_blank\"")
+                .contains("/workflow/data");
     }
 
     @Test
@@ -290,46 +483,145 @@ class PageRenderingIntegrationTest {
     void sideStoryList_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/side-stories"), String.class);
-        assertPageOk(response, "side-story-list");
+        // 静态化后：列表页通过同步 XHR 拉取 /side-stories/list-data，由 Alpine 渲染卡片
+        assertStaticPage(response, "side-story-list", "sideStoryList()");
+        assertThat(response.getBody())
+                .as("番外列表页应通过同步 XHR 拉取引导数据")
+                .contains("/side-stories/list-data");
     }
 
     @Test
     void sideStoryDetail_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/side-stories/" + sideStoryId), String.class);
-        assertPageOk(response, "side-story");
+        // 静态化后：详情页通过同步 XHR 拉取 /side-stories/{id}/data，由 Alpine 渲染
+        assertStaticPage(response, "side-story", "sideStoryWorkflow()");
+        assertThat(response.getBody())
+                .as("番外详情页应通过同步 XHR 拉取引导数据")
+                .contains("/side-stories/")
+                .contains("'/data'");
     }
 
-    // ==================== Inspiration Pages ====================
+    @Test
+    void sideStoryListData_returnsBootstrapJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/side-stories/list-data"), String.class);
+        assertThat(response.getStatusCode()).as("list-data 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("list-data 应含项目/番外列表/角色/分卷引导数据")
+                .contains("\"projectId\"")
+                .contains("\"projectTitle\"")
+                .contains("\"sideStories\"")
+                .contains("\"番外：前尘往事\"")
+                .contains("\"characters\"")
+                .contains("\"volumes\"");
+
+        ResponseEntity<String> missing = restTemplate.getForEntity(
+                url("/projects/999999/side-stories/list-data"), String.class);
+        assertThat(missing.getStatusCode()).as("未知项目 list-data 应 404").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void sideStoryDetailData_returnsBootstrapJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/side-stories/" + sideStoryId + "/data"), String.class);
+        assertThat(response.getStatusCode()).as("detail-data 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("detail-data 应含番外/章节/角色关联/角色/分卷引导数据")
+                .contains("\"projectId\"")
+                .contains("\"projectTitle\"")
+                .contains("\"sideStory\"")
+                .contains("\"番外：前尘往事\"")
+                .contains("\"OUTLINE_READY\"")
+                .contains("\"chapters\"")
+                .contains("\"characterIds\"")
+                .contains("\"characters\"")
+                .contains("\"volumes\"");
+
+        ResponseEntity<String> missingProject = restTemplate.getForEntity(
+                url("/projects/999999/side-stories/" + sideStoryId + "/data"), String.class);
+        assertThat(missingProject.getStatusCode()).as("未知项目 detail-data 应 404").isEqualTo(HttpStatus.NOT_FOUND);
+        ResponseEntity<String> missingStory = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/side-stories/999999/data"), String.class);
+        assertThat(missingStory.getStatusCode()).as("未知番外 detail-data 应 404").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    // ==================== Expansion (情节拓展) Page ====================
+
+    @Test
+    void expansion_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/expansion"), String.class);
+        // 静态化后：拓展页通过同步 XHR 拉取 /expansion/data，由 Alpine 渲染
+        assertStaticPage(response, "expansion", "expansionPage()");
+        assertThat(response.getBody())
+                .as("情节拓展页应通过同步 XHR 拉取引导数据")
+                .contains("/expansion/data")
+                .contains("PROJECT_ID");
+    }
+
+    @Test
+    void expansionData_returnsBootstrapJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/expansion/data"), String.class);
+        assertThat(response.getStatusCode()).as("expansion/data 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("expansion/data 应含项目/章节引导数据")
+                .contains("\"projectId\"")
+                .contains("\"projectTitle\"")
+                .contains("\"expansionGuidance\"")
+                .contains("\"chapters\"")
+                .contains("\"chaptersPerVolume\"");
+
+        ResponseEntity<String> missing = restTemplate.getForEntity(
+                url("/projects/999999/expansion/data"), String.class);
+        assertThat(missing.getStatusCode()).as("未知项目 expansion/data 应 404").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    // ==================== Inspiration Pages (静态页 + JSON API) ====================
+
+    /** 静态页渲染骨架：返回 200 + 完整 HTML + 含静态页专用标记，且不含 Thymeleaf 痕迹。 */
+    private void assertStaticPage(ResponseEntity<String> response, String name, String marker) {
+        assertPageOk(response, name);
+        assertThat(response.getBody())
+                .as("%s 应为静态页（无 Thymeleaf 内联表达式痕迹）", name)
+                .doesNotContain("xmlns:th")
+                .doesNotContain("th:replace")
+                .contains(marker);
+    }
 
     @Test
     void inspirationsList_rendersSuccessfully() {
-        ResponseEntity<String> response = restTemplate.getForEntity(
+        ResponseEntity<String> page = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/inspirations"), String.class);
-        assertPageOk(response, "inspirations");
-        assertThat(response.getBody())
-                .as("灵感列表应展示已有条目")
-                .contains("灵感：主角的第一次顿悟");
+        assertStaticPage(page, "inspirations-list", "新建灵感");
+        // 数据由 API 提供：列表 API 应返回已播种的灵感
+        ResponseEntity<String> api = restTemplate.getForEntity(
+                url("/api/projects/" + projectId + "/inspirations"), String.class);
+        assertThat(api.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(api.getBody()).contains("灵感：主角的第一次顿悟");
     }
 
     @Test
     void inspirationDetail_rendersSuccessfully() {
-        ResponseEntity<String> response = restTemplate.getForEntity(
+        ResponseEntity<String> page = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/inspirations/" + inspirationId), String.class);
-        assertPageOk(response, "inspiration-detail");
-        assertThat(response.getBody())
-                .as("灵感详情应展示正文")
-                .contains("雨夜的山道");
+        assertStaticPage(page, "inspiration-detail", "灵感列表");
+        // 详情数据由 API 提供：应包含正文
+        ResponseEntity<String> api = restTemplate.getForEntity(
+                url("/api/projects/" + projectId + "/inspirations/" + inspirationId), String.class);
+        assertThat(api.getBody()).contains("雨夜的山道");
     }
 
     @Test
     void inspirationEdit_rendersSuccessfully() {
-        ResponseEntity<String> response = restTemplate.getForEntity(
+        ResponseEntity<String> page = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/inspirations/" + inspirationId + "/edit"), String.class);
-        assertPageOk(response, "inspiration-edit");
-        assertThat(response.getBody())
-                .as("灵感编辑页应回填标题")
-                .contains("灵感：主角的第一次顿悟");
+        // 标题回填由前端 JS 完成，这里只校验静态页骨架 + 表单标记
+        assertStaticPage(page, "inspiration-edit", "保存修改");
+        ResponseEntity<String> api = restTemplate.getForEntity(
+                url("/api/projects/" + projectId + "/inspirations/" + inspirationId), String.class);
+        assertThat(api.getBody()).contains("灵感：主角的第一次顿悟");
     }
 
     /** 跨项目访问同一条灵感必须被拒绝（不能通过换 projectId 读到别人的数据）。 */
@@ -341,70 +633,61 @@ class PageRenderingIntegrationTest {
         Long otherId = projectRepository.save(other).getId();
         try {
             ResponseEntity<String> response = restTemplate.getForEntity(
-                    url("/projects/" + otherId + "/inspirations/" + inspirationId), String.class);
+                    url("/api/projects/" + otherId + "/inspirations/" + inspirationId), String.class);
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         } finally {
             transactionTemplate.executeWithoutResult(status -> projectRepository.deleteById(otherId));
         }
     }
 
+    private HttpEntity<Map<String, String>> jsonEntity(String title, String content) {
+        HttpHeaders h = new HttpHeaders();
+        h.setContentType(MediaType.APPLICATION_JSON);
+        return new HttpEntity<>(Map.of("title", title, "content", content == null ? "" : content), h);
+    }
+
+    private Long extractId(String jsonBody) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"id\"\\s*:\\s*(\\d+)").matcher(jsonBody);
+        assertThat(m.find()).as("响应 JSON 应包含 id 字段").isTrue();
+        return Long.valueOf(m.group(1));
+    }
+
     /**
-     * 走一遍真实 HTTP 的新增 → 详情 → 更新 → 列表 → 删除 链路。
-     *
-     * <p>断言以「实际效果」为准，不依赖 302 具体形态：测试用的 RestTemplate 会跟随重定向，
-     * 因此创建/更新/删除的响应可能是 3xx 也可能是重定向后的 2xx。
+     * 走一遍真实 HTTP 的新增 → 详情 → 更新 → 列表 → 删除 链路（JSON API 形态）。
      */
     @Test
     void inspiration_crudRoundTripOverHttp() {
-        MultiValueMap<String, String> createForm = new LinkedMultiValueMap<>();
-        createForm.add("title", "HTTP 往返灵感");
-        createForm.add("content", "第一行\n第二行");
+        String apiBase = url("/api/projects/" + projectId + "/inspirations");
         ResponseEntity<String> created = restTemplate.postForEntity(
-                url("/projects/" + projectId + "/inspirations"), createForm, String.class);
-        assertThat(created.getStatusCode().is2xxSuccessful() || created.getStatusCode().is3xxRedirection())
-                .as("创建请求应成功（直接重定向或跟随重定向落到详情页）")
-                .isTrue();
+                apiBase, jsonEntity("HTTP 往返灵感", "第一行\n第二行"), String.class);
+        assertThat(created.getStatusCode().is2xxSuccessful())
+                .as("创建请求应成功").isTrue();
+        Long newId = extractId(created.getBody());
 
-        Long newId = inspirationRepository.findByProjectIdOrderByCreatedAtDescIdDesc(projectId).stream()
-                .filter(i -> "HTTP 往返灵感".equals(i.getTitle()))
-                .map(InspirationEntity::getId)
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("新建的灵感未落库"));
-
-        // 详情页能看到新建内容（换行原样保留）
-        ResponseEntity<String> detail = restTemplate.getForEntity(
-                url("/projects/" + projectId + "/inspirations/" + newId), String.class);
-        assertPageOk(detail, "inspiration-detail (created)");
+        // 详情 API 能看到新建内容（换行原样保留）
+        ResponseEntity<String> detail = restTemplate.getForEntity(apiBase + "/" + newId, String.class);
         assertThat(detail.getBody()).contains("HTTP 往返灵感").contains("第二行");
 
         // 更新
-        MultiValueMap<String, String> updateForm = new LinkedMultiValueMap<>();
-        updateForm.add("title", "HTTP 往返灵感（已改）");
-        updateForm.add("content", "改后的内容");
-        ResponseEntity<String> updated = restTemplate.postForEntity(
-                url("/projects/" + projectId + "/inspirations/" + newId + "/update"), updateForm, String.class);
-        assertThat(updated.getStatusCode().is2xxSuccessful() || updated.getStatusCode().is3xxRedirection()).isTrue();
-        assertThat(restTemplate.getForEntity(
-                url("/projects/" + projectId + "/inspirations/" + newId), String.class).getBody())
-                .contains("HTTP 往返灵感（已改）")
-                .contains("改后的内容");
+        ResponseEntity<String> updated = restTemplate.exchange(
+                apiBase + "/" + newId, HttpMethod.PUT, jsonEntity("HTTP 往返灵感（已改）", "改后的内容"), String.class);
+        assertThat(updated.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(restTemplate.getForEntity(apiBase + "/" + newId, String.class).getBody())
+                .contains("HTTP 往返灵感（已改）").contains("改后的内容");
 
         // 列表里出现新标题，且原内容已被覆盖
-        ResponseEntity<String> list = restTemplate.getForEntity(
-                url("/projects/" + projectId + "/inspirations"), String.class);
-        assertPageOk(list, "inspirations (after update)");
+        ResponseEntity<String> list = restTemplate.getForEntity(apiBase, String.class);
         assertThat(list.getBody()).contains("HTTP 往返灵感（已改）").contains("改后的内容").doesNotContain("第一行");
 
         // 删除
-        ResponseEntity<String> deleted = restTemplate.postForEntity(
-                url("/projects/" + projectId + "/inspirations/" + newId + "/delete"), null, String.class);
-        assertThat(deleted.getStatusCode().is2xxSuccessful() || deleted.getStatusCode().is3xxRedirection()).isTrue();
-        assertThat(restTemplate.getForEntity(
-                url("/projects/" + projectId + "/inspirations/" + newId), String.class).getBody())
-                .as("删除后再访问详情应返回错误而非页面")
-                .doesNotContain("<html");
-        assertThat(restTemplate.getForEntity(
-                url("/projects/" + projectId + "/inspirations"), String.class).getBody())
+        ResponseEntity<String> deleted = restTemplate.exchange(
+                apiBase + "/" + newId, HttpMethod.DELETE, null, String.class);
+        assertThat(deleted.getStatusCode().is2xxSuccessful()).isTrue();
+        ResponseEntity<String> afterDelete = restTemplate.getForEntity(apiBase + "/" + newId, String.class);
+        assertThat(afterDelete.getStatusCode())
+                .as("删除后再访问详情应返回错误")
+                .isNotEqualTo(HttpStatus.OK);
+        assertThat(restTemplate.getForEntity(apiBase, String.class).getBody())
                 .doesNotContain("HTTP 往返灵感（已改）");
     }
 
@@ -412,27 +695,24 @@ class PageRenderingIntegrationTest {
     @Test
     void inspiration_blankTitleIsRejected() {
         long before = inspirationRepository.countByProjectId(projectId);
+        String apiBase = url("/api/projects/" + projectId + "/inspirations");
 
         // 只有空白字符
-        MultiValueMap<String, String> blank = new LinkedMultiValueMap<>();
-        blank.add("title", "   ");
-        blank.add("content", "没有标题的灵感");
-        restTemplate.postForEntity(url("/projects/" + projectId + "/inspirations"), blank, String.class);
+        HttpHeaders h = new HttpHeaders();
+        h.setContentType(MediaType.APPLICATION_JSON);
+        restTemplate.postForEntity(apiBase, new HttpEntity<>(Map.of("title", "   ", "content", "没有标题的灵感"), h), String.class);
 
-        // 完全没传 title 参数：应友好回退，而不是 500
-        MultiValueMap<String, String> missing = new LinkedMultiValueMap<>();
-        missing.add("content", "缺少标题参数");
+        // 完全没传 title 参数：应返回 400 而非 500
         ResponseEntity<String> missingResp = restTemplate.postForEntity(
-                url("/projects/" + projectId + "/inspirations"), missing, String.class);
-        assertThat(missingResp.getStatusCode().is5xxServerError())
-                .as("缺少 title 参数时应友好回退而非 500")
-                .isFalse();
+                apiBase, new HttpEntity<>(Map.of("content", "缺少标题参数"), h), String.class);
+        assertThat(missingResp.getStatusCode())
+                .as("缺少 title 参数时应返回 400 而非 5xx")
+                .isNotEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
 
         assertThat(inspirationRepository.countByProjectId(projectId))
                 .as("标题无效时不应落库")
                 .isEqualTo(before);
-        assertThat(restTemplate.getForEntity(
-                url("/projects/" + projectId + "/inspirations"), String.class).getBody())
+        assertThat(restTemplate.getForEntity(apiBase, String.class).getBody())
                 .doesNotContain("没有标题的灵感")
                 .doesNotContain("缺少标题参数");
     }
@@ -488,21 +768,73 @@ class PageRenderingIntegrationTest {
     void inspect_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/inspect"), String.class);
-        assertPageOk(response, "inspect");
+        assertStaticPage(response, "inspect", "inspectOverview()");
+        assertThat(response.getBody())
+                .as("创作透视页应通过同步 XHR 拉取引导数据")
+                .contains("/inspect/data");
     }
 
     @Test
     void inspectChapter_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/inspect/chapters/1"), String.class);
-        assertPageOk(response, "inspect-chapter");
+        assertStaticPage(response, "inspect-chapter", "inspectChapter()");
+        assertThat(response.getBody())
+                .as("章节透视页应通过同步 XHR 拉取引导数据")
+                .contains("/inspect/chapters/");
     }
 
     @Test
     void inspectCharacters_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/inspect/characters"), String.class);
-        assertPageOk(response, "inspect-characters");
+        assertStaticPage(response, "inspect-characters", "inspectCharacters()");
+        assertThat(response.getBody())
+                .as("角色透视页应通过同步 XHR 拉取引导数据")
+                .contains("/inspect/characters/data");
+    }
+
+    @Test
+    void inspectData_returnsBootstrapJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/inspect/data"), String.class);
+        assertThat(response.getStatusCode()).as("inspect/data 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("inspect/data 应含项目/大纲/卷/分章大纲/章节完整度引导数据")
+                .contains("\"projectId\"")
+                .contains("\"projectTitle\"")
+                .contains("\"storyOutline\"")
+                .contains("\"volumes\"")
+                .contains("\"outlines\"")
+                .contains("\"chapterList\"");
+
+        ResponseEntity<String> missing = restTemplate.getForEntity(
+                url("/projects/999999/inspect/data"), String.class);
+        assertThat(missing.getStatusCode()).as("未知项目 inspect/data 应 404").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void inspectChapterData_returnsBootstrapJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/inspect/chapters/1/data"), String.class);
+        assertThat(response.getStatusCode()).as("inspect/chapters/1/data 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("inspect/chapters/1/data 应含章节字段可用性与目录引导数据")
+                .contains("\"projectId\"")
+                .contains("\"chapterNum\"")
+                .contains("\"fieldAvail\"")
+                .contains("\"chapterMetas\"");
+    }
+
+    @Test
+    void inspectCharactersData_returnsBootstrapJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/inspect/characters/data"), String.class);
+        assertThat(response.getStatusCode()).as("inspect/characters/data 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("inspect/characters/data 应含角色列表引导数据")
+                .contains("\"projectId\"")
+                .contains("\"characters\"");
     }
 
     // ==================== Settings Pages ====================
@@ -513,36 +845,110 @@ class PageRenderingIntegrationTest {
         assertPageOk(response, "settings");
     }
 
-    @Test
-    void guidances_rendersSuccessfully() {
-        ResponseEntity<String> response = restTemplate.getForEntity(url("/settings/guidances"), String.class);
-        assertPageOk(response, "guidances");
-    }
-
-    @Test
-    void materials_rendersSuccessfully() {
-        ResponseEntity<String> response = restTemplate.getForEntity(url("/settings/materials"), String.class);
-        assertPageOk(response, "materials");
-    }
-
-    @Test
-    void ttsTemplates_rendersSuccessfully() {
-        ResponseEntity<String> response = restTemplate.getForEntity(url("/settings/tts-templates"), String.class);
-        assertPageOk(response, "tts-templates");
-    }
+    // 创作指导库 / 素材库 / 章节分割配置 / TTS替换模板 / 聊天 的渲染用例见下方对应分区（均已迁移为静态页）
 
     // ==================== Prompt Pages ====================
 
     @Test
     void prompts_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/prompts"), String.class);
-        assertPageOk(response, "prompts");
+        assertStaticPage(response, "prompts", "__PROMPTS_DATA__");
+    }
+
+    @Test
+    void promptsData_returnsBootstrapJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/prompts/data"), String.class);
+        assertThat(response.getStatusCode()).as("/prompts/data 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("/prompts/data 应含模板列表与枚举选项")
+                .contains("\"templates\"")
+                .contains("\"steps\"")
+                .contains("\"genres\"")
+                .contains("\"subSteps\"")
+                .contains("stepDisplayName")
+                .contains("workflowTagNamesCsv");
     }
 
     @Test
     void promptExplore_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/prompts/explore"), String.class);
-        assertPageOk(response, "prompt-explore");
+        assertStaticPage(response, "prompt-explore", "__PROMPT_EXPLORE_DATA__");
+        assertThat(response.getBody())
+                .as("提示词探索页应通过同步 XHR 拉取引导数据")
+                .contains("/prompts/explore/data");
+    }
+
+    @Test
+    void promptExploreData_returnsBootstrapJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/prompts/explore/data"), String.class);
+        assertThat(response.getStatusCode()).as("/prompts/explore/data 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("/prompts/explore/data 应含模板原文/变量提示/项目与模型下拉")
+                .contains("\"templateContent\"")
+                .contains("\"systemPromptContent\"")
+                .contains("\"variableNames\"")
+                .contains("\"projects\"")
+                .contains("\"modelConfigs\"");
+    }
+
+    @Test
+    void promptExploreData_unknownBuiltinKeyReturns404() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/prompts/explore/data?templateKey=NOT_A_REAL_TEMPLATE_KEY"), String.class);
+        assertThat(response.getStatusCode()).as("未知 templateKey 应 404").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void promptEdit_customTemplate_rendersSuccessfully() {
+        Long id = createCustomPromptTemplate();
+        try {
+            ResponseEntity<String> page = restTemplate.getForEntity(url("/prompts/" + id + "/edit"), String.class);
+            assertStaticPage(page, "prompt-edit", "__PROMPT_EDIT_DATA__");
+
+            ResponseEntity<String> data = restTemplate.getForEntity(
+                    url("/prompts/" + id + "/edit-data"), String.class);
+            assertThat(data.getStatusCode()).as("自定义模板 edit-data 应返回 200").isEqualTo(HttpStatus.OK);
+            assertThat(data.getBody())
+                    .as("edit-data 应含模板字段与只读视图所需信息")
+                    .contains("\"isBuiltin\":false")
+                    .contains("\"stepDisplayName\"")
+                    .contains("__probe_prompt_name__");
+        } finally {
+            transactionTemplate.executeWithoutResult(status -> promptTemplateRepository.deleteById(id));
+        }
+    }
+
+    @Test
+    void promptEdit_builtinTemplate_rendersSuccessfully() {
+        String key = "WORLD_BUILDING|WORLD_BUILDING_PRIMARY|";
+        ResponseEntity<String> page = restTemplate.getForEntity(url("/prompts/builtin/" + key), String.class);
+        assertStaticPage(page, "prompt-edit", "__PROMPT_EDIT_DATA__");
+
+        ResponseEntity<String> data = restTemplate.getForEntity(
+                url("/prompts/builtin/" + key + "/edit-data"), String.class);
+        assertThat(data.getStatusCode()).as("内置模板 edit-data 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(data.getBody())
+                .as("内置模板 edit-data 应标记 isBuiltin=true 并给出步骤显示名")
+                .contains("\"isBuiltin\":true")
+                .contains("\"stepDisplayName\"");
+    }
+
+    @Test
+    void promptEdit_unknownIdReturns404() {
+        ResponseEntity<String> data = restTemplate.getForEntity(url("/prompts/999999/edit-data"), String.class);
+        assertThat(data.getStatusCode()).as("未知模板 edit-data 应 404").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    /** 造一个自定义模板，供编辑页用例复用。 */
+    private Long createCustomPromptTemplate() {
+        PromptTemplateEntity entity = new PromptTemplateEntity();
+        entity.setStep(WorkflowStep.WORLD_BUILDING);
+        entity.setGenre(null);
+        entity.setName("__probe_prompt_name__");
+        entity.setSystemPrompt("probe system");
+        entity.setTemplate("probe template {{title}}");
+        entity.setDefault(false);
+        return transactionTemplate.execute(status -> promptTemplateRepository.save(entity).getId());
     }
 
     // ==================== Import Page ====================
@@ -551,25 +957,214 @@ class PageRenderingIntegrationTest {
     void importPage_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/import"), String.class);
         assertPageOk(response, "import");
+        assertThat(response.getBody())
+                .as("导入页已改造为静态页：不得再出现 Thymeleaf 痕迹")
+                .doesNotContain("xmlns:th")
+                .doesNotContain("th:action")
+                .as("导入页应挂载导航栏、提交到 /import 并保留 TXT 导入入口")
+                .contains("id=\"site-nav\"")
+                .contains("action=\"/import\"")
+                .contains("/import/txt");
     }
+
+    // ==================== 创作指导库 ====================
+
+    @Test
+    void guidances_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/settings/guidances"), String.class);
+        assertPageOk(response, "guidances");
+        assertThat(response.getBody())
+                .as("创作指导库已改造为静态页：不得再出现 Thymeleaf 痕迹")
+                .doesNotContain("xmlns:th")
+                .doesNotContain("th:href")
+                .as("创作指导库应挂载导航栏并同步注入引导数据")
+                .contains("id=\"site-nav\"")
+                .contains("/settings/guidances/data")
+                .contains("__GUIDANCES_DATA__");
+    }
+
+    @Test
+    void guidancesData_returnsBootstrapJson() {
+        Long id = createGuidance("__probe_guidance__", WorkflowStep.WORLD_BUILDING, "probe guidance content");
+        try {
+            ResponseEntity<String> response = restTemplate.getForEntity(url("/settings/guidances/data"), String.class);
+            assertThat(response.getStatusCode()).as("指导库引导数据应 200").isEqualTo(HttpStatus.OK);
+            assertThat(response.getBody())
+                    .as("引导数据应含条目、步骤枚举与显示名")
+                    .contains("__probe_guidance__")
+                    .contains("\"stepLabel\"")
+                    .contains("\"steps\"")
+                    .contains("\"itemIds\"");
+        } finally {
+            guidanceLibraryRepository.deleteById(id);
+        }
+    }
+
+    @Test
+    void guidanceEdit_rendersStaticPageAndData() {
+        Long id = createGuidance("__probe_guidance_edit__", WorkflowStep.OUTLINE_GENERATION, "edit guidance body");
+        try {
+            ResponseEntity<String> page = restTemplate.getForEntity(
+                    url("/settings/guidances/" + id + "/edit"), String.class);
+            assertPageOk(page, "guidance-edit");
+            assertThat(page.getBody())
+                    .as("指导编辑页应为静态页")
+                    .doesNotContain("xmlns:th")
+                    .contains("__GUIDANCE_EDIT_DATA__");
+
+            ResponseEntity<String> data = restTemplate.getForEntity(
+                    url("/settings/guidances/" + id + "/edit-data"), String.class);
+            assertThat(data.getStatusCode()).as("指导编辑引导数据应 200").isEqualTo(HttpStatus.OK);
+            assertThat(data.getBody())
+                    .as("编辑引导数据应含名称/内容/步骤选项")
+                    .contains("__probe_guidance_edit__")
+                    .contains("edit guidance body")
+                    .contains("\"steps\"");
+        } finally {
+            guidanceLibraryRepository.deleteById(id);
+        }
+    }
+
+    @Test
+    void guidanceEdit_unknownIdReturns404() {
+        ResponseEntity<String> data = restTemplate.getForEntity(
+                url("/settings/guidances/999999/edit-data"), String.class);
+        assertThat(data.getStatusCode()).as("未知指导 edit-data 应 404").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    // ==================== 素材库 ====================
+
+    @Test
+    void materials_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/settings/materials"), String.class);
+        assertPageOk(response, "materials");
+        assertThat(response.getBody())
+                .as("素材库已改造为静态页：不得再出现 Thymeleaf 痕迹")
+                .doesNotContain("xmlns:th")
+                .doesNotContain("th:href")
+                .as("素材库应挂载导航栏并同步注入引导数据")
+                .contains("id=\"site-nav\"")
+                .contains("/settings/materials/data")
+                .contains("__MATERIALS_DATA__");
+    }
+
+    @Test
+    void materialsData_returnsBootstrapJson() {
+        Long id = createMaterial("__probe_material__", "probe material content");
+        try {
+            ResponseEntity<String> response = restTemplate.getForEntity(url("/settings/materials/data"), String.class);
+            assertThat(response.getStatusCode()).as("素材库引导数据应 200").isEqualTo(HttpStatus.OK);
+            assertThat(response.getBody())
+                    .as("引导数据应含条目、分类与文本模型选项")
+                    .contains("__probe_material__")
+                    .contains("\"categoryLabel\"")
+                    .contains("\"categories\"")
+                    .contains("\"modelConfigs\"");
+        } finally {
+            materialLibraryRepository.deleteById(id);
+        }
+    }
+
+    @Test
+    void materialEdit_rendersStaticPageAndData() {
+        Long id = createMaterial("__probe_material_edit__", "edit material body");
+        try {
+            ResponseEntity<String> page = restTemplate.getForEntity(
+                    url("/settings/materials/" + id + "/edit"), String.class);
+            assertPageOk(page, "material-edit");
+            assertThat(page.getBody())
+                    .as("素材编辑页应为静态页")
+                    .doesNotContain("xmlns:th")
+                    .contains("__MATERIAL_EDIT_DATA__");
+
+            ResponseEntity<String> data = restTemplate.getForEntity(
+                    url("/settings/materials/" + id + "/edit-data"), String.class);
+            assertThat(data.getStatusCode()).as("素材编辑引导数据应 200").isEqualTo(HttpStatus.OK);
+            assertThat(data.getBody())
+                    .as("编辑引导数据应含名称/内容/分类选项")
+                    .contains("__probe_material_edit__")
+                    .contains("edit material body")
+                    .contains("\"categories\"");
+        } finally {
+            materialLibraryRepository.deleteById(id);
+        }
+    }
+
+    @Test
+    void materialEdit_unknownIdReturns404() {
+        ResponseEntity<String> data = restTemplate.getForEntity(
+                url("/settings/materials/999999/edit-data"), String.class);
+        assertThat(data.getStatusCode()).as("未知素材 edit-data 应 404").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    // ==================== 章节分割配置 ====================
+
+    @Test
+    void chapterSplitConfigs_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/settings/chapter-split-configs"), String.class);
+        assertPageOk(response, "chapter-split-configs");
+        assertThat(response.getBody())
+                .as("章节分割配置页已改造为静态页：不得再出现 Thymeleaf 痕迹")
+                .doesNotContain("xmlns:th")
+                .doesNotContain("th:href")
+                .as("配置页应挂载导航栏并同步注入引导数据")
+                .contains("id=\"site-nav\"")
+                .contains("/settings/chapter-split-configs/data")
+                .contains("__SPLIT_CONFIG_DATA__");
+    }
+
+    @Test
+    void chapterSplitConfigsData_returnsConfigList() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/settings/chapter-split-configs/data"), String.class);
+        assertThat(response.getStatusCode()).as("分章配置引导数据应 200").isEqualTo(HttpStatus.OK);
+        // 内置配置由 Flyway 迁移写入，这里只断言结构字段
+        assertThat(response.getBody())
+                .as("引导数据应含配置数组与渲染所需字段")
+                .contains("\"configs\"")
+                .contains("\"pattern\"")
+                .contains("\"builtin\"")
+                .contains("\"enabled\"");
+    }
+
+    // ==================== 测试数据辅助 ====================
+
+    private Long createGuidance(String name, WorkflowStep step, String guidance) {
+        GuidanceLibraryEntity entity = new GuidanceLibraryEntity();
+        entity.setName(name);
+        entity.setStep(step);
+        entity.setGuidance(guidance);
+        return transactionTemplate.execute(status -> guidanceLibraryRepository.save(entity).getId());
+    }
+
+    private Long createMaterial(String name, String content) {
+        MaterialLibraryEntity entity = new MaterialLibraryEntity();
+        entity.setName(name);
+        entity.setCategory(MaterialCategory.OTHER);
+        entity.setContent(content);
+        entity.setSourceHint("probe source");
+        return transactionTemplate.execute(status -> materialLibraryRepository.save(entity).getId());
+    }
+
+    // ==================== TXT 导入页（静态页 + 引导 JSON） ====================
 
     /**
      * TXT 导入页（含逆向工程流程控制与 SSE 实时显示脚本）。
      *
-     * <p>回归保护：该模板脚本内含逆向工程协议标记字面量（形如双左方括号开头的标签），
-     * Thymeleaf 3 在 HTML 模式下默认把这类文本当作内联表达式解析。若脚本所在的
-     * {@code <script>} 缺少 {@code th:inline="none"}，模板会在遇到该字面量的位置
-     * 静默中断渲染，返回一个被截断的 200 响应（页面尾部监听器全部丢失）。
-     * 由于响应缓冲区已 flush，状态码无法改为 500，因此这类故障只能靠内容断言发现。
+     * <p>迁移后为静态页 {@code static/pages/txt-import.html}，引导数据由
+     * {@code GET /import/txt/data} 提供。此处保留 SSE 监听器断言：页面若被意外截断，
+     * 尾部的监听器会全部缺失（历史故障：Thymeleaf 文本内联会把协议标记字面量当作
+     * 内联表达式，渲染中断但状态码仍是 200，只能靠内容断言发现）。
      */
     @Test
     void txtImport_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/import/txt"), String.class);
-        assertPageOk(response, "txt-import");
+        assertStaticPage(response, "txt-import", "__TXT_IMPORT_DATA__");
 
         String body = response.getBody();
         assertThat(body).as("txt-import 页面必须完整渲染到 </script> 结束").contains("</script>");
-        // 位于协议标记字面量之后的监听器——若模板被截断，这些会全部缺失
+        // 位于协议标记字面量之后的监听器——若页面被截断，这些会全部缺失
         for (String listener : new String[] {
                 "addEventListener('phase'",
                 "addEventListener('phase-done'",
@@ -583,19 +1178,234 @@ class PageRenderingIntegrationTest {
         }
     }
 
-    // ==================== TTS Export Pages ====================
+    @Test
+    void txtImportData_returnsBootstrapJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/import/txt/data"), String.class);
+        assertThat(response.getStatusCode()).as("/import/txt/data 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("/import/txt/data 应含分割配置 / 题材 / 模型列表")
+                .contains("\"splitConfigs\"")
+                .contains("\"genres\"")
+                .contains("\"modelConfigs\"")
+                .contains("displayName");
+    }
+
+    // ==================== TTS Export / Full Play Pages ====================
 
     @Test
     void ttsExport_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/tts-export"), String.class);
-        assertPageOk(response, "tts-export");
+        assertStaticPage(response, "tts-export", "__TTS_EXPORT_DATA__");
     }
 
     @Test
     void ttsExport_withProjectId_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/tts-export?projectId=" + projectId), String.class);
-        assertPageOk(response, "tts-export (with projectId)");
+        assertStaticPage(response, "tts-export (with projectId)", "__TTS_EXPORT_DATA__");
+        assertThat(response.getBody())
+                .as("预选 projectId 应由静态页自行解析并随引导请求带回")
+                .contains("projectId");
+    }
+
+    @Test
+    void ttsExportData_returnsBootstrapJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/tts-export/data"), String.class);
+        assertThat(response.getStatusCode()).as("/tts-export/data 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("/tts-export/data 应含项目列表与预选字段")
+                .contains("\"projects\"")
+                .contains("\"preselectedProjectId\"");
+    }
+
+    @Test
+    void ttsFullplay_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/tts-fullplay?taskId=1"), String.class);
+        assertStaticPage(response, "tts-fullplay", "fullPlayApp()");
+        assertThat(response.getBody())
+                .as("全文收听页应从查询串读取 taskId")
+                .contains("__TTS_FULLPLAY_TASK_ID__");
+    }
+
+    // ==================== TTS 替换模板 Pages ====================
+
+    @Test
+    void ttsTemplates_asStaticPage_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/settings/tts-templates"), String.class);
+        assertStaticPage(response, "tts-templates", "__TTS_TEMPLATES_DATA__");
+    }
+
+    @Test
+    void ttsTemplatesData_returnsBootstrapJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/settings/tts-templates/data"), String.class);
+        assertThat(response.getStatusCode()).as("TTS 模板引导数据应 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("引导数据应含内置 / 自定义模板数组")
+                .contains("\"builtinTemplates\"")
+                .contains("\"userTemplates\"");
+    }
+
+    @Test
+    void ttsTemplateView_rendersSuccessfully() {
+        String builtinId = firstBuiltinTtsTemplateId();
+        ResponseEntity<String> page = restTemplate.getForEntity(
+                url("/settings/tts-templates/builtin/" + builtinId + "/view"), String.class);
+        assertStaticPage(page, "tts-template-view", "__TTS_TEMPLATE_VIEW_DATA__");
+
+        ResponseEntity<String> data = restTemplate.getForEntity(
+                url("/settings/tts-templates/builtin/" + builtinId + "/view-data"), String.class);
+        assertThat(data.getStatusCode()).as("内置模板 view-data 应 200").isEqualTo(HttpStatus.OK);
+        assertThat(data.getBody())
+                .as("view-data 应含名称与规则数组")
+                .contains("\"name\"")
+                .contains("\"rules\"")
+                .contains("\"pattern\"");
+    }
+
+    @Test
+    void ttsTemplateView_unknownIdReturns404() {
+        ResponseEntity<String> data = restTemplate.getForEntity(
+                url("/settings/tts-templates/builtin/NOT_A_REAL_BUILTIN/view-data"), String.class);
+        assertThat(data.getStatusCode()).as("未知内置模板应 404").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void ttsTemplateEdit_rendersSuccessfully() {
+        Long id = createTtsReplacementTemplate("__probe_tts_tpl__");
+        try {
+            ResponseEntity<String> page = restTemplate.getForEntity(
+                    url("/settings/tts-templates/" + id + "/edit"), String.class);
+            assertStaticPage(page, "tts-template-edit", "__TTS_TEMPLATE_EDIT_DATA__");
+
+            ResponseEntity<String> data = restTemplate.getForEntity(
+                    url("/settings/tts-templates/" + id + "/edit-data"), String.class);
+            assertThat(data.getStatusCode()).as("模板 edit-data 应 200").isEqualTo(HttpStatus.OK);
+            assertThat(data.getBody())
+                    .as("edit-data 应含模板信息与规则数组")
+                    .contains("\"template\"")
+                    .contains("\"rules\"")
+                    .contains("__probe_tts_tpl__");
+        } finally {
+            transactionTemplate.executeWithoutResult(status -> ttsReplacementTemplateRepository.deleteById(id));
+        }
+    }
+
+    @Test
+    void ttsTemplateEdit_unknownIdReturns404() {
+        ResponseEntity<String> data = restTemplate.getForEntity(
+                url("/settings/tts-templates/999999/edit-data"), String.class);
+        assertThat(data.getStatusCode()).as("未知模板 edit-data 应 404").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void ttsTemplateBindings_rendersSuccessfully() {
+        // 绑定页只需 configId 即可渲染（无绑定时展示空态）
+        ResponseEntity<String> page = restTemplate.getForEntity(
+                url("/settings/tts-templates/bindings/1"), String.class);
+        assertStaticPage(page, "tts-template-bindings", "__TTS_BINDINGS_DATA__");
+
+        ResponseEntity<String> data = restTemplate.getForEntity(
+                url("/settings/tts-templates/bindings/1/data"), String.class);
+        assertThat(data.getStatusCode()).as("绑定引导数据应 200").isEqualTo(HttpStatus.OK);
+        assertThat(data.getBody())
+                .as("绑定引导数据应含 configId / bindings / allOptions")
+                .contains("\"configId\"")
+                .contains("\"bindings\"")
+                .contains("\"allOptions\"");
+    }
+
+    // ==================== Chat Page ====================
+
+    @Test
+    void chat_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/chat"), String.class);
+        assertStaticPage(response, "chat", "__CHAT_DATA__");
+        assertThat(response.getBody())
+                .as("聊天页应含 chatApp 与流式解析逻辑")
+                .contains("chatApp()")
+                .contains("/api/chat/sessions/");
+    }
+
+    @Test
+    void chatData_returnsBootstrapJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/chat/data"), String.class);
+        assertThat(response.getStatusCode()).as("/chat/data 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("/chat/data 应含会话与三类模型配置")
+                .contains("\"sessions\"")
+                .contains("\"textConfigs\"")
+                .contains("\"ttsConfigs\"")
+                .contains("\"imageConfigs\"");
+    }
+
+    // ==================== Learn Pages ====================
+
+    @Test
+    void learn_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/learn"), String.class);
+        assertStaticPage(response, "learn", "九九乘法口诀");
+        assertThat(response.getBody())
+                .as("教学首页应含乘法学习与音频设置入口")
+                .contains("/learn/multiplication")
+                .contains("/learn/multiplication/settings");
+    }
+
+    @Test
+    void learnMultiplication_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/learn/multiplication"), String.class);
+        assertStaticPage(response, "learn-multiplication", "multiplicationApp()");
+        assertThat(response.getBody())
+                .as("乘法页应含口诀数据与音频取值逻辑")
+                .contains("九九八十一")
+                .contains("/api/learn/multiplication/audio/");
+    }
+
+    @Test
+    void learnMultiplicationSettings_rendersSuccessfully() {
+        ResponseEntity<String> page = restTemplate.getForEntity(
+                url("/learn/multiplication/settings"), String.class);
+        assertStaticPage(page, "learn-multiplication-settings", "__LEARN_SETTINGS_DATA__");
+        assertThat(page.getBody())
+                .as("音频管理页应含 settingsApp 与音频状态接口")
+                .contains("settingsApp()")
+                .contains("/api/learn/multiplication/audio-status");
+    }
+
+    @Test
+    void learnMultiplicationSettingsData_returnsBootstrapJson() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/learn/multiplication/settings/data"), String.class);
+        assertThat(response.getStatusCode()).as("音频管理引导数据应 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("引导数据应含 TTS 配置 / 默认配置 / 口诀 / 前缀 / 音频总数")
+                .contains("\"ttsConfigs\"")
+                .contains("\"defaultTtsConfigId\"")
+                .contains("\"formulas\"")
+                .contains("\"prefixes\"")
+                .contains("\"totalAudioCount\"")
+                .contains("九九八十一");
+    }
+
+    // ==================== 测试数据辅助（TTS 替换模板） ====================
+
+    /** 取第一个内置 TTS 替换模板 id（避免在测试里硬编码内置模板标识）。 */
+    @SuppressWarnings("unchecked")
+    private String firstBuiltinTtsTemplateId() {
+        Map<String, Object> data = restTemplate.getForObject(
+                url("/settings/tts-templates/data"), Map.class);
+        List<Map<String, Object>> builtins = (List<Map<String, Object>>) data.get("builtinTemplates");
+        assertThat(builtins).as("应至少存在一个内置 TTS 替换模板").isNotEmpty();
+        return String.valueOf(builtins.get(0).get("id"));
+    }
+
+    private Long createTtsReplacementTemplate(String name) {
+        TtsReplacementTemplateEntity entity = new TtsReplacementTemplateEntity();
+        entity.setName(name);
+        entity.setDescription("probe description");
+        entity.setEnabled(true);
+        return transactionTemplate.execute(status -> ttsReplacementTemplateRepository.save(entity).getId());
     }
 
     // ==================== Helpers ====================

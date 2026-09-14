@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI模型配置 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="sc-page">
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4" id="main">
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <h2 class="sc-page-title"><i class="bi bi-cpu"></i> AI模型配置</h2>
+        <a href="/settings/tts-templates" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-music-note-list"></i> TTS替换模板
+        </a>
+    </div>
+
+    <!-- Global Default Models -->
+    <div class="card mb-4">
+        <div class="card-header"><strong>全局默认模型</strong></div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label fw-semibold mb-1">文本生成模型</label>
+                <div class="d-flex gap-2 align-items-center">
+                    <select id="globalText" class="form-select form-select-sm" style="max-width: 300px;"></select>
+                    <button type="button" class="btn btn-sm btn-primary" data-act="save-global" data-target="globalText" data-key="global-default">保存</button>
+                </div>
+                <small class="text-muted mt-1 d-block">所有项目和步骤默认使用此模型（除非单独配置）</small>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold mb-1">TTS 语音合成模型</label>
+                <div class="d-flex gap-2 align-items-center">
+                    <select id="globalTts" class="form-select form-select-sm" style="max-width: 300px;"></select>
+                    <button type="button" class="btn btn-sm btn-primary" data-act="save-global" data-target="globalTts" data-key="global-default-tts">保存</button>
+                </div>
+                <small class="text-muted mt-1 d-block">Reader 页面 TTS 播放时默认使用此配置</small>
+            </div>
+            <div>
+                <label class="form-label fw-semibold mb-1">图像生成模型</label>
+                <div class="d-flex gap-2 align-items-center">
+                    <select id="globalImage" class="form-select form-select-sm" style="max-width: 300px;"></select>
+                    <button type="button" class="btn btn-sm btn-primary" data-act="save-global" data-target="globalImage" data-key="global-default-image">保存</button>
+                </div>
+                <small class="text-muted mt-1 d-block">角色图片生成时默认使用此配置</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Timeout -->
+    <div class="card mb-4">
+        <div class="card-header"><strong>AI生成超时时间</strong></div>
+        <div class="card-body">
+            <div class="d-flex gap-2 align-items-center">
+                <input type="number" id="aiTimeout" class="form-control form-control-sm" min="30" max="3600" style="max-width: 120px;">
+                <span class="text-muted small">秒</span>
+                <button type="button" class="btn btn-sm btn-primary" data-act="save-timeout">保存</button>
+            </div>
+            <small class="text-muted mt-1 d-block">AI模型连接和生成的超时时间，默认300秒（5分钟），范围30-3600秒</small>
+        </div>
+    </div>
+
+    <!-- Default Author -->
+    <div class="card mb-4">
+        <div class="card-header"><strong>默认作者</strong></div>
+        <div class="card-body">
+            <div class="d-flex gap-2 align-items-center">
+                <input type="text" id="defaultAuthor" class="form-control form-control-sm" placeholder="例如：佚名" style="max-width: 240px;">
+                <button type="button" class="btn btn-sm btn-primary" data-act="save-author">保存</button>
+            </div>
+            <small class="text-muted mt-1 d-block">创建项目、TXT导入时若未填写作者，将自动使用此处设置的默认作者。</small>
+        </div>
+    </div>
+
+    <!-- TTS Debug Mode -->
+    <div class="card mb-4">
+        <div class="card-header"><strong>TTS 调试模式</strong></div>
+        <div class="card-body">
+            <div class="d-flex gap-2 align-items-center">
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="ttsDebug" value="true">
+                    <label class="form-check-label" for="ttsDebug">启用</label>
+                </div>
+                <button type="button" class="btn btn-sm btn-primary" data-act="save-tts-debug">保存</button>
+            </div>
+            <small class="text-muted mt-1 d-block">开启后，TTS导出MP3时保留中间chunk文件（位于导出任务目录下的 chapter_N/ 子目录），便于逐段调试校对语音问题</small>
+        </div>
+    </div>
+
+    <!-- Nav Tabs -->
+    <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-all" type="button" role="tab">全部模型</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-text" type="button" role="tab">文本生成</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-tts" type="button" role="tab">语音合成</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-image" type="button" role="tab">图像生成</button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <div class="tab-pane fade show active" id="tab-all" role="tabpanel"></div>
+        <div class="tab-pane fade" id="tab-text" role="tabpanel"></div>
+        <div class="tab-pane fade" id="tab-tts" role="tabpanel"></div>
+        <div class="tab-pane fade" id="tab-image" role="tabpanel"></div>
+    </div>
+</main>
+
+<!-- Edit/Add Modal -->
+<div class="modal fade" id="configModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="configForm">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">添加新模型</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">模型类型</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="modelType" value="TEXT" id="typeText">
+                                <label class="form-check-label" for="typeText">文本生成</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="modelType" value="TTS" id="typeTts">
+                                <label class="form-check-label" for="typeTts">语音合成(TTS)</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="modelType" value="IMAGE" id="typeImage">
+                                <label class="form-check-label" for="typeImage">图像生成</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Provider</label>
+                        <select class="form-select form-select-sm" id="inputProvider">
+                            <option value="openai">OpenAI</option>
+                            <option value="claude">Claude</option>
+                            <option value="ollama">Ollama</option>
+                            <option value="sd-webui">Stable Diffusion WebUI</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Model ID</label>
+                        <input type="text" class="form-control form-control-sm" id="inputModelId" required
+                               placeholder="例: gpt-4o, claude-3-opus">
+                        <div class="mt-1">
+                            <div id="recText" style="display:none;">
+                                <small class="text-muted">推荐: </small>
+                                <a href="#" class="badge bg-secondary text-decoration-none" onclick="setTextRecommended();return false;">Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-8bit</a>
+                            </div>
+                            <div id="recTts" style="display:none;">
+                                <small class="text-muted">推荐: </small>
+                                <a href="#" class="badge bg-secondary text-decoration-none" onclick="setTtsRecommended();return false;">Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit</a>
+                            </div>
+                            <div id="recImage" style="display:none;">
+                                <small class="text-muted">推荐: </small>
+                                <a href="#" class="badge bg-secondary text-decoration-none" onclick="setImageRecommended();return false;">agnes-image-2.1-flash</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">显示名称</label>
+                        <input type="text" class="form-control form-control-sm" id="inputDisplayName" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">API Key</label>
+                        <input type="password" class="form-control form-control-sm" id="inputApiKey"
+                               placeholder="编辑时留空保持不变，勾选下方清除">
+                        <div class="form-check mt-1" id="clearApiKeyRow" style="display:none;">
+                            <input type="checkbox" class="form-check-input" id="clearApiKey">
+                            <label class="form-check-label small text-muted" for="clearApiKey">清除已有API Key</label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Base URL</label>
+                        <input type="text" class="form-control form-control-sm" id="inputBaseUrl" placeholder="例: https://api.openai.com">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">额外参数 (JSON)</label>
+                        <textarea class="form-control form-control-sm" id="inputExtraParams" rows="2"
+                                  placeholder='例: {"enable_thinking": false}'></textarea>
+                        <small class="text-muted" id="extraHintText" style="display:none;">合并到API请求体</small>
+                        <small class="text-muted" id="extraHintTts" style="display:none;">voice: 默认测试音色; voices: 可用音色列表(逗号分隔); systemPrompt: 文本前缀(VoxCPM格式含括号); noVoice: true则不发送voice参数</small>
+                        <small class="text-muted" id="extraHintImage" style="display:none;">OpenAI: quality/style; SD WebUI: steps/cfg_scale/sampler_name/negative_prompt; 输出格式: return_base64/response_format</small>
+                        <div class="mt-1">
+                            <span class="badge bg-secondary" role="button" style="cursor:pointer" id="thinkBadge" onclick="addDisableThinking()">+ 禁用思考 (vLLM)</span>
+                            <span class="badge bg-secondary" role="button" style="cursor:pointer" id="voxcpBadge" onclick="applyVoxCPM()">VoxCPM风格</span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3" id="delayRow" style="display:none;">
+                        <label class="form-label">调用前延迟 (秒)</label>
+                        <input type="number" class="form-control form-control-sm" id="inputDelay" min="0" max="600" style="max-width: 120px;">
+                        <small class="text-muted">每次调用该模型前暂停的秒数，用于降低服务区压力；0 表示不延迟</small>
+                    </div>
+
+                    <div class="form-check" id="probeRow" style="display:none;">
+                        <button type="button" class="btn btn-sm btn-outline-info" id="probeBtn" onclick="probeVoices()">
+                            <i class="bi bi-mic"></i> 探测可用音色
+                        </button>
+                        <span class="small ms-2" id="probeMsg"></span>
+                    </div>
+
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="inputActive" checked>
+                        <label class="form-check-label" for="inputActive">启用</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary" id="configSubmitBtn">添加</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Test Modal -->
+<div class="modal fade" id="testModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="testModalTitle">测试模型连接</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="testVoiceSelectArea" class="mb-3" style="display:none;">
+                    <label class="form-label fw-semibold">选择音色</label>
+                    <select class="form-select form-select-sm" id="testVoiceSelect" onchange="onTestVoiceChange()"></select>
+                </div>
+                <div id="testFormatSelectArea" class="mb-3" style="display:none;">
+                    <label class="form-label fw-semibold">音频格式</label>
+                    <select class="form-select form-select-sm" id="testFormatSelect" onchange="onTestFormatChange()">
+                        <option value="mp3">mp3</option>
+                        <option value="opus">opus</option>
+                        <option value="aac">aac</option>
+                        <option value="flac">flac</option>
+                        <option value="wav">wav</option>
+                        <option value="pcm">pcm</option>
+                    </select>
+                </div>
+                <div id="testParamsArea">
+                    <label class="form-label fw-semibold">测试参数</label>
+                    <textarea class="form-control font-monospace" id="testParamsInput" rows="10" style="font-size: 0.85rem;"></textarea>
+                    <small class="text-muted">可修改参数后点击"开始测试"</small>
+                </div>
+                <div id="testResultArea" class="mt-3" style="display:none;">
+                    <label class="form-label fw-semibold">测试结果</label>
+                    <div id="testResultContent" class="border rounded p-2 small" style="white-space: pre-wrap; max-height: 200px; overflow-y: auto;"></div>
+                </div>
+                <div id="testAudioArea" class="mt-3" style="display:none;">
+                    <button type="button" class="btn btn-sm btn-outline-success" id="testAudioPlayBtn" onclick="playTestAudio()">
+                        <i class="bi bi-volume-up"></i> 播放语音
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="testAudioStopBtn" onclick="stopTestAudio()" style="display:none;">
+                        <i class="bi bi-stop-fill"></i> 停止
+                    </button>
+                </div>
+                <div id="testImageArea" class="mt-3" style="display:none;">
+                    <label class="form-label fw-semibold">生成的图片</label>
+                    <div class="border rounded p-2 text-center">
+                        <img id="testImagePreview" src="" alt="生成的测试图片" style="max-width: 100%; max-height: 300px;">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="testStartBtn" onclick="executeTest()">
+                    <i class="bi bi-play-fill"></i> 开始测试
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    var state = { text: [], tts: [], image: [], globalDefaultId: null, globalDefaultTtsId: null, globalDefaultImageId: null, aiTimeoutSeconds: 300, ttsDebugMode: false, defaultAuthor: '' };
+    var byId = {};
+
+    /* ===================== 数据加载 ===================== */
+    async function load() {
+        try {
+            var data = await SC.api.get('/api/settings');
+            state.text = data.textConfigs || [];
+            state.tts = data.ttsConfigs || [];
+            state.image = data.imageConfigs || [];
+            state.globalDefaultId = data.globalDefaultId;
+            state.globalDefaultTtsId = data.globalDefaultTtsId;
+            state.globalDefaultImageId = data.globalDefaultImageId;
+            state.aiTimeoutSeconds = data.aiTimeoutSeconds;
+            state.ttsDebugMode = data.ttsDebugMode;
+            state.defaultAuthor = data.defaultAuthor || '';
+            byId = {};
+            state.text.concat(state.tts).concat(state.image).forEach(function (c) { byId[c.id] = c; });
+            renderAll();
+        } catch (e) {
+            SC.toast.error('设置加载失败：' + e.message);
+        }
+    }
+
+    /* ===================== 渲染 ===================== */
+    function renderAll() {
+        fillGlobalSelect('globalText', state.text, state.globalDefaultId);
+        fillGlobalSelect('globalTts', state.tts, state.globalDefaultTtsId);
+        fillGlobalSelect('globalImage', state.image, state.globalDefaultImageId);
+        document.getElementById('aiTimeout').value = state.aiTimeoutSeconds;
+        document.getElementById('defaultAuthor').value = state.defaultAuthor;
+        document.getElementById('ttsDebug').checked = !!state.ttsDebugMode;
+
+        document.getElementById('tab-all').innerHTML = renderGroup('TEXT') + renderGroup('TTS') + renderGroup('IMAGE');
+        document.getElementById('tab-text').innerHTML = renderGroup('TEXT');
+        document.getElementById('tab-tts').innerHTML = renderGroup('TTS') + ttsTemplateTableHtml();
+        document.getElementById('tab-image').innerHTML = renderGroup('IMAGE');
+    }
+
+    function fillGlobalSelect(selId, list, currentId) {
+        var sel = document.getElementById(selId);
+        var html = '<option value="">-- 未指定 --</option>';
+        list.forEach(function (c) {
+            if (!c.active) return;
+            html += '<option value="' + c.id + '"' + (c.id === currentId ? ' selected' : '') + '>' +
+                SC.escape(c.displayName) + ' (' + SC.escape(c.provider) + '/' + SC.escape(c.modelId) + ')</option>';
+        });
+        sel.innerHTML = html;
+    }
+
+    function modelCardHtml(c) {
+        var statusBadge = c.active
+            ? '<span class="badge bg-success">启用</span>'
+            : '<span class="badge bg-secondary">禁用</span>';
+        var keyHtml = c.apiKeyMasked
+            ? '<code>' + SC.escape(c.apiKeyMasked) + '</code>'
+            : '<span class="text-warning">未设置</span>';
+        return '' +
+            '<div class="col-md-4 col-lg-3">' +
+            '  <div class="card h-100">' +
+            '    <div class="card-body p-3">' +
+            '      <div class="d-flex justify-content-between align-items-start mb-2">' +
+            '        <h6 class="card-title mb-0 text-truncate" style="max-width:140px;">' + SC.escape(c.displayName) + '</h6>' +
+            statusBadge +
+            '      </div>' +
+            '      <p class="card-text small text-muted mb-1">' + SC.escape(c.provider) + ' / ' + SC.escape(c.modelId) + '</p>' +
+            '      <p class="card-text small mb-2"><span class="text-muted">API Key: </span>' + keyHtml + '</p>' +
+            '    </div>' +
+            '    <div class="card-footer bg-transparent border-top-0 p-2 d-flex gap-1">' +
+            '      <button type="button" class="btn btn-sm btn-outline-success flex-grow-0" data-act="test" data-id="' + c.id + '"><i class="bi bi-plug"></i> 测试</button>' +
+            '      <button type="button" class="btn btn-sm btn-outline-primary flex-grow-1" data-act="edit" data-id="' + c.id + '"><i class="bi bi-pencil"></i> 编辑</button>' +
+            '      <button type="button" class="btn btn-sm btn-outline-danger" data-act="delete" data-id="' + c.id + '"><i class="bi bi-trash"></i> 删除</button>' +
+            '    </div>' +
+            '  </div>' +
+            '</div>';
+    }
+
+    function renderGroup(type) {
+        var list = state[type.toLowerCase()];
+        var title = type === 'TEXT' ? '文本生成模型' : type === 'TTS' ? '语音合成（TTS）模型' : '图像生成模型';
+        var icon = type === 'TEXT' ? 'bi-chat-text' : type === 'TTS' ? 'bi-volume-up' : 'bi-image';
+        var addLabel = type === 'TEXT' ? '添加文本模型' : type === 'TTS' ? '添加TTS模型' : '添加图像模型';
+        var html = '<h5 class="mb-3 mt-2"><i class="bi ' + icon + '"></i> ' + title + '</h5>' +
+            '<div class="row g-3 mb-3">';
+        list.forEach(function (c) { html += modelCardHtml(c); });
+        html += '<div class="col-md-4 col-lg-3">' +
+            '  <div class="card h-100 border-dashed" data-act="add" data-type="' + type + '" style="border-style:dashed !important;cursor:pointer;">' +
+            '    <div class="card-body d-flex flex-column align-items-center justify-content-center text-muted">' +
+            '      <i class="bi bi-plus-circle" style="font-size: 2rem;"></i>' +
+            '      <span class="mt-2 small">' + addLabel + '</span>' +
+            '    </div>' +
+            '  </div>' +
+            '</div>';
+        html += '</div>';
+        return html;
+    }
+
+    function ttsTemplateTableHtml() {
+        if (!state.tts.length) {
+            return '<div class="card mb-4 mt-4"><div class="card-header"><strong><i class="bi bi-arrow-left-right"></i> TTS 文字替换模板</strong></div>' +
+                '<div class="card-body"><p class="text-muted small mb-0">暂无 TTS 模型配置</p></div></div>';
+        }
+        var rows = state.tts.map(function (c) {
+            return '<tr><td>' + SC.escape(c.displayName) + ' (' + SC.escape(c.modelId) + ')</td>' +
+                '<td><a class="btn btn-sm btn-outline-secondary" href="/settings/tts-templates/bindings/' + c.id + '"><i class="bi bi-link-45deg"></i> 绑定</a></td></tr>';
+        }).join('');
+        return '<div class="card mb-4 mt-4"><div class="card-header d-flex justify-content-between align-items-center">' +
+            '<strong><i class="bi bi-arrow-left-right"></i> TTS 文字替换模板</strong>' +
+            '<a class="btn btn-sm btn-outline-primary" href="/settings/tts-templates"><i class="bi bi-gear"></i> 管理模板</a></div>' +
+            '<div class="card-body"><small class="text-muted d-block mb-2">TTS 生成前会按模板中的规则顺序执行文字替换。每个 TTS 模型可绑定不同的模板组合。</small>' +
+            '<table class="table table-sm mb-0"><thead><tr><th>TTS 模型</th><th style="width:120px;">绑定管理</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+    }
+
+    /* ===================== 全局设置保存 ===================== */
+    async function saveGlobal(targetSel, key) {
+        var sel = document.getElementById(targetSel);
+        var val = sel.value ? parseInt(sel.value, 10) : null;
+        try {
+            await SC.api.post('/api/settings/' + key, { modelConfigId: val });
+            SC.toast.success('已保存');
+        } catch (e) { /* 已提示 */ }
+    }
+
+    async function saveTimeout() {
+        var v = parseInt(document.getElementById('aiTimeout').value, 10) || 300;
+        try { await SC.api.post('/api/settings/ai-timeout', { timeoutSeconds: v }); SC.toast.success('已保存'); }
+        catch (e) { /* 已提示 */ }
+    }
+
+    async function saveAuthor() {
+        try { await SC.api.post('/api/settings/default-author', { author: document.getElementById('defaultAuthor').value }); SC.toast.success('已保存'); }
+        catch (e) { /* 已提示 */ }
+    }
+
+    async function saveTtsDebug() {
+        try { await SC.api.post('/api/settings/tts-debug-mode', { enabled: document.getElementById('ttsDebug').checked }); SC.toast.success('已保存'); }
+        catch (e) { /* 已提示 */ }
+    }
+
+    /* ===================== 增 / 改 ===================== */
+    var modalMode = 'add';
+    var editId = null;
+
+    function setFormDisabled(disabled) {
+        document.getElementById('typeText').disabled = disabled;
+        document.getElementById('typeTts').disabled = disabled;
+        document.getElementById('typeImage').disabled = disabled;
+        document.getElementById('inputProvider').disabled = disabled;
+        document.getElementById('inputModelId').disabled = disabled;
+    }
+
+    function currentType() {
+        return document.getElementById('typeText').checked ? 'TEXT'
+            : document.getElementById('typeTts').checked ? 'TTS' : 'IMAGE';
+    }
+
+    function updateTypeUI() {
+        var type = currentType();
+        document.getElementById('recText').style.display = (type === 'TEXT' && modalMode === 'add') ? 'block' : 'none';
+        document.getElementById('recTts').style.display = (type === 'TTS' && modalMode === 'add') ? 'block' : 'none';
+        document.getElementById('recImage').style.display = (type === 'IMAGE' && modalMode === 'add') ? 'block' : 'none';
+        document.getElementById('thinkBadge').style.display = (type === 'TEXT') ? 'inline-block' : 'none';
+        document.getElementById('voxcpBadge').style.display = (type === 'TTS') ? 'inline-block' : 'none';
+        document.getElementById('delayRow').style.display = (type === 'TEXT') ? 'block' : 'none';
+        document.getElementById('extraHintText').style.display = (type === 'TEXT') ? 'block' : 'none';
+        document.getElementById('extraHintTts').style.display = (type === 'TTS') ? 'block' : 'none';
+        document.getElementById('extraHintImage').style.display = (type === 'IMAGE') ? 'block' : 'none';
+    }
+
+    function openAdd(type) {
+        modalMode = 'add';
+        editId = null;
+        document.getElementById('modalTitle').textContent = '添加新模型';
+        document.getElementById('configForm').reset();
+        document.getElementById('typeText').checked = (type === 'TEXT');
+        document.getElementById('typeTts').checked = (type === 'TTS');
+        document.getElementById('typeImage').checked = (type === 'IMAGE');
+        document.getElementById('inputProvider').value = 'openai';
+        document.getElementById('inputDelay').value = 0;
+        document.getElementById('inputActive').checked = true;
+        document.getElementById('clearApiKeyRow').style.display = 'none';
+        document.getElementById('probeRow').style.display = 'none';
+        setFormDisabled(false);
+        document.getElementById('configSubmitBtn').textContent = '添加';
+        updateTypeUI();
+        new bootstrap.Modal(document.getElementById('configModal')).show();
+    }
+
+    function openEdit(configId) {
+        var cfg = byId[configId];
+        if (!cfg) return;
+        modalMode = 'edit';
+        editId = configId;
+        document.getElementById('modalTitle').textContent = '编辑模型配置';
+        document.getElementById('typeText').checked = (cfg.modelType === 'TEXT');
+        document.getElementById('typeTts').checked = (cfg.modelType === 'TTS');
+        document.getElementById('typeImage').checked = (cfg.modelType === 'IMAGE');
+        document.getElementById('inputProvider').value = cfg.provider || 'openai';
+        document.getElementById('inputModelId').value = cfg.modelId || '';
+        document.getElementById('inputDisplayName').value = cfg.displayName || '';
+        document.getElementById('inputApiKey').value = '';
+        document.getElementById('inputBaseUrl').value = cfg.baseUrl || '';
+        document.getElementById('inputExtraParams').value = cfg.extraParams || '';
+        document.getElementById('inputDelay').value = cfg.preCallDelaySeconds || 0;
+        document.getElementById('inputActive').checked = !!cfg.active;
+        document.getElementById('clearApiKey').checked = false;
+        document.getElementById('clearApiKeyRow').style.display = 'block';
+        document.getElementById('probeRow').style.display = (cfg.modelType === 'TTS') ? 'block' : 'none';
+        document.getElementById('probeMsg').textContent = '';
+        document.getElementById('probeMsg').className = 'small ms-2';
+        setFormDisabled(true);
+        document.getElementById('configSubmitBtn').textContent = '保存';
+        updateTypeUI();
+        new bootstrap.Modal(document.getElementById('configModal')).show();
+    }
+
+    async function submitConfig(e) {
+        e.preventDefault();
+        var type = currentType();
+        var payload = {
+            provider: document.getElementById('inputProvider').value.trim(),
+            modelId: document.getElementById('inputModelId').value.trim(),
+            displayName: document.getElementById('inputDisplayName').value.trim(),
+            apiKey: document.getElementById('inputApiKey').value,
+            baseUrl: document.getElementById('inputBaseUrl').value.trim(),
+            extraParams: document.getElementById('inputExtraParams').value.trim(),
+            preCallDelaySeconds: parseInt(document.getElementById('inputDelay').value, 10) || 0,
+            modelType: type,
+            active: document.getElementById('inputActive').checked
+        };
+        if (modalMode === 'edit') {
+            payload.clearApiKey = document.getElementById('clearApiKey').checked;
+        }
+        try {
+            if (modalMode === 'add') {
+                await SC.api.post('/api/settings/ai-models', payload);
+                SC.toast.success('模型已添加');
+            } else {
+                await SC.api.put('/api/settings/ai-models/' + editId, payload);
+                SC.toast.success('模型已保存');
+            }
+            bootstrap.Modal.getInstance(document.getElementById('configModal')).hide();
+            await load();
+        } catch (err) { /* SC.api 已提示 */ }
+    }
+
+    async function confirmDelete(id) {
+        var cfg = byId[id];
+        var name = cfg ? cfg.displayName : ('#' + id);
+        var ok = await SC.confirm({ title: '删除模型配置', message: '确定要删除「' + name + '」吗？此操作不可撤销。', confirmText: '删除', danger: true });
+        if (!ok) return;
+        try {
+            await SC.api.del('/api/settings/ai-models/' + id);
+            SC.toast.success('已删除');
+            await load();
+        } catch (e) { /* 已提示 */ }
+    }
+
+    async function probeVoices() {
+        if (!editId) return;
+        var btn = document.getElementById('probeBtn');
+        var msg = document.getElementById('probeMsg');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 探测中...';
+        msg.textContent = '';
+        msg.className = 'small ms-2';
+        try {
+            var data = await SC.api.post('/api/settings/ai-models/' + editId + '/probe-voices', {});
+            if (data.success && data.voices) {
+                var params = {};
+                try { params = JSON.parse(document.getElementById('inputExtraParams').value || '{}'); } catch (e) {}
+                params.voices = data.voices;
+                if (!params.voice) {
+                    var first = data.voices.split(',')[0].trim();
+                    if (first) params.voice = first;
+                }
+                document.getElementById('inputExtraParams').value = JSON.stringify(params, null, 2);
+                msg.textContent = '已回填音色列表';
+                msg.className = 'small ms-2 text-success';
+            } else {
+                msg.textContent = data.message || '探测失败';
+                msg.className = 'small ms-2 text-danger';
+            }
+        } catch (e) {
+            msg.textContent = '请求失败: ' + e.message;
+            msg.className = 'small ms-2 text-danger';
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-mic"></i> 探测可用音色';
+        }
+    }
+
+    /* ===================== 连接测试 ===================== */
+    var _testConfigId = null, _testType = null, _testModal = null, _testAudioData = null, _testAudioPlayer = null;
+
+    function openTest(configId) {
+        var cfg = byId[configId];
+        if (!cfg) return;
+        _testConfigId = configId;
+        var type = cfg.modelType;
+        _testType = type === 'TTS' ? 'tts' : type === 'IMAGE' ? 'image' : 'text';
+
+        document.getElementById('testResultArea').style.display = 'none';
+        document.getElementById('testResultContent').textContent = '';
+        document.getElementById('testAudioArea').style.display = 'none';
+        document.getElementById('testImageArea').style.display = 'none';
+        _testAudioData = null;
+        stopTestAudio();
+
+        document.getElementById('testModalTitle').textContent = '测试' + (type === 'TTS' ? 'TTS模型连接' : type === 'IMAGE' ? '图像生成模型' : '文本模型连接');
+
+        if (_testType === 'tts') {
+            var voiceList = [], defaultVoice = '', defaultFormat = 'mp3';
+            if (cfg.extraParams) {
+                try {
+                    var ep = JSON.parse(cfg.extraParams);
+                    if (ep.voices) voiceList = String(ep.voices).split(',').map(function (v) { return v.trim(); }).filter(Boolean);
+                    if (ep.voice) defaultVoice = ep.voice;
+                    if (ep.format) defaultFormat = ep.format;
+                } catch (e) {}
+            }
+            if (!defaultVoice && voiceList.length) defaultVoice = voiceList[0];
+            var vs = document.getElementById('testVoiceSelect');
+            vs.innerHTML = '';
+            if (voiceList.length) {
+                voiceList.forEach(function (v) {
+                    var o = document.createElement('option');
+                    o.value = v; o.textContent = v;
+                    if (v === defaultVoice) o.selected = true;
+                    vs.appendChild(o);
+                });
+                document.getElementById('testVoiceSelectArea').style.display = 'block';
+            } else {
+                document.getElementById('testVoiceSelectArea').style.display = 'none';
+            }
+            document.getElementById('testFormatSelect').value = defaultFormat;
+            document.getElementById('testFormatSelectArea').style.display = 'block';
+            document.getElementById('testParamsInput').value = JSON.stringify({ input: '测试语音合成。', voice: defaultVoice, speed: 1.0, format: defaultFormat }, null, 2);
+        } else if (_testType === 'image') {
+            document.getElementById('testVoiceSelectArea').style.display = 'none';
+            document.getElementById('testFormatSelectArea').style.display = 'none';
+            document.getElementById('testParamsInput').value = JSON.stringify({ prompt: 'A red circle on a white background', width: 1024, height: 1024 }, null, 2);
+        } else {
+            document.getElementById('testVoiceSelectArea').style.display = 'none';
+            document.getElementById('testFormatSelectArea').style.display = 'none';
+            document.getElementById('testParamsInput').value = JSON.stringify({ systemPrompt: 'You are a helpful assistant.', userPrompt: "请回复'连接成功'四个字。", maxTokens: 20, temperature: 0.1 }, null, 2);
+        }
+        document.getElementById('testStartBtn').disabled = false;
+        document.getElementById('testStartBtn').innerHTML = '<i class="bi bi-play-fill"></i> 开始测试';
+        _testModal = new bootstrap.Modal(document.getElementById('testModal'));
+        _testModal.show();
+    }
+
+    function onTestVoiceChange() {
+        var ta = document.getElementById('testParamsInput');
+        try {
+            var p = JSON.parse(ta.value);
+            p.voice = document.getElementById('testVoiceSelect').value;
+            ta.value = JSON.stringify(p, null, 2);
+        } catch (e) {}
+    }
+
+    function onTestFormatChange() {
+        var ta = document.getElementById('testParamsInput');
+        try {
+            var p = JSON.parse(ta.value);
+            p.format = document.getElementById('testFormatSelect').value;
+            ta.value = JSON.stringify(p, null, 2);
+        } catch (e) {}
+    }
+
+    function executeTest() {
+        var btn = document.getElementById('testStartBtn');
+        var resultArea = document.getElementById('testResultArea');
+        var resultContent = document.getElementById('testResultContent');
+        var params;
+        try {
+            params = JSON.parse(document.getElementById('testParamsInput').value);
+        } catch (e) {
+            resultArea.style.display = 'block';
+            resultContent.textContent = '参数JSON格式错误: ' + e.message;
+            resultContent.className = 'border rounded p-2 small text-danger';
+            return;
+        }
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 测试中...';
+        resultArea.style.display = 'block';
+        resultContent.textContent = '正在测试...';
+        resultContent.className = 'border rounded p-2 small text-muted';
+
+        var url = _testType === 'tts' ? '/api/settings/ai-models/' + _testConfigId + '/test-tts'
+            : _testType === 'image' ? '/api/settings/ai-models/' + _testConfigId + '/test-image'
+            : '/api/settings/ai-models/' + _testConfigId + '/test';
+
+        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params) })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                resultContent.textContent = data.message;
+                resultContent.className = 'border rounded p-2 small ' + (data.success ? 'text-success' : 'text-danger');
+                if (_testType === 'tts' && data.success && data.audio) {
+                    _testAudioData = data.audio;
+                    document.getElementById('testAudioArea').style.display = 'block';
+                } else {
+                    document.getElementById('testAudioArea').style.display = 'none';
+                    _testAudioData = null;
+                }
+                if (_testType === 'image' && data.success && data.imageBase64) {
+                    document.getElementById('testImagePreview').src = 'data:image/png;base64,' + data.imageBase64;
+                    document.getElementById('testImageArea').style.display = 'block';
+                } else {
+                    document.getElementById('testImageArea').style.display = 'none';
+                }
+            })
+            .catch(function (err) {
+                resultContent.textContent = '请求失败: ' + err.message;
+                resultContent.className = 'border rounded p-2 small text-danger';
+                document.getElementById('testAudioArea').style.display = 'none';
+                document.getElementById('testImageArea').style.display = 'none';
+                _testAudioData = null;
+            })
+            .finally(function () {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-play-fill"></i> 开始测试';
+            });
+    }
+
+    function playTestAudio() {
+        if (!_testAudioData) return;
+        stopTestAudio();
+        var audioFormat = 'mp3';
+        try {
+            var params = JSON.parse(document.getElementById('testParamsInput').value);
+            if (params.format) audioFormat = params.format;
+        } catch (e) {}
+        var mimeTypes = { mp3: 'audio/mpeg', opus: 'audio/ogg', aac: 'audio/aac', flac: 'audio/flac', wav: 'audio/wav', pcm: 'audio/pcm' };
+        var mimeType = mimeTypes[audioFormat] || 'audio/mpeg';
+        var audioSrc = 'data:' + mimeType + ';base64,' + _testAudioData;
+        _testAudioPlayer = new Audio(audioSrc);
+        _testAudioPlayer.onended = function () {
+            document.getElementById('testAudioStopBtn').style.display = 'none';
+            document.getElementById('testAudioPlayBtn').innerHTML = '<i class="bi bi-volume-up"></i> 播放语音';
+        };
+        _testAudioPlayer.play();
+        document.getElementById('testAudioStopBtn').style.display = 'inline-block';
+        document.getElementById('testAudioPlayBtn').innerHTML = '<i class="bi bi-volume-up"></i> 播放中...';
+    }
+
+    function stopTestAudio() {
+        if (_testAudioPlayer) {
+            _testAudioPlayer.pause();
+            _testAudioPlayer.currentTime = 0;
+            _testAudioPlayer = null;
+        }
+        var stop = document.getElementById('testAudioStopBtn');
+        if (stop) stop.style.display = 'none';
+        var play = document.getElementById('testAudioPlayBtn');
+        if (play) play.innerHTML = '<i class="bi bi-volume-up"></i> 播放语音';
+    }
+
+    /* ===================== 推荐/辅助 ===================== */
+    window.setTextRecommended = function () { document.getElementById('inputModelId').value = 'Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-8bit'; };
+    window.setTtsRecommended = function () { document.getElementById('inputModelId').value = 'Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit'; };
+    window.setImageRecommended = function () {
+        document.getElementById('inputModelId').value = 'agnes-image-2.1-flash';
+        var dn = document.getElementById('inputDisplayName');
+        if (!dn.value) dn.value = 'Agnes Image 2.1 Flash';
+        var bu = document.getElementById('inputBaseUrl');
+        if (!bu.value) bu.value = 'https://apihub.agnes-ai.com';
+        var ep = document.getElementById('inputExtraParams');
+        if (!ep.value || !ep.value.trim()) ep.value = '{"return_base64": true}';
+    };
+    window.addDisableThinking = function () {
+        var ta = document.getElementById('inputExtraParams');
+        var obj = {};
+        try { obj = JSON.parse(ta.value || '{}'); } catch (e) { obj = {}; }
+        obj['chat_template_kwargs'] = { enable_thinking: false };
+        ta.value = JSON.stringify(obj);
+    };
+    window.applyVoxCPM = function () {
+        var ta = document.getElementById('inputExtraParams');
+        var obj = {};
+        try { obj = JSON.parse(ta.value || '{}'); } catch (e) { obj = {}; }
+        obj.systemPrompt = obj.systemPrompt || '(A young woman, gentle and sweet voice)';
+        obj.noVoice = true;
+        ta.value = JSON.stringify(obj, null, 2);
+    };
+
+    /* ===================== 事件绑定 ===================== */
+    document.getElementById('main').addEventListener('click', function (e) {
+        var el = e.target.closest('[data-act]');
+        if (!el) return;
+        var act = el.dataset.act;
+        if (act === 'save-global') saveGlobal(el.dataset.target, el.dataset.key);
+        else if (act === 'save-timeout') saveTimeout();
+        else if (act === 'save-author') saveAuthor();
+        else if (act === 'save-tts-debug') saveTtsDebug();
+        else if (act === 'test') openTest(parseInt(el.dataset.id, 10));
+        else if (act === 'edit') openEdit(parseInt(el.dataset.id, 10));
+        else if (act === 'delete') confirmDelete(parseInt(el.dataset.id, 10));
+        else if (act === 'add') openAdd(el.dataset.type);
+    });
+
+    document.getElementById('configForm').addEventListener('submit', submitConfig);
+    document.querySelectorAll('input[name="modelType"]').forEach(function (r) {
+        r.addEventListener('change', updateTypeUI);
+    });
+
+    // Tab 持久化
+    document.querySelectorAll('[data-bs-toggle="tab"]').forEach(function (tab) {
+        tab.addEventListener('shown.bs.tab', function (e) {
+            history.replaceState(null, null, e.target.dataset.bsTarget);
+        });
+    });
+
+    load();
+})();
+</script>
+</body>
+</html>

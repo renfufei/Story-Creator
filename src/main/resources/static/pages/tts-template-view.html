@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>查看模板 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="sc-page">
+
+<script>
+/* 引导数据：内置模板 id 取自路径 /settings/tts-templates/builtin/{id}/view */
+window.__TTS_TEMPLATE_VIEW_DATA__ = (function () {
+    var d = { name: '', description: '', rules: [] };
+    try {
+        var m = location.pathname.match(/\/settings\/tts-templates\/builtin\/([^/]+)\/view/);
+        var id = m ? decodeURIComponent(m[1]) : '';
+        if (id) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/settings/tts-templates/builtin/' + encodeURIComponent(id) + '/view-data', false);
+            xhr.send();
+            if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
+        }
+    } catch (e) { console.error('__TTS_TEMPLATE_VIEW_DATA__ load failed', e); }
+    return d;
+})();
+</script>
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0" id="pageTitle">查看模板</h2>
+            <small class="text-muted" id="pageDesc"></small>
+        </div>
+        <a href="/settings/tts-templates" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> 返回列表
+        </a>
+    </div>
+
+    <!-- Template Info -->
+    <div class="card mb-4">
+        <div class="card-header"><strong>模板信息</strong></div>
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">名称</label>
+                    <input type="text" class="form-control form-control-sm" id="bName" readonly>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small mb-1">描述</label>
+                    <input type="text" class="form-control form-control-sm" id="bDesc" readonly>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rules List -->
+    <div class="card">
+        <div class="card-header">
+            <strong><i class="bi bi-list-ol"></i> 替换规则</strong>
+        </div>
+        <div class="card-body">
+            <div id="rulesArea"></div>
+        </div>
+    </div>
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+(function () {
+    'use strict';
+    var data = window.__TTS_TEMPLATE_VIEW_DATA__ || { rules: [] };
+    var rules = data.rules || [];
+
+    document.getElementById('pageTitle').textContent = '查看模板: ' + (data.name || '');
+    document.getElementById('pageDesc').textContent = data.description || '';
+    document.getElementById('bName').value = data.name || '';
+    document.getElementById('bDesc').value = data.description || '';
+
+    var area = document.getElementById('rulesArea');
+    if (!rules.length) {
+        area.innerHTML = '<p class="text-muted small mb-0">此模板暂无规则。</p>';
+    } else {
+        var rows = rules.map(function (r, i) {
+            var repl = (r.replacement && r.replacement.length)
+                ? '<code>' + SC.escape(r.replacement) + '</code>'
+                : '<span class="text-muted small">(删除)</span>';
+            return '<tr>' +
+                '<td>' + i + '</td>' +
+                '<td><code class="small" style="word-break: break-all;">' + SC.escape(r.pattern) + '</code></td>' +
+                '<td>' + repl + '</td>' +
+                '<td><span class="badge ' + (r.regex ? 'bg-info' : 'bg-secondary') + '">' +
+                    (r.regex ? '正则' : '文本') + '</span></td>' +
+                '<td class="text-muted small">' + SC.escape(r.description) + '</td>' +
+                '</tr>';
+        }).join('');
+        area.innerHTML =
+            '<table class="table table-sm table-hover mb-0">' +
+            '<thead><tr><th style="width:50px;">序号</th><th>匹配模式</th><th>替换为</th>' +
+            '<th style="width:60px;">类型</th><th>描述</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody></table>';
+    }
+})();
+</script>
+</body>
+</html>

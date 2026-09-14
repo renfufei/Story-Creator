@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TTS替换模板 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="sc-page">
+
+<script>
+/* 引导数据：同步 XHR，确保渲染脚本读取时已就绪 */
+window.__TTS_TEMPLATES_DATA__ = (function () {
+    var d = { builtinTemplates: [], userTemplates: [] };
+    try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/settings/tts-templates/data', false);
+        xhr.send();
+        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
+    } catch (e) { console.error('__TTS_TEMPLATES_DATA__ load failed', e); }
+    return d;
+})();
+</script>
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+<div x-data="{ showAdd: false }">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">TTS 文字替换模板</h2>
+        <div>
+            <a href="/settings" class="btn btn-outline-secondary btn-sm me-2">
+                <i class="bi bi-arrow-left"></i> 返回设置
+            </a>
+            <button class="btn btn-primary btn-sm" @click="showAdd = true">
+                <i class="bi bi-plus"></i> 新建模板
+            </button>
+        </div>
+    </div>
+
+    <!-- Add Template Form -->
+    <div class="card mb-4" x-show="showAdd" x-cloak>
+        <div class="card-body">
+            <form action="/settings/tts-templates" method="post" class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">模板名称</label>
+                    <input type="text" class="form-control form-control-sm" name="name" required placeholder="例: 自定义替换规则">
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small mb-1">描述</label>
+                    <input type="text" class="form-control form-control-sm" name="description" placeholder="可选描述">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-sm btn-primary">创建</button>
+                    <button type="button" class="btn btn-sm btn-secondary" @click="showAdd = false">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Builtin Templates -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <strong><i class="bi bi-lock"></i> 内置模板</strong>
+            <small class="text-muted ms-2">不可编辑，可复制为自定义模板</small>
+        </div>
+        <div class="card-body p-0" id="builtinArea"></div>
+    </div>
+
+    <!-- User Templates -->
+    <div class="card">
+        <div class="card-header">
+            <strong><i class="bi bi-pencil-square"></i> 自定义模板</strong>
+            <small class="text-muted ms-2">可编辑、启用/禁用或删除</small>
+        </div>
+        <div class="card-body p-0" id="userArea"></div>
+    </div>
+</div>
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+(function () {
+    'use strict';
+    var data = window.__TTS_TEMPLATES_DATA__ || { builtinTemplates: [], userTemplates: [] };
+    var builtin = data.builtinTemplates || [];
+    var users = data.userTemplates || [];
+    var main = document.querySelector('main');
+
+    function renderBuiltin() {
+        var area = document.getElementById('builtinArea');
+        if (!builtin.length) {
+            area.innerHTML = '<div class="p-3"><p class="text-muted small mb-0">暂无内置模板。</p></div>';
+            return;
+        }
+        var rows = builtin.map(function (t) {
+            var ref = encodeURIComponent(t.id);
+            return '<tr>' +
+                '<td><i class="bi bi-shield-check text-success me-1"></i><strong>' + SC.escape(t.name) + '</strong></td>' +
+                '<td class="text-muted small">' + SC.escape(t.description) + '</td>' +
+                '<td><span class="badge bg-secondary">' + t.ruleCount + '</span></td>' +
+                '<td>' +
+                    '<a href="/settings/tts-templates/builtin/' + ref + '/view" class="btn btn-sm btn-outline-secondary me-1" title="查看规则">' +
+                        '<i class="bi bi-eye"></i> 查看</a>' +
+                    '<form action="/settings/tts-templates/builtin/' + ref + '/copy" method="post" class="d-inline">' +
+                        '<button type="submit" class="btn btn-sm btn-outline-primary" title="复制为自定义模板">' +
+                            '<i class="bi bi-copy"></i> 复制</button>' +
+                    '</form>' +
+                '</td></tr>';
+        }).join('');
+        area.innerHTML =
+            '<table class="table table-sm table-hover mb-0">' +
+            '<thead><tr><th>名称</th><th>描述</th><th style="width:80px;">规则数</th><th style="width:160px;">操作</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody></table>';
+    }
+
+    function renderUsers() {
+        var area = document.getElementById('userArea');
+        if (!users.length) {
+            area.innerHTML = '<div class="p-3"><p class="text-muted small mb-0">' +
+                '暂无自定义模板。可从内置模板复制，或点击"新建模板"创建。</p></div>';
+            return;
+        }
+        var rows = users.map(function (t) {
+            return '<tr>' +
+                '<td><strong>' + SC.escape(t.name) + '</strong></td>' +
+                '<td class="text-muted small">' + SC.escape(t.description) + '</td>' +
+                '<td><span class="badge bg-secondary">' + t.ruleCount + '</span></td>' +
+                '<td><span class="badge ' + (t.enabled ? 'bg-success' : 'bg-secondary') + '">' +
+                    (t.enabled ? '启用' : '禁用') + '</span></td>' +
+                '<td>' +
+                    '<a href="/settings/tts-templates/' + t.id + '/edit" class="btn btn-sm btn-outline-primary me-1" title="编辑规则">' +
+                        '<i class="bi bi-pencil"></i></a>' +
+                    '<form action="/settings/tts-templates/' + t.id + '/toggle" method="post" class="d-inline">' +
+                        '<button type="submit" class="btn btn-sm btn-outline-secondary me-1">' +
+                            (t.enabled ? '禁用' : '启用') + '</button></form>' +
+                    '<form action="/settings/tts-templates/' + t.id + '/delete" method="post" class="d-inline" ' +
+                        'data-confirm="确定删除此模板及其所有规则？">' +
+                        '<button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form>' +
+                '</td></tr>';
+        }).join('');
+        area.innerHTML =
+            '<table class="table table-sm table-hover mb-0">' +
+            '<thead><tr><th>名称</th><th>描述</th><th style="width:80px;">规则数</th>' +
+            '<th style="width:80px;">状态</th><th style="width:200px;">操作</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody></table>';
+    }
+
+    main.addEventListener('submit', function (e) {
+        var form = e.target.closest('form[data-confirm]');
+        if (form && !confirm(form.dataset.confirm)) e.preventDefault();
+    });
+
+    renderBuiltin();
+    renderUsers();
+})();
+</script>
+<script src="/vendor/alpinejs/cdn.min.js" defer></script>
+</body>
+</html>

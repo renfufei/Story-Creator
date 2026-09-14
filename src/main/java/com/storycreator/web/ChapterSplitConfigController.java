@@ -4,9 +4,10 @@ import com.storycreator.persistence.entity.ChapterSplitConfigEntity;
 import com.storycreator.txtimport.ChapterSplitConfigService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Controller
@@ -20,9 +21,27 @@ public class ChapterSplitConfigController {
     }
 
     @GetMapping
-    public String list(Model model) {
-        model.addAttribute("configs", configService.listAll());
-        return "chapter-split-configs";
+    public String list() {
+        return "forward:/pages/chapter-split-configs.html";
+    }
+
+    /** 列表引导数据（静态页同步 XHR 读取） */
+    @GetMapping("/data")
+    @ResponseBody
+    public Map<String, Object> data() {
+        List<Map<String, Object>> configs = configService.listAll().stream().map(c -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", c.getId());
+            m.put("name", c.getName());
+            m.put("description", c.getDescription() != null ? c.getDescription() : "");
+            m.put("pattern", c.getPattern());
+            m.put("titleGroup", c.getTitleGroup());
+            m.put("includeMatch", c.isIncludeMatch());
+            m.put("builtin", c.isBuiltin());
+            m.put("enabled", c.isEnabled());
+            return m;
+        }).toList();
+        return Map.of("configs", configs);
     }
 
     @PostMapping

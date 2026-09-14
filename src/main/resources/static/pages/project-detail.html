@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目详情 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="sc-page">
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small mb-0">
+            <li class="breadcrumb-item"><a href="/">项目列表</a></li>
+            <li class="breadcrumb-item active" id="crumbTitle">项目详情</li>
+        </ol>
+    </nav>
+
+    <div id="detailContainer">
+        <div class="sc-loading"><div class="sc-loading-row"></div><div class="sc-loading-row"></div></div>
+    </div>
+
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    // URL 形如 /projects/12 —— 取最后一段作为项目 ID
+    var projectId = (location.pathname.match(/\/projects\/(\d+)/) || [])[1];
+    var container = document.getElementById('detailContainer');
+
+    if (!projectId) {
+        container.innerHTML = SC.skeleton.error('无效的项目地址：' + SC.escape(location.pathname));
+        return;
+    }
+
+    var BASE = '/projects/' + projectId;
+
+    function headerHtml(p) {
+        return '' +
+            '<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">' +
+            '  <div>' +
+            '    <h2 class="sc-page-title mb-2">' + SC.escape(p.title) + '</h2>' +
+            '    <span class="badge bg-info">' + SC.escape(p.genre || '未设置') + '</span> ' +
+            '    <span class="badge bg-secondary">' + SC.escape(p.currentStep || '') + '</span> ' +
+            (p.author ? '<span class="badge bg-light text-dark">作者：' + SC.escape(p.author) + '</span> ' : '') +
+            '    <span class="text-muted ms-3 small"><i class="bi bi-journal-text"></i> ' + (p.chapterCount || 0) + ' 章</span>' +
+            '    <span class="text-muted ms-2 small"><i class="bi bi-fonts"></i> ' + SC.escape(p.wordCountText || '0') + ' 字</span>' +
+            '    <div class="text-muted small mt-1">更新于 ' + SC.escape(SC.fmt.datetime(p.updatedAt)) + '</div>' +
+            '  </div>' +
+            '  <div class="d-flex flex-wrap gap-2">' +
+            '    <a href="' + BASE + '/workflow" class="btn btn-primary"><i class="bi bi-pencil-square"></i> 继续创作</a>' +
+            '    <a href="' + BASE + '/side-stories" class="btn btn-outline-warning"><i class="bi bi-journal-bookmark"></i> 番外</a>' +
+            '    <a href="' + BASE + '/inspirations" class="btn btn-outline-dark" target="_blank"><i class="bi bi-lightbulb"></i> 灵感</a>' +
+            '    <a href="' + BASE + '/read" class="btn btn-outline-success" target="_blank"><i class="bi bi-book"></i> 全文阅读</a>' +
+            '    <a href="' + BASE + '/inspect" class="btn btn-outline-info" target="_blank"><i class="bi bi-eye"></i> 创作透视</a>' +
+            '    <div class="dropdown">' +
+            '      <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">' +
+            '        <i class="bi bi-download"></i> 导出</button>' +
+            '      <ul class="dropdown-menu dropdown-menu-end">' +
+            '        <li><a class="dropdown-item" href="' + BASE + '/export?format=markdown"><i class="bi bi-filetype-md me-2"></i>Markdown (.md)</a></li>' +
+            '        <li><a class="dropdown-item" href="' + BASE + '/export?format=txt"><i class="bi bi-file-text me-2"></i>纯文本 (.txt)</a></li>' +
+            '        <li><a class="dropdown-item" href="' + BASE + '/export?format=pdf"><i class="bi bi-filetype-pdf me-2"></i>PDF (.pdf)</a></li>' +
+            '        <li><a class="dropdown-item" href="' + BASE + '/export?format=epub"><i class="bi bi-book me-2"></i>电子书 (.epub)</a></li>' +
+            '        <li><hr class="dropdown-divider"></li>' +
+            '        <li><a class="dropdown-item" href="' + BASE + '/export?format=json"><i class="bi bi-filetype-json me-2"></i>完整备份 (.json)</a></li>' +
+            '        <li><hr class="dropdown-divider"></li>' +
+            '        <li><a class="dropdown-item" href="/tts-export?projectId=' + projectId + '"><i class="bi bi-music-note-beamed me-2"></i>导出MP3</a></li>' +
+            '      </ul>' +
+            '    </div>' +
+            '    <a href="' + BASE + '/edit" class="btn btn-outline-secondary"><i class="bi bi-gear"></i> 编辑</a>' +
+            '    <button type="button" class="btn btn-outline-danger" id="btnDelete"><i class="bi bi-trash"></i> 删除</button>' +
+            '  </div>' +
+            '</div>';
+    }
+
+    function descriptionHtml(p) {
+        if (!p.description) return '';
+        return '<div class="card mb-3"><div class="card-body">' +
+            '<h6 class="card-subtitle mb-2 text-muted">故事简介</h6>' +
+            '<p class="mb-0" style="white-space:pre-wrap">' + SC.escape(p.description) + '</p>' +
+            '</div></div>';
+    }
+
+    function workflowHtml(p) {
+        var states = p.workflowStates || [];
+        var rows = states.map(function (s) {
+            return '<div class="list-group-item d-flex justify-content-between align-items-center">' +
+                '<span>' + SC.escape(s.stepName) + '</span>' +
+                '<span class="badge ' + SC.escape(s.statusClass) + '">' + SC.escape(s.statusName) + '</span>' +
+                '</div>';
+        }).join('');
+        return '<h5 class="mt-4">工作流进度</h5>' +
+            '<div class="list-group">' + (rows || '<div class="list-group-item text-muted">暂无进度</div>') + '</div>';
+    }
+
+    function usageHtml(p) {
+        var stats = p.usageStats || [];
+        if (!stats.length) return '';
+        var rows = stats.map(function (s) {
+            return '<tr><td>' + SC.escape(s.modelId) + '</td><td>' + SC.escape(s.providerName) + '</td>' +
+                '<td>' + SC.escape(s.formattedDuration) + '</td></tr>';
+        }).join('');
+        return '<div class="card mt-4"><div class="card-body">' +
+            '<h6 class="card-subtitle mb-3 text-muted">AI 用时统计</h6>' +
+            '<table class="table table-sm table-striped mb-0">' +
+            '<thead><tr><th>模型</th><th>供应商</th><th>累计用时</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody></table></div></div>';
+    }
+
+    function render(p) {
+        document.title = p.title + ' - AI故事创作';
+        document.getElementById('crumbTitle').textContent = p.title;
+        container.innerHTML = headerHtml(p) + descriptionHtml(p) + workflowHtml(p) + usageHtml(p);
+    }
+
+    async function doDelete() {
+        var ok = await SC.confirm({
+            title: '删除项目',
+            message: '确定要删除此项目吗？此操作不可撤销。\n（仅「已废弃」状态的项目允许删除）',
+            confirmText: '删除',
+            danger: true
+        });
+        if (!ok) return;
+        try {
+            await SC.api.del('/api/projects/' + projectId);
+            SC.toast.success('项目已删除');
+            location.href = '/';
+        } catch (e) { /* SC.api 已提示 */ }
+    }
+
+    async function load() {
+        try {
+            var p = await SC.api.get('/api/projects/' + projectId);
+            render(p);
+            var btn = document.getElementById('btnDelete');
+            if (btn) btn.addEventListener('click', doDelete);
+        } catch (e) {
+            container.innerHTML = SC.skeleton.error('项目信息加载失败：' + e.message);
+        }
+    }
+
+    load();
+})();
+</script>
+</body>
+</html>

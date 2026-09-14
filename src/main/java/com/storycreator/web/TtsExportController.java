@@ -18,7 +18,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -58,7 +57,14 @@ public class TtsExportController {
     // ==================== Page ====================
 
     @GetMapping("/tts-export")
-    public String ttsExportPage(@RequestParam(required = false) Long projectId, Model model) {
+    public String ttsExportPage() {
+        return "forward:/pages/tts-export.html";
+    }
+
+    /** 页面引导数据：项目列表（含章节数 / 字数）+ 预选项目 id。 */
+    @GetMapping("/tts-export/data")
+    @ResponseBody
+    public Map<String, Object> ttsExportData(@RequestParam(required = false) Long projectId) {
         List<ProjectEntity> projects = projectRepository.findAllByOrderByUpdatedAtDesc();
         // Build chapter count and word count map per project
         Map<Long, long[]> chapterStats = new HashMap<>();
@@ -77,15 +83,15 @@ public class TtsExportController {
             m.put("wordCount", stats[1]);
             return m;
         }).toList();
-        model.addAttribute("projects", projectList);
-        model.addAttribute("preselectedProjectId", projectId);
-        return "tts-export";
+        Map<String, Object> result = new HashMap<>();
+        result.put("projects", projectList);
+        result.put("preselectedProjectId", projectId);
+        return result;
     }
 
     @GetMapping("/tts-fullplay")
-    public String fullPlayPage(@RequestParam Long taskId, Model model) {
-        model.addAttribute("taskId", taskId);
-        return "tts-fullplay";
+    public String fullPlayPage() {
+        return "forward:/pages/tts-fullplay.html";
     }
 
     // ==================== REST API ====================

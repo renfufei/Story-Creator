@@ -8,7 +8,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -47,11 +46,49 @@ public class MaterialLibraryController {
     }
 
     @GetMapping
-    public String listPage(Model model) {
-        model.addAttribute("items", materialLibraryService.findAll());
-        model.addAttribute("categories", MaterialCategory.values());
-        model.addAttribute("modelConfigs", aiModelConfigRepository.findByActiveTrueAndModelType(ModelType.TEXT));
-        return "materials";
+    public String listPage() {
+        return "forward:/pages/materials.html";
+    }
+
+    /** 列表引导数据（静态页同步 XHR 读取） */
+    @GetMapping("/data")
+    @ResponseBody
+    public Map<String, Object> data() {
+        List<MaterialLibraryEntity> items = materialLibraryService.findAll();
+
+        List<Map<String, Object>> itemList = items.stream().map(item -> {
+            String content = item.getContent() != null ? item.getContent() : "";
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", item.getId());
+            m.put("name", item.getName());
+            m.put("category", item.getCategory().name());
+            m.put("categoryLabel", item.getCategory().getDisplayName());
+            m.put("content", content);
+            m.put("preview", content.length() > 60 ? content.substring(0, 60) + "..." : content);
+            m.put("sourceHint", item.getSourceHint() != null ? item.getSourceHint() : "");
+            m.put("updatedAt", item.getUpdatedAt() != null ? item.getUpdatedAt().toString() : null);
+            return m;
+        }).toList();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("items", itemList);
+        result.put("categories", categoryOptions());
+        result.put("modelConfigs", aiModelConfigRepository.findByActiveTrueAndModelType(ModelType.TEXT).stream()
+                .map(mc -> {
+                    Map<String, Object> c = new LinkedHashMap<>();
+                    c.put("id", mc.getId());
+                    c.put("provider", mc.getProvider() != null ? mc.getProvider() : "");
+                    c.put("modelId", mc.getModelId() != null ? mc.getModelId() : "");
+                    return c;
+                })
+                .toList());
+        return result;
+    }
+
+    private static List<Map<String, Object>> categoryOptions() {
+        return Arrays.stream(MaterialCategory.values())
+                .map(c -> Map.<String, Object>of("name", c.name(), "displayName", c.getDisplayName()))
+                .toList();
     }
 
     @PostMapping
@@ -69,12 +106,29 @@ public class MaterialLibraryController {
     }
 
     @GetMapping("/{id}/edit")
-    public String editPage(@PathVariable Long id, Model model) {
+    public String editPage(@PathVariable Long id) {
         MaterialLibraryEntity entity = materialLibraryService.findById(id);
         if (entity == null) throw new IllegalArgumentException("Material not found: " + id);
-        model.addAttribute("item", entity);
-        model.addAttribute("categories", MaterialCategory.values());
-        return "material-edit";
+        return "forward:/pages/material-edit.html";
+    }
+
+    /** 编辑页引导数据 */
+    @GetMapping("/{id}/edit-data")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> editData(@PathVariable Long id) {
+        MaterialLibraryEntity entity = materialLibraryService.findById(id);
+        if (entity == null) {
+            return ResponseEntity.notFound().build();
+        }
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", entity.getId());
+        m.put("name", entity.getName());
+        m.put("category", entity.getCategory().name());
+        m.put("categoryLabel", entity.getCategory().getDisplayName());
+        m.put("content", entity.getContent() != null ? entity.getContent() : "");
+        m.put("sourceHint", entity.getSourceHint() != null ? entity.getSourceHint() : "");
+        m.put("categories", categoryOptions());
+        return ResponseEntity.ok(m);
     }
 
     @PostMapping("/{id}/update")

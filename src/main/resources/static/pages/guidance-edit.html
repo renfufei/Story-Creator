@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>编辑创作指导 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="sc-page">
+
+<script>
+/* 引导数据：同步 XHR（路径形如 /settings/guidances/{id}/edit） */
+window.__GUIDANCE_EDIT_DATA__ = (function () {
+    var d = {};
+    try {
+        var id = location.pathname.split('/')[3] || '';
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/settings/guidances/' + encodeURIComponent(id) + '/edit-data', false);
+        xhr.send();
+        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
+    } catch (e) { console.error('__GUIDANCE_EDIT_DATA__ load failed', e); }
+    return d;
+})();
+</script>
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">编辑创作指导</h2>
+        <a href="/settings/guidances" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> 返回列表
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <form id="editForm" method="post">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">名称</label>
+                        <input type="text" class="form-control" name="name" id="fName" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">步骤</label>
+                        <select class="form-select" name="step" id="fStep" required></select>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">指导内容</label>
+                    <textarea class="form-control" name="guidance" id="fGuidance" rows="12"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">保存</button>
+                <a href="/settings/guidances" class="btn btn-secondary">取消</a>
+            </form>
+        </div>
+    </div>
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+(function () {
+    'use strict';
+    var d = window.__GUIDANCE_EDIT_DATA__ || {};
+
+    document.getElementById('editForm').setAttribute('action', '/settings/guidances/' + d.id + '/update');
+    document.getElementById('fName').value = d.name || '';
+    document.getElementById('fGuidance').value = d.guidance || '';
+    document.getElementById('fStep').innerHTML = (d.steps || []).map(function (s) {
+        return '<option value="' + SC.escape(s.name) + '"' + (s.name === d.step ? ' selected' : '') + '>' +
+            SC.escape(s.displayName) + '</option>';
+    }).join('');
+})();
+</script>
+</body>
+</html>

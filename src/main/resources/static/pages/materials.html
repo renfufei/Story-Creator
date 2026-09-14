@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>素材库 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="sc-page">
+
+<script>
+/* 引导数据：同步 XHR，确保下方渲染脚本读取时已就绪 */
+window.__MATERIALS_DATA__ = (function () {
+    var d = { items: [], categories: [], modelConfigs: [] };
+    try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/settings/materials/data', false);
+        xhr.send();
+        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
+    } catch (e) { console.error('__MATERIALS_DATA__ load failed', e); }
+    return d;
+})();
+</script>
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4" id="main">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <h2 class="mb-0">素材库</h2>
+        <div>
+            <a href="/settings" class="btn btn-outline-secondary btn-sm me-2">
+                <i class="bi bi-arrow-left"></i> 返回设置
+            </a>
+            <button type="button" class="btn btn-outline-success btn-sm me-2" data-bs-toggle="modal" data-bs-target="#distillModal">
+                <i class="bi bi-funnel"></i> 蒸馏素材
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" id="btnNew">
+                <i class="bi bi-plus"></i> 新建素材
+            </button>
+        </div>
+    </div>
+
+    <!-- 新建表单 -->
+    <div class="card mb-4" id="addCard" style="display:none;">
+        <div class="card-body">
+            <form action="/settings/materials" method="post">
+                <div class="row g-2 mb-2">
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">名称</label>
+                        <input type="text" class="form-control form-control-sm" name="name" required placeholder="素材名称">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">分类</label>
+                        <select class="form-select form-select-sm" name="category" id="addCategory" required></select>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small mb-1">来源提示（可选）</label>
+                        <input type="text" class="form-control form-control-sm" name="sourceHint" placeholder="如：某项目的世界观">
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small mb-1">素材内容</label>
+                    <textarea class="form-control form-control-sm" name="content" rows="5" placeholder="素材内容..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">创建</button>
+                <button type="button" class="btn btn-sm btn-secondary" id="btnCancelAdd">取消</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 蒸馏弹窗 -->
+    <div class="modal fade" id="distillModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-funnel"></i> 蒸馏素材</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small">选择项目</label>
+                            <select class="form-select form-select-sm" id="dProject">
+                                <option value="">-- 请选择 --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">来源类型</label>
+                            <select class="form-select form-select-sm" id="dSourceType" disabled>
+                                <option value="">-- 请选择 --</option>
+                                <option value="world" id="optWorld" hidden>世界观</option>
+                                <option value="outline" id="optOutline" hidden>故事大纲</option>
+                                <option value="character">角色卡</option>
+                                <option value="chapter_outline">章节大纲</option>
+                                <option value="chapter">章节正文</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6" id="dSecondaryWrap" style="display:none;">
+                            <label class="form-label small" id="dSecondaryLabel"></label>
+                            <select class="form-select form-select-sm" id="dSecondary">
+                                <option value="">-- 请选择 --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">素材分类</label>
+                            <select class="form-select form-select-sm" id="dCategory"></select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">素材名称（可选）</label>
+                            <input type="text" class="form-control form-control-sm" id="dName" placeholder="留空则自动生成">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">AI模型</label>
+                            <select class="form-select form-select-sm" id="dConfig">
+                                <option value="">使用全局默认</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button type="button" class="btn btn-success btn-sm" id="dRun" disabled>
+                            <span id="dSpinner" class="spinner-border spinner-border-sm me-1" style="display:none;"></span>蒸馏
+                        </button>
+                    </div>
+                    <div class="mt-3" id="dErrorWrap" style="display:none;">
+                        <div class="alert alert-danger small mb-0" id="dError"></div>
+                    </div>
+                    <div class="mt-3" id="dResultWrap" style="display:none;">
+                        <div class="alert alert-success small mb-1">
+                            蒸馏成功！素材已保存：<strong id="dResultName"></strong>
+                        </div>
+                        <div class="border rounded p-2 bg-light small" id="dResultContent"
+                             style="max-height:200px;overflow-y:auto;white-space:pre-wrap;"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 列表 -->
+    <div class="card">
+        <div class="card-header">
+            <strong><i class="bi bi-collection"></i> 素材列表</strong>
+            <small class="text-muted ms-2">可在工作流页面"蒸馏素材"按钮提取，也可手动管理</small>
+        </div>
+        <div class="card-body p-0" id="listArea"></div>
+    </div>
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    var data = window.__MATERIALS_DATA__ || { items: [], categories: [], modelConfigs: [] };
+    var items = data.items || [];
+    var categories = data.categories || [];
+    var main = document.getElementById('main');
+    var listArea = document.getElementById('listArea');
+
+    function categoryOptionsHtml() {
+        return categories.map(function (c) {
+            return '<option value="' + SC.escape(c.name) + '">' + SC.escape(c.displayName) + '</option>';
+        }).join('');
+    }
+
+    /* ===================== 列表渲染 ===================== */
+    function renderList() {
+        if (!items.length) {
+            listArea.innerHTML = '<div class="p-3"><p class="text-muted small mb-0">' +
+                '暂无素材。可在工作流页面中蒸馏已有项目内容，或点击"新建素材"手动创建。</p></div>';
+            return;
+        }
+        var rows = items.map(function (it) {
+            return '<tr>' +
+                '<td><strong>' + SC.escape(it.name) + '</strong></td>' +
+                '<td><span class="badge bg-secondary">' + SC.escape(it.categoryLabel) + '</span></td>' +
+                '<td class="text-muted small text-truncate" style="max-width:200px;">' + SC.escape(it.preview) + '</td>' +
+                '<td class="text-muted small text-truncate" style="max-width:160px;">' + SC.escape(it.sourceHint) + '</td>' +
+                '<td class="small text-muted">' + SC.escape(SC.fmt.datetime(it.updatedAt)) + '</td>' +
+                '<td>' +
+                    '<a href="/settings/materials/' + it.id + '/edit" class="btn btn-sm btn-outline-primary me-1" title="编辑">' +
+                        '<i class="bi bi-pencil"></i></a>' +
+                    '<form action="/settings/materials/' + it.id + '/delete" method="post" class="d-inline" ' +
+                        'data-confirm="确定删除此素材？">' +
+                        '<button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>' +
+                    '</form>' +
+                '</td>' +
+                '</tr>';
+        }).join('');
+
+        listArea.innerHTML =
+            '<table class="table table-sm table-hover mb-0">' +
+            '<thead><tr>' +
+            '<th>名称</th><th style="width:100px;">分类</th><th style="width:200px;">内容预览</th>' +
+            '<th style="width:160px;">来源</th><th style="width:140px;">更新时间</th><th style="width:120px;">操作</th>' +
+            '</tr></thead><tbody>' + rows + '</tbody></table>';
+    }
+
+    /* ===================== 蒸馏弹窗 ===================== */
+    var dProject = document.getElementById('dProject');
+    var dSourceType = document.getElementById('dSourceType');
+    var dSecondaryWrap = document.getElementById('dSecondaryWrap');
+    var dSecondaryLabel = document.getElementById('dSecondaryLabel');
+    var dSecondary = document.getElementById('dSecondary');
+    var dCategory = document.getElementById('dCategory');
+    var dName = document.getElementById('dName');
+    var dConfig = document.getElementById('dConfig');
+    var dRun = document.getElementById('dRun');
+    var dSpinner = document.getElementById('dSpinner');
+    var dErrorWrap = document.getElementById('dErrorWrap');
+    var dError = document.getElementById('dError');
+    var dResultWrap = document.getElementById('dResultWrap');
+    var dResultName = document.getElementById('dResultName');
+    var dResultContent = document.getElementById('dResultContent');
+    var sources = {};
+    var secondaryOptions = [];
+
+    function fillDistillSelects() {
+        dCategory.innerHTML = categoryOptionsHtml();
+        if (categories.some(function (c) { return c.name === 'OTHER'; })) dCategory.value = 'OTHER';
+        dConfig.innerHTML = '<option value="">使用全局默认</option>' + (data.modelConfigs || []).map(function (mc) {
+            return '<option value="' + mc.id + '">' + SC.escape(mc.provider + ' / ' + mc.modelId) + '</option>';
+        }).join('');
+    }
+
+    function loadProjects() {
+        fetch('/settings/materials/projects-json')
+            .then(function (r) { return r.json(); })
+            .then(function (list) {
+                dProject.innerHTML = '<option value="">-- 请选择 --</option>' + (list || []).map(function (p) {
+                    return '<option value="' + p.id + '">' + SC.escape(p.title) + '</option>';
+                }).join('');
+            })
+            .catch(function () { /* 静默：弹窗内仍可手动选择 */ });
+    }
+
+    function resetResult() {
+        dErrorWrap.style.display = 'none';
+        dResultWrap.style.display = 'none';
+        dError.textContent = '';
+    }
+
+    function updateRunState() {
+        var needSecondary = dSecondaryWrap.style.display !== 'none';
+        dRun.disabled = !(dProject.value && dSourceType.value && (!needSecondary || dSecondary.value));
+    }
+
+    function onProjectChange() {
+        dSourceType.value = '';
+        dSourceType.disabled = !dProject.value;
+        sources = {};
+        dSecondaryWrap.style.display = 'none';
+        dSecondary.innerHTML = '<option value="">-- 请选择 --</option>';
+        document.getElementById('optWorld').hidden = true;
+        document.getElementById('optOutline').hidden = true;
+        resetResult();
+        updateRunState();
+        if (!dProject.value) return;
+        fetch('/settings/materials/project-sources?projectId=' + encodeURIComponent(dProject.value))
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                sources = d || {};
+                document.getElementById('optWorld').hidden = !sources.hasWorld;
+                document.getElementById('optOutline').hidden = !sources.hasOutline;
+            })
+            .catch(function () { /* 静默 */ });
+    }
+
+    function onSourceTypeChange() {
+        var type = dSourceType.value;
+        dSecondaryWrap.style.display = 'none';
+        dSecondary.innerHTML = '<option value="">-- 请选择 --</option>';
+        secondaryOptions = [];
+        var map = null;
+        if (type === 'character') {
+            dSecondaryLabel.textContent = '选择角色';
+            map = function (c) { return { value: 'character:' + c.id, label: c.name }; };
+            secondaryOptions = (sources.characters || []).map(map);
+        } else if (type === 'chapter_outline') {
+            dSecondaryLabel.textContent = '选择章节大纲';
+            map = function (co) { return { value: 'chapter_outline:' + co.num, label: co.title }; };
+            secondaryOptions = (sources.chapterOutlines || []).map(map);
+        } else if (type === 'chapter') {
+            dSecondaryLabel.textContent = '选择章节';
+            map = function (ch) { return { value: 'chapter:' + ch.num, label: ch.title }; };
+            secondaryOptions = (sources.chapters || []).map(map);
+        }
+        if (secondaryOptions.length) {
+            dSecondary.innerHTML = '<option value="">-- 请选择 --</option>' + secondaryOptions.map(function (o) {
+                return '<option value="' + SC.escape(o.value) + '">' + SC.escape(o.label) + '</option>';
+            }).join('');
+            dSecondaryWrap.style.display = '';
+        }
+        resetResult();
+        updateRunState();
+    }
+
+    function doDistill() {
+        var needSecondary = dSecondaryWrap.style.display !== 'none';
+        var actualSource = needSecondary ? dSecondary.value : dSourceType.value;
+        var params = new URLSearchParams();
+        params.append('projectId', dProject.value);
+        params.append('sourceType', actualSource);
+        params.append('category', dCategory.value);
+        if (dName.value) params.append('name', dName.value);
+        if (dConfig.value) params.append('configId', dConfig.value);
+
+        dRun.disabled = true;
+        dSpinner.style.display = '';
+        resetResult();
+
+        fetch('/settings/materials/distill', { method: 'POST', body: params })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                dSpinner.style.display = 'none';
+                dRun.disabled = false;
+                if (res.error) {
+                    dError.textContent = res.error;
+                    dErrorWrap.style.display = '';
+                } else {
+                    dResultName.textContent = res.name || '';
+                    dResultContent.textContent = res.content || '';
+                    dResultWrap.style.display = '';
+                }
+            })
+            .catch(function (err) {
+                dSpinner.style.display = 'none';
+                dRun.disabled = false;
+                dError.textContent = '请求失败: ' + err.message;
+                dErrorWrap.style.display = '';
+            });
+    }
+
+    /* ===================== 事件绑定 ===================== */
+    document.getElementById('btnNew').addEventListener('click', function () {
+        document.getElementById('addCard').style.display = '';
+    });
+    document.getElementById('btnCancelAdd').addEventListener('click', function () {
+        document.getElementById('addCard').style.display = 'none';
+    });
+
+    dProject.addEventListener('change', onProjectChange);
+    dSourceType.addEventListener('change', onSourceTypeChange);
+    dSecondary.addEventListener('change', updateRunState);
+    dCategory.addEventListener('change', updateRunState);
+    dRun.addEventListener('click', doDistill);
+
+    main.addEventListener('submit', function (e) {
+        var form = e.target.closest('form[data-confirm]');
+        if (form && !confirm(form.dataset.confirm)) e.preventDefault();
+    });
+
+    /* ===================== 初始化 ===================== */
+    document.getElementById('addCategory').innerHTML = categoryOptionsHtml();
+    fillDistillSelects();
+    loadProjects();
+    renderList();
+})();
+</script>
+</body>
+</html>

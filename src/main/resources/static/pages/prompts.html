@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>流程模板配置 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="sc-page" data-nav="prompts">
+
+<script>
+/* 引导数据：同步 XHR，确保页面脚本读取时已就绪 */
+window.__PROMPTS_DATA__ = (function () {
+    var d = { templates: [], steps: [], genres: [], subSteps: [] };
+    try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/prompts/data', false);
+        xhr.send();
+        if (xhr.status === 200) {
+            d = JSON.parse(xhr.responseText || '{}');
+        }
+    } catch (e) { console.error('__PROMPTS_DATA__ load failed', e); }
+    return d;
+})();
+</script>
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="sc-page-title mb-0"><i class="bi bi-diagram-3"></i> Prompt模板管理</h2>
+        <div class="d-flex gap-2">
+            <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#createModal">
+                <i class="bi bi-plus-lg"></i> 新建模板
+            </button>
+            <button class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#importModal">
+                <i class="bi bi-upload"></i> 导入模板
+            </button>
+            <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#exportModal">
+                <i class="bi bi-download"></i> 导出自定义模板
+            </button>
+        </div>
+    </div>
+
+    <!-- 过滤按钮组 -->
+    <div class="d-flex align-items-center mb-3 gap-3">
+        <div class="btn-group" role="group">
+            <button type="button" class="btn btn-outline-secondary btn-sm active" data-filter="all">全部</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-filter="builtin">内置</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-filter="custom">自定义</button>
+        </div>
+        <div class="btn-group" role="group">
+            <button type="button" class="btn btn-outline-secondary btn-sm active" data-workflow="all">所有流程</button>
+            <button type="button" class="btn btn-outline-primary btn-sm" data-workflow="STANDARD">标准</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-workflow="IMAGE">图像</button>
+            <button type="button" class="btn btn-outline-warning btn-sm" data-workflow="SIDE_STORY">番外</button>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+            <tr>
+                <th>步骤</th>
+                <th>子步骤</th>
+                <th>流程</th>
+                <th>题材</th>
+                <th>名称</th>
+                <th>类型</th>
+                <th>默认</th>
+                <th>修改时间</th>
+                <th>操作</th>
+            </tr>
+            </thead>
+            <tbody id="templateTbody"></tbody>
+        </table>
+    </div>
+
+    <!-- 新建/复制模板 Modal -->
+    <div class="modal fade" id="createModal" tabindex="-1" aria-labelledby="createModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="createModalLabel">新建模板</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="/prompts" method="post" id="create-form">
+                    <div class="modal-body">
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-3">
+                                <label class="form-label">步骤</label>
+                                <select class="form-select form-select-sm" name="step" id="create-step" required>
+                                    <option value="">-- 选择步骤 --</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">子步骤</label>
+                                <select class="form-select form-select-sm" name="subStep" id="create-substep">
+                                    <option value="">主步骤模板</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">题材</label>
+                                <select class="form-select form-select-sm" name="genre" id="create-genre">
+                                    <option value="">通用（不限题材）</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">名称</label>
+                                <input type="text" class="form-control form-control-sm" name="name" id="create-name" placeholder="模板名称" required>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">System Prompt <small class="text-muted">(可选)</small></label>
+                            <textarea class="form-control" name="systemPrompt" id="create-systemPrompt" rows="3" placeholder="AI的角色设定提示词，会作为system消息发送。留空则使用代码中的默认值。"></textarea>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">模板内容</label>
+                            <textarea class="form-control" name="template" id="create-template" rows="8" placeholder="模板内容，使用 {{变量名}} 作为占位符..." required></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-success">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导出自定义模板 Modal -->
+    <div class="modal fade" id="exportModal" tabindex="-1" aria-labelledby="exportModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="exportModalLabel">导出自定义模板</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2 d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.querySelectorAll('#exportModal .export-checkbox').forEach(cb => cb.checked = true)">全选</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.querySelectorAll('#exportModal .export-checkbox').forEach(cb => cb.checked = false)">全不选</button>
+                    </div>
+                    <div class="list-group" id="exportTemplateList"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="doExportTemplates()">
+                        <i class="bi bi-download"></i> 导出
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导入模板 Modal -->
+    <div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="importModalLabel">导入模板</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">覆盖模式</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="importMode" id="importModeOverwrite" value="overwrite" checked>
+                            <label class="form-check-label" for="importModeOverwrite">同名覆盖 <small class="text-muted">（相同步骤+题材+名称的模板会被覆盖）</small></label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="importMode" id="importModeCreate" value="create">
+                            <label class="form-check-label" for="importModeCreate">新创建 <small class="text-muted">（始终创建新模板）</small></label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold" for="importFile">选择文件</label>
+                        <input type="file" class="form-control" id="importFile" accept=".json">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-success" onclick="doImportTemplates()">
+                        <i class="bi bi-upload"></i> 导入
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+(function () {
+    var data = window.__PROMPTS_DATA__ || {};
+    var templates = data.templates || [];
+    var esc = SC.escape;
+
+    function tagClass(name) {
+        if (name === 'STANDARD') return 'bg-primary';
+        if (name === 'SIDE_STORY') return 'bg-warning text-dark';
+        return 'bg-secondary';
+    }
+
+    function actionCell(t) {
+        var parts = [];
+        if (t.builtin) {
+            parts.push('<a href="/prompts/builtin/' + encodeURIComponent(t.key || '') + '" class="btn btn-sm btn-outline-secondary">' +
+                '<i class="bi bi-eye"></i> 查看</a>');
+        } else {
+            parts.push('<a href="/prompts/' + t.id + '/edit" class="btn btn-sm btn-outline-primary">' +
+                '<i class="bi bi-pencil"></i> 编辑</a>');
+        }
+        if (!t.builtin && !t.isDefault) {
+            parts.push('<form action="/prompts/' + t.id + '/set-default" method="post" class="d-inline">' +
+                '<button type="submit" class="btn btn-sm btn-outline-success"><i class="bi bi-check-circle"></i> 设为默认</button></form>');
+        }
+        if (!t.builtin && t.isDefault) {
+            parts.push('<form action="/prompts/' + t.id + '/unset-default" method="post" class="d-inline">' +
+                '<button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle"></i> 取消默认</button></form>');
+        }
+        if (!t.builtin) {
+            parts.push('<form action="/prompts/' + t.id + '/reset" method="post" class="d-inline" ' +
+                'data-confirm="确定要删除此自定义模板吗？将恢复使用内置模板。">' +
+                '<button type="submit" class="btn btn-sm btn-outline-warning"><i class="bi bi-arrow-counterclockwise"></i> 删除覆盖</button></form>');
+        }
+        var exploreHref = t.builtin
+            ? '/prompts/explore?templateKey=' + encodeURIComponent(t.key || '')
+            : '/prompts/explore?templateId=' + t.id;
+        parts.push('<a href="' + exploreHref + '" target="_blank" class="btn btn-sm btn-outline-success">' +
+            '<i class="bi bi-compass"></i> 探索</a>');
+        parts.push('<button type="button" class="btn btn-sm btn-outline-info btn-copy" ' +
+            'data-step="' + esc(t.step || '') + '" ' +
+            'data-substep="' + esc(t.subStep || '') + '" ' +
+            'data-genre="' + esc(t.genre || '') + '" ' +
+            'data-name="' + esc(t.name || '') + '" ' +
+            'data-key="' + esc(t.builtin ? (t.key || '') : '') + '" ' +
+            'data-id="' + (t.id != null ? t.id : '') + '">' +
+            '<i class="bi bi-copy"></i> 复制</button>');
+        return '<div class="d-flex gap-1 flex-wrap">' + parts.join('') + '</div>';
+    }
+
+    function renderTemplates() {
+        var rows = templates.map(function (t) {
+            var cells = [];
+            cells.push('<td><span class="badge bg-primary">' + esc(t.stepDisplayName) + '</span></td>');
+            if (t.subStep) {
+                cells.push('<td><span class="badge bg-warning text-dark">' + esc(t.subStepDisplayName) + '</span></td>');
+            } else {
+                cells.push('<td><span class="text-muted">-</span></td>');
+            }
+            var tagsHtml;
+            if (t.workflowTags && t.workflowTags.length) {
+                tagsHtml = t.workflowTags.map(function (tag) {
+                    return '<span class="badge me-1 ' + tagClass(tag.name) + '">' + esc(tag.displayName) + '</span>';
+                }).join('');
+            } else {
+                tagsHtml = '<span class="text-muted">-</span>';
+            }
+            cells.push('<td>' + tagsHtml + '</td>');
+            cells.push('<td>' + esc(t.genreDisplayName || '通用') + '</td>');
+            cells.push('<td>' + esc(t.name) + '</td>');
+            cells.push('<td>' + (t.builtin
+                ? '<span class="badge bg-secondary">内置</span>'
+                : '<span class="badge bg-info">自定义</span>') + '</td>');
+            cells.push('<td><i class="bi ' + (t.isDefault ? 'bi-check-circle-fill text-success' : 'bi-circle') + '"></i></td>');
+            cells.push('<td>' + (t.updatedAt
+                ? '<small class="text-muted">' + esc(t.updatedAt) + '</small>'
+                : '<small class="text-muted">-</small>') + '</td>');
+            cells.push('<td>' + actionCell(t) + '</td>');
+            return '<tr data-builtin="' + (t.builtin ? 'true' : 'false') + '" ' +
+                'data-workflow-tags="' + esc(t.workflowTagNamesCsv || '') + '">' + cells.join('') + '</tr>';
+        }).join('');
+        document.getElementById('templateTbody').innerHTML = rows;
+    }
+
+    function renderSelects() {
+        var stepSel = document.getElementById('create-step');
+        var subStepSel = document.getElementById('create-substep');
+        var genreSel = document.getElementById('create-genre');
+
+        (data.steps || []).forEach(function (s) {
+            var opt = document.createElement('option');
+            opt.value = s.value;
+            opt.textContent = s.displayName;
+            stepSel.appendChild(opt);
+        });
+        (data.subSteps || []).forEach(function (ss) {
+            var opt = document.createElement('option');
+            opt.value = ss.value;
+            opt.textContent = ss.displayName;
+            if (ss.parentStep) opt.setAttribute('data-parent', ss.parentStep);
+            subStepSel.appendChild(opt);
+        });
+        (data.genres || []).forEach(function (g) {
+            var opt = document.createElement('option');
+            opt.value = g.value;
+            opt.textContent = g.displayName;
+            genreSel.appendChild(opt);
+        });
+    }
+
+    function renderExportList() {
+        var container = document.getElementById('exportTemplateList');
+        var html = templates.filter(function (t) { return !t.builtin; }).map(function (t) {
+            return '<label class="list-group-item d-flex align-items-center gap-2">' +
+                '<input type="checkbox" class="form-check-input export-checkbox" value="' + t.id + '" checked>' +
+                '<span class="badge bg-primary">' + esc(t.stepDisplayName) + '</span>' +
+                '<span class="text-muted">' + esc(t.genreDisplayName || '通用') + '</span>' +
+                '<span>' + esc(t.name) + '</span>' +
+                '</label>';
+        }).join('');
+        container.innerHTML = html || '<div class="text-muted p-2">暂无自定义模板</div>';
+    }
+
+    /* ---------- 过滤 ---------- */
+    var currentTypeFilter = 'all';
+    var currentWorkflowFilter = 'all';
+
+    function applyFilters() {
+        var rows = document.querySelectorAll('tbody tr[data-builtin]');
+        rows.forEach(function (row) {
+            var showType = true;
+            var showWorkflow = true;
+
+            if (currentTypeFilter === 'builtin') {
+                showType = row.getAttribute('data-builtin') === 'true';
+            } else if (currentTypeFilter === 'custom') {
+                showType = row.getAttribute('data-builtin') === 'false';
+            }
+
+            if (currentWorkflowFilter !== 'all') {
+                var tags = row.getAttribute('data-workflow-tags') || '';
+                showWorkflow = tags.indexOf(currentWorkflowFilter) !== -1;
+            }
+
+            row.style.display = (showType && showWorkflow) ? '' : 'none';
+        });
+    }
+
+    function bindFilters() {
+        var filterBtns = document.querySelectorAll('[data-filter]');
+        filterBtns.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                filterBtns.forEach(function (b) { b.classList.remove('active'); });
+                this.classList.add('active');
+                currentTypeFilter = this.getAttribute('data-filter');
+                applyFilters();
+            });
+        });
+
+        var workflowBtns = document.querySelectorAll('[data-workflow]');
+        workflowBtns.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                workflowBtns.forEach(function (b) { b.classList.remove('active'); });
+                this.classList.add('active');
+                currentWorkflowFilter = this.getAttribute('data-workflow');
+                applyFilters();
+            });
+        });
+    }
+
+    /* ---------- 子步骤联动 ---------- */
+    function bindSubStepLinkage() {
+        var stepSelect = document.getElementById('create-step');
+        var subStepSelect = document.getElementById('create-substep');
+        function filterSubSteps() {
+            var selectedStep = stepSelect.value;
+            var options = subStepSelect.querySelectorAll('option[data-parent]');
+            options.forEach(function (opt) {
+                opt.style.display = (!selectedStep || opt.getAttribute('data-parent') === selectedStep) ? '' : 'none';
+            });
+            var currentOpt = subStepSelect.options[subStepSelect.selectedIndex];
+            if (currentOpt && currentOpt.getAttribute('data-parent') && currentOpt.getAttribute('data-parent') !== selectedStep) {
+                subStepSelect.value = '';
+            }
+        }
+        stepSelect.addEventListener('change', filterSubSteps);
+        window.__filterSubSteps = filterSubSteps;
+        filterSubSteps();
+    }
+
+    /* ---------- 复制模板 ---------- */
+    function fillCreateForm(step, substep, genre, name, systemPrompt, template) {
+        document.getElementById('create-step').value = step || '';
+        if (window.__filterSubSteps) window.__filterSubSteps();
+        if (substep && substep !== 'null') {
+            document.getElementById('create-substep').value = substep;
+        } else {
+            document.getElementById('create-substep').value = '';
+        }
+        document.getElementById('create-genre').value = (genre && genre !== 'null') ? genre : '';
+        document.getElementById('create-name').value = (name || '') + ' - 副本';
+        document.getElementById('create-systemPrompt').value = systemPrompt;
+        document.getElementById('create-template').value = template;
+        document.getElementById('createModalLabel').textContent = '复制模板';
+        var modal = new bootstrap.Modal(document.getElementById('createModal'));
+        modal.show();
+    }
+
+    function bindCopyButtons() {
+        document.querySelectorAll('.btn-copy').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var step = this.getAttribute('data-step');
+                var substep = this.getAttribute('data-substep');
+                var genre = this.getAttribute('data-genre');
+                var name = this.getAttribute('data-name');
+                var key = this.getAttribute('data-key');
+                var id = this.getAttribute('data-id');
+
+                if (key) {
+                    fetch('/prompts/builtin/' + encodeURIComponent(key) + '/json')
+                        .then(function (r) { return r.json(); })
+                        .then(function (d) {
+                            fillCreateForm(step, substep, genre, name, d.systemPrompt || '', d.template || '');
+                        })
+                        .catch(function () { alert('获取模板内容失败'); });
+                } else if (id) {
+                    fetch('/prompts/' + id + '/json')
+                        .then(function (r) { return r.json(); })
+                        .then(function (d) {
+                            fillCreateForm(step, substep, genre, name, d.systemPrompt || '', d.template || '');
+                        })
+                        .catch(function () { alert('获取模板内容失败'); });
+                }
+            });
+        });
+    }
+
+    /* ---------- 新建弹窗重置 ---------- */
+    function bindCreateModalReset() {
+        var createModal = document.getElementById('createModal');
+        createModal.addEventListener('show.bs.modal', function (event) {
+            // 只有从顶部按钮触发时重置（复制按钮通过 JS 打开，不会触发 data-bs-toggle）
+            if (event.relatedTarget) {
+                document.getElementById('create-form').reset();
+                if (window.__filterSubSteps) window.__filterSubSteps();
+                document.getElementById('createModalLabel').textContent = '新建模板';
+            }
+        });
+    }
+
+    /* ---------- 行内确认（删除覆盖） ---------- */
+    function bindConfirmSubmit() {
+        document.getElementById('templateTbody').addEventListener('submit', function (e) {
+            var msg = e.target.getAttribute && e.target.getAttribute('data-confirm');
+            if (msg && !confirm(msg)) e.preventDefault();
+        });
+    }
+
+    /* ---------- 导入 / 导出 ---------- */
+    window.doImportTemplates = function () {
+        var fileInput = document.getElementById('importFile');
+        if (!fileInput.files || fileInput.files.length === 0) {
+            alert('请选择一个 JSON 文件');
+            return;
+        }
+        var mode = document.querySelector('input[name="importMode"]:checked').value;
+        var formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        formData.append('mode', mode);
+        fetch('/prompts/import', { method: 'POST', body: formData })
+            .then(function (r) {
+                if (!r.ok) throw new Error('导入失败');
+                return r.json();
+            })
+            .then(function (d) {
+                alert('导入成功：' + d.imported + ' 个模板');
+                var modal = bootstrap.Modal.getInstance(document.getElementById('importModal'));
+                if (modal) modal.hide();
+                location.reload();
+            })
+            .catch(function (err) { alert(err.message || '导入失败'); });
+    };
+
+    window.doExportTemplates = function () {
+        var checkboxes = document.querySelectorAll('#exportModal .export-checkbox:checked');
+        if (checkboxes.length === 0) {
+            alert('请至少选择一个模板');
+            return;
+        }
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/prompts/export';
+        form.style.display = 'none';
+        checkboxes.forEach(function (cb) {
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'ids';
+            input.value = cb.value;
+            form.appendChild(input);
+        });
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+        var modal = bootstrap.Modal.getInstance(document.getElementById('exportModal'));
+        if (modal) modal.hide();
+    };
+
+    /* ---------- 启动 ---------- */
+    renderTemplates();
+    renderSelects();
+    renderExportList();
+    bindFilters();
+    bindSubStepLinkage();
+    bindCopyButtons();
+    bindCreateModalReset();
+    bindConfirmSubmit();
+})();
+</script>
+</body>
+</html>
