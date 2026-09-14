@@ -51,7 +51,7 @@
 ## 迁移后的收尾状态
 
 - `src/main/resources/templates/` **已空**（`layout.html` 随最后三页一并删除）。所有控制器只返回 `forward:` / `redirect:`，没有任何方法返回 Thymeleaf view name（可用 `grep -rnoE 'return "[a-z][a-z0-9-]*"' src/main/java/com/storycreator/web src/main/java/com/storycreator/chat | grep -vE 'forward:|redirect:'` 复核，应无输出）。
-- **可选后续清理**：`spring-boot-starter-thymeleaf` 依赖、`spring.thymeleaf.*` 配置已无使用者，可从 `pom.xml` / `application*.yml` 摘除（本轮未动，避免影响既有测试上下文）。
+- **Thymeleaf 依赖与配置已彻底摘除（2026-09-14 收尾）**：`pom.xml` 删除 `spring-boot-starter-thymeleaf`；`src/main/resources/application.yml`、`src/test/resources/application.yml` 删除 `spring.thymeleaf.*` 块；空的 `src/main/resources/templates/` 目录一并删除。项目模板引擎依赖归零，`forward:/pages/*.html` 由 Spring MVC 内置 `InternalResourceViewResolver` 处理（`UrlBasedViewResolver` 原生识别 `forward:` 前缀）。
 - 迁移前的 `learn*` 三页是本项目最后一批 Thymeleaf 页面；`layout.html` 的导航已由 `static/js/nav.js`（`NAV_ITEMS` 含 `learn` key）接管。
 
 ## 已知坑（迁移通用）
@@ -71,5 +71,6 @@
 - **`x-init` 里读 DOM 的勾选状态不可靠**：Alpine 初始化根元素时先跑 `x-init`，子级 `x-for` 可能尚未渲染，`querySelectorAll('.xxx:checked')` 会拿到空集合（原 Thymeleaf 是服务端渲染好勾选，所以原代码可能依赖 DOM）。**改为从引导数据推导**（如 `splitConfigs.filter(c => c.enabled).map(c => c.id)`），行为等价且不受渲染时序影响。
 - **引导脚本"整体覆盖"陷阱**：若脚本先用 `location.pathname` 解析出 id，再用接口 JSON **整体替换**变量对象，而接口未回传该 id，则 id 会丢失（症状：`form.action` 变成 `/xxx/undefined/update`）。**修法**：覆盖后回填（`parsed.templateId = d.templateId`）或直接取 `data.template.id`。
 - **计数校验 DOM 时要剔除 `<script>` 与 `<template>` 里的模板字符串**：`grep -c`/正则会同时命中行内脚本字面量与 Alpine `x-for` 蓝图（`<template>` 内容不渲染但留在 DOM 中）。正确姿势：先去 `<script>...</script>` 再去 `<template>...</template>` 再统计。
+- **`grep -c 'th:'` 会误报**：静态页 CSS 里 `width:` 含子串 `th:`。复核 Thymeleaf 残留要用精确模式 `grep -oE 'th:(href|src|if|unless|each|text|action|value|replace|inline|attr|classappend|selected)'`。
 - **路径含 `|` 的内置模板 key**：走 HTTP 时用 `encodeURIComponent`/`%7C`；`TestRestTemplate.getForEntity(String)` 会再编码一次（`%` → `%25`），因此测试里直接传**原始** key（含 `|`）交给 RestTemplate 编码即可，不要预编码。
 - **探针用例要用「真实存在」的外键**：如 `tts_model_template_bindings.model_config_id` 有外键约束，绑定接口传一个不存在的 configId 会 500（`JdbcSQLIntegrityConstraintViolationException`），这属数据前提而非迁移缺陷。本机当前无 TTS 模型配置，绑定页只能验证空态。

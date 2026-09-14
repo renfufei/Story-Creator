@@ -12,8 +12,6 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-  thymeleaf:
-    cache: false
 
 server:
   port: 0

@@ -56,6 +56,12 @@ public class StaticPageController {
         return "forward:/pages/inspirations/edit.html";
     }
 
+    /** 跨项目灵感汇总页（按项目分组）。 */
+    @GetMapping("/inspirations")
+    public String allInspirations() {
+        return "forward:/pages/inspirations/all.html";
+    }
+
     @GetMapping("/settings")
     public String settings() {
         return "forward:/pages/settings.html";

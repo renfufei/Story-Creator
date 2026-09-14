@@ -1,6 +1,6 @@
 /**
  * 静态化页面（static/pages/**）通用样式
- * 与 Bootstrap 5 / style.css 配合使用，不覆盖既有 Thymeleaf 页面样式。
+ * 与 Bootstrap 5 / style.css 配合使用，不覆盖既有页面样式。
  */
 
 /* ---------- 页面骨架 ---------- */

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>所有灵感</title>
+    <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/css/app.css" rel="stylesheet">
+    <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/common.js"></script>
+    <script src="/js/nav.js"></script>
+</head>
+<body>
+<header id="site-nav"></header>
+<main class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0"><i class="bi bi-globe2"></i> 所有灵感</h2>
+            <small class="text-muted">跨项目汇总，按项目分组</small>
+        </div>
+        <a class="btn btn-outline-secondary btn-sm" href="/"><i class="bi bi-house"></i> 返回首页</a>
+    </div>
+
+    <div id="alert" class="alert py-2 d-none"></div>
+
+    <div id="groups"></div>
+    <div id="empty" class="text-center text-muted py-5 d-none">
+        <i class="bi bi-lightbulb" style="font-size: 2.5rem;"></i>
+        <p class="mt-2 mb-0">还没有任何灵感记录。</p>
+    </div>
+</main>
+
+<script>
+(function () {
+    SC.nav.mount();
+    const $ = (id) => document.getElementById(id);
+
+    function esc(s) { return SC.escape(s == null ? '' : String(s)); }
+
+    function hideAlert() { $('alert').className = 'alert py-2 d-none'; }
+
+    function showAlert(msg, type) {
+        const el = $('alert');
+        el.textContent = msg;
+        el.className = 'alert alert-' + (type || 'info') + ' py-2';
+    }
+
+    function itemHtml(it) {
+        const base = '/projects/' + it.projectId + '/inspirations/' + it.id;
+        return '<div class="card mb-2">' +
+            '<div class="card-body py-2">' +
+            '<div class="d-flex align-items-center gap-2 mb-1">' +
+            '<a class="text-decoration-none fw-semibold" href="' + base + '">' + esc(it.title) + '</a>' +
+            '</div>' +
+            '<div class="text-muted small mb-2"><i class="bi bi-clock"></i> ' + esc(it.createdAt) + '</div>' +
+            (it.contentPreview ? '<p class="card-text text-muted mb-2" style="white-space:pre-wrap;word-break:break-word;">' + esc(it.contentPreview) + '</p>' : '') +
+            '<div class="d-flex gap-2">' +
+            '<a class="btn btn-sm btn-outline-secondary" href="' + base + '"><i class="bi bi-eye"></i> 查看</a>' +
+            '<a class="btn btn-sm btn-outline-primary" href="' + base + '/edit"><i class="bi bi-pencil"></i> 编辑</a>' +
+            '</div>' +
+            '</div></div>';
+    }
+
+    function groupHtml(g) {
+        const listUrl = '/projects/' + g.projectId + '/inspirations';
+        return '<div class="card mb-4">' +
+            '<div class="card-header bg-transparent d-flex justify-content-between align-items-center">' +
+            '<div><i class="bi bi-folder2"></i> <a class="text-decoration-none fw-semibold" href="' + listUrl + '">' + esc(g.projectTitle) + '</a>' +
+            ' <span class="badge bg-secondary ms-1">' + g.count + '</span></div>' +
+            '<a class="btn btn-sm btn-outline-secondary" href="' + listUrl + '"><i class="bi bi-list-ul"></i> 进入项目灵感</a>' +
+            '</div>' +
+            '<div class="card-body">' +
+            (g.items.length ? g.items.map(itemHtml).join('') : '<div class="text-muted small">该项目暂无灵感</div>') +
+            '</div></div>';
+    }
+
+    async function loadAll() {
+        hideAlert();
+        try {
+            const groups = await SC.api.get('/api/inspirations');
+            if (!groups || !groups.length) {
+                $('groups').innerHTML = '';
+                $('empty').classList.remove('d-none');
+                return;
+            }
+            $('empty').classList.add('d-none');
+            $('groups').innerHTML = groups.map(groupHtml).join('');
+        } catch (e) {
+            showAlert('灵感加载失败：' + (e.message || ''), 'danger');
+        }
+    }
+
+    loadAll();
+})();
+</script>
+</body>
+</html>

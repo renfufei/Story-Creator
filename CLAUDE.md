@@ -37,7 +37,7 @@ Spring Boot 3.3 / Java 21 monolith for AI-driven Chinese web novel creation.
 
 ### Frontend
 
-Thymeleaf + Alpine.js + Bootstrap 5. Key pages: `workflow.html`, `reader.html`, `import.html`.
+静态 HTML + Alpine.js + Bootstrap 5（**Thymeleaf 已彻底移除**，`templates/` 目录不存在）。页面文件在 `src/main/resources/static/pages/*.html`，控制器只做 `forward:/pages/xxx.html` 与 JSON `/data` 端点；引导数据由页面顶部同步 XHR 注入 `window.__XXX_DATA__`，交互走 REST/SSE。导航栏由 `static/js/nav.js` 挂载（高亮靠 `<body data-nav="...">`）。关键页：`pages/workflow.html`、`pages/reader.html`、`pages/txt-import.html`。迁移历程与已知坑见根目录 `MIGRATION_PENDING.md`。
 
 ## Key Patterns
 
