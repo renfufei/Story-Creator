@@ -1,5 +1,7 @@
 package com.storycreator.image;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.prompt.PromptTemplateRegistry;
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.ai.router.ImageProviderRegistry;
@@ -34,26 +36,43 @@ public class CharacterImageService {
     private static final Logger log = LoggerFactory.getLogger(CharacterImageService.class);
     private static final String IMAGE_BASE_DIR = "data/images";
 
-    private final CharacterImageRepository imageRepository;
-    private final CharacterRepository characterRepository;
-    private final ImageProviderRegistry imageProviderRegistry;
-    private final AiProviderRouter aiProviderRouter;
-    private final PromptTemplateRegistry promptRegistry;
-    private final ProjectRepository projectRepository;
+    private CharacterImageRepository imageRepository;
+    private CharacterRepository characterRepository;
+    private ImageProviderRegistry imageProviderRegistry;
+    private AiProviderRouter aiProviderRouter;
+    private PromptTemplateRegistry promptRegistry;
+    private ProjectRepository projectRepository;
 
-    public CharacterImageService(CharacterImageRepository imageRepository,
-                                 CharacterRepository characterRepository,
-                                 ImageProviderRegistry imageProviderRegistry,
-                                 AiProviderRouter aiProviderRouter,
-                                 PromptTemplateRegistry promptRegistry,
-                                 ProjectRepository projectRepository) {
+    @Autowired
+    public void setImageRepository(CharacterImageRepository imageRepository) {
         this.imageRepository = imageRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setImageProviderRegistry(ImageProviderRegistry imageProviderRegistry) {
         this.imageProviderRegistry = imageProviderRegistry;
+    }
+
+    @Autowired
+    public void setAiProviderRouter(AiProviderRouter aiProviderRouter) {
         this.aiProviderRouter = aiProviderRouter;
+    }
+
+    @Autowired
+    public void setPromptRegistry(PromptTemplateRegistry promptRegistry) {
         this.promptRegistry = promptRegistry;
+    }
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
     }
+
 
     /**
      * Step 0: Create a PROMPT_PENDING image record.

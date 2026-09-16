@@ -1,5 +1,7 @@
 package com.storycreator.workflow.autorun.strategy;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.prompt.PromptTemplateRegistry;
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.core.domain.Genre;
@@ -23,20 +25,31 @@ public class SubStepExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(SubStepExecutor.class);
 
-    private final PromptTemplateRegistry promptRegistry;
-    private final AiProviderRouter providerRouter;
-    private final AiUsageTracker aiUsageTracker;
-    private final GlobalSettingService globalSettingService;
+    private PromptTemplateRegistry promptRegistry;
+    private AiProviderRouter providerRouter;
+    private AiUsageTracker aiUsageTracker;
+    private GlobalSettingService globalSettingService;
 
-    public SubStepExecutor(PromptTemplateRegistry promptRegistry,
-                           AiProviderRouter providerRouter,
-                           AiUsageTracker aiUsageTracker,
-                           GlobalSettingService globalSettingService) {
+    @Autowired
+    public void setPromptRegistry(PromptTemplateRegistry promptRegistry) {
         this.promptRegistry = promptRegistry;
+    }
+
+    @Autowired
+    public void setProviderRouter(AiProviderRouter providerRouter) {
         this.providerRouter = providerRouter;
+    }
+
+    @Autowired
+    public void setAiUsageTracker(AiUsageTracker aiUsageTracker) {
         this.aiUsageTracker = aiUsageTracker;
+    }
+
+    @Autowired
+    public void setGlobalSettingService(GlobalSettingService globalSettingService) {
         this.globalSettingService = globalSettingService;
     }
+
 
     /**
      * Execute a sub-step: resolve template, call AI, return result string.

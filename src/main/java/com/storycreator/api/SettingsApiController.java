@@ -1,5 +1,7 @@
 package com.storycreator.api;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.ai.router.ImageProviderRegistry;
 import com.storycreator.ai.router.TtsProviderRegistry;
@@ -38,32 +40,55 @@ public class SettingsApiController {
 
     private static final Logger log = LoggerFactory.getLogger(SettingsApiController.class);
 
-    private final AiModelConfigRepository configRepository;
-    private final AiProviderRouter providerRouter;
-    private final TtsProviderRegistry ttsProviderRegistry;
-    private final ImageProviderRegistry imageProviderRegistry;
-    private final GlobalSettingService globalSettingService;
-    private final TtsReplacementBuiltinLoader builtinLoader;
-    private final TtsReplacementTemplateService ttsReplacementTemplateService;
-    private final Environment environment;
+    private AiModelConfigRepository configRepository;
+    private AiProviderRouter providerRouter;
+    private TtsProviderRegistry ttsProviderRegistry;
+    private ImageProviderRegistry imageProviderRegistry;
+    private GlobalSettingService globalSettingService;
+    private TtsReplacementBuiltinLoader builtinLoader;
+    private TtsReplacementTemplateService ttsReplacementTemplateService;
+    private Environment environment;
 
-    public SettingsApiController(AiModelConfigRepository configRepository,
-                                AiProviderRouter providerRouter,
-                                TtsProviderRegistry ttsProviderRegistry,
-                                ImageProviderRegistry imageProviderRegistry,
-                                GlobalSettingService globalSettingService,
-                                TtsReplacementBuiltinLoader builtinLoader,
-                                TtsReplacementTemplateService ttsReplacementTemplateService,
-                                Environment environment) {
+    @Autowired
+    public void setConfigRepository(AiModelConfigRepository configRepository) {
         this.configRepository = configRepository;
+    }
+
+    @Autowired
+    public void setProviderRouter(AiProviderRouter providerRouter) {
         this.providerRouter = providerRouter;
+    }
+
+    @Autowired
+    public void setTtsProviderRegistry(TtsProviderRegistry ttsProviderRegistry) {
         this.ttsProviderRegistry = ttsProviderRegistry;
+    }
+
+    @Autowired
+    public void setImageProviderRegistry(ImageProviderRegistry imageProviderRegistry) {
         this.imageProviderRegistry = imageProviderRegistry;
+    }
+
+    @Autowired
+    public void setGlobalSettingService(GlobalSettingService globalSettingService) {
         this.globalSettingService = globalSettingService;
+    }
+
+    @Autowired
+    public void setBuiltinLoader(TtsReplacementBuiltinLoader builtinLoader) {
         this.builtinLoader = builtinLoader;
+    }
+
+    @Autowired
+    public void setTtsReplacementTemplateService(TtsReplacementTemplateService ttsReplacementTemplateService) {
         this.ttsReplacementTemplateService = ttsReplacementTemplateService;
+    }
+
+    @Autowired
+    public void setEnvironment(Environment environment) {
         this.environment = environment;
     }
+
 
     /* ============================ 读取 ============================ */
 

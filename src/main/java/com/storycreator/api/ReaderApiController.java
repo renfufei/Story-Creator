@@ -1,5 +1,7 @@
 package com.storycreator.api;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.persistence.entity.ChapterEntity;
 import com.storycreator.persistence.entity.ProjectEntity;
 import com.storycreator.persistence.entity.SideStoryChapterEntity;
@@ -31,23 +33,37 @@ import java.util.Map;
 @RequestMapping("/api/projects")
 public class ReaderApiController {
 
-    private final ProjectRepository projectRepository;
-    private final ChapterRepository chapterRepository;
-    private final VolumeOutlineRepository volumeOutlineRepository;
-    private final SideStoryRepository sideStoryRepository;
-    private final SideStoryChapterRepository sideStoryChapterRepository;
+    private ProjectRepository projectRepository;
+    private ChapterRepository chapterRepository;
+    private VolumeOutlineRepository volumeOutlineRepository;
+    private SideStoryRepository sideStoryRepository;
+    private SideStoryChapterRepository sideStoryChapterRepository;
 
-    public ReaderApiController(ProjectRepository projectRepository,
-                               ChapterRepository chapterRepository,
-                               VolumeOutlineRepository volumeOutlineRepository,
-                               SideStoryRepository sideStoryRepository,
-                               SideStoryChapterRepository sideStoryChapterRepository) {
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setVolumeOutlineRepository(VolumeOutlineRepository volumeOutlineRepository) {
         this.volumeOutlineRepository = volumeOutlineRepository;
+    }
+
+    @Autowired
+    public void setSideStoryRepository(SideStoryRepository sideStoryRepository) {
         this.sideStoryRepository = sideStoryRepository;
+    }
+
+    @Autowired
+    public void setSideStoryChapterRepository(SideStoryChapterRepository sideStoryChapterRepository) {
         this.sideStoryChapterRepository = sideStoryChapterRepository;
     }
+
 
     /** 阅读页引导数据：项目信息 + 分卷 + 章节（含正文）+ 番外（含正文）。 */
     @GetMapping("/{id}/read-data")

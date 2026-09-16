@@ -1,5 +1,7 @@
 package com.storycreator.txtimport;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.prompt.PromptTemplateRegistry;
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.core.domain.Genre;
@@ -65,50 +67,91 @@ public class TxtReverseEngineeringService {
     /** 阶段 3 汇总结果的角色记录名。 */
     private static final String REVERSE_CHARACTER_NAME = "逆向角色汇总";
 
-    private final TxtImportJobRepository jobRepository;
-    private final TxtImportChapterRepository importChapterRepository;
-    private final TxtImportReStepRepository reStepRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
-    private final VolumeOutlineRepository volumeOutlineRepository;
-    private final WorldSettingRepository worldSettingRepository;
-    private final CharacterRepository characterRepository;
-    private final StoryOutlineRepository storyOutlineRepository;
-    private final ProjectRepository projectRepository;
-    private final AiProviderRouter providerRouter;
-    private final PromptTemplateRegistry promptRegistry;
-    private final AiUsageTracker aiUsageTracker;
-    private final WorkflowStateService workflowStateService;
-    private final ContextSummaryService contextSummaryService;
+    private TxtImportJobRepository jobRepository;
+    private TxtImportChapterRepository importChapterRepository;
+    private TxtImportReStepRepository reStepRepository;
+    private ChapterOutlineRepository chapterOutlineRepository;
+    private VolumeOutlineRepository volumeOutlineRepository;
+    private WorldSettingRepository worldSettingRepository;
+    private CharacterRepository characterRepository;
+    private StoryOutlineRepository storyOutlineRepository;
+    private ProjectRepository projectRepository;
+    private AiProviderRouter providerRouter;
+    private PromptTemplateRegistry promptRegistry;
+    private AiUsageTracker aiUsageTracker;
+    private WorkflowStateService workflowStateService;
+    private ContextSummaryService contextSummaryService;
 
-    public TxtReverseEngineeringService(TxtImportJobRepository jobRepository,
-                                        TxtImportChapterRepository importChapterRepository,
-                                        TxtImportReStepRepository reStepRepository,
-                                        ChapterOutlineRepository chapterOutlineRepository,
-                                        VolumeOutlineRepository volumeOutlineRepository,
-                                        WorldSettingRepository worldSettingRepository,
-                                        CharacterRepository characterRepository,
-                                        StoryOutlineRepository storyOutlineRepository,
-                                        ProjectRepository projectRepository,
-                                        AiProviderRouter providerRouter,
-                                        PromptTemplateRegistry promptRegistry,
-                                        AiUsageTracker aiUsageTracker,
-                                        WorkflowStateService workflowStateService,
-                                        ContextSummaryService contextSummaryService) {
+    @Autowired
+    public void setJobRepository(TxtImportJobRepository jobRepository) {
         this.jobRepository = jobRepository;
+    }
+
+    @Autowired
+    public void setImportChapterRepository(TxtImportChapterRepository importChapterRepository) {
         this.importChapterRepository = importChapterRepository;
+    }
+
+    @Autowired
+    public void setReStepRepository(TxtImportReStepRepository reStepRepository) {
         this.reStepRepository = reStepRepository;
+    }
+
+    @Autowired
+    public void setChapterOutlineRepository(ChapterOutlineRepository chapterOutlineRepository) {
         this.chapterOutlineRepository = chapterOutlineRepository;
+    }
+
+    @Autowired
+    public void setVolumeOutlineRepository(VolumeOutlineRepository volumeOutlineRepository) {
         this.volumeOutlineRepository = volumeOutlineRepository;
+    }
+
+    @Autowired
+    public void setWorldSettingRepository(WorldSettingRepository worldSettingRepository) {
         this.worldSettingRepository = worldSettingRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setStoryOutlineRepository(StoryOutlineRepository storyOutlineRepository) {
         this.storyOutlineRepository = storyOutlineRepository;
+    }
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setProviderRouter(AiProviderRouter providerRouter) {
         this.providerRouter = providerRouter;
+    }
+
+    @Autowired
+    public void setPromptRegistry(PromptTemplateRegistry promptRegistry) {
         this.promptRegistry = promptRegistry;
+    }
+
+    @Autowired
+    public void setAiUsageTracker(AiUsageTracker aiUsageTracker) {
         this.aiUsageTracker = aiUsageTracker;
+    }
+
+    @Autowired
+    public void setWorkflowStateService(WorkflowStateService workflowStateService) {
         this.workflowStateService = workflowStateService;
+    }
+
+    @Autowired
+    public void setContextSummaryService(ContextSummaryService contextSummaryService) {
         this.contextSummaryService = contextSummaryService;
     }
+
 
     // ==================================================================
     // 启动清理：把上次进程遗留的「执行中」状态复位，保证可恢复

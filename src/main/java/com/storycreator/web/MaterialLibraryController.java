@@ -1,5 +1,7 @@
 package com.storycreator.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.core.domain.MaterialCategory;
 import com.storycreator.core.domain.ModelType;
 import com.storycreator.persistence.entity.MaterialLibraryEntity;
@@ -18,32 +20,55 @@ public class MaterialLibraryController {
 
     private static final Logger log = LoggerFactory.getLogger(MaterialLibraryController.class);
 
-    private final MaterialLibraryService materialLibraryService;
-    private final WorldSettingRepository worldSettingRepository;
-    private final CharacterRepository characterRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
-    private final ChapterRepository chapterRepository;
-    private final StoryOutlineRepository storyOutlineRepository;
-    private final ProjectRepository projectRepository;
-    private final AiModelConfigRepository aiModelConfigRepository;
+    private MaterialLibraryService materialLibraryService;
+    private WorldSettingRepository worldSettingRepository;
+    private CharacterRepository characterRepository;
+    private ChapterOutlineRepository chapterOutlineRepository;
+    private ChapterRepository chapterRepository;
+    private StoryOutlineRepository storyOutlineRepository;
+    private ProjectRepository projectRepository;
+    private AiModelConfigRepository aiModelConfigRepository;
 
-    public MaterialLibraryController(MaterialLibraryService materialLibraryService,
-                                     WorldSettingRepository worldSettingRepository,
-                                     CharacterRepository characterRepository,
-                                     ChapterOutlineRepository chapterOutlineRepository,
-                                     ChapterRepository chapterRepository,
-                                     StoryOutlineRepository storyOutlineRepository,
-                                     ProjectRepository projectRepository,
-                                     AiModelConfigRepository aiModelConfigRepository) {
+    @Autowired
+    public void setMaterialLibraryService(MaterialLibraryService materialLibraryService) {
         this.materialLibraryService = materialLibraryService;
+    }
+
+    @Autowired
+    public void setWorldSettingRepository(WorldSettingRepository worldSettingRepository) {
         this.worldSettingRepository = worldSettingRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setChapterOutlineRepository(ChapterOutlineRepository chapterOutlineRepository) {
         this.chapterOutlineRepository = chapterOutlineRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setStoryOutlineRepository(StoryOutlineRepository storyOutlineRepository) {
         this.storyOutlineRepository = storyOutlineRepository;
+    }
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setAiModelConfigRepository(AiModelConfigRepository aiModelConfigRepository) {
         this.aiModelConfigRepository = aiModelConfigRepository;
     }
+
 
     @GetMapping
     public String listPage() {

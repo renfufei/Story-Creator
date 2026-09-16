@@ -40,8 +40,14 @@ class CharacterImageServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CharacterImageService(imageRepository, characterRepository,
-                imageProviderRegistry, aiProviderRouter, promptRegistry, projectRepository);
+        
+        service = new CharacterImageService();
+        service.setImageRepository(imageRepository);
+        service.setCharacterRepository(characterRepository);
+        service.setImageProviderRegistry(imageProviderRegistry);
+        service.setAiProviderRouter(aiProviderRouter);
+        service.setPromptRegistry(promptRegistry);
+        service.setProjectRepository(projectRepository);
     }
 
     private CharacterEntity makeCharacter(Long charId, Long projectId) {

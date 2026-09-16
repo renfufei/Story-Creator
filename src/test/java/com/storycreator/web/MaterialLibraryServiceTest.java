@@ -38,7 +38,12 @@ class MaterialLibraryServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new MaterialLibraryService(repository, providerRouter, aiUsageTracker, templateLoader);
+        
+        service = new MaterialLibraryService();
+        service.setRepository(repository);
+        service.setProviderRouter(providerRouter);
+        service.setAiUsageTracker(aiUsageTracker);
+        service.setTemplateLoader(templateLoader);
     }
 
     @Test

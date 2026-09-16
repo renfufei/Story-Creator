@@ -52,16 +52,24 @@ class PromptExploreServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new PromptExploreService(promptRegistry, contextBuilder,
-                characterGenerationService, outlineGenerationService,
-                proofreadingService,
-                characterStateService, characterImageService,
-                sideStoryWorkflowService,
-                projectRepository, promptTemplateRepository,
-                worldSettingRepository,
-                characterRepository, chapterRepository,
-                stepGuidanceRepository, sideStoryRepository,
-                worldFacetElaborationService);
+        
+        service = new PromptExploreService();
+        service.setPromptRegistry(promptRegistry);
+        service.setContextBuilder(contextBuilder);
+        service.setCharacterGenerationService(characterGenerationService);
+        service.setOutlineGenerationService(outlineGenerationService);
+        service.setProofreadingService(proofreadingService);
+        service.setCharacterStateService(characterStateService);
+        service.setCharacterImageService(characterImageService);
+        service.setSideStoryWorkflowService(sideStoryWorkflowService);
+        service.setProjectRepository(projectRepository);
+        service.setPromptTemplateRepository(promptTemplateRepository);
+        service.setWorldSettingRepository(worldSettingRepository);
+        service.setCharacterRepository(characterRepository);
+        service.setChapterRepository(chapterRepository);
+        service.setStepGuidanceRepository(stepGuidanceRepository);
+        service.setSideStoryRepository(sideStoryRepository);
+        service.setWorldFacetElaborationService(worldFacetElaborationService);
     }
 
     private ProjectEntity mockProject(Genre genre) {

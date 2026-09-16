@@ -1,5 +1,7 @@
 package com.storycreator.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.router.TtsProviderRegistry;
 import com.storycreator.persistence.entity.AiModelConfigEntity;
 import com.storycreator.persistence.entity.TtsModelTemplateBindingEntity;
@@ -31,20 +33,31 @@ import java.util.Map;
 @RequestMapping("/settings/tts-templates")
 public class TtsReplacementController {
 
-    private final TtsReplacementTemplateService templateService;
-    private final TtsReplacementBuiltinLoader builtinLoader;
-    private final TtsReplacementTemplateRepository templateRepository;
-    private final TtsProviderRegistry ttsProviderRegistry;
+    private TtsReplacementTemplateService templateService;
+    private TtsReplacementBuiltinLoader builtinLoader;
+    private TtsReplacementTemplateRepository templateRepository;
+    private TtsProviderRegistry ttsProviderRegistry;
 
-    public TtsReplacementController(TtsReplacementTemplateService templateService,
-                                     TtsReplacementBuiltinLoader builtinLoader,
-                                     TtsReplacementTemplateRepository templateRepository,
-                                     TtsProviderRegistry ttsProviderRegistry) {
+    @Autowired
+    public void setTemplateService(TtsReplacementTemplateService templateService) {
         this.templateService = templateService;
+    }
+
+    @Autowired
+    public void setBuiltinLoader(TtsReplacementBuiltinLoader builtinLoader) {
         this.builtinLoader = builtinLoader;
+    }
+
+    @Autowired
+    public void setTemplateRepository(TtsReplacementTemplateRepository templateRepository) {
         this.templateRepository = templateRepository;
+    }
+
+    @Autowired
+    public void setTtsProviderRegistry(TtsProviderRegistry ttsProviderRegistry) {
         this.ttsProviderRegistry = ttsProviderRegistry;
     }
+
 
     @GetMapping
     public String listTemplates() {

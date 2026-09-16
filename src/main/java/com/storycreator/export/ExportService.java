@@ -1,5 +1,7 @@
 package com.storycreator.export;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.storycreator.persistence.entity.*;
 import com.storycreator.persistence.entity.SideStoryEntity;
@@ -16,56 +18,103 @@ import java.util.Map;
 @Service
 public class ExportService {
 
-    private final ProjectRepository projectRepository;
-    private final WorldSettingRepository worldSettingRepository;
-    private final CharacterRepository characterRepository;
-    private final StoryOutlineRepository storyOutlineRepository;
-    private final ChapterRepository chapterRepository;
-    private final VolumeOutlineRepository volumeOutlineRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
-    private final WorkflowStateRepository workflowStateRepository;
-    private final StepGuidanceRepository stepGuidanceRepository;
-    private final StepModelConfigRepository stepModelConfigRepository;
-    private final AiModelConfigRepository aiModelConfigRepository;
-    private final ProofreadingReportRepository proofreadingReportRepository;
-    private final SideStoryRepository sideStoryRepository;
-    private final SideStoryChapterRepository sideStoryChapterRepository;
-    private final WorldSettingFacetRepository worldSettingFacetRepository;
-    private final ObjectMapper objectMapper;
+    private ProjectRepository projectRepository;
+    private WorldSettingRepository worldSettingRepository;
+    private CharacterRepository characterRepository;
+    private StoryOutlineRepository storyOutlineRepository;
+    private ChapterRepository chapterRepository;
+    private VolumeOutlineRepository volumeOutlineRepository;
+    private ChapterOutlineRepository chapterOutlineRepository;
+    private WorkflowStateRepository workflowStateRepository;
+    private StepGuidanceRepository stepGuidanceRepository;
+    private StepModelConfigRepository stepModelConfigRepository;
+    private AiModelConfigRepository aiModelConfigRepository;
+    private ProofreadingReportRepository proofreadingReportRepository;
+    private SideStoryRepository sideStoryRepository;
+    private SideStoryChapterRepository sideStoryChapterRepository;
+    private WorldSettingFacetRepository worldSettingFacetRepository;
+    private ObjectMapper objectMapper;
 
-    public ExportService(ProjectRepository projectRepository,
-                        WorldSettingRepository worldSettingRepository,
-                        CharacterRepository characterRepository,
-                        StoryOutlineRepository storyOutlineRepository,
-                        ChapterRepository chapterRepository,
-                        VolumeOutlineRepository volumeOutlineRepository,
-                        ChapterOutlineRepository chapterOutlineRepository,
-                        WorkflowStateRepository workflowStateRepository,
-                        StepGuidanceRepository stepGuidanceRepository,
-                        StepModelConfigRepository stepModelConfigRepository,
-                        AiModelConfigRepository aiModelConfigRepository,
-                        ProofreadingReportRepository proofreadingReportRepository,
-                        SideStoryRepository sideStoryRepository,
-                        SideStoryChapterRepository sideStoryChapterRepository,
-                        WorldSettingFacetRepository worldSettingFacetRepository,
-                        ObjectMapper objectMapper) {
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setWorldSettingRepository(WorldSettingRepository worldSettingRepository) {
         this.worldSettingRepository = worldSettingRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setStoryOutlineRepository(StoryOutlineRepository storyOutlineRepository) {
         this.storyOutlineRepository = storyOutlineRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setVolumeOutlineRepository(VolumeOutlineRepository volumeOutlineRepository) {
         this.volumeOutlineRepository = volumeOutlineRepository;
+    }
+
+    @Autowired
+    public void setChapterOutlineRepository(ChapterOutlineRepository chapterOutlineRepository) {
         this.chapterOutlineRepository = chapterOutlineRepository;
+    }
+
+    @Autowired
+    public void setWorkflowStateRepository(WorkflowStateRepository workflowStateRepository) {
         this.workflowStateRepository = workflowStateRepository;
+    }
+
+    @Autowired
+    public void setStepGuidanceRepository(StepGuidanceRepository stepGuidanceRepository) {
         this.stepGuidanceRepository = stepGuidanceRepository;
+    }
+
+    @Autowired
+    public void setStepModelConfigRepository(StepModelConfigRepository stepModelConfigRepository) {
         this.stepModelConfigRepository = stepModelConfigRepository;
+    }
+
+    @Autowired
+    public void setAiModelConfigRepository(AiModelConfigRepository aiModelConfigRepository) {
         this.aiModelConfigRepository = aiModelConfigRepository;
+    }
+
+    @Autowired
+    public void setProofreadingReportRepository(ProofreadingReportRepository proofreadingReportRepository) {
         this.proofreadingReportRepository = proofreadingReportRepository;
+    }
+
+    @Autowired
+    public void setSideStoryRepository(SideStoryRepository sideStoryRepository) {
         this.sideStoryRepository = sideStoryRepository;
+    }
+
+    @Autowired
+    public void setSideStoryChapterRepository(SideStoryChapterRepository sideStoryChapterRepository) {
         this.sideStoryChapterRepository = sideStoryChapterRepository;
+    }
+
+    @Autowired
+    public void setWorldSettingFacetRepository(WorldSettingFacetRepository worldSettingFacetRepository) {
         this.worldSettingFacetRepository = worldSettingFacetRepository;
+    }
+
+    @Autowired
+    public void setObjectMapper(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
+
 
     public String exportMarkdown(Long projectId) {
         ProjectEntity project = projectRepository.findById(projectId)

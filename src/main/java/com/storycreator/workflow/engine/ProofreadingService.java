@@ -1,5 +1,7 @@
 package com.storycreator.workflow.engine;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.prompt.PromptTemplateRegistry;
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.core.domain.PromptSubStep;
@@ -29,26 +31,43 @@ public class ProofreadingService {
 
     private static final Logger log = LoggerFactory.getLogger(ProofreadingService.class);
 
-    private final ChapterRepository chapterRepository;
-    private final ProofreadingReportRepository proofreadingReportRepository;
-    private final AiProviderRouter providerRouter;
-    private final PromptTemplateRegistry promptRegistry;
-    private final AiUsageTracker aiUsageTracker;
-    private final GlobalSettingService globalSettingService;
+    private ChapterRepository chapterRepository;
+    private ProofreadingReportRepository proofreadingReportRepository;
+    private AiProviderRouter providerRouter;
+    private PromptTemplateRegistry promptRegistry;
+    private AiUsageTracker aiUsageTracker;
+    private GlobalSettingService globalSettingService;
 
-    public ProofreadingService(ChapterRepository chapterRepository,
-                               ProofreadingReportRepository proofreadingReportRepository,
-                               AiProviderRouter providerRouter,
-                               PromptTemplateRegistry promptRegistry,
-                               AiUsageTracker aiUsageTracker,
-                               GlobalSettingService globalSettingService) {
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setProofreadingReportRepository(ProofreadingReportRepository proofreadingReportRepository) {
         this.proofreadingReportRepository = proofreadingReportRepository;
+    }
+
+    @Autowired
+    public void setProviderRouter(AiProviderRouter providerRouter) {
         this.providerRouter = providerRouter;
+    }
+
+    @Autowired
+    public void setPromptRegistry(PromptTemplateRegistry promptRegistry) {
         this.promptRegistry = promptRegistry;
+    }
+
+    @Autowired
+    public void setAiUsageTracker(AiUsageTracker aiUsageTracker) {
         this.aiUsageTracker = aiUsageTracker;
+    }
+
+    @Autowired
+    public void setGlobalSettingService(GlobalSettingService globalSettingService) {
         this.globalSettingService = globalSettingService;
     }
+
 
     public ProofreadingReportRepository getProofreadingReportRepository() {
         return proofreadingReportRepository;

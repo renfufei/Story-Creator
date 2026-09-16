@@ -1,5 +1,7 @@
 package com.storycreator.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.persistence.entity.CharacterEntity;
 import com.storycreator.persistence.repository.CharacterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
@@ -31,26 +33,43 @@ import java.util.Map;
 @RequestMapping("/projects/{projectId}/side-stories")
 public class SideStoryController {
 
-    private final ProjectRepository projectRepository;
-    private final SideStoryRepository sideStoryRepository;
-    private final SideStoryChapterRepository sideStoryChapterRepository;
-    private final CharacterRepository characterRepository;
-    private final VolumeOutlineRepository volumeOutlineRepository;
-    private final SideStoryWorkflowService workflowService;
+    private ProjectRepository projectRepository;
+    private SideStoryRepository sideStoryRepository;
+    private SideStoryChapterRepository sideStoryChapterRepository;
+    private CharacterRepository characterRepository;
+    private VolumeOutlineRepository volumeOutlineRepository;
+    private SideStoryWorkflowService workflowService;
 
-    public SideStoryController(ProjectRepository projectRepository,
-                                SideStoryRepository sideStoryRepository,
-                                SideStoryChapterRepository sideStoryChapterRepository,
-                                CharacterRepository characterRepository,
-                                VolumeOutlineRepository volumeOutlineRepository,
-                                SideStoryWorkflowService workflowService) {
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setSideStoryRepository(SideStoryRepository sideStoryRepository) {
         this.sideStoryRepository = sideStoryRepository;
+    }
+
+    @Autowired
+    public void setSideStoryChapterRepository(SideStoryChapterRepository sideStoryChapterRepository) {
         this.sideStoryChapterRepository = sideStoryChapterRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setVolumeOutlineRepository(VolumeOutlineRepository volumeOutlineRepository) {
         this.volumeOutlineRepository = volumeOutlineRepository;
+    }
+
+    @Autowired
+    public void setWorkflowService(SideStoryWorkflowService workflowService) {
         this.workflowService = workflowService;
     }
+
 
     /** 番外列表页引导数据（供 {@code side-story-list.html} 同步 XHR 拉取）。 */
     @GetMapping("/list-data")

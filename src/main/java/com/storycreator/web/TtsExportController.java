@@ -1,5 +1,7 @@
 package com.storycreator.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.router.TtsProviderRegistry;
 import com.storycreator.persistence.entity.AiModelConfigEntity;
 import com.storycreator.persistence.entity.ChapterEntity;
@@ -32,27 +34,44 @@ import java.util.concurrent.Executors;
 @Controller
 public class TtsExportController {
 
-    private final TtsExportService ttsExportService;
-    private final ProjectRepository projectRepository;
-    private final ChapterRepository chapterRepository;
-    private final TtsProviderRegistry ttsProviderRegistry;
-    private final AiModelConfigRepository configRepository;
-    private final Mp3ProcessingService mp3ProcessingService;
+    private TtsExportService ttsExportService;
+    private ProjectRepository projectRepository;
+    private ChapterRepository chapterRepository;
+    private TtsProviderRegistry ttsProviderRegistry;
+    private AiModelConfigRepository configRepository;
+    private Mp3ProcessingService mp3ProcessingService;
     private final ExecutorService sseExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
-    public TtsExportController(TtsExportService ttsExportService,
-                               ProjectRepository projectRepository,
-                               ChapterRepository chapterRepository,
-                               TtsProviderRegistry ttsProviderRegistry,
-                               AiModelConfigRepository configRepository,
-                               Mp3ProcessingService mp3ProcessingService) {
+    @Autowired
+    public void setTtsExportService(TtsExportService ttsExportService) {
         this.ttsExportService = ttsExportService;
+    }
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setTtsProviderRegistry(TtsProviderRegistry ttsProviderRegistry) {
         this.ttsProviderRegistry = ttsProviderRegistry;
+    }
+
+    @Autowired
+    public void setConfigRepository(AiModelConfigRepository configRepository) {
         this.configRepository = configRepository;
+    }
+
+    @Autowired
+    public void setMp3ProcessingService(Mp3ProcessingService mp3ProcessingService) {
         this.mp3ProcessingService = mp3ProcessingService;
     }
+
 
     // ==================== Page ====================
 

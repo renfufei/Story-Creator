@@ -1,5 +1,7 @@
 package com.storycreator.workflow.engine;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.prompt.WorldFacetTemplateLoader;
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.core.domain.WorldFacetKey;
@@ -24,20 +26,31 @@ public class WorldFacetElaborationService {
 
     private static final Logger log = LoggerFactory.getLogger(WorldFacetElaborationService.class);
 
-    private final WorldSettingFacetRepository facetRepository;
-    private final AiProviderRouter providerRouter;
-    private final AiUsageTracker aiUsageTracker;
-    private final WorldFacetTemplateLoader templateLoader;
+    private WorldSettingFacetRepository facetRepository;
+    private AiProviderRouter providerRouter;
+    private AiUsageTracker aiUsageTracker;
+    private WorldFacetTemplateLoader templateLoader;
 
-    public WorldFacetElaborationService(WorldSettingFacetRepository facetRepository,
-                                        AiProviderRouter providerRouter,
-                                        AiUsageTracker aiUsageTracker,
-                                        WorldFacetTemplateLoader templateLoader) {
+    @Autowired
+    public void setFacetRepository(WorldSettingFacetRepository facetRepository) {
         this.facetRepository = facetRepository;
+    }
+
+    @Autowired
+    public void setProviderRouter(AiProviderRouter providerRouter) {
         this.providerRouter = providerRouter;
+    }
+
+    @Autowired
+    public void setAiUsageTracker(AiUsageTracker aiUsageTracker) {
         this.aiUsageTracker = aiUsageTracker;
+    }
+
+    @Autowired
+    public void setTemplateLoader(WorldFacetTemplateLoader templateLoader) {
         this.templateLoader = templateLoader;
     }
+
 
     /**
      * Asynchronously elaborate all facets for a project.

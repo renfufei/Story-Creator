@@ -1,5 +1,7 @@
 package com.storycreator.workflow.autorun;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.core.service.GlobalSettingService;
 import com.storycreator.persistence.entity.ProjectEntity;
 import com.storycreator.persistence.repository.AutoRunStepConfigRepository;
@@ -27,16 +29,16 @@ public class AutoRunService {
 
     private static final Logger log = LoggerFactory.getLogger(AutoRunService.class);
 
-    private final ProjectRepository projectRepository;
-    private final ChapterRepository chapterRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
-    private final CharacterRepository characterRepository;
-    private final WorldSettingRepository worldSettingRepository;
-    private final StoryOutlineRepository storyOutlineRepository;
-    private final WorkflowEngine workflowEngine;
-    private final GlobalSettingService globalSettingService;
-    private final AutoRunStepConfigRepository autoRunStepConfigRepository;
-    private final DefaultAutoRunStrategy strategy;
+    private ProjectRepository projectRepository;
+    private ChapterRepository chapterRepository;
+    private ChapterOutlineRepository chapterOutlineRepository;
+    private CharacterRepository characterRepository;
+    private WorldSettingRepository worldSettingRepository;
+    private StoryOutlineRepository storyOutlineRepository;
+    private WorkflowEngine workflowEngine;
+    private GlobalSettingService globalSettingService;
+    private AutoRunStepConfigRepository autoRunStepConfigRepository;
+    private DefaultAutoRunStrategy strategy;
 
     private final ConcurrentHashMap<Long, Boolean> stopSignals = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Boolean> runningProjects = new ConcurrentHashMap<>();
@@ -44,27 +46,56 @@ public class AutoRunService {
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private final ScheduledExecutorService observationCleanupScheduler = Executors.newSingleThreadScheduledExecutor();
 
-    public AutoRunService(ProjectRepository projectRepository,
-                          ChapterRepository chapterRepository,
-                          ChapterOutlineRepository chapterOutlineRepository,
-                          CharacterRepository characterRepository,
-                          WorldSettingRepository worldSettingRepository,
-                          StoryOutlineRepository storyOutlineRepository,
-                          WorkflowEngine workflowEngine,
-                          GlobalSettingService globalSettingService,
-                          AutoRunStepConfigRepository autoRunStepConfigRepository,
-                          DefaultAutoRunStrategy strategy) {
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setChapterOutlineRepository(ChapterOutlineRepository chapterOutlineRepository) {
         this.chapterOutlineRepository = chapterOutlineRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setWorldSettingRepository(WorldSettingRepository worldSettingRepository) {
         this.worldSettingRepository = worldSettingRepository;
+    }
+
+    @Autowired
+    public void setStoryOutlineRepository(StoryOutlineRepository storyOutlineRepository) {
         this.storyOutlineRepository = storyOutlineRepository;
+    }
+
+    @Autowired
+    public void setWorkflowEngine(WorkflowEngine workflowEngine) {
         this.workflowEngine = workflowEngine;
+    }
+
+    @Autowired
+    public void setGlobalSettingService(GlobalSettingService globalSettingService) {
         this.globalSettingService = globalSettingService;
+    }
+
+    @Autowired
+    public void setAutoRunStepConfigRepository(AutoRunStepConfigRepository autoRunStepConfigRepository) {
         this.autoRunStepConfigRepository = autoRunStepConfigRepository;
+    }
+
+    @Autowired
+    public void setStrategy(DefaultAutoRunStrategy strategy) {
         this.strategy = strategy;
     }
+
 
     public void startAutoRun(Long projectId) {
         ProjectEntity project = projectRepository.findById(projectId)

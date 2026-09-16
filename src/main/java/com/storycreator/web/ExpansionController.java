@@ -1,5 +1,7 @@
 package com.storycreator.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.persistence.entity.ChapterEntity;
 import com.storycreator.persistence.entity.ProjectEntity;
 import com.storycreator.persistence.repository.ChapterRepository;
@@ -31,21 +33,32 @@ public class ExpansionController {
 
     private static final Logger log = LoggerFactory.getLogger(ExpansionController.class);
 
-    private final ProjectRepository projectRepository;
-    private final ChapterRepository chapterRepository;
-    private final ExpansionService expansionService;
-    private final ExpansionBackgroundService bgService;
+    private ProjectRepository projectRepository;
+    private ChapterRepository chapterRepository;
+    private ExpansionService expansionService;
+    private ExpansionBackgroundService bgService;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
-    public ExpansionController(ProjectRepository projectRepository,
-                               ChapterRepository chapterRepository,
-                               ExpansionService expansionService,
-                               ExpansionBackgroundService bgService) {
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setExpansionService(ExpansionService expansionService) {
         this.expansionService = expansionService;
+    }
+
+    @Autowired
+    public void setBgService(ExpansionBackgroundService bgService) {
         this.bgService = bgService;
     }
+
 
     /** 情节拓展页引导数据（供静态页同步 XHR 拉取）。 */
     @GetMapping("/data")

@@ -1,5 +1,7 @@
 package com.storycreator.sidestory;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.prompt.PromptTemplateRegistry;
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.ai.router.AiProviderRouter.ResolvedModel;
@@ -22,38 +24,67 @@ public class SideStoryWorkflowService {
 
     private static final Logger log = LoggerFactory.getLogger(SideStoryWorkflowService.class);
 
-    private final SideStoryRepository sideStoryRepository;
-    private final SideStoryChapterRepository sideStoryChapterRepository;
-    private final ProjectRepository projectRepository;
-    private final WorldSettingRepository worldSettingRepository;
-    private final CharacterRepository characterRepository;
-    private final StoryOutlineRepository storyOutlineRepository;
-    private final VolumeOutlineRepository volumeOutlineRepository;
-    private final AiProviderRouter providerRouter;
-    private final PromptTemplateRegistry templateRegistry;
-    private final JdbcTemplate jdbcTemplate;
+    private SideStoryRepository sideStoryRepository;
+    private SideStoryChapterRepository sideStoryChapterRepository;
+    private ProjectRepository projectRepository;
+    private WorldSettingRepository worldSettingRepository;
+    private CharacterRepository characterRepository;
+    private StoryOutlineRepository storyOutlineRepository;
+    private VolumeOutlineRepository volumeOutlineRepository;
+    private AiProviderRouter providerRouter;
+    private PromptTemplateRegistry templateRegistry;
+    private JdbcTemplate jdbcTemplate;
 
-    public SideStoryWorkflowService(SideStoryRepository sideStoryRepository,
-                                     SideStoryChapterRepository sideStoryChapterRepository,
-                                     ProjectRepository projectRepository,
-                                     WorldSettingRepository worldSettingRepository,
-                                     CharacterRepository characterRepository,
-                                     StoryOutlineRepository storyOutlineRepository,
-                                     VolumeOutlineRepository volumeOutlineRepository,
-                                     AiProviderRouter providerRouter,
-                                     PromptTemplateRegistry templateRegistry,
-                                     JdbcTemplate jdbcTemplate) {
+    @Autowired
+    public void setSideStoryRepository(SideStoryRepository sideStoryRepository) {
         this.sideStoryRepository = sideStoryRepository;
+    }
+
+    @Autowired
+    public void setSideStoryChapterRepository(SideStoryChapterRepository sideStoryChapterRepository) {
         this.sideStoryChapterRepository = sideStoryChapterRepository;
+    }
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setWorldSettingRepository(WorldSettingRepository worldSettingRepository) {
         this.worldSettingRepository = worldSettingRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setStoryOutlineRepository(StoryOutlineRepository storyOutlineRepository) {
         this.storyOutlineRepository = storyOutlineRepository;
+    }
+
+    @Autowired
+    public void setVolumeOutlineRepository(VolumeOutlineRepository volumeOutlineRepository) {
         this.volumeOutlineRepository = volumeOutlineRepository;
+    }
+
+    @Autowired
+    public void setProviderRouter(AiProviderRouter providerRouter) {
         this.providerRouter = providerRouter;
+    }
+
+    @Autowired
+    public void setTemplateRegistry(PromptTemplateRegistry templateRegistry) {
         this.templateRegistry = templateRegistry;
+    }
+
+    @Autowired
+    public void setJdbcTemplate(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
+
 
     // ==================== Generate Outline ====================
 

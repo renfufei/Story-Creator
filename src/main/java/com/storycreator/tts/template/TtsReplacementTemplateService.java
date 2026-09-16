@@ -1,5 +1,7 @@
 package com.storycreator.tts.template;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.persistence.entity.TtsModelTemplateBindingEntity;
 import com.storycreator.persistence.entity.TtsReplacementRuleEntity;
 import com.storycreator.persistence.entity.TtsReplacementTemplateEntity;
@@ -19,20 +21,31 @@ public class TtsReplacementTemplateService {
 
     private static final Logger log = LoggerFactory.getLogger(TtsReplacementTemplateService.class);
 
-    private final TtsReplacementBuiltinLoader builtinLoader;
-    private final TtsReplacementTemplateRepository templateRepository;
-    private final TtsReplacementRuleRepository ruleRepository;
-    private final TtsModelTemplateBindingRepository bindingRepository;
+    private TtsReplacementBuiltinLoader builtinLoader;
+    private TtsReplacementTemplateRepository templateRepository;
+    private TtsReplacementRuleRepository ruleRepository;
+    private TtsModelTemplateBindingRepository bindingRepository;
 
-    public TtsReplacementTemplateService(TtsReplacementBuiltinLoader builtinLoader,
-                                          TtsReplacementTemplateRepository templateRepository,
-                                          TtsReplacementRuleRepository ruleRepository,
-                                          TtsModelTemplateBindingRepository bindingRepository) {
+    @Autowired
+    public void setBuiltinLoader(TtsReplacementBuiltinLoader builtinLoader) {
         this.builtinLoader = builtinLoader;
+    }
+
+    @Autowired
+    public void setTemplateRepository(TtsReplacementTemplateRepository templateRepository) {
         this.templateRepository = templateRepository;
+    }
+
+    @Autowired
+    public void setRuleRepository(TtsReplacementRuleRepository ruleRepository) {
         this.ruleRepository = ruleRepository;
+    }
+
+    @Autowired
+    public void setBindingRepository(TtsModelTemplateBindingRepository bindingRepository) {
         this.bindingRepository = bindingRepository;
     }
+
 
     /**
      * Resolve all replacement rules for a given TTS config.

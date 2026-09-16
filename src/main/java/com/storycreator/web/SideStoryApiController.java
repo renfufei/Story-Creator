@@ -1,5 +1,7 @@
 package com.storycreator.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.persistence.entity.SideStoryChapterEntity;
 import com.storycreator.persistence.entity.SideStoryEntity;
 import com.storycreator.persistence.repository.SideStoryChapterRepository;
@@ -30,24 +32,38 @@ public class SideStoryApiController {
 
     private static final Logger log = LoggerFactory.getLogger(SideStoryApiController.class);
 
-    private final SideStoryRepository sideStoryRepository;
-    private final SideStoryChapterRepository sideStoryChapterRepository;
-    private final SideStoryWorkflowService workflowService;
-    private final SideStoryBackgroundService bgService;
-    private final SideStoryAutoRunService autoRunService;
+    private SideStoryRepository sideStoryRepository;
+    private SideStoryChapterRepository sideStoryChapterRepository;
+    private SideStoryWorkflowService workflowService;
+    private SideStoryBackgroundService bgService;
+    private SideStoryAutoRunService autoRunService;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
-    public SideStoryApiController(SideStoryRepository sideStoryRepository,
-                                   SideStoryChapterRepository sideStoryChapterRepository,
-                                   SideStoryWorkflowService workflowService,
-                                   SideStoryBackgroundService bgService,
-                                   SideStoryAutoRunService autoRunService) {
+    @Autowired
+    public void setSideStoryRepository(SideStoryRepository sideStoryRepository) {
         this.sideStoryRepository = sideStoryRepository;
+    }
+
+    @Autowired
+    public void setSideStoryChapterRepository(SideStoryChapterRepository sideStoryChapterRepository) {
         this.sideStoryChapterRepository = sideStoryChapterRepository;
+    }
+
+    @Autowired
+    public void setWorkflowService(SideStoryWorkflowService workflowService) {
         this.workflowService = workflowService;
+    }
+
+    @Autowired
+    public void setBgService(SideStoryBackgroundService bgService) {
         this.bgService = bgService;
+    }
+
+    @Autowired
+    public void setAutoRunService(SideStoryAutoRunService autoRunService) {
         this.autoRunService = autoRunService;
     }
+
 
     // ==================== CRUD ====================
 

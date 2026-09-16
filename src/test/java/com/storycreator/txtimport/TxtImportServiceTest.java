@@ -52,8 +52,15 @@ class TxtImportServiceTest {
     void setUp() {
         splitter = mock(TxtChapterSplitter.class);
         globalSettingService = mock(GlobalSettingService.class);
-        service = new TxtImportService(jobRepository, importChapterRepository, configRepository,
-                projectRepository, chapterRepository, splitter, globalSettingService);
+        
+        service = new TxtImportService();
+        service.setJobRepository(jobRepository);
+        service.setImportChapterRepository(importChapterRepository);
+        service.setConfigRepository(configRepository);
+        service.setProjectRepository(projectRepository);
+        service.setChapterRepository(chapterRepository);
+        service.setSplitter(splitter);
+        service.setGlobalSettingService(globalSettingService);
     }
 
     @Test

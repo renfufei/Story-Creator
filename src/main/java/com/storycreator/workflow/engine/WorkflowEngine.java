@@ -14,6 +14,7 @@ import com.storycreator.persistence.repository.VolumeOutlineRepository;
 import com.storycreator.web.MaterialLibraryService;
 import com.storycreator.workflow.step.WorkflowStepHandler;
 import com.storycreator.core.port.ai.AiRequest;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,54 +41,97 @@ public class WorkflowEngine {
 
     private static final Logger log = LoggerFactory.getLogger(WorkflowEngine.class);
 
-    private final Map<WorkflowStep, WorkflowStepHandler> handlers;
-    private final AiProviderRouter providerRouter;
-    private final ProjectRepository projectRepository;
-    private final ChapterRepository chapterRepository;
-    private final StepGuidanceRepository stepGuidanceRepository;
-    private final VolumeOutlineRepository volumeOutlineRepository;
-    private final AiUsageTracker aiUsageTracker;
+    private Map<WorkflowStep, WorkflowStepHandler> handlers;
+    private AiProviderRouter providerRouter;
+    private ProjectRepository projectRepository;
+    private ChapterRepository chapterRepository;
+    private StepGuidanceRepository stepGuidanceRepository;
+    private VolumeOutlineRepository volumeOutlineRepository;
+    private AiUsageTracker aiUsageTracker;
 
     // Delegated services
-    private final WorkflowContextBuilder contextBuilder;
-    private final WorkflowStateService stateService;
-    private final CharacterStateService characterStateService;
-    private final CharacterGenerationService characterGenerationService;
-    private final OutlineGenerationService outlineGenerationService;
-    private final ProofreadingService proofreadingService;
-    private final MaterialLibraryService materialLibraryService;
-    private final AutoRunStepConfigRepository autoRunStepConfigRepository;
+    private WorkflowContextBuilder contextBuilder;
+    private WorkflowStateService stateService;
+    private CharacterStateService characterStateService;
+    private CharacterGenerationService characterGenerationService;
+    private OutlineGenerationService outlineGenerationService;
+    private ProofreadingService proofreadingService;
+    private MaterialLibraryService materialLibraryService;
+    private AutoRunStepConfigRepository autoRunStepConfigRepository;
 
-    public WorkflowEngine(List<WorkflowStepHandler> handlerList,
-                         AiProviderRouter providerRouter,
-                         ProjectRepository projectRepository,
-                         ChapterRepository chapterRepository,
-                         StepGuidanceRepository stepGuidanceRepository,
-                         VolumeOutlineRepository volumeOutlineRepository,
-                         AiUsageTracker aiUsageTracker,
-                         WorkflowContextBuilder contextBuilder,
-                         WorkflowStateService stateService,
-                         CharacterStateService characterStateService,
-                         CharacterGenerationService characterGenerationService,
-                         OutlineGenerationService outlineGenerationService,
-                         ProofreadingService proofreadingService,
-                         @Lazy MaterialLibraryService materialLibraryService,
-                         AutoRunStepConfigRepository autoRunStepConfigRepository) {
+    @Autowired
+    public void setHandlers(List<WorkflowStepHandler> handlerList) {
         this.handlers = handlerList.stream()
                 .collect(Collectors.toMap(WorkflowStepHandler::getStep, Function.identity()));
+    }
+
+    @Autowired
+    public void setProviderRouter(AiProviderRouter providerRouter) {
         this.providerRouter = providerRouter;
+    }
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setStepGuidanceRepository(StepGuidanceRepository stepGuidanceRepository) {
         this.stepGuidanceRepository = stepGuidanceRepository;
+    }
+
+    @Autowired
+    public void setVolumeOutlineRepository(VolumeOutlineRepository volumeOutlineRepository) {
         this.volumeOutlineRepository = volumeOutlineRepository;
+    }
+
+    @Autowired
+    public void setAiUsageTracker(AiUsageTracker aiUsageTracker) {
         this.aiUsageTracker = aiUsageTracker;
+    }
+
+    @Autowired
+    public void setContextBuilder(WorkflowContextBuilder contextBuilder) {
         this.contextBuilder = contextBuilder;
+    }
+
+    @Autowired
+    public void setStateService(WorkflowStateService stateService) {
         this.stateService = stateService;
+    }
+
+    @Autowired
+    public void setCharacterStateService(CharacterStateService characterStateService) {
         this.characterStateService = characterStateService;
+    }
+
+    @Autowired
+    public void setCharacterGenerationService(CharacterGenerationService characterGenerationService) {
         this.characterGenerationService = characterGenerationService;
+    }
+
+    @Autowired
+    public void setOutlineGenerationService(OutlineGenerationService outlineGenerationService) {
         this.outlineGenerationService = outlineGenerationService;
+    }
+
+    @Autowired
+    public void setProofreadingService(ProofreadingService proofreadingService) {
         this.proofreadingService = proofreadingService;
+    }
+
+    @Autowired
+    public void setMaterialLibraryService(@Lazy MaterialLibraryService materialLibraryService) {
         this.materialLibraryService = materialLibraryService;
+    }
+
+    @Autowired
+    public void setAutoRunStepConfigRepository(AutoRunStepConfigRepository autoRunStepConfigRepository) {
         this.autoRunStepConfigRepository = autoRunStepConfigRepository;
     }
 

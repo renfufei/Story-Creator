@@ -47,11 +47,22 @@ class ImportServiceTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        importService = new ImportService(objectMapper, projectRepository, worldSettingRepository,
-                characterRepository, storyOutlineRepository, volumeOutlineRepository,
-                chapterOutlineRepository, chapterRepository, workflowStateRepository,
-                stepGuidanceRepository, stepModelConfigRepository, aiModelConfigRepository,
-                proofreadingReportRepository, worldSettingFacetRepository);
+        
+        importService = new ImportService();
+        importService.setObjectMapper(objectMapper);
+        importService.setProjectRepository(projectRepository);
+        importService.setWorldSettingRepository(worldSettingRepository);
+        importService.setCharacterRepository(characterRepository);
+        importService.setStoryOutlineRepository(storyOutlineRepository);
+        importService.setVolumeOutlineRepository(volumeOutlineRepository);
+        importService.setChapterOutlineRepository(chapterOutlineRepository);
+        importService.setChapterRepository(chapterRepository);
+        importService.setWorkflowStateRepository(workflowStateRepository);
+        importService.setStepGuidanceRepository(stepGuidanceRepository);
+        importService.setStepModelConfigRepository(stepModelConfigRepository);
+        importService.setAiModelConfigRepository(aiModelConfigRepository);
+        importService.setProofreadingReportRepository(proofreadingReportRepository);
+        importService.setWorldSettingFacetRepository(worldSettingFacetRepository);
     }
 
     // ==================== parseJson ====================

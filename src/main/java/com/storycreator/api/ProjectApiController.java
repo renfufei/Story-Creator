@@ -1,5 +1,7 @@
 package com.storycreator.api;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.core.domain.StepStatus;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.persistence.entity.AiUsageStatEntity;
@@ -34,23 +36,37 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/projects")
 public class ProjectApiController {
 
-    private final ProjectRepository projectRepository;
-    private final ChapterRepository chapterRepository;
-    private final WorkflowStateRepository workflowStateRepository;
-    private final AiUsageStatRepository aiUsageStatRepository;
-    private final TxtImportJobRepository txtImportJobRepository;
+    private ProjectRepository projectRepository;
+    private ChapterRepository chapterRepository;
+    private WorkflowStateRepository workflowStateRepository;
+    private AiUsageStatRepository aiUsageStatRepository;
+    private TxtImportJobRepository txtImportJobRepository;
 
-    public ProjectApiController(ProjectRepository projectRepository,
-                                ChapterRepository chapterRepository,
-                                WorkflowStateRepository workflowStateRepository,
-                                AiUsageStatRepository aiUsageStatRepository,
-                                TxtImportJobRepository txtImportJobRepository) {
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setWorkflowStateRepository(WorkflowStateRepository workflowStateRepository) {
         this.workflowStateRepository = workflowStateRepository;
+    }
+
+    @Autowired
+    public void setAiUsageStatRepository(AiUsageStatRepository aiUsageStatRepository) {
         this.aiUsageStatRepository = aiUsageStatRepository;
+    }
+
+    @Autowired
+    public void setTxtImportJobRepository(TxtImportJobRepository txtImportJobRepository) {
         this.txtImportJobRepository = txtImportJobRepository;
     }
+
 
     /** 项目列表（含章节数与字数统计），按更新时间倒序 */
     @GetMapping

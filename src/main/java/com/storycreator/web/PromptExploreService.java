@@ -1,5 +1,7 @@
 package com.storycreator.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.prompt.PromptTemplateRegistry;
 import com.storycreator.core.domain.ImageType;
 import com.storycreator.core.domain.PromptSubStep;
@@ -18,56 +20,103 @@ import java.util.Optional;
 @Service
 public class PromptExploreService {
 
-    private final PromptTemplateRegistry promptRegistry;
-    private final WorkflowContextBuilder contextBuilder;
-    private final CharacterGenerationService characterGenerationService;
-    private final OutlineGenerationService outlineGenerationService;
-    private final ProofreadingService proofreadingService;
-    private final CharacterStateService characterStateService;
-    private final CharacterImageService characterImageService;
-    private final SideStoryWorkflowService sideStoryWorkflowService;
-    private final ProjectRepository projectRepository;
-    private final PromptTemplateRepository promptTemplateRepository;
-    private final WorldSettingRepository worldSettingRepository;
-    private final CharacterRepository characterRepository;
-    private final ChapterRepository chapterRepository;
-    private final StepGuidanceRepository stepGuidanceRepository;
-    private final SideStoryRepository sideStoryRepository;
-    private final WorldFacetElaborationService worldFacetElaborationService;
+    private PromptTemplateRegistry promptRegistry;
+    private WorkflowContextBuilder contextBuilder;
+    private CharacterGenerationService characterGenerationService;
+    private OutlineGenerationService outlineGenerationService;
+    private ProofreadingService proofreadingService;
+    private CharacterStateService characterStateService;
+    private CharacterImageService characterImageService;
+    private SideStoryWorkflowService sideStoryWorkflowService;
+    private ProjectRepository projectRepository;
+    private PromptTemplateRepository promptTemplateRepository;
+    private WorldSettingRepository worldSettingRepository;
+    private CharacterRepository characterRepository;
+    private ChapterRepository chapterRepository;
+    private StepGuidanceRepository stepGuidanceRepository;
+    private SideStoryRepository sideStoryRepository;
+    private WorldFacetElaborationService worldFacetElaborationService;
 
-    public PromptExploreService(PromptTemplateRegistry promptRegistry,
-                                WorkflowContextBuilder contextBuilder,
-                                CharacterGenerationService characterGenerationService,
-                                OutlineGenerationService outlineGenerationService,
-                                ProofreadingService proofreadingService,
-                                CharacterStateService characterStateService,
-                                CharacterImageService characterImageService,
-                                SideStoryWorkflowService sideStoryWorkflowService,
-                                ProjectRepository projectRepository,
-                                PromptTemplateRepository promptTemplateRepository,
-                                WorldSettingRepository worldSettingRepository,
-                                CharacterRepository characterRepository,
-                                ChapterRepository chapterRepository,
-                                StepGuidanceRepository stepGuidanceRepository,
-                                SideStoryRepository sideStoryRepository,
-                                WorldFacetElaborationService worldFacetElaborationService) {
+    @Autowired
+    public void setPromptRegistry(PromptTemplateRegistry promptRegistry) {
         this.promptRegistry = promptRegistry;
+    }
+
+    @Autowired
+    public void setContextBuilder(WorkflowContextBuilder contextBuilder) {
         this.contextBuilder = contextBuilder;
+    }
+
+    @Autowired
+    public void setCharacterGenerationService(CharacterGenerationService characterGenerationService) {
         this.characterGenerationService = characterGenerationService;
+    }
+
+    @Autowired
+    public void setOutlineGenerationService(OutlineGenerationService outlineGenerationService) {
         this.outlineGenerationService = outlineGenerationService;
+    }
+
+    @Autowired
+    public void setProofreadingService(ProofreadingService proofreadingService) {
         this.proofreadingService = proofreadingService;
+    }
+
+    @Autowired
+    public void setCharacterStateService(CharacterStateService characterStateService) {
         this.characterStateService = characterStateService;
+    }
+
+    @Autowired
+    public void setCharacterImageService(CharacterImageService characterImageService) {
         this.characterImageService = characterImageService;
+    }
+
+    @Autowired
+    public void setSideStoryWorkflowService(SideStoryWorkflowService sideStoryWorkflowService) {
         this.sideStoryWorkflowService = sideStoryWorkflowService;
+    }
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setPromptTemplateRepository(PromptTemplateRepository promptTemplateRepository) {
         this.promptTemplateRepository = promptTemplateRepository;
+    }
+
+    @Autowired
+    public void setWorldSettingRepository(WorldSettingRepository worldSettingRepository) {
         this.worldSettingRepository = worldSettingRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setStepGuidanceRepository(StepGuidanceRepository stepGuidanceRepository) {
         this.stepGuidanceRepository = stepGuidanceRepository;
+    }
+
+    @Autowired
+    public void setSideStoryRepository(SideStoryRepository sideStoryRepository) {
         this.sideStoryRepository = sideStoryRepository;
+    }
+
+    @Autowired
+    public void setWorldFacetElaborationService(WorldFacetElaborationService worldFacetElaborationService) {
         this.worldFacetElaborationService = worldFacetElaborationService;
     }
+
 
     public record ExploreResult(String templateContent, String systemPrompt,
                                 Map<String, String> variables, String renderedPrompt) {}

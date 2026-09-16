@@ -1,5 +1,7 @@
 package com.storycreator.workflow.engine;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.prompt.PromptTemplateRegistry;
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.core.domain.Genre;
@@ -27,35 +29,61 @@ public class CharacterGenerationService {
 
     private static final Logger log = LoggerFactory.getLogger(CharacterGenerationService.class);
 
-    private final ProjectRepository projectRepository;
-    private final CharacterRepository characterRepository;
-    private final StepGuidanceRepository stepGuidanceRepository;
-    private final AiProviderRouter providerRouter;
-    private final PromptTemplateRegistry promptRegistry;
-    private final WorkflowContextBuilder contextBuilder;
-    private final ContextSummaryService contextSummaryService;
-    private final AiUsageTracker aiUsageTracker;
-    private final WorldFacetElaborationService worldFacetElaborationService;
+    private ProjectRepository projectRepository;
+    private CharacterRepository characterRepository;
+    private StepGuidanceRepository stepGuidanceRepository;
+    private AiProviderRouter providerRouter;
+    private PromptTemplateRegistry promptRegistry;
+    private WorkflowContextBuilder contextBuilder;
+    private ContextSummaryService contextSummaryService;
+    private AiUsageTracker aiUsageTracker;
+    private WorldFacetElaborationService worldFacetElaborationService;
 
-    public CharacterGenerationService(ProjectRepository projectRepository,
-                                      CharacterRepository characterRepository,
-                                      StepGuidanceRepository stepGuidanceRepository,
-                                      AiProviderRouter providerRouter,
-                                      PromptTemplateRegistry promptRegistry,
-                                      WorkflowContextBuilder contextBuilder,
-                                      ContextSummaryService contextSummaryService,
-                                      AiUsageTracker aiUsageTracker,
-                                      WorldFacetElaborationService worldFacetElaborationService) {
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setStepGuidanceRepository(StepGuidanceRepository stepGuidanceRepository) {
         this.stepGuidanceRepository = stepGuidanceRepository;
+    }
+
+    @Autowired
+    public void setProviderRouter(AiProviderRouter providerRouter) {
         this.providerRouter = providerRouter;
+    }
+
+    @Autowired
+    public void setPromptRegistry(PromptTemplateRegistry promptRegistry) {
         this.promptRegistry = promptRegistry;
+    }
+
+    @Autowired
+    public void setContextBuilder(WorkflowContextBuilder contextBuilder) {
         this.contextBuilder = contextBuilder;
+    }
+
+    @Autowired
+    public void setContextSummaryService(ContextSummaryService contextSummaryService) {
         this.contextSummaryService = contextSummaryService;
+    }
+
+    @Autowired
+    public void setAiUsageTracker(AiUsageTracker aiUsageTracker) {
         this.aiUsageTracker = aiUsageTracker;
+    }
+
+    @Autowired
+    public void setWorldFacetElaborationService(WorldFacetElaborationService worldFacetElaborationService) {
         this.worldFacetElaborationService = worldFacetElaborationService;
     }
+
 
     public Flux<String> generateCharactersByCards(Long projectId) {
         ProjectEntity project = projectRepository.findById(projectId).orElseThrow();

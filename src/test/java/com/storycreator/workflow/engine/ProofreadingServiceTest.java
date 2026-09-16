@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import java.lang.reflect.Constructor;
+import java.util.Arrays;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -37,18 +38,29 @@ class ProofreadingServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ProofreadingService(chapterRepository,
-                proofreadingReportRepository, providerRouter, promptRegistry,
-                aiUsageTracker, globalSettingService);
+        
+        service = new ProofreadingService();
+        service.setChapterRepository(chapterRepository);
+        service.setProofreadingReportRepository(proofreadingReportRepository);
+        service.setProviderRouter(providerRouter);
+        service.setPromptRegistry(promptRegistry);
+        service.setAiUsageTracker(aiUsageTracker);
+        service.setGlobalSettingService(globalSettingService);
     }
 
     @Test
     void constructor_doesNotRequireChapterOutlineRepository() {
-        // Verify that ProofreadingService has exactly 6 constructor parameters
+        // setter 注入设计：仅一个无参构造 + 恰好 6 个依赖 setter（不含 ChapterOutlineRepository）
         Constructor<?>[] constructors = ProofreadingService.class.getConstructors();
         assertEquals(1, constructors.length);
-        assertEquals(6, constructors[0].getParameterCount(),
-                "ProofreadingService should have 6 constructor parameters");
+        assertEquals(0, constructors[0].getParameterCount(),
+                "ProofreadingService should have a no-arg constructor");
+        long setterCount = Arrays.stream(ProofreadingService.class.getDeclaredMethods())
+                .filter(m -> m.getName().startsWith("set") && m.getParameterCount() == 1
+                        && m.getReturnType() == void.class)
+                .count();
+        assertEquals(6, setterCount,
+                "ProofreadingService should have 6 dependency setters");
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.storycreator.sidestory;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.core.service.GlobalSettingService;
 import com.storycreator.persistence.entity.SideStoryChapterEntity;
 import com.storycreator.persistence.entity.SideStoryEntity;
@@ -22,10 +24,10 @@ public class SideStoryAutoRunService {
 
     private static final Logger log = LoggerFactory.getLogger(SideStoryAutoRunService.class);
 
-    private final SideStoryWorkflowService workflowService;
-    private final SideStoryRepository sideStoryRepository;
-    private final SideStoryChapterRepository sideStoryChapterRepository;
-    private final GlobalSettingService globalSettingService;
+    private SideStoryWorkflowService workflowService;
+    private SideStoryRepository sideStoryRepository;
+    private SideStoryChapterRepository sideStoryChapterRepository;
+    private GlobalSettingService globalSettingService;
 
     private final ConcurrentHashMap<Long, Boolean> stopSignals = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Boolean> runningSideStories = new ConcurrentHashMap<>();
@@ -34,15 +36,26 @@ public class SideStoryAutoRunService {
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private final ScheduledExecutorService cleanupScheduler = Executors.newSingleThreadScheduledExecutor();
 
-    public SideStoryAutoRunService(SideStoryWorkflowService workflowService,
-                                    SideStoryRepository sideStoryRepository,
-                                    SideStoryChapterRepository sideStoryChapterRepository,
-                                    GlobalSettingService globalSettingService) {
+    @Autowired
+    public void setWorkflowService(SideStoryWorkflowService workflowService) {
         this.workflowService = workflowService;
+    }
+
+    @Autowired
+    public void setSideStoryRepository(SideStoryRepository sideStoryRepository) {
         this.sideStoryRepository = sideStoryRepository;
+    }
+
+    @Autowired
+    public void setSideStoryChapterRepository(SideStoryChapterRepository sideStoryChapterRepository) {
         this.sideStoryChapterRepository = sideStoryChapterRepository;
+    }
+
+    @Autowired
+    public void setGlobalSettingService(GlobalSettingService globalSettingService) {
         this.globalSettingService = globalSettingService;
     }
+
 
     public void startAutoRun(Long projectId, Long sideStoryId) {
         SideStoryEntity sideStory = sideStoryRepository.findById(sideStoryId)

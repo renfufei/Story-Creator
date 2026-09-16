@@ -1,5 +1,7 @@
 package com.storycreator.workflow.engine;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.core.domain.WorldFacetKey;
 import com.storycreator.persistence.entity.*;
 import com.storycreator.persistence.repository.*;
@@ -12,32 +14,55 @@ import static com.storycreator.workflow.engine.TextProcessingUtils.truncate;
 @Service
 public class WorkflowContextBuilder {
 
-    private final ProjectRepository projectRepository;
-    private final WorldSettingRepository worldSettingRepository;
-    private final CharacterRepository characterRepository;
-    private final StoryOutlineRepository storyOutlineRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
-    private final ChapterRepository chapterRepository;
-    private final StepGuidanceRepository stepGuidanceRepository;
-    private final WorldSettingFacetRepository worldSettingFacetRepository;
+    private ProjectRepository projectRepository;
+    private WorldSettingRepository worldSettingRepository;
+    private CharacterRepository characterRepository;
+    private StoryOutlineRepository storyOutlineRepository;
+    private ChapterOutlineRepository chapterOutlineRepository;
+    private ChapterRepository chapterRepository;
+    private StepGuidanceRepository stepGuidanceRepository;
+    private WorldSettingFacetRepository worldSettingFacetRepository;
 
-    public WorkflowContextBuilder(ProjectRepository projectRepository,
-                                  WorldSettingRepository worldSettingRepository,
-                                  CharacterRepository characterRepository,
-                                  StoryOutlineRepository storyOutlineRepository,
-                                  ChapterOutlineRepository chapterOutlineRepository,
-                                  ChapterRepository chapterRepository,
-                                  StepGuidanceRepository stepGuidanceRepository,
-                                  WorldSettingFacetRepository worldSettingFacetRepository) {
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setWorldSettingRepository(WorldSettingRepository worldSettingRepository) {
         this.worldSettingRepository = worldSettingRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setStoryOutlineRepository(StoryOutlineRepository storyOutlineRepository) {
         this.storyOutlineRepository = storyOutlineRepository;
+    }
+
+    @Autowired
+    public void setChapterOutlineRepository(ChapterOutlineRepository chapterOutlineRepository) {
         this.chapterOutlineRepository = chapterOutlineRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setStepGuidanceRepository(StepGuidanceRepository stepGuidanceRepository) {
         this.stepGuidanceRepository = stepGuidanceRepository;
+    }
+
+    @Autowired
+    public void setWorldSettingFacetRepository(WorldSettingFacetRepository worldSettingFacetRepository) {
         this.worldSettingFacetRepository = worldSettingFacetRepository;
     }
+
 
     public WorkflowContext build(Long projectId) {
         return build(projectId, 0);

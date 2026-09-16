@@ -1,5 +1,7 @@
 package com.storycreator.workflow.engine;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.prompt.PromptTemplateRegistry;
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.core.domain.PromptSubStep;
@@ -25,26 +27,43 @@ public class CharacterStateService {
 
     private static final Logger log = LoggerFactory.getLogger(CharacterStateService.class);
 
-    private final ChapterRepository chapterRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
-    private final AiProviderRouter providerRouter;
-    private final PromptTemplateRegistry promptRegistry;
-    private final AiUsageTracker aiUsageTracker;
-    private final CharacterStateDimensionService characterStateDimensionService;
+    private ChapterRepository chapterRepository;
+    private ChapterOutlineRepository chapterOutlineRepository;
+    private AiProviderRouter providerRouter;
+    private PromptTemplateRegistry promptRegistry;
+    private AiUsageTracker aiUsageTracker;
+    private CharacterStateDimensionService characterStateDimensionService;
 
-    public CharacterStateService(ChapterRepository chapterRepository,
-                                 ChapterOutlineRepository chapterOutlineRepository,
-                                 AiProviderRouter providerRouter,
-                                 PromptTemplateRegistry promptRegistry,
-                                 AiUsageTracker aiUsageTracker,
-                                 CharacterStateDimensionService characterStateDimensionService) {
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setChapterOutlineRepository(ChapterOutlineRepository chapterOutlineRepository) {
         this.chapterOutlineRepository = chapterOutlineRepository;
+    }
+
+    @Autowired
+    public void setProviderRouter(AiProviderRouter providerRouter) {
         this.providerRouter = providerRouter;
+    }
+
+    @Autowired
+    public void setPromptRegistry(PromptTemplateRegistry promptRegistry) {
         this.promptRegistry = promptRegistry;
+    }
+
+    @Autowired
+    public void setAiUsageTracker(AiUsageTracker aiUsageTracker) {
         this.aiUsageTracker = aiUsageTracker;
+    }
+
+    @Autowired
+    public void setCharacterStateDimensionService(CharacterStateDimensionService characterStateDimensionService) {
         this.characterStateDimensionService = characterStateDimensionService;
     }
+
 
     public Map<String, String> buildCharacterStateVariables(Long projectId, int chapterNumber) {
         ChapterEntity chapter = chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)

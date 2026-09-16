@@ -41,10 +41,18 @@ class SideStoryWorkflowServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new SideStoryWorkflowService(
-                sideStoryRepository, sideStoryChapterRepository, projectRepository,
-                worldSettingRepository, characterRepository, storyOutlineRepository,
-                volumeOutlineRepository, providerRouter, templateRegistry, jdbcTemplate);
+        
+        service = new SideStoryWorkflowService();
+        service.setSideStoryRepository(sideStoryRepository);
+        service.setSideStoryChapterRepository(sideStoryChapterRepository);
+        service.setProjectRepository(projectRepository);
+        service.setWorldSettingRepository(worldSettingRepository);
+        service.setCharacterRepository(characterRepository);
+        service.setStoryOutlineRepository(storyOutlineRepository);
+        service.setVolumeOutlineRepository(volumeOutlineRepository);
+        service.setProviderRouter(providerRouter);
+        service.setTemplateRegistry(templateRegistry);
+        service.setJdbcTemplate(jdbcTemplate);
     }
 
     private ProjectEntity makeProject(Long id) {

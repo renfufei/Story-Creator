@@ -1,5 +1,7 @@
 package com.storycreator.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.persistence.entity.*;
 import com.storycreator.persistence.repository.*;
 import org.springframework.http.ResponseEntity;
@@ -11,26 +13,43 @@ import java.util.*;
 @RequestMapping("/projects/{projectId}/inspect")
 public class InspectController {
 
-    private final ProjectRepository projectRepository;
-    private final ChapterRepository chapterRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
-    private final CharacterRepository characterRepository;
-    private final VolumeOutlineRepository volumeOutlineRepository;
-    private final StoryOutlineRepository storyOutlineRepository;
+    private ProjectRepository projectRepository;
+    private ChapterRepository chapterRepository;
+    private ChapterOutlineRepository chapterOutlineRepository;
+    private CharacterRepository characterRepository;
+    private VolumeOutlineRepository volumeOutlineRepository;
+    private StoryOutlineRepository storyOutlineRepository;
 
-    public InspectController(ProjectRepository projectRepository,
-                            ChapterRepository chapterRepository,
-                            ChapterOutlineRepository chapterOutlineRepository,
-                            CharacterRepository characterRepository,
-                            VolumeOutlineRepository volumeOutlineRepository,
-                            StoryOutlineRepository storyOutlineRepository) {
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setChapterOutlineRepository(ChapterOutlineRepository chapterOutlineRepository) {
         this.chapterOutlineRepository = chapterOutlineRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setVolumeOutlineRepository(VolumeOutlineRepository volumeOutlineRepository) {
         this.volumeOutlineRepository = volumeOutlineRepository;
+    }
+
+    @Autowired
+    public void setStoryOutlineRepository(StoryOutlineRepository storyOutlineRepository) {
         this.storyOutlineRepository = storyOutlineRepository;
     }
+
 
     @GetMapping("/data")
     public ResponseEntity<Map<String, Object>> inspectOverview(@PathVariable Long projectId) {

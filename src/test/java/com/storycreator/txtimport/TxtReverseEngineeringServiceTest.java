@@ -113,17 +113,35 @@ class TxtReverseEngineeringServiceTest {
 
         // 真实 WorkflowStateService（用于验证 workflow_states 回填），仅 mock 其重依赖
         contextSummaryService = mock(ContextSummaryService.class);
-        workflowStateService = new WorkflowStateService(
-                workflowStateRepository, projectRepository, worldSettingRepository,
-                characterRepository, storyOutlineRepository, chapterOutlineRepository,
-                chapterRepository,
-                mock(BackgroundGenerationService.class), contextSummaryService,
-                mock(WorldFacetElaborationService.class));
+        
+        workflowStateService = new WorkflowStateService();
+        workflowStateService.setWorkflowStateRepository(workflowStateRepository);
+        workflowStateService.setProjectRepository(projectRepository);
+        workflowStateService.setWorldSettingRepository(worldSettingRepository);
+        workflowStateService.setCharacterRepository(characterRepository);
+        workflowStateService.setStoryOutlineRepository(storyOutlineRepository);
+        workflowStateService.setChapterOutlineRepository(chapterOutlineRepository);
+        workflowStateService.setChapterRepository(chapterRepository);
+        workflowStateService.setBackgroundGenerationService(mock(BackgroundGenerationService.class));
+        workflowStateService.setContextSummaryService(contextSummaryService);
+        workflowStateService.setWorldFacetElaborationService(mock(WorldFacetElaborationService.class));
 
-        service = new TxtReverseEngineeringService(jobRepository, importChapterRepository, reStepRepository,
-                chapterOutlineRepository, volumeOutlineRepository, worldSettingRepository,
-                characterRepository, storyOutlineRepository, projectRepository, router, promptRegistry, usageTracker,
-                workflowStateService, contextSummaryService);
+        
+        service = new TxtReverseEngineeringService();
+        service.setJobRepository(jobRepository);
+        service.setImportChapterRepository(importChapterRepository);
+        service.setReStepRepository(reStepRepository);
+        service.setChapterOutlineRepository(chapterOutlineRepository);
+        service.setVolumeOutlineRepository(volumeOutlineRepository);
+        service.setWorldSettingRepository(worldSettingRepository);
+        service.setCharacterRepository(characterRepository);
+        service.setStoryOutlineRepository(storyOutlineRepository);
+        service.setProjectRepository(projectRepository);
+        service.setProviderRouter(router);
+        service.setPromptRegistry(promptRegistry);
+        service.setAiUsageTracker(usageTracker);
+        service.setWorkflowStateService(workflowStateService);
+        service.setContextSummaryService(contextSummaryService);
     }
 
     // ==================================================================

@@ -1,5 +1,7 @@
 package com.storycreator.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.prompt.BuiltinTemplate;
 import com.storycreator.ai.prompt.BuiltinTemplateLoader;
 import com.storycreator.ai.prompt.PromptTemplateRegistry;
@@ -46,50 +48,91 @@ public class PromptExploreController {
 
     private static final Logger log = LoggerFactory.getLogger(PromptExploreController.class);
 
-    private final PromptExploreService exploreService;
-    private final PromptTemplateRegistry promptRegistry;
-    private final BuiltinTemplateLoader builtinLoader;
-    private final PromptTemplateRepository promptTemplateRepository;
-    private final ProjectRepository projectRepository;
-    private final ChapterRepository chapterRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
-    private final CharacterRepository characterRepository;
-    private final AiModelConfigRepository modelConfigRepository;
-    private final AiProviderRouter aiProviderRouter;
-    private final TtsProviderRegistry ttsProviderRegistry;
-    private final ImageProviderRegistry imageProviderRegistry;
-    private final SideStoryRepository sideStoryRepository;
-    private final SideStoryChapterRepository sideStoryChapterRepository;
+    private PromptExploreService exploreService;
+    private PromptTemplateRegistry promptRegistry;
+    private BuiltinTemplateLoader builtinLoader;
+    private PromptTemplateRepository promptTemplateRepository;
+    private ProjectRepository projectRepository;
+    private ChapterRepository chapterRepository;
+    private ChapterOutlineRepository chapterOutlineRepository;
+    private CharacterRepository characterRepository;
+    private AiModelConfigRepository modelConfigRepository;
+    private AiProviderRouter aiProviderRouter;
+    private TtsProviderRegistry ttsProviderRegistry;
+    private ImageProviderRegistry imageProviderRegistry;
+    private SideStoryRepository sideStoryRepository;
+    private SideStoryChapterRepository sideStoryChapterRepository;
 
-    public PromptExploreController(PromptExploreService exploreService,
-                                   PromptTemplateRegistry promptRegistry,
-                                   BuiltinTemplateLoader builtinLoader,
-                                   PromptTemplateRepository promptTemplateRepository,
-                                   ProjectRepository projectRepository,
-                                   ChapterRepository chapterRepository,
-                                   ChapterOutlineRepository chapterOutlineRepository,
-                                   CharacterRepository characterRepository,
-                                   AiModelConfigRepository modelConfigRepository,
-                                   AiProviderRouter aiProviderRouter,
-                                   TtsProviderRegistry ttsProviderRegistry,
-                                   ImageProviderRegistry imageProviderRegistry,
-                                   SideStoryRepository sideStoryRepository,
-                                   SideStoryChapterRepository sideStoryChapterRepository) {
+    @Autowired
+    public void setExploreService(PromptExploreService exploreService) {
         this.exploreService = exploreService;
+    }
+
+    @Autowired
+    public void setPromptRegistry(PromptTemplateRegistry promptRegistry) {
         this.promptRegistry = promptRegistry;
+    }
+
+    @Autowired
+    public void setBuiltinLoader(BuiltinTemplateLoader builtinLoader) {
         this.builtinLoader = builtinLoader;
+    }
+
+    @Autowired
+    public void setPromptTemplateRepository(PromptTemplateRepository promptTemplateRepository) {
         this.promptTemplateRepository = promptTemplateRepository;
+    }
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setChapterOutlineRepository(ChapterOutlineRepository chapterOutlineRepository) {
         this.chapterOutlineRepository = chapterOutlineRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setModelConfigRepository(AiModelConfigRepository modelConfigRepository) {
         this.modelConfigRepository = modelConfigRepository;
+    }
+
+    @Autowired
+    public void setAiProviderRouter(AiProviderRouter aiProviderRouter) {
         this.aiProviderRouter = aiProviderRouter;
+    }
+
+    @Autowired
+    public void setTtsProviderRegistry(TtsProviderRegistry ttsProviderRegistry) {
         this.ttsProviderRegistry = ttsProviderRegistry;
+    }
+
+    @Autowired
+    public void setImageProviderRegistry(ImageProviderRegistry imageProviderRegistry) {
         this.imageProviderRegistry = imageProviderRegistry;
+    }
+
+    @Autowired
+    public void setSideStoryRepository(SideStoryRepository sideStoryRepository) {
         this.sideStoryRepository = sideStoryRepository;
+    }
+
+    @Autowired
+    public void setSideStoryChapterRepository(SideStoryChapterRepository sideStoryChapterRepository) {
         this.sideStoryChapterRepository = sideStoryChapterRepository;
     }
+
 
     /**
      * 提示词探索页：转发到静态页。

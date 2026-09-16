@@ -1,5 +1,7 @@
 package com.storycreator.api;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.ModelType;
 import com.storycreator.core.domain.ProjectStatus;
@@ -67,53 +69,97 @@ public class ProjectEditApiController {
             Map<String, Object> stepModelConfigs
     ) {}
 
-    private final ProjectRepository projectRepository;
-    private final AiModelConfigRepository modelConfigRepository;
-    private final StepGuidanceRepository stepGuidanceRepository;
-    private final StepModelConfigRepository stepModelConfigRepository;
-    private final WorkflowStateRepository workflowStateRepository;
-    private final ChapterRepository chapterRepository;
-    private final CharacterRepository characterRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
-    private final StoryOutlineRepository storyOutlineRepository;
-    private final VolumeOutlineRepository volumeOutlineRepository;
-    private final ProofreadingReportRepository proofreadingReportRepository;
-    private final AiUsageStatRepository aiUsageStatRepository;
-    private final AutoRunStepConfigRepository autoRunStepConfigRepository;
-    private final WorldSettingRepository worldSettingRepository;
-    private final GlobalSettingService globalSettingService;
+    private ProjectRepository projectRepository;
+    private AiModelConfigRepository modelConfigRepository;
+    private StepGuidanceRepository stepGuidanceRepository;
+    private StepModelConfigRepository stepModelConfigRepository;
+    private WorkflowStateRepository workflowStateRepository;
+    private ChapterRepository chapterRepository;
+    private CharacterRepository characterRepository;
+    private ChapterOutlineRepository chapterOutlineRepository;
+    private StoryOutlineRepository storyOutlineRepository;
+    private VolumeOutlineRepository volumeOutlineRepository;
+    private ProofreadingReportRepository proofreadingReportRepository;
+    private AiUsageStatRepository aiUsageStatRepository;
+    private AutoRunStepConfigRepository autoRunStepConfigRepository;
+    private WorldSettingRepository worldSettingRepository;
+    private GlobalSettingService globalSettingService;
 
-    public ProjectEditApiController(ProjectRepository projectRepository,
-                                    AiModelConfigRepository modelConfigRepository,
-                                    StepGuidanceRepository stepGuidanceRepository,
-                                    StepModelConfigRepository stepModelConfigRepository,
-                                    WorkflowStateRepository workflowStateRepository,
-                                    ChapterRepository chapterRepository,
-                                    CharacterRepository characterRepository,
-                                    ChapterOutlineRepository chapterOutlineRepository,
-                                    StoryOutlineRepository storyOutlineRepository,
-                                    VolumeOutlineRepository volumeOutlineRepository,
-                                    ProofreadingReportRepository proofreadingReportRepository,
-                                    AiUsageStatRepository aiUsageStatRepository,
-                                    AutoRunStepConfigRepository autoRunStepConfigRepository,
-                                    WorldSettingRepository worldSettingRepository,
-                                    GlobalSettingService globalSettingService) {
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setModelConfigRepository(AiModelConfigRepository modelConfigRepository) {
         this.modelConfigRepository = modelConfigRepository;
+    }
+
+    @Autowired
+    public void setStepGuidanceRepository(StepGuidanceRepository stepGuidanceRepository) {
         this.stepGuidanceRepository = stepGuidanceRepository;
+    }
+
+    @Autowired
+    public void setStepModelConfigRepository(StepModelConfigRepository stepModelConfigRepository) {
         this.stepModelConfigRepository = stepModelConfigRepository;
+    }
+
+    @Autowired
+    public void setWorkflowStateRepository(WorkflowStateRepository workflowStateRepository) {
         this.workflowStateRepository = workflowStateRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setChapterOutlineRepository(ChapterOutlineRepository chapterOutlineRepository) {
         this.chapterOutlineRepository = chapterOutlineRepository;
+    }
+
+    @Autowired
+    public void setStoryOutlineRepository(StoryOutlineRepository storyOutlineRepository) {
         this.storyOutlineRepository = storyOutlineRepository;
+    }
+
+    @Autowired
+    public void setVolumeOutlineRepository(VolumeOutlineRepository volumeOutlineRepository) {
         this.volumeOutlineRepository = volumeOutlineRepository;
+    }
+
+    @Autowired
+    public void setProofreadingReportRepository(ProofreadingReportRepository proofreadingReportRepository) {
         this.proofreadingReportRepository = proofreadingReportRepository;
+    }
+
+    @Autowired
+    public void setAiUsageStatRepository(AiUsageStatRepository aiUsageStatRepository) {
         this.aiUsageStatRepository = aiUsageStatRepository;
+    }
+
+    @Autowired
+    public void setAutoRunStepConfigRepository(AutoRunStepConfigRepository autoRunStepConfigRepository) {
         this.autoRunStepConfigRepository = autoRunStepConfigRepository;
+    }
+
+    @Autowired
+    public void setWorldSettingRepository(WorldSettingRepository worldSettingRepository) {
         this.worldSettingRepository = worldSettingRepository;
+    }
+
+    @Autowired
+    public void setGlobalSettingService(GlobalSettingService globalSettingService) {
         this.globalSettingService = globalSettingService;
     }
+
 
     /* ==================== 表单元数据 ==================== */
 

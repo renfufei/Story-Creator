@@ -1,5 +1,7 @@
 package com.storycreator.txtimport;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.core.service.GlobalSettingService;
@@ -25,29 +27,49 @@ public class TxtImportService {
 
     private static final Logger log = LoggerFactory.getLogger(TxtImportService.class);
 
-    private final TxtImportJobRepository jobRepository;
-    private final TxtImportChapterRepository importChapterRepository;
-    private final ChapterSplitConfigRepository configRepository;
-    private final ProjectRepository projectRepository;
-    private final ChapterRepository chapterRepository;
-    private final TxtChapterSplitter splitter;
-    private final GlobalSettingService globalSettingService;
+    private TxtImportJobRepository jobRepository;
+    private TxtImportChapterRepository importChapterRepository;
+    private ChapterSplitConfigRepository configRepository;
+    private ProjectRepository projectRepository;
+    private ChapterRepository chapterRepository;
+    private TxtChapterSplitter splitter;
+    private GlobalSettingService globalSettingService;
 
-    public TxtImportService(TxtImportJobRepository jobRepository,
-                            TxtImportChapterRepository importChapterRepository,
-                            ChapterSplitConfigRepository configRepository,
-                            ProjectRepository projectRepository,
-                            ChapterRepository chapterRepository,
-                            TxtChapterSplitter splitter,
-                            GlobalSettingService globalSettingService) {
+    @Autowired
+    public void setJobRepository(TxtImportJobRepository jobRepository) {
         this.jobRepository = jobRepository;
+    }
+
+    @Autowired
+    public void setImportChapterRepository(TxtImportChapterRepository importChapterRepository) {
         this.importChapterRepository = importChapterRepository;
+    }
+
+    @Autowired
+    public void setConfigRepository(ChapterSplitConfigRepository configRepository) {
         this.configRepository = configRepository;
+    }
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setSplitter(TxtChapterSplitter splitter) {
         this.splitter = splitter;
+    }
+
+    @Autowired
+    public void setGlobalSettingService(GlobalSettingService globalSettingService) {
         this.globalSettingService = globalSettingService;
     }
+
 
     @Transactional
     public TxtImportJobEntity createJob(String title, String genre, String author, String rawContent) {

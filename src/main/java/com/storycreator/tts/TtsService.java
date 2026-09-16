@@ -1,5 +1,7 @@
 package com.storycreator.tts;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.storycreator.ai.router.TtsProviderRegistry;
@@ -37,26 +39,49 @@ public class TtsService {
     private static final double TRIM_SAFETY_MARGIN_SECONDS = 0.1;
     private static final String SPLIT_PUNCTUATION = "。！？，、；：.!?,;:";
 
-    private final TtsProviderRegistry ttsProviderRegistry;
-    private final ChapterRepository chapterRepository;
-    private final TtsReplacementTemplateService templateService;
-    private final Mp3QualityDetector mp3QualityDetector;
-    private final Mp3ProcessingService mp3ProcessingService;
-    private final ObjectMapper objectMapper;
-    private final AiUsageTracker aiUsageTracker;
+    private TtsProviderRegistry ttsProviderRegistry;
+    private ChapterRepository chapterRepository;
+    private TtsReplacementTemplateService templateService;
+    private Mp3QualityDetector mp3QualityDetector;
+    private Mp3ProcessingService mp3ProcessingService;
+    private ObjectMapper objectMapper;
+    private AiUsageTracker aiUsageTracker;
 
-    public TtsService(TtsProviderRegistry ttsProviderRegistry, ChapterRepository chapterRepository,
-                      TtsReplacementTemplateService templateService,
-                      Mp3QualityDetector mp3QualityDetector, Mp3ProcessingService mp3ProcessingService,
-                      ObjectMapper objectMapper, AiUsageTracker aiUsageTracker) {
+    @Autowired
+    public void setTtsProviderRegistry(TtsProviderRegistry ttsProviderRegistry) {
         this.ttsProviderRegistry = ttsProviderRegistry;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setTemplateService(TtsReplacementTemplateService templateService) {
         this.templateService = templateService;
+    }
+
+    @Autowired
+    public void setMp3QualityDetector(Mp3QualityDetector mp3QualityDetector) {
         this.mp3QualityDetector = mp3QualityDetector;
+    }
+
+    @Autowired
+    public void setMp3ProcessingService(Mp3ProcessingService mp3ProcessingService) {
         this.mp3ProcessingService = mp3ProcessingService;
+    }
+
+    @Autowired
+    public void setObjectMapper(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+    }
+
+    @Autowired
+    public void setAiUsageTracker(AiUsageTracker aiUsageTracker) {
         this.aiUsageTracker = aiUsageTracker;
     }
+
 
     /**
      * Returns the text chunks for a chapter (for chunk-by-chunk playback).

@@ -11,6 +11,7 @@ import com.storycreator.workflow.engine.AiUsageTracker;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -36,14 +37,14 @@ public class TtsExportService {
 
     private static final Logger log = LoggerFactory.getLogger(TtsExportService.class);
 
-    private final TtsExportTaskRepository taskRepository;
-    private final TtsExportChapterRepository chapterRepository;
-    private final ChapterRepository storyChapterRepository;
-    private final TtsService ttsService;
-    private final Mp3ProcessingService mp3ProcessingService;
-    private final com.storycreator.core.service.GlobalSettingService globalSettingService;
-    private final AiUsageTracker aiUsageTracker;
-    private final TtsProviderRegistry ttsProviderRegistry;
+    private TtsExportTaskRepository taskRepository;
+    private TtsExportChapterRepository chapterRepository;
+    private ChapterRepository storyChapterRepository;
+    private TtsService ttsService;
+    private Mp3ProcessingService mp3ProcessingService;
+    private com.storycreator.core.service.GlobalSettingService globalSettingService;
+    private AiUsageTracker aiUsageTracker;
+    private TtsProviderRegistry ttsProviderRegistry;
 
     private final ConcurrentHashMap<Long, Boolean> stopSignals = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Boolean> pauseSignals = new ConcurrentHashMap<>();
@@ -74,25 +75,50 @@ public class TtsExportService {
         }
     }
 
-    private final Path storageBaseDir;
+    private Path storageBaseDir;
 
-    public TtsExportService(TtsExportTaskRepository taskRepository,
-                            TtsExportChapterRepository chapterRepository,
-                            ChapterRepository storyChapterRepository,
-                            TtsService ttsService,
-                            Mp3ProcessingService mp3ProcessingService,
-                            com.storycreator.core.service.GlobalSettingService globalSettingService,
-                            AiUsageTracker aiUsageTracker,
-                            TtsProviderRegistry ttsProviderRegistry,
-                            @Value("${STORY_DB_PATH:./data}") String dbPath) {
+    @Autowired
+    public void setTaskRepository(TtsExportTaskRepository taskRepository) {
         this.taskRepository = taskRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(TtsExportChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setStoryChapterRepository(ChapterRepository storyChapterRepository) {
         this.storyChapterRepository = storyChapterRepository;
+    }
+
+    @Autowired
+    public void setTtsService(TtsService ttsService) {
         this.ttsService = ttsService;
+    }
+
+    @Autowired
+    public void setMp3ProcessingService(Mp3ProcessingService mp3ProcessingService) {
         this.mp3ProcessingService = mp3ProcessingService;
+    }
+
+    @Autowired
+    public void setGlobalSettingService(com.storycreator.core.service.GlobalSettingService globalSettingService) {
         this.globalSettingService = globalSettingService;
+    }
+
+    @Autowired
+    public void setAiUsageTracker(AiUsageTracker aiUsageTracker) {
         this.aiUsageTracker = aiUsageTracker;
+    }
+
+    @Autowired
+    public void setTtsProviderRegistry(TtsProviderRegistry ttsProviderRegistry) {
         this.ttsProviderRegistry = ttsProviderRegistry;
+    }
+
+    @Autowired
+    public void setDbPath(@Value("${STORY_DB_PATH:./data}") String dbPath) {
         this.storageBaseDir = Paths.get(dbPath, "tts-export");
     }
 

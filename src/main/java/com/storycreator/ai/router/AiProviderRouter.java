@@ -12,6 +12,7 @@ import com.storycreator.persistence.repository.GlobalSettingRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.StepModelConfigRepository;
 import com.storycreator.core.domain.WorkflowStep;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -25,22 +26,35 @@ public class AiProviderRouter {
     private static final String GLOBAL_DEFAULT_KEY = "default_model_config_id";
     private static final String GLOBAL_DEFAULT_TTS_KEY = "default_tts_config_id";
 
-    private final Map<String, AiProvider> providers;
-    private final AiModelConfigRepository configRepository;
-    private final GlobalSettingRepository globalSettingRepository;
-    private final ProjectRepository projectRepository;
-    private final StepModelConfigRepository stepModelConfigRepository;
+    private Map<String, AiProvider> providers;
+    private AiModelConfigRepository configRepository;
+    private GlobalSettingRepository globalSettingRepository;
+    private ProjectRepository projectRepository;
+    private StepModelConfigRepository stepModelConfigRepository;
 
-    public AiProviderRouter(List<AiProvider> providerList,
-                           AiModelConfigRepository configRepository,
-                           GlobalSettingRepository globalSettingRepository,
-                           ProjectRepository projectRepository,
-                           StepModelConfigRepository stepModelConfigRepository) {
+    @Autowired
+    public void setProviders(List<AiProvider> providerList) {
         this.providers = providerList.stream()
                 .collect(Collectors.toMap(AiProvider::getProviderName, Function.identity()));
+    }
+
+    @Autowired
+    public void setConfigRepository(AiModelConfigRepository configRepository) {
         this.configRepository = configRepository;
+    }
+
+    @Autowired
+    public void setGlobalSettingRepository(GlobalSettingRepository globalSettingRepository) {
         this.globalSettingRepository = globalSettingRepository;
+    }
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setStepModelConfigRepository(StepModelConfigRepository stepModelConfigRepository) {
         this.stepModelConfigRepository = stepModelConfigRepository;
     }
 

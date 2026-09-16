@@ -1,5 +1,7 @@
 package com.storycreator.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.core.domain.CharacterStateDimension;
 import com.storycreator.core.domain.ModelType;
 import com.storycreator.core.domain.StepStatus;
@@ -32,24 +34,24 @@ import java.util.concurrent.Executors;
 public class WorkflowController {
 
     private static final Logger log = LoggerFactory.getLogger(WorkflowController.class);
-    private final WorkflowEngine workflowEngine;
-    private final ProjectRepository projectRepository;
-    private final WorkflowStateRepository workflowStateRepository;
-    private final ChapterRepository chapterRepository;
-    private final CharacterRepository characterRepository;
-    private final StoryOutlineRepository storyOutlineRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
-    private final VolumeOutlineRepository volumeOutlineRepository;
-    private final AiModelConfigRepository modelConfigRepository;
-    private final StepGuidanceRepository stepGuidanceRepository;
-    private final StepModelConfigRepository stepModelConfigRepository;
-    private final ProofreadingReportRepository proofreadingReportRepository;
-    private final WorldSettingRepository worldSettingRepository;
-    private final GlobalSettingService globalSettingService;
-    private final BackgroundGenerationService backgroundGenerationService;
-    private final AutoRunStepConfigRepository autoRunStepConfigRepository;
-    private final CharacterStateDimensionService characterStateDimensionService;
-    private final WorldFacetElaborationService worldFacetElaborationService;
+    private WorkflowEngine workflowEngine;
+    private ProjectRepository projectRepository;
+    private WorkflowStateRepository workflowStateRepository;
+    private ChapterRepository chapterRepository;
+    private CharacterRepository characterRepository;
+    private StoryOutlineRepository storyOutlineRepository;
+    private ChapterOutlineRepository chapterOutlineRepository;
+    private VolumeOutlineRepository volumeOutlineRepository;
+    private AiModelConfigRepository modelConfigRepository;
+    private StepGuidanceRepository stepGuidanceRepository;
+    private StepModelConfigRepository stepModelConfigRepository;
+    private ProofreadingReportRepository proofreadingReportRepository;
+    private WorldSettingRepository worldSettingRepository;
+    private GlobalSettingService globalSettingService;
+    private BackgroundGenerationService backgroundGenerationService;
+    private AutoRunStepConfigRepository autoRunStepConfigRepository;
+    private CharacterStateDimensionService characterStateDimensionService;
+    private WorldFacetElaborationService worldFacetElaborationService;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     /**
@@ -65,43 +67,96 @@ public class WorkflowController {
             "proofreading", WorkflowStep.PROOFREADING
     );
 
-    public WorkflowController(WorkflowEngine workflowEngine,
-                             ProjectRepository projectRepository,
-                             WorkflowStateRepository workflowStateRepository,
-                             ChapterRepository chapterRepository,
-                             CharacterRepository characterRepository,
-                             StoryOutlineRepository storyOutlineRepository,
-                             ChapterOutlineRepository chapterOutlineRepository,
-                             VolumeOutlineRepository volumeOutlineRepository,
-                             AiModelConfigRepository modelConfigRepository,
-                             StepGuidanceRepository stepGuidanceRepository,
-                             StepModelConfigRepository stepModelConfigRepository,
-                             ProofreadingReportRepository proofreadingReportRepository,
-                             WorldSettingRepository worldSettingRepository,
-                             GlobalSettingService globalSettingService,
-                             BackgroundGenerationService backgroundGenerationService,
-                             AutoRunStepConfigRepository autoRunStepConfigRepository,
-                             CharacterStateDimensionService characterStateDimensionService,
-                             WorldFacetElaborationService worldFacetElaborationService) {
+    @Autowired
+    public void setWorkflowEngine(WorkflowEngine workflowEngine) {
         this.workflowEngine = workflowEngine;
+    }
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setWorkflowStateRepository(WorkflowStateRepository workflowStateRepository) {
         this.workflowStateRepository = workflowStateRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setStoryOutlineRepository(StoryOutlineRepository storyOutlineRepository) {
         this.storyOutlineRepository = storyOutlineRepository;
+    }
+
+    @Autowired
+    public void setChapterOutlineRepository(ChapterOutlineRepository chapterOutlineRepository) {
         this.chapterOutlineRepository = chapterOutlineRepository;
+    }
+
+    @Autowired
+    public void setVolumeOutlineRepository(VolumeOutlineRepository volumeOutlineRepository) {
         this.volumeOutlineRepository = volumeOutlineRepository;
+    }
+
+    @Autowired
+    public void setModelConfigRepository(AiModelConfigRepository modelConfigRepository) {
         this.modelConfigRepository = modelConfigRepository;
+    }
+
+    @Autowired
+    public void setStepGuidanceRepository(StepGuidanceRepository stepGuidanceRepository) {
         this.stepGuidanceRepository = stepGuidanceRepository;
+    }
+
+    @Autowired
+    public void setStepModelConfigRepository(StepModelConfigRepository stepModelConfigRepository) {
         this.stepModelConfigRepository = stepModelConfigRepository;
+    }
+
+    @Autowired
+    public void setProofreadingReportRepository(ProofreadingReportRepository proofreadingReportRepository) {
         this.proofreadingReportRepository = proofreadingReportRepository;
+    }
+
+    @Autowired
+    public void setWorldSettingRepository(WorldSettingRepository worldSettingRepository) {
         this.worldSettingRepository = worldSettingRepository;
+    }
+
+    @Autowired
+    public void setGlobalSettingService(GlobalSettingService globalSettingService) {
         this.globalSettingService = globalSettingService;
+    }
+
+    @Autowired
+    public void setBackgroundGenerationService(BackgroundGenerationService backgroundGenerationService) {
         this.backgroundGenerationService = backgroundGenerationService;
+    }
+
+    @Autowired
+    public void setAutoRunStepConfigRepository(AutoRunStepConfigRepository autoRunStepConfigRepository) {
         this.autoRunStepConfigRepository = autoRunStepConfigRepository;
+    }
+
+    @Autowired
+    public void setCharacterStateDimensionService(CharacterStateDimensionService characterStateDimensionService) {
         this.characterStateDimensionService = characterStateDimensionService;
+    }
+
+    @Autowired
+    public void setWorldFacetElaborationService(WorldFacetElaborationService worldFacetElaborationService) {
         this.worldFacetElaborationService = worldFacetElaborationService;
     }
+
 
     /**
      * 静态化后，工作流页面由 /pages/workflow.html 提供，本端点以 JSON 返回原 Thymeleaf 注入的

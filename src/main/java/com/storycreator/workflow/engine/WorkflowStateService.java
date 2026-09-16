@@ -1,5 +1,7 @@
 package com.storycreator.workflow.engine;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.core.domain.StepStatus;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.persistence.entity.*;
@@ -23,38 +25,67 @@ public class WorkflowStateService {
 
     private static final Logger log = LoggerFactory.getLogger(WorkflowStateService.class);
 
-    private final WorkflowStateRepository workflowStateRepository;
-    private final ProjectRepository projectRepository;
-    private final WorldSettingRepository worldSettingRepository;
-    private final CharacterRepository characterRepository;
-    private final StoryOutlineRepository storyOutlineRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
-    private final ChapterRepository chapterRepository;
-    private final BackgroundGenerationService backgroundGenerationService;
-    private final ContextSummaryService contextSummaryService;
-    private final WorldFacetElaborationService worldFacetElaborationService;
+    private WorkflowStateRepository workflowStateRepository;
+    private ProjectRepository projectRepository;
+    private WorldSettingRepository worldSettingRepository;
+    private CharacterRepository characterRepository;
+    private StoryOutlineRepository storyOutlineRepository;
+    private ChapterOutlineRepository chapterOutlineRepository;
+    private ChapterRepository chapterRepository;
+    private BackgroundGenerationService backgroundGenerationService;
+    private ContextSummaryService contextSummaryService;
+    private WorldFacetElaborationService worldFacetElaborationService;
 
-    public WorkflowStateService(WorkflowStateRepository workflowStateRepository,
-                                ProjectRepository projectRepository,
-                                WorldSettingRepository worldSettingRepository,
-                                CharacterRepository characterRepository,
-                                StoryOutlineRepository storyOutlineRepository,
-                                ChapterOutlineRepository chapterOutlineRepository,
-                                ChapterRepository chapterRepository,
-                                @Lazy BackgroundGenerationService backgroundGenerationService,
-                                ContextSummaryService contextSummaryService,
-                                WorldFacetElaborationService worldFacetElaborationService) {
+    @Autowired
+    public void setWorkflowStateRepository(WorkflowStateRepository workflowStateRepository) {
         this.workflowStateRepository = workflowStateRepository;
+    }
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setWorldSettingRepository(WorldSettingRepository worldSettingRepository) {
         this.worldSettingRepository = worldSettingRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setStoryOutlineRepository(StoryOutlineRepository storyOutlineRepository) {
         this.storyOutlineRepository = storyOutlineRepository;
+    }
+
+    @Autowired
+    public void setChapterOutlineRepository(ChapterOutlineRepository chapterOutlineRepository) {
         this.chapterOutlineRepository = chapterOutlineRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setBackgroundGenerationService(@Lazy BackgroundGenerationService backgroundGenerationService) {
         this.backgroundGenerationService = backgroundGenerationService;
+    }
+
+    @Autowired
+    public void setContextSummaryService(ContextSummaryService contextSummaryService) {
         this.contextSummaryService = contextSummaryService;
+    }
+
+    @Autowired
+    public void setWorldFacetElaborationService(WorldFacetElaborationService worldFacetElaborationService) {
         this.worldFacetElaborationService = worldFacetElaborationService;
     }
+
 
     @Transactional
     public void saveGeneratedContent(Long projectId, WorkflowStep step, String content) {

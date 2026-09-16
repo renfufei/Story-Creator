@@ -1,5 +1,7 @@
 package com.storycreator.workflow.engine;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.core.domain.StepStatus;
 import com.storycreator.persistence.entity.ProjectEntity;
 import com.storycreator.persistence.repository.ChapterRepository;
@@ -24,23 +26,37 @@ public class StuckStatusCleaner {
 
     private static final Logger log = LoggerFactory.getLogger(StuckStatusCleaner.class);
 
-    private final WorkflowStateRepository workflowStateRepository;
-    private final ChapterRepository chapterRepository;
-    private final ProjectRepository projectRepository;
-    private final SideStoryChapterRepository sideStoryChapterRepository;
-    private final TxtImportJobRepository txtImportJobRepository;
+    private WorkflowStateRepository workflowStateRepository;
+    private ChapterRepository chapterRepository;
+    private ProjectRepository projectRepository;
+    private SideStoryChapterRepository sideStoryChapterRepository;
+    private TxtImportJobRepository txtImportJobRepository;
 
-    public StuckStatusCleaner(WorkflowStateRepository workflowStateRepository,
-                              ChapterRepository chapterRepository,
-                              ProjectRepository projectRepository,
-                              SideStoryChapterRepository sideStoryChapterRepository,
-                              TxtImportJobRepository txtImportJobRepository) {
+    @Autowired
+    public void setWorkflowStateRepository(WorkflowStateRepository workflowStateRepository) {
         this.workflowStateRepository = workflowStateRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setSideStoryChapterRepository(SideStoryChapterRepository sideStoryChapterRepository) {
         this.sideStoryChapterRepository = sideStoryChapterRepository;
+    }
+
+    @Autowired
+    public void setTxtImportJobRepository(TxtImportJobRepository txtImportJobRepository) {
         this.txtImportJobRepository = txtImportJobRepository;
     }
+
 
     @EventListener(ApplicationReadyEvent.class)
     @Transactional

@@ -1,5 +1,7 @@
 package com.storycreator.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.prompt.MaterialDistillationTemplateLoader;
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.core.domain.MaterialCategory;
@@ -20,20 +22,31 @@ public class MaterialLibraryService {
 
     private static final Logger log = LoggerFactory.getLogger(MaterialLibraryService.class);
 
-    private final MaterialLibraryRepository repository;
-    private final AiProviderRouter providerRouter;
-    private final AiUsageTracker aiUsageTracker;
-    private final MaterialDistillationTemplateLoader templateLoader;
+    private MaterialLibraryRepository repository;
+    private AiProviderRouter providerRouter;
+    private AiUsageTracker aiUsageTracker;
+    private MaterialDistillationTemplateLoader templateLoader;
 
-    public MaterialLibraryService(MaterialLibraryRepository repository,
-                                  AiProviderRouter providerRouter,
-                                  AiUsageTracker aiUsageTracker,
-                                  MaterialDistillationTemplateLoader templateLoader) {
+    @Autowired
+    public void setRepository(MaterialLibraryRepository repository) {
         this.repository = repository;
+    }
+
+    @Autowired
+    public void setProviderRouter(AiProviderRouter providerRouter) {
         this.providerRouter = providerRouter;
+    }
+
+    @Autowired
+    public void setAiUsageTracker(AiUsageTracker aiUsageTracker) {
         this.aiUsageTracker = aiUsageTracker;
+    }
+
+    @Autowired
+    public void setTemplateLoader(MaterialDistillationTemplateLoader templateLoader) {
         this.templateLoader = templateLoader;
     }
+
 
     /**
      * Distill raw content using AI and save to material library.

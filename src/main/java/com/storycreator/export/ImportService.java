@@ -1,5 +1,7 @@
 package com.storycreator.export;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.ModelType;
@@ -18,50 +20,91 @@ import java.util.stream.Collectors;
 @Service
 public class ImportService {
 
-    private final ObjectMapper objectMapper;
-    private final ProjectRepository projectRepository;
-    private final WorldSettingRepository worldSettingRepository;
-    private final CharacterRepository characterRepository;
-    private final StoryOutlineRepository storyOutlineRepository;
-    private final VolumeOutlineRepository volumeOutlineRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
-    private final ChapterRepository chapterRepository;
-    private final WorkflowStateRepository workflowStateRepository;
-    private final StepGuidanceRepository stepGuidanceRepository;
-    private final StepModelConfigRepository stepModelConfigRepository;
-    private final AiModelConfigRepository aiModelConfigRepository;
-    private final ProofreadingReportRepository proofreadingReportRepository;
-    private final WorldSettingFacetRepository worldSettingFacetRepository;
+    private ObjectMapper objectMapper;
+    private ProjectRepository projectRepository;
+    private WorldSettingRepository worldSettingRepository;
+    private CharacterRepository characterRepository;
+    private StoryOutlineRepository storyOutlineRepository;
+    private VolumeOutlineRepository volumeOutlineRepository;
+    private ChapterOutlineRepository chapterOutlineRepository;
+    private ChapterRepository chapterRepository;
+    private WorkflowStateRepository workflowStateRepository;
+    private StepGuidanceRepository stepGuidanceRepository;
+    private StepModelConfigRepository stepModelConfigRepository;
+    private AiModelConfigRepository aiModelConfigRepository;
+    private ProofreadingReportRepository proofreadingReportRepository;
+    private WorldSettingFacetRepository worldSettingFacetRepository;
 
-    public ImportService(ObjectMapper objectMapper,
-                        ProjectRepository projectRepository,
-                        WorldSettingRepository worldSettingRepository,
-                        CharacterRepository characterRepository,
-                        StoryOutlineRepository storyOutlineRepository,
-                        VolumeOutlineRepository volumeOutlineRepository,
-                        ChapterOutlineRepository chapterOutlineRepository,
-                        ChapterRepository chapterRepository,
-                        WorkflowStateRepository workflowStateRepository,
-                        StepGuidanceRepository stepGuidanceRepository,
-                        StepModelConfigRepository stepModelConfigRepository,
-                        AiModelConfigRepository aiModelConfigRepository,
-                        ProofreadingReportRepository proofreadingReportRepository,
-                        WorldSettingFacetRepository worldSettingFacetRepository) {
+    @Autowired
+    public void setObjectMapper(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+    }
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setWorldSettingRepository(WorldSettingRepository worldSettingRepository) {
         this.worldSettingRepository = worldSettingRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setStoryOutlineRepository(StoryOutlineRepository storyOutlineRepository) {
         this.storyOutlineRepository = storyOutlineRepository;
+    }
+
+    @Autowired
+    public void setVolumeOutlineRepository(VolumeOutlineRepository volumeOutlineRepository) {
         this.volumeOutlineRepository = volumeOutlineRepository;
+    }
+
+    @Autowired
+    public void setChapterOutlineRepository(ChapterOutlineRepository chapterOutlineRepository) {
         this.chapterOutlineRepository = chapterOutlineRepository;
+    }
+
+    @Autowired
+    public void setChapterRepository(ChapterRepository chapterRepository) {
         this.chapterRepository = chapterRepository;
+    }
+
+    @Autowired
+    public void setWorkflowStateRepository(WorkflowStateRepository workflowStateRepository) {
         this.workflowStateRepository = workflowStateRepository;
+    }
+
+    @Autowired
+    public void setStepGuidanceRepository(StepGuidanceRepository stepGuidanceRepository) {
         this.stepGuidanceRepository = stepGuidanceRepository;
+    }
+
+    @Autowired
+    public void setStepModelConfigRepository(StepModelConfigRepository stepModelConfigRepository) {
         this.stepModelConfigRepository = stepModelConfigRepository;
+    }
+
+    @Autowired
+    public void setAiModelConfigRepository(AiModelConfigRepository aiModelConfigRepository) {
         this.aiModelConfigRepository = aiModelConfigRepository;
+    }
+
+    @Autowired
+    public void setProofreadingReportRepository(ProofreadingReportRepository proofreadingReportRepository) {
         this.proofreadingReportRepository = proofreadingReportRepository;
+    }
+
+    @Autowired
+    public void setWorldSettingFacetRepository(WorldSettingFacetRepository worldSettingFacetRepository) {
         this.worldSettingFacetRepository = worldSettingFacetRepository;
     }
+
 
     public ProjectJsonDto parseJson(byte[] data) {
         try {

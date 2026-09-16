@@ -1,5 +1,7 @@
 package com.storycreator.workflow.engine;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.prompt.PromptTemplateRegistry;
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.core.domain.Genre;
@@ -26,44 +28,79 @@ public class OutlineGenerationService {
 
     private static final Logger log = LoggerFactory.getLogger(OutlineGenerationService.class);
 
-    private final ProjectRepository projectRepository;
-    private final ChapterOutlineRepository chapterOutlineRepository;
-    private final VolumeOutlineRepository volumeOutlineRepository;
-    private final StoryOutlineRepository storyOutlineRepository;
-    private final StepGuidanceRepository stepGuidanceRepository;
-    private final CharacterRepository characterRepository;
-    private final AiProviderRouter providerRouter;
-    private final PromptTemplateRegistry promptRegistry;
-    private final WorkflowContextBuilder contextBuilder;
-    private final AiUsageTracker aiUsageTracker;
-    private final AutoRunStepConfigRepository autoRunStepConfigRepository;
-    private final WorldFacetElaborationService worldFacetElaborationService;
+    private ProjectRepository projectRepository;
+    private ChapterOutlineRepository chapterOutlineRepository;
+    private VolumeOutlineRepository volumeOutlineRepository;
+    private StoryOutlineRepository storyOutlineRepository;
+    private StepGuidanceRepository stepGuidanceRepository;
+    private CharacterRepository characterRepository;
+    private AiProviderRouter providerRouter;
+    private PromptTemplateRegistry promptRegistry;
+    private WorkflowContextBuilder contextBuilder;
+    private AiUsageTracker aiUsageTracker;
+    private AutoRunStepConfigRepository autoRunStepConfigRepository;
+    private WorldFacetElaborationService worldFacetElaborationService;
 
-    public OutlineGenerationService(ProjectRepository projectRepository,
-                                    ChapterOutlineRepository chapterOutlineRepository,
-                                    VolumeOutlineRepository volumeOutlineRepository,
-                                    StoryOutlineRepository storyOutlineRepository,
-                                    StepGuidanceRepository stepGuidanceRepository,
-                                    CharacterRepository characterRepository,
-                                    AiProviderRouter providerRouter,
-                                    PromptTemplateRegistry promptRegistry,
-                                    WorkflowContextBuilder contextBuilder,
-                                    AiUsageTracker aiUsageTracker,
-                                    AutoRunStepConfigRepository autoRunStepConfigRepository,
-                                    WorldFacetElaborationService worldFacetElaborationService) {
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
         this.projectRepository = projectRepository;
+    }
+
+    @Autowired
+    public void setChapterOutlineRepository(ChapterOutlineRepository chapterOutlineRepository) {
         this.chapterOutlineRepository = chapterOutlineRepository;
+    }
+
+    @Autowired
+    public void setVolumeOutlineRepository(VolumeOutlineRepository volumeOutlineRepository) {
         this.volumeOutlineRepository = volumeOutlineRepository;
+    }
+
+    @Autowired
+    public void setStoryOutlineRepository(StoryOutlineRepository storyOutlineRepository) {
         this.storyOutlineRepository = storyOutlineRepository;
+    }
+
+    @Autowired
+    public void setStepGuidanceRepository(StepGuidanceRepository stepGuidanceRepository) {
         this.stepGuidanceRepository = stepGuidanceRepository;
+    }
+
+    @Autowired
+    public void setCharacterRepository(CharacterRepository characterRepository) {
         this.characterRepository = characterRepository;
+    }
+
+    @Autowired
+    public void setProviderRouter(AiProviderRouter providerRouter) {
         this.providerRouter = providerRouter;
+    }
+
+    @Autowired
+    public void setPromptRegistry(PromptTemplateRegistry promptRegistry) {
         this.promptRegistry = promptRegistry;
+    }
+
+    @Autowired
+    public void setContextBuilder(WorkflowContextBuilder contextBuilder) {
         this.contextBuilder = contextBuilder;
+    }
+
+    @Autowired
+    public void setAiUsageTracker(AiUsageTracker aiUsageTracker) {
         this.aiUsageTracker = aiUsageTracker;
+    }
+
+    @Autowired
+    public void setAutoRunStepConfigRepository(AutoRunStepConfigRepository autoRunStepConfigRepository) {
         this.autoRunStepConfigRepository = autoRunStepConfigRepository;
+    }
+
+    @Autowired
+    public void setWorldFacetElaborationService(WorldFacetElaborationService worldFacetElaborationService) {
         this.worldFacetElaborationService = worldFacetElaborationService;
     }
+
 
     // --- Public API ---
 

@@ -44,13 +44,24 @@ class ExportServiceTest {
 
     @BeforeEach
     void setUp() {
-        exportService = new ExportService(
-                projectRepository, worldSettingRepository, characterRepository,
-                storyOutlineRepository, chapterRepository, volumeOutlineRepository,
-                chapterOutlineRepository, workflowStateRepository, stepGuidanceRepository,
-                stepModelConfigRepository, aiModelConfigRepository, proofreadingReportRepository,
-                sideStoryRepository, sideStoryChapterRepository, worldSettingFacetRepository,
-                new ObjectMapper());
+        
+        exportService = new ExportService();
+        exportService.setProjectRepository(projectRepository);
+        exportService.setWorldSettingRepository(worldSettingRepository);
+        exportService.setCharacterRepository(characterRepository);
+        exportService.setStoryOutlineRepository(storyOutlineRepository);
+        exportService.setChapterRepository(chapterRepository);
+        exportService.setVolumeOutlineRepository(volumeOutlineRepository);
+        exportService.setChapterOutlineRepository(chapterOutlineRepository);
+        exportService.setWorkflowStateRepository(workflowStateRepository);
+        exportService.setStepGuidanceRepository(stepGuidanceRepository);
+        exportService.setStepModelConfigRepository(stepModelConfigRepository);
+        exportService.setAiModelConfigRepository(aiModelConfigRepository);
+        exportService.setProofreadingReportRepository(proofreadingReportRepository);
+        exportService.setSideStoryRepository(sideStoryRepository);
+        exportService.setSideStoryChapterRepository(sideStoryChapterRepository);
+        exportService.setWorldSettingFacetRepository(worldSettingFacetRepository);
+        exportService.setObjectMapper(new ObjectMapper());
     }
 
     private ProjectEntity makeProject() {

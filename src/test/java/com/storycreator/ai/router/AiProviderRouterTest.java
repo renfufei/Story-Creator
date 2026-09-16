@@ -45,13 +45,13 @@ class AiProviderRouterTest {
 
     @BeforeEach
     void setUp() {
-        router = new AiProviderRouter(
-                List.of(claudeProvider, openaiProvider),
-                configRepository,
-                globalSettingRepository,
-                projectRepository,
-                stepModelConfigRepository
-        );
+        
+        router = new AiProviderRouter();
+        router.setProviders(List.of(claudeProvider, openaiProvider));
+        router.setConfigRepository(configRepository);
+        router.setGlobalSettingRepository(globalSettingRepository);
+        router.setProjectRepository(projectRepository);
+        router.setStepModelConfigRepository(stepModelConfigRepository);
         // Default: repositories return empty unless overridden per test
         when(stepModelConfigRepository.findByProjectIdAndStep(any(), any())).thenReturn(Optional.empty());
         when(projectRepository.findById(any())).thenReturn(Optional.empty());

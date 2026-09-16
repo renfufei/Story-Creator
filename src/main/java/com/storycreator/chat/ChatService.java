@@ -1,5 +1,7 @@
 package com.storycreator.chat;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.ai.router.ImageProviderRegistry;
 import com.storycreator.ai.router.TtsProviderRegistry;
@@ -33,23 +35,37 @@ public class ChatService {
     private static final int CONTEXT_FETCH_LIMIT = 40;
     private static final int CONTEXT_MESSAGE_LIMIT = 20;
 
-    private final ChatSessionRepository sessionRepository;
-    private final ChatMessageRepository messageRepository;
-    private final AiProviderRouter aiProviderRouter;
-    private final ImageProviderRegistry imageProviderRegistry;
-    private final TtsProviderRegistry ttsProviderRegistry;
+    private ChatSessionRepository sessionRepository;
+    private ChatMessageRepository messageRepository;
+    private AiProviderRouter aiProviderRouter;
+    private ImageProviderRegistry imageProviderRegistry;
+    private TtsProviderRegistry ttsProviderRegistry;
 
-    public ChatService(ChatSessionRepository sessionRepository,
-                       ChatMessageRepository messageRepository,
-                       AiProviderRouter aiProviderRouter,
-                       ImageProviderRegistry imageProviderRegistry,
-                       TtsProviderRegistry ttsProviderRegistry) {
+    @Autowired
+    public void setSessionRepository(ChatSessionRepository sessionRepository) {
         this.sessionRepository = sessionRepository;
+    }
+
+    @Autowired
+    public void setMessageRepository(ChatMessageRepository messageRepository) {
         this.messageRepository = messageRepository;
+    }
+
+    @Autowired
+    public void setAiProviderRouter(AiProviderRouter aiProviderRouter) {
         this.aiProviderRouter = aiProviderRouter;
+    }
+
+    @Autowired
+    public void setImageProviderRegistry(ImageProviderRegistry imageProviderRegistry) {
         this.imageProviderRegistry = imageProviderRegistry;
+    }
+
+    @Autowired
+    public void setTtsProviderRegistry(TtsProviderRegistry ttsProviderRegistry) {
         this.ttsProviderRegistry = ttsProviderRegistry;
     }
+
 
     // --- Session CRUD ---
 

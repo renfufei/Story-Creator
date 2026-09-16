@@ -1,5 +1,7 @@
 package com.storycreator.web;
 
+import org.springframework.beans.factory.annotation.Autowired;
+
 import com.storycreator.persistence.entity.TxtImportChapterEntity;
 import com.storycreator.persistence.entity.TxtImportJobEntity;
 import com.storycreator.txtimport.ChapterSplitConfigService;
@@ -35,21 +37,32 @@ public class TxtImportApiController {
 
     private static final Logger log = LoggerFactory.getLogger(TxtImportApiController.class);
 
-    private final TxtImportService importService;
-    private final TxtReverseEngineeringService reverseService;
-    private final TxtImportBackgroundService bgService;
-    private final ChapterSplitConfigService configService;
+    private TxtImportService importService;
+    private TxtReverseEngineeringService reverseService;
+    private TxtImportBackgroundService bgService;
+    private ChapterSplitConfigService configService;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
-    public TxtImportApiController(TxtImportService importService,
-                                  TxtReverseEngineeringService reverseService,
-                                  TxtImportBackgroundService bgService,
-                                  ChapterSplitConfigService configService) {
+    @Autowired
+    public void setImportService(TxtImportService importService) {
         this.importService = importService;
+    }
+
+    @Autowired
+    public void setReverseService(TxtReverseEngineeringService reverseService) {
         this.reverseService = reverseService;
+    }
+
+    @Autowired
+    public void setBgService(TxtImportBackgroundService bgService) {
         this.bgService = bgService;
+    }
+
+    @Autowired
+    public void setConfigService(ChapterSplitConfigService configService) {
         this.configService = configService;
     }
+
 
     @PostMapping("/upload")
     public ResponseEntity<Map<String, Object>> upload(@RequestParam("file") MultipartFile file,
