@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import com.storycreator.core.domain.WorldFacetKey;
 import com.storycreator.persistence.entity.*;
 import com.storycreator.persistence.repository.*;
+import com.storycreator.volume.VolumeService;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -22,6 +23,12 @@ public class WorkflowContextBuilder {
     private ChapterRepository chapterRepository;
     private StepGuidanceRepository stepGuidanceRepository;
     private WorldSettingFacetRepository worldSettingFacetRepository;
+    private VolumeService volumeService;
+
+    @Autowired
+    public void setVolumeService(VolumeService volumeService) {
+        this.volumeService = volumeService;
+    }
 
     @Autowired
     public void setProjectRepository(ProjectRepository projectRepository) {
@@ -110,7 +117,12 @@ public class WorkflowContextBuilder {
         // Determine current volume number for filtering (only when writing a specific chapter)
         final int currentVolume;
         if (chapterNumber > 0 && project.getChaptersPerVolume() > 0) {
-            currentVolume = (chapterNumber - 1) / project.getChaptersPerVolume() + 1;
+            int byFormula = (chapterNumber - 1) / project.getChaptersPerVolume() + 1;
+            // 分卷绑定开启时以绑定为准（用户在分卷管理页手工调整过），否则沿用整除公式 —— 兼容老数据。
+            // 只有开关打开才去查绑定：避免给存量项目（开关默认关闭）增加无谓的查询开销。
+            currentVolume = project.isVolumeBindingEnabled()
+                    ? volumeService.volumeNumberOf(projectId, chapterNumber).orElse(byFormula)
+                    : byFormula;
         } else {
             currentVolume = 0;
         }

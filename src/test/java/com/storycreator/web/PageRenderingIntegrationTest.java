@@ -645,6 +645,36 @@ class PageRenderingIntegrationTest {
         assertThat(missing.getStatusCode()).as("未知项目 expansion/data 应 404").isEqualTo(HttpStatus.NOT_FOUND);
     }
 
+    // ==================== Volume Manager (分卷管理) ====================
+
+    @Test
+    void volumeManagerPage_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/volumes/manage"), String.class);
+        assertStaticPage(response, "volumes", "volumeManagerApp()");
+        assertThat(response.getBody())
+                .as("分卷管理页应加载 volumes.js")
+                .contains("/js/volumes.js");
+    }
+
+    @Test
+    void volumeApi_returnsVolumesAndChapters() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/api/projects/" + projectId + "/volumes"), String.class);
+        assertThat(response.getStatusCode()).as("volumes API 应 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("volumes API 应含项目/分卷/章节/绑定开关")
+                .contains("\"projectTitle\"")
+                .contains("\"chaptersPerVolume\"")
+                .contains("\"bindingEnabled\"")
+                .contains("\"chapterNumbers\"")
+                .contains("\"unboundChapterNumbers\"");
+
+        ResponseEntity<String> missing = restTemplate.getForEntity(
+                url("/api/projects/999999/volumes"), String.class);
+        assertThat(missing.getStatusCode()).as("未知项目 volumes API 应 404").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
     // ==================== Inspiration Pages (静态页 + JSON API) ====================
 
     /** 静态页渲染骨架：返回 200 + 完整 HTML + 含静态页专用标记，且不含 Thymeleaf 痕迹。 */

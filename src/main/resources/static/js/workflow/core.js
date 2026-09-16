@@ -347,9 +347,12 @@ function workflowCoreMixin() {
             }
             let firstIncompleteFound = false;
             this.chapterVolumeGroups = this._volumeMeta.map(vol => {
-                const chapters = this.chapterListData.filter(
-                    ch => ch.chapterNumber >= vol.chapterStart && ch.chapterNumber <= vol.chapterEnd
-                );
+                // 后端下发的 chapterNumbers 优先：分卷管理页调整过归属后，某卷的章节可能不再是连续区间
+                const chapters = Array.isArray(vol.chapterNumbers)
+                    ? this.chapterListData.filter(ch => vol.chapterNumbers.indexOf(ch.chapterNumber) >= 0)
+                    : this.chapterListData.filter(
+                        ch => ch.chapterNumber >= vol.chapterStart && ch.chapterNumber <= vol.chapterEnd
+                    );
                 const hasIncomplete = chapters.some(ch => {
                     if (this.currentStep === 'CHAPTER_WRITING') return ch.status !== 'CONFIRMED';
                     if (this.currentStep === 'POLISHING') return ch.polishStatus !== 'CONFIRMED';

@@ -429,7 +429,9 @@
                 const match = hash.match(/chapter-(\d+)/);
                 const targetChapter = match ? parseInt(match[1]) : null;
                 if (targetChapter && this.volumes.length > 0) {
-                    const vol = this.volumes.find(v => targetChapter >= v.chapterStart && targetChapter <= v.chapterEnd);
+                    const vol = this.volumes.find(v => Array.isArray(v.chapterNumbers)
+                        ? v.chapterNumbers.indexOf(targetChapter) >= 0
+                        : (targetChapter >= v.chapterStart && targetChapter <= v.chapterEnd));
                     this.openVolumes = vol ? [vol.volumeNumber] : [this.volumes[0].volumeNumber];
                 } else if (this.volumes.length > 0) {
                     this.openVolumes = [this.volumes[0].volumeNumber];
@@ -466,7 +468,13 @@
                 if (idx >= 0) this.openSideStories.splice(idx, 1);
                 else this.openSideStories.push(id);
             },
+            // 优先用后端下发的 chapterNumbers（支持用户在「分卷管理」里手工调整过的不连续归属），
+            // 缺失时才退回 chapterStart~chapterEnd 范围过滤（兼容旧数据）。
             chaptersInVolume(vol) {
+                if (Array.isArray(vol.chapterNumbers)) {
+                    const set = new Set(vol.chapterNumbers);
+                    return this.chapters.filter(c => set.has(c.number));
+                }
                 return this.chapters.filter(c => c.number >= vol.chapterStart && c.number <= vol.chapterEnd);
             },
             sideStoriesForVolume(volNum) {
@@ -870,7 +878,11 @@
             const vol = volumes.find(v => v.volumeNumber === volNum);
             if (!vol) return;
             // Find the h3 element of the volume's last chapter
-            const lastChapterH3 = document.getElementById('chapter-' + vol.chapterEnd);
+            // （chapterNumbers 存在时用真实末章，避免段内存在手工调整导致 chapterEnd 不准）
+            const lastNum = Array.isArray(vol.chapterNumbers) && vol.chapterNumbers.length
+                ? vol.chapterNumbers[vol.chapterNumbers.length - 1]
+                : vol.chapterEnd;
+            const lastChapterH3 = document.getElementById('chapter-' + lastNum);
             if (!lastChapterH3) return;
             // Navigate up: h3 -> div.d-flex -> div (x-for iteration container)
             const chapterContainer = lastChapterH3.parentElement.parentElement;

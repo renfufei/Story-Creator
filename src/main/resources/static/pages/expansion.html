@@ -240,6 +240,8 @@
     const INITIAL_GUIDANCE = window.__EXPANSION_DATA__.expansionGuidance || '';
     const INITIAL_CHAPTERS = window.__EXPANSION_DATA__.chapters || [];
     const CHAPTERS_PER_VOLUME = window.__EXPANSION_DATA__.chaptersPerVolume || 10;
+    // 后端下发的分卷分组（章节->卷绑定优先，无绑定时按每卷 N 章推算）；为空则前端回落旧公式
+    const INITIAL_VOLUMES = window.__EXPANSION_DATA__.volumes || [];
 
     function expansionPage() {
         return {
@@ -258,11 +260,16 @@
                 hasContent: ch.content != null
             })),
             selectedChapters: [],
+            volumeGroups: INITIAL_VOLUMES,
             chaptersPerVolume: CHAPTERS_PER_VOLUME,
             // 默认展开全部分卷：在 x-data 创建时即初始化，保证首屏按钮文案正确
             expandedVolumes: (function () {
-                const per = CHAPTERS_PER_VOLUME || 10;
                 const m = {};
+                if (INITIAL_VOLUMES && INITIAL_VOLUMES.length > 0) {
+                    INITIAL_VOLUMES.forEach(v => { m[v.volumeNumber] = true; });
+                    return m;
+                }
+                const per = CHAPTERS_PER_VOLUME || 10;
                 INITIAL_CHAPTERS.forEach(ch => {
                     const vol = Math.ceil(ch.chapterNumber / per);
                     m[vol] = true;
@@ -299,8 +306,23 @@
                 return sel.length > 0 && sel.every(ch => this.selectedChapters.includes(ch.chapterNumber));
             },
 
-            // 按分卷（每 chaptersPerVolume 章为一卷）对全部章节分组
+            // 按分卷对全部章节分组：优先使用后端下发的分卷分组（chapters.volume_id 绑定，
+            // 用户可在「分卷管理」页手工调整）；没有分组数据时才退回「每 chaptersPerVolume 章一卷」的旧公式
             get groupedVolumes() {
+                if (this.volumeGroups && this.volumeGroups.length > 0) {
+                    const byNumber = new Map(this.allChapters.map(ch => [ch.chapterNumber, ch]));
+                    const vols = [];
+                    for (const g of this.volumeGroups) {
+                        const chapters = (g.chapterNumbers || [])
+                            .map(n => byNumber.get(n))
+                            .filter(Boolean)
+                            .sort((a, b) => a.chapterNumber - b.chapterNumber);
+                        if (chapters.length === 0) continue;
+                        const label = (g.title && String(g.title).trim()) ? String(g.title) : ('第' + g.volumeNumber + '卷');
+                        vols.push({volume: g.volumeNumber, label: label, chapters: chapters});
+                    }
+                    if (vols.length > 0) return vols;
+                }
                 const perVol = this.chaptersPerVolume || 10;
                 const map = new Map();
                 for (const ch of this.allChapters) {

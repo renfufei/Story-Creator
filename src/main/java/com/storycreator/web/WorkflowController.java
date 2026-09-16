@@ -12,6 +12,8 @@ import com.storycreator.persistence.entity.*;
 import com.storycreator.persistence.repository.*;
 import com.storycreator.persistence.entity.AutoRunStepConfigEntity;
 import com.storycreator.persistence.repository.AutoRunStepConfigRepository;
+import com.storycreator.volume.VolumeChapterGroup;
+import com.storycreator.volume.VolumeService;
 import com.storycreator.workflow.background.BackgroundGenerationService;
 import com.storycreator.workflow.engine.WorldFacetElaborationService;
 import com.storycreator.workflow.engine.WorkflowEngine;
@@ -52,7 +54,13 @@ public class WorkflowController {
     private AutoRunStepConfigRepository autoRunStepConfigRepository;
     private CharacterStateDimensionService characterStateDimensionService;
     private WorldFacetElaborationService worldFacetElaborationService;
+    private VolumeService volumeService;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+
+    @Autowired
+    public void setVolumeService(VolumeService volumeService) {
+        this.volumeService = volumeService;
+    }
 
     /**
      * 路由段 -> 工作流步骤 的映射。拆分成独立接口后，前端按 /workflow/{step}/data 访问，
@@ -1005,18 +1013,31 @@ public class WorkflowController {
 
     /**
      * Get volume metadata (lightweight, for chapter grouping in writing/polishing/proofreading)
+     *
+     * <p>额外下发 {@code chapterNumbers}（该卷实际包含的章节号，由 {@link VolumeService} 统一解析）：
+     * 用户在「分卷管理」调整过归属后，各卷的章节可能不再是连续区间，前端应优先按该列表分组，
+     * 只有在它缺失（老缓存等场景）时才退回 {@code chapterStart}~{@code chapterEnd} 范围过滤。
      */
     @GetMapping("/volumes")
     @ResponseBody
     public List<Map<String, Object>> getVolumes(@PathVariable Long projectId) {
         List<VolumeOutlineEntity> volumes = volumeOutlineRepository.findByProjectIdOrderByVolumeNumber(projectId);
+        Map<Integer, List<Integer>> numbersByVolumeNumber = new HashMap<>();
+        for (VolumeChapterGroup g : volumeService.resolveGroups(projectId)) {
+            numbersByVolumeNumber.put(g.volumeNumber(), g.chapterNumbers());
+        }
         return volumes.stream().map(vol -> {
             Map<String, Object> map = new LinkedHashMap<>();
+            List<Integer> numbers = numbersByVolumeNumber.get(vol.getVolumeNumber());
+            if (numbers == null) {
+                numbers = List.of();
+            }
             map.put("volumeNumber", vol.getVolumeNumber());
             map.put("title", vol.getTitle());
             map.put("arcName", vol.getArcName());
-            map.put("chapterStart", vol.getChapterStart());
-            map.put("chapterEnd", vol.getChapterEnd());
+            map.put("chapterStart", numbers.isEmpty() ? vol.getChapterStart() : numbers.get(0));
+            map.put("chapterEnd", numbers.isEmpty() ? vol.getChapterEnd() : numbers.get(numbers.size() - 1));
+            map.put("chapterNumbers", numbers);
             return map;
         }).toList();
     }

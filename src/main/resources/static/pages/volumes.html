@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分卷管理 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+    <style>
+        [x-cloak] { display: none !important; }
+        .vol-chapter {
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            margin: 0 .25rem .25rem 0;
+            padding: .15rem .5rem;
+            border: 1px solid #dee2e6;
+            border-radius: .75rem;
+            background: #fff;
+            font-size: .85rem;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .vol-chapter:hover { border-color: #86b7fe; }
+        .vol-chapter.selected { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+        .vol-card { border-left: 4px solid #0d6efd; }
+    </style>
+</head>
+<body class="sc-page" data-nav="projects">
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4" x-data="volumeManagerApp()">
+
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small mb-0">
+            <li class="breadcrumb-item"><a href="/">项目列表</a></li>
+            <li class="breadcrumb-item"><a :href="'/projects/' + projectId">项目详情</a></li>
+            <li class="breadcrumb-item active">分卷管理</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-collection"></i> 分卷管理</h2>
+            <div class="text-muted small" x-show="projectTitle" x-cloak x-text="'《' + projectTitle + '》'"></div>
+        </div>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-secondary btn-sm" :href="'/projects/' + projectId"><i class="bi bi-folder"></i> 项目详情</a>
+            <a class="btn btn-outline-success btn-sm" :href="'/projects/' + projectId + '/read'" target="_blank"><i class="bi bi-book"></i> 全文阅读</a>
+        </div>
+    </div>
+
+    <div class="alert alert-danger" x-show="error" x-cloak x-text="error"></div>
+    <div class="alert alert-success py-2" x-show="message" x-cloak x-text="message"></div>
+
+    <!-- 概览 + 重建 -->
+    <div class="card mb-3" x-cloak>
+        <div class="card-body py-3">
+            <div class="row align-items-end g-3">
+                <div class="col-md-auto">
+                    <div class="text-muted small">每卷章节数（自动创作默认值）</div>
+                    <div class="fs-5" x-text="chaptersPerVolume"></div>
+                </div>
+                <div class="col-md-auto">
+                    <div class="text-muted small">总章节</div>
+                    <div class="fs-5" x-text="totalChapters()"></div>
+                </div>
+                <div class="col-md-auto">
+                    <div class="text-muted small">已归入分卷</div>
+                    <div class="fs-5" x-text="boundCount() + ' / ' + totalChapters()"></div>
+                </div>
+                <div class="col-md-auto">
+                    <span class="badge bg-secondary" x-show="!bindingEnabled">按每卷章节数自动推算</span>
+                    <span class="badge bg-primary" x-show="bindingEnabled">手工绑定已启用</span>
+                </div>
+                <div class="col-md">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text">按每卷</span>
+                        <input type="number" class="form-control" style="max-width:5rem" min="1" max="200"
+                               x-model.number="rebuildCount">
+                        <span class="input-group-text">章重建</span>
+                        <button class="btn btn-outline-primary" @click="rebuild()" :disabled="busy">
+                            <i class="bi bi-arrow-repeat"></i> 重建绑定
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="text-muted small mt-2">
+                <i class="bi bi-info-circle"></i>
+                这里的「每卷章节数」只作为<b>自动创作</b>切卷的默认值；一旦在本页手工调整过归属，<b>实际分卷以本页的绑定为准</b>。
+                未绑定开关时，每卷包含哪些章节仍按该数值推算，行为与改造前一致。
+            </div>
+        </div>
+    </div>
+
+    <!-- 批量移动工具条 -->
+    <div class="card mb-3 border-primary" x-show="selectedChapters.length > 0" x-cloak>
+        <div class="card-body py-2 d-flex flex-wrap align-items-center gap-2">
+            <span class="badge bg-primary">已选 <span x-text="selectedChapters.length"></span> 章</span>
+            <span class="text-muted small" x-text="selectedChapters.slice().sort((a,b)=>a-b).map(n => '第'+n+'章').join('、')"></span>
+            <select class="form-select form-select-sm" style="max-width:12rem" x-model="moveTargetVolumeId">
+                <template x-for="v in volumes" :key="v.id">
+                    <option :value="v.id" x-text="volumeLabel(v)"></option>
+                </template>
+            </select>
+            <button class="btn btn-sm btn-primary" @click="moveSelected()" :disabled="busy">
+                <i class="bi bi-arrow-right-circle"></i> 移动到该卷
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" @click="clearSelection()">取消选择</button>
+        </div>
+    </div>
+
+    <!-- 未绑定的章节提示 -->
+    <div class="alert alert-warning py-2" x-show="bindingEnabled && unboundChapterNumbers.length > 0" x-cloak>
+        <i class="bi bi-exclamation-triangle"></i>
+        有 <b x-text="unboundChapterNumbers.length"></b> 章尚未显式绑定（<span
+            x-text="unboundChapterNumbers.map(n => '第'+n+'章').join('、')"></span>），
+        目前按每卷章节数兜底归属；可点选后移动到指定分卷。
+    </div>
+
+    <!-- 分卷列表 -->
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h5 class="mb-0">分卷（<span x-text="volumes.length"></span>）</h5>
+        <button class="btn btn-sm btn-outline-primary" @click="addVolume()" :disabled="busy">
+            <i class="bi bi-plus-lg"></i> 末尾新增空分卷
+        </button>
+    </div>
+
+    <div class="text-muted py-4 text-center" x-show="volumes.length === 0 && !error" x-cloak>
+        <i class="bi bi-inbox" style="font-size:2.5rem"></i>
+        <p class="mt-2 mb-0">该项目还没有分卷 —— 用上方「重建绑定」按每卷章节数生成。</p>
+    </div>
+
+    <template x-for="(v, index) in volumes" :key="v.id">
+        <div class="card mb-3 vol-card" x-cloak>
+            <div class="card-header py-2 d-flex flex-wrap align-items-center gap-2">
+                <strong x-text="'第' + v.volumeNumber + '卷'"></strong>
+                <span class="text-muted" x-text="v.title"></span>
+                <span class="badge bg-secondary"
+                      x-text="(v.chapterCount || 0) + '章' + (v.chapterCount ? '（' + v.chapterStart + '-' + v.chapterEnd + '）' : '')"></span>
+                <span class="badge bg-light text-dark" x-show="v.arcName" x-text="v.arcName"></span>
+                <div class="ms-auto d-flex flex-wrap gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" @click="renameVolume(v)"><i class="bi bi-pencil"></i> 改名</button>
+                    <button class="btn btn-sm btn-outline-danger" @click="removeVolume(v)" :disabled="busy">
+                        <i class="bi bi-trash"></i> 删除
+                    </button>
+                </div>
+            </div>
+            <div class="card-body py-3">
+                <div class="mb-2">
+                    <template x-for="n in v.chapterNumbers" :key="n">
+                        <span class="vol-chapter" :class="selectedChapters.indexOf(n) >= 0 ? 'selected' : ''"
+                              @click="toggleSelect(n)" :title="chapterTitle(n)">
+                            <i class="bi"
+                               :class="selectedChapters.indexOf(n) >= 0 ? 'bi-check-circle-fill' : 'bi-circle'"></i>
+                            <span x-text="'第' + n + '章'"></span>
+                            <span class="text-muted" x-show="chapterTitle(n)"
+                                  :class="selectedChapters.indexOf(n) >= 0 ? 'text-white-50' : 'text-muted'"
+                                  x-text="chapterTitle(n)"></span>
+                        </span>
+                    </template>
+                    <span class="text-muted small" x-show="!v.chapterNumbers || v.chapterNumbers.length === 0">
+                        （空卷 —— 把其它卷的章节移进来）
+                    </span>
+                </div>
+                <div class="border-top pt-2 d-flex flex-wrap align-items-center gap-2">
+                    <div class="input-group input-group-sm" style="max-width:15rem">
+                        <input type="number" class="form-control" min="1" max="200" :id="'adj-' + v.id" value="5">
+                        <button class="btn btn-outline-primary" @click="takeFromNext(index, parseInt(document.getElementById('adj-' + v.id).value))"
+                                :disabled="busy || !nextVolume(index)">
+                            <i class="bi bi-arrow-down-left-circle"></i> 从下一卷并入
+                        </button>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary"
+                            @click="giveToNext(index, parseInt(document.getElementById('adj-' + v.id).value))"
+                            :disabled="busy || !nextVolume(index)">
+                        <i class="bi bi-arrow-up-right-circle"></i> 末尾若干章移出到下一卷
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" @click="selectAllInVolume(v)">
+                        <i class="bi bi-check-all"></i> 全选本卷
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <div class="text-center text-muted py-4" x-show="projectId === 0">
+        无效的项目地址
+    </div>
+
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script src="/js/volumes.js"></script>
+<script src="/vendor/alpinejs/cdn.min.js" defer></script>
+</body>
+</html>

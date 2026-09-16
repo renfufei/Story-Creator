@@ -131,4 +131,15 @@ public class StaticPageController {
     public String inspectCharacters() {
         return "forward:/pages/inspect-characters.html";
     }
+
+    /**
+     * 分卷管理页：手工调整「章节 ↔ 分卷」归属。
+     *
+     * <p>注意 {@code /projects/{projectId}/volumes} 已被 {@link WorkflowController} 占用（返回卷元数据 JSON），
+     * 故页面走 {@code /volumes/manage}，避免 Ambiguous mapping。
+     */
+    @GetMapping("/projects/{projectId}/volumes/manage")
+    public String volumeManager() {
+        return "forward:/pages/volumes.html";
+    }
 }

@@ -295,6 +295,8 @@ window.__PROMPT_EXPLORE_DATA__ = (function () {
             volumeNumber: 1,
             chapters: [],
             chapterOutlines: [],
+            // 章节号 -> 卷号（后端按分卷绑定给出；为空时前端回落旧公式）
+            volumeOfChapter: {},
             chaptersPerVolume: 10,
             selectedVolume: '',
             characters: [],
@@ -349,23 +351,25 @@ window.__PROMPT_EXPLORE_DATA__ = (function () {
             get needsSideStoryChapter() {
                 return pageSubStep === 'SIDE_STORY_WRITING';
             },
+            // 章节大纲归卷：① 分卷绑定（后端 volumeOfChapter）② 大纲自带的 volumeNumber ③ 旧公式
+            volumeOfOutline: function (o) {
+                var m = this.volumeOfChapter || {};
+                if (o && m[o.chapterNumber] != null) return m[o.chapterNumber];
+                if (o && o.volumeNumber != null) return o.volumeNumber;
+                var cpv = this.chaptersPerVolume || 10;
+                return Math.ceil(o.chapterNumber / cpv);
+            },
             get volumes() {
                 var set = new Set();
-                var cpv = this.chaptersPerVolume || 10;
-                this.chapterOutlines.forEach(o => {
-                    var v = o.volumeNumber != null ? o.volumeNumber : Math.ceil(o.chapterNumber / cpv);
-                    set.add(v);
-                });
+                var self = this;
+                this.chapterOutlines.forEach(o => { set.add(self.volumeOfOutline(o)); });
                 return Array.from(set).sort((a, b) => a - b);
             },
             get filteredOutlines() {
                 if (!this.selectedVolume) return [];
                 var sv = parseInt(this.selectedVolume);
-                var cpv = this.chaptersPerVolume || 10;
-                return this.chapterOutlines.filter(o => {
-                    var v = o.volumeNumber != null ? o.volumeNumber : Math.ceil(o.chapterNumber / cpv);
-                    return v === sv;
-                });
+                var self = this;
+                return this.chapterOutlines.filter(o => self.volumeOfOutline(o) === sv);
             },
 
             init() {},
@@ -373,6 +377,7 @@ window.__PROMPT_EXPLORE_DATA__ = (function () {
             onProjectChange() {
                 this.chapters = [];
                 this.chapterOutlines = [];
+                this.volumeOfChapter = {};
                 this.chaptersPerVolume = 10;
                 this.selectedVolume = '';
                 this.characters = [];
@@ -395,6 +400,7 @@ window.__PROMPT_EXPLORE_DATA__ = (function () {
                     .then(r => r.json())
                     .then(data => {
                         this.chapterOutlines = data.outlines || [];
+                        this.volumeOfChapter = data.volumeOfChapter || {};
                         this.chaptersPerVolume = data.chaptersPerVolume || 10;
                     });
                 fetch('/prompts/explore/characters?projectId=' + this.projectId)

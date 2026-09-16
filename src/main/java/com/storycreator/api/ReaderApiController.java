@@ -10,6 +10,7 @@ import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.SideStoryChapterRepository;
 import com.storycreator.persistence.repository.SideStoryRepository;
 import com.storycreator.persistence.repository.VolumeOutlineRepository;
+import com.storycreator.volume.VolumeService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +40,7 @@ public class ReaderApiController {
     private VolumeOutlineRepository volumeOutlineRepository;
     private SideStoryRepository sideStoryRepository;
     private SideStoryChapterRepository sideStoryChapterRepository;
+    private VolumeService volumeService;
 
     @Autowired
     public void setProjectRepository(ProjectRepository projectRepository) {
@@ -52,6 +55,11 @@ public class ReaderApiController {
     @Autowired
     public void setVolumeOutlineRepository(VolumeOutlineRepository volumeOutlineRepository) {
         this.volumeOutlineRepository = volumeOutlineRepository;
+    }
+
+    @Autowired
+    public void setVolumeService(VolumeService volumeService) {
+        this.volumeService = volumeService;
     }
 
     @Autowired
@@ -80,17 +88,32 @@ public class ReaderApiController {
         data.put("projectTitle", project.getTitle() != null ? project.getTitle() : "");
         data.put("author", project.getAuthor() != null ? project.getAuthor() : "");
 
-        // 分卷（目录用）
+        // 分卷（目录用）。chapterNumbers 由 VolumeService 解析（显式绑定优先，老数据按每卷章节数兜底），
+        // 供前端精确分组；chapterStart/chapterEnd 同步刷新为实际首尾章号，兼容按范围过滤的旧逻辑。
+        Map<Integer, List<Integer>> numbersByVolumeNumber = new HashMap<>();
+        for (var g : volumeService.resolveGroups(projectId)) {
+            numbersByVolumeNumber.put(g.volumeNumber(), g.chapterNumbers());
+        }
         List<Map<String, Object>> volumes = new ArrayList<>();
         for (var v : volumeOutlineRepository.findByProjectIdOrderByVolumeNumber(projectId)) {
+            List<Integer> numbers = numbersByVolumeNumber.getOrDefault(v.getVolumeNumber(), List.of());
             Map<String, Object> vm = new LinkedHashMap<>();
             vm.put("volumeNumber", v.getVolumeNumber());
             vm.put("title", v.getTitle() != null ? v.getTitle() : "");
-            vm.put("chapterStart", v.getChapterStart());
-            vm.put("chapterEnd", v.getChapterEnd());
+            vm.put("chapterStart", numbers.isEmpty() ? v.getChapterStart() : numbers.get(0));
+            vm.put("chapterEnd", numbers.isEmpty() ? v.getChapterEnd() : numbers.get(numbers.size() - 1));
+            vm.put("chapterNumbers", numbers);
             volumes.add(vm);
         }
         data.put("volumes", volumes);
+
+        // 章节号 -> 卷号，便于阅读器直接定位章所属卷
+        Map<Integer, Integer> volumeOfChapter = new HashMap<>();
+        for (var e : numbersByVolumeNumber.entrySet()) {
+            for (int chapterNumber : e.getValue()) {
+                volumeOfChapter.put(chapterNumber, e.getKey());
+            }
+        }
 
         // 章节（目录 + 正文共用）
         List<Map<String, Object>> chapters = new ArrayList<>();
@@ -100,6 +123,10 @@ public class ReaderApiController {
             cm.put("title", c.getTitle() != null ? c.getTitle() : "");
             cm.put("content", c.getContent() != null ? c.getContent() : "");
             cm.put("expansionStatus", c.getExpansionStatus());
+            Integer volNo = volumeOfChapter.get(c.getChapterNumber());
+            if (volNo != null) {
+                cm.put("volumeNumber", volNo);
+            }
             chapters.add(cm);
         }
         data.put("chapters", chapters);

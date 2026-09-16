@@ -68,6 +68,7 @@ class BrowserSmokePagesTest extends BrowserSmokeSupport {
                 new PageCase("/projects/{pid}", "#detailContainer", "工作流进度", true),
                 new PageCase("/projects/{pid}/edit", "#projectForm", "编辑项目", true),
                 new PageCase("/projects/{pid}/workflow", null, "世界观设定", true),
+                new PageCase("/projects/{pid}/volumes/manage", null, "分卷管理", true),
                 new PageCase("/projects/{pid}/side-stories", null, "番外篇", true),
                 new PageCase("/projects/{pid}/expansion", null, "情节拓展", true),
 

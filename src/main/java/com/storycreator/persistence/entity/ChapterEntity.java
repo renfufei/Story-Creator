@@ -67,6 +67,9 @@ public class ChapterEntity {
     @Column(name = "expansion_status", length = 20)
     private String expansionStatus;
 
+    @Column(name = "volume_id")
+    private Long volumeId;
+
     @Column(name = "content_before_expansion", columnDefinition = "TEXT")
     private String contentBeforeExpansion;
 
@@ -143,6 +146,16 @@ public class ChapterEntity {
 
     public String getContentBeforeExpansion() { return contentBeforeExpansion; }
     public void setContentBeforeExpansion(String contentBeforeExpansion) { this.contentBeforeExpansion = contentBeforeExpansion; }
+
+    /**
+     * 所属分卷（volume_outlines.id）。
+     *
+     * <p><b>可空</b>：为 NULL 表示该章节尚未做显式绑定，读路径会按
+     * {@code projects.chapters_per_volume} 的整除公式兜底（见 {@code VolumeService}）——
+     * 这是兼容存量数据的关键。</p>
+     */
+    public Long getVolumeId() { return volumeId; }
+    public void setVolumeId(Long volumeId) { this.volumeId = volumeId; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

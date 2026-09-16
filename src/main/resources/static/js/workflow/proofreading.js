@@ -100,9 +100,11 @@ function workflowProofreadingMixin() {
             }
             let firstIncompleteFound = false;
             this.proofreadVolumeGroups = this._volumeMeta.map(vol => {
-                const chapters = this.proofreadData.filter(
-                    ch => ch.chapterNumber >= vol.chapterStart && ch.chapterNumber <= vol.chapterEnd
-                );
+                const chapters = Array.isArray(vol.chapterNumbers)
+                    ? this.proofreadData.filter(ch => vol.chapterNumbers.indexOf(ch.chapterNumber) >= 0)
+                    : this.proofreadData.filter(
+                        ch => ch.chapterNumber >= vol.chapterStart && ch.chapterNumber <= vol.chapterEnd
+                    );
                 const hasIncomplete = chapters.some(ch =>
                     ch.proofreadStatus !== 'GENERATED' && ch.proofreadStatus !== 'CONFIRMED'
                 );

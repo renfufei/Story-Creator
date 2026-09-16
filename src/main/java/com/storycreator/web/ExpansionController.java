@@ -8,6 +8,7 @@ import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.workflow.background.ExpansionBackgroundService;
 import com.storycreator.workflow.background.ExpansionBackgroundService.GenerationTask;
+import com.storycreator.volume.VolumeService;
 import com.storycreator.workflow.engine.ExpansionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +38,7 @@ public class ExpansionController {
     private ChapterRepository chapterRepository;
     private ExpansionService expansionService;
     private ExpansionBackgroundService bgService;
+    private VolumeService volumeService;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     @Autowired
@@ -57,6 +59,11 @@ public class ExpansionController {
     @Autowired
     public void setBgService(ExpansionBackgroundService bgService) {
         this.bgService = bgService;
+    }
+
+    @Autowired
+    public void setVolumeService(VolumeService volumeService) {
+        this.volumeService = volumeService;
     }
 
 
@@ -83,6 +90,8 @@ public class ExpansionController {
                     data.put("expansionGuidance", project.getExpansionGuidance());
                     data.put("chapters", chaptersJs);
                     data.put("chaptersPerVolume", project.getChaptersPerVolume());
+                    // 分卷分组：优先用 chapters.volume_id 的绑定结果，未绑定时后端按公式推算（兼容老数据）
+                    data.put("volumes", volumeService.resolveGroupMaps(projectId));
                     return ResponseEntity.ok(data);
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());

@@ -28,6 +28,7 @@ import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.PromptTemplateRepository;
 import com.storycreator.persistence.repository.SideStoryRepository;
 import com.storycreator.persistence.repository.SideStoryChapterRepository;
+import com.storycreator.volume.VolumeService;
 import com.storycreator.persistence.entity.SideStoryEntity;
 import com.storycreator.persistence.entity.SideStoryChapterEntity;
 import org.slf4j.Logger;
@@ -62,6 +63,12 @@ public class PromptExploreController {
     private ImageProviderRegistry imageProviderRegistry;
     private SideStoryRepository sideStoryRepository;
     private SideStoryChapterRepository sideStoryChapterRepository;
+    private VolumeService volumeService;
+
+    @Autowired
+    public void setVolumeService(VolumeService volumeService) {
+        this.volumeService = volumeService;
+    }
 
     @Autowired
     public void setExploreService(PromptExploreService exploreService) {
@@ -254,6 +261,8 @@ public class PromptExploreController {
                 .orElse(10);
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("chaptersPerVolume", chaptersPerVolume);
+        // 章节号 -> 卷号：以分卷绑定为准，前端据此给章节大纲归卷（无绑定时回落旧公式）
+        response.put("volumeOfChapter", volumeService.volumeNumberByChapter(projectId));
         response.put("outlines", result);
         return ResponseEntity.ok(response);
     }

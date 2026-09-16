@@ -50,6 +50,18 @@ public class ProjectEntity {
     @Column(name = "chapters_per_volume", nullable = false)
     private int chaptersPerVolume = 10;
 
+    /**
+     * 是否已启用「章节 → 分卷」显式绑定（见 V68）。
+     *
+     * <p>FALSE（默认，所有存量项目）：卷归属一律按 {@code chaptersPerVolume} 整除推算，
+     * 行为与本次改造前完全一致。</p>
+     *
+     * <p>TRUE：以 {@code chapters.volume_id} 为准；用户在分卷管理页做过任何一次调整后自动置 TRUE。
+     * 注意 {@code chaptersPerVolume} 本身仍是「自动创作」时切卷的默认值，两者互不覆盖。</p>
+     */
+    @Column(name = "volume_binding_enabled", nullable = false)
+    private boolean volumeBindingEnabled = false;
+
     @Column(name = "default_model_config_id")
     private Long defaultModelConfigId;
 
@@ -144,6 +156,9 @@ public class ProjectEntity {
 
     public int getChaptersPerVolume() { return chaptersPerVolume; }
     public void setChaptersPerVolume(int chaptersPerVolume) { this.chaptersPerVolume = chaptersPerVolume; }
+
+    public boolean isVolumeBindingEnabled() { return volumeBindingEnabled; }
+    public void setVolumeBindingEnabled(boolean volumeBindingEnabled) { this.volumeBindingEnabled = volumeBindingEnabled; }
 
     public Long getDefaultModelConfigId() { return defaultModelConfigId; }
     public void setDefaultModelConfigId(Long defaultModelConfigId) { this.defaultModelConfigId = defaultModelConfigId; }
