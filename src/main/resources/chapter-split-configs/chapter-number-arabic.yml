@@ -1,7 +1,7 @@
 id: "chapter-number-arabic"
 name: "阿拉伯数字章节号"
-description: "匹配「第N章」格式，N为阿拉伯数字（1、23、123等）"
-pattern: "(?m)^\\s*第\\s*\\d+\\s*章[ \\t　]*(.*)$"
+description: "匹配「第N章」格式，N为阿拉伯数字（1、23、123等）；标题行自「第」起到行尾不超过50字符，避免长段正文被误判为标题"
+pattern: "(?m)^\\s*(?![^\\n]{51,})第\\s*\\d+\\s*章[ \\t　]*(.*)$"
 titleGroup: 1
 includeMatch: false
 order: 20

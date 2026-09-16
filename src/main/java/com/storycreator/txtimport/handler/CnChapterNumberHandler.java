@@ -15,7 +15,7 @@ public class CnChapterNumberHandler extends AbstractRegexChapterHandler {
     public CnChapterNumberHandler(ChapterSplitConfigRepository configRepository) {
         super(configRepository,
                 "中文数字章节号",
-                "(?m)^\\s*第[零一二三四五六七八九十百千万]+章[ \\t　]*(.*)$",
+                "(?m)^\\s*" + HEADING_LINE_LIMIT_GUARD + "第[零一二三四五六七八九十百千万]+章[ \\t　]*(.*)$",
                 1,
                 false);
     }

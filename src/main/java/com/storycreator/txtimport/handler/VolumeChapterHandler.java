@@ -16,7 +16,8 @@ public class VolumeChapterHandler extends AbstractRegexChapterHandler {
     public VolumeChapterHandler(ChapterSplitConfigRepository configRepository) {
         super(configRepository,
                 "卷章格式",
-                "(?m)^\\s*(?:第[零一二三四五六七八九十百千万\\d]+卷)?\\s*第[零一二三四五六七八九十百千万\\d]+章[ \\t　]*(.*)$",
+                "(?m)^\\s*" + HEADING_LINE_LIMIT_GUARD
+                        + "(?:第[零一二三四五六七八九十百千万\\d]+卷)?\\s*第[零一二三四五六七八九十百千万\\d]+章[ \\t　]*(.*)$",
                 1,
                 false);
     }

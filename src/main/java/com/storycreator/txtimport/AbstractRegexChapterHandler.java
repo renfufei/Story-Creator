@@ -22,6 +22,42 @@ import java.util.regex.Pattern;
  */
 public abstract class AbstractRegexChapterHandler implements ChapterSplitHandler {
 
+    /**
+     * 章节标题行的最大长度（自「第X章」起算到行尾，单位：字符）。
+     *
+     * <p>限制目的：真正的章节标题行一定很短。若不限长度，正文里「以下是一个很长的段落，开头恰好写了
+     * 第3章……」这种长行也会被当成标题行，切出来的 title 混着一整段正文。</p>
+     *
+     * <p>线上常见误解可以以 2026-09 的真实样例说明：</p>
+     * <pre>
+     * 第5章混在一整段很长的正文里啊啊啊……（74 字）   ← 不是标题，是正文
+     * 第104章 挑房间(加料)                          ← 是标题
+     * </pre>
+     */
+    public static final int HEADING_LINE_MAX_CHARS = 50;
+
+    /**
+     * 「行长度守卫」正则片段：从当前位置到行尾（不含换行符）的字符数不得超过
+     * {@link #HEADING_LINE_MAX_CHARS}，超过则整个匹配失败 —— 即该行不作为标题行。
+     *
+     * <p>需放在标题正则「消耗完行首空白之后、匹配『第』之前」的位置，这样只统计
+     * 「第X章 + 标题」的长度，行首缩进不占用额度。</p>
+     */
+    public static final String HEADING_LINE_LIMIT_GUARD = "(?![^\\n]{" + (HEADING_LINE_MAX_CHARS + 1) + ",})";
+
+    /**
+     * 去掉正则中的 {@link #HEADING_LINE_LIMIT_GUARD} 守卫，得到「不限标题行长度」的放宽版本。
+     *
+     * <p>用于放宽重试：当严格模式（限 50 字）一个标题行都没命中时，回落到旧行为再试一次，
+     * 避免「标题与正文挤在同一行长行」的书籍被整体切成单一章节。</p>
+     */
+    public static String withoutHeadingLineLimit(String pattern) {
+        if (pattern == null) {
+            return null;
+        }
+        return pattern.replace(HEADING_LINE_LIMIT_GUARD, "");
+    }
+
     private final ChapterSplitConfigRepository configRepository;
     private final String configName;
     private final String defaultPattern;

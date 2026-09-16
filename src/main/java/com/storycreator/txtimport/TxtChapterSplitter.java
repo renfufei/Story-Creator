@@ -42,11 +42,16 @@ public class TxtChapterSplitter {
     /**
      * 章节分割。遍历 {@code configs}（为空则回退到全部启用配置）：内置 Handler 始终参与（不受 enabled 开关影响，因为
      * 它由 {@code canHandle} 自检测），仅自定义配置受 enabled 控制；第一个 {@code canHandle} 命中的 Handler 胜出。
+     *
+     * <p>进入正则匹配之前会先做一次空白归一化（见 {@link TxtNormalizer#normalizeSpaces}）：
+     * 中文 TXT 常用全角空格缩进章节标题，而 Java 的 {@code \s} 不含 U+3000，不归一化就会漏切。</p>
      */
     public List<SplitChapter> split(String text, List<ChapterSplitConfigEntity> configs) {
         if (text == null || text.isBlank()) {
             return List.of();
         }
+        // 归一化是全角→半角的一对一替换，长度与下标与原文一致，可直接用做切片来源
+        String normalized = TxtNormalizer.normalizeSpaces(text);
 
         List<ChapterSplitConfigEntity> cfgs = (configs != null && !configs.isEmpty())
                 ? configs
@@ -72,12 +77,12 @@ public class TxtChapterSplitter {
             ChapterSplitHandler handler = byName.get(config.getName());
             List<SplitChapter> result;
             if (handler != null) {
-                if (!handler.canHandle(text)) {
+                if (!handler.canHandle(normalized)) {
                     continue;
                 }
-                result = handler.split(text);
+                result = handler.split(normalized);
             } else {
-                result = genericHandler.split(text, config);
+                result = genericHandler.split(normalized, config);
             }
             if (result.isEmpty()) {
                 continue;
@@ -90,9 +95,47 @@ public class TxtChapterSplitter {
             }
         }
 
+        // 严格模式（标题行 ≤50 字符）一章都没切出来时，去掉长度守卫再放宽重试一次：
+        // 少数书籍的标题与正文挤在同一行长行里，此时宁可拿到「长标题」也不要整本合成一章。
+        List<SplitChapter> relaxed = splitRelaxed(normalized, cfgs);
+        if (relaxed != null) {
+            return relaxed;
+        }
+
         if (singleChapterFallback != null) {
             return singleChapterFallback;
         }
-        return List.of(new SplitChapter(1, "全文", text.trim(), text.trim().length()));
+        return List.of(new SplitChapter(1, "全文", normalized.trim(), normalized.trim().length()));
+    }
+
+    /**
+     * 放宽重试：把每条配置正则里的 {@link AbstractRegexChapterHandler#HEADING_LINE_LIMIT_GUARD}
+     * 去掉后重新分割，首个切出 ≥2 章的结果胜出。
+     *
+     * @return 放宽后的分割结果（至少 1 章）；一条都没切出时返回 null
+     */
+    private List<SplitChapter> splitRelaxed(String text, List<ChapterSplitConfigEntity> cfgs) {
+        List<SplitChapter> single = null;
+        for (ChapterSplitConfigEntity config : cfgs) {
+            if (config == null || (!config.isBuiltin() && !config.isEnabled())) {
+                continue;
+            }
+            String pattern = AbstractRegexChapterHandler.withoutHeadingLineLimit(config.getPattern());
+            if (pattern == null || pattern.isBlank()) {
+                continue;
+            }
+            List<SplitChapter> result = AbstractRegexChapterHandler.splitRegex(
+                    text, pattern, config.getTitleGroup(), config.isIncludeMatch());
+            if (result.isEmpty()) {
+                continue;
+            }
+            if (result.size() > 1) {
+                return result;
+            }
+            if (single == null) {
+                single = result;
+            }
+        }
+        return single;
     }
 }

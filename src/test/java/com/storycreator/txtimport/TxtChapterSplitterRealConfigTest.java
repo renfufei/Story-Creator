@@ -140,6 +140,74 @@ class TxtChapterSplitterRealConfigTest {
         assertThat(indexOf("分隔线")).as("启发式不得排在精确章节号之前").isGreaterThan(precise);
     }
 
+    /** 全角空格（U+3000），中文 TXT 里最常用的标题缩进字符。 */
+    private static final String FW = "　";
+
+    /**
+     * 用户反馈的真实样例（2026-09）：行首可能是半角空格、全角空格或多个全角空格，
+     * 「第N章」与标题之间可能有空格也可能直接相连；同时还存在只有截图的极短正文。
+     */
+    private static final String ARABIC_MIXED_SPACE_SAMPLE = String.join("\n",
+            "第1章二百块，玩一天(加料)",
+            "\"哥，崩根烟抽呗？\"",
+            FW + "第2章 今晚你怎么样都可以(加料)",
+            "\"哥。\"",
+            "黄毛的声音突然贴着耳朵响起来。",
+            FW + "第3章 六个脑袋同时低下(加料)",
+            "\"哥，还有烟不？\"",
+            "\"吃饭、喝茶、住宿，还有优先预订权。以后你们想自己来，不用等我。\"",
+            FW + FW + "第414章 挑房间(加料)",
+            "白晓静站在原地，",
+            FW + "第415章一起玩游戏(加料)",
+            "林野刚把手机放下，");
+
+    @Test
+    void arabicHeadingsWithFullWidthSpaces_areAllSplit() {
+        List<SplitChapter> chapters = splitter.split(ARABIC_MIXED_SPACE_SAMPLE, configs);
+
+        assertThat(chapters).as("行首的全角空格必须在匹配前归一化为半角空格，否则整章漏切").hasSize(5);
+        assertThat(chapters).extracting(SplitChapter::title).containsExactly(
+                "二百块，玩一天(加料)",
+                "今晚你怎么样都可以(加料)",
+                "六个脑袋同时低下(加料)",
+                "挑房间(加料)",
+                "一起玩游戏(加料)");
+        // 标题行本身不进正文
+        assertThat(chapters.get(0).content()).doesNotContain("第1章");
+    }
+
+    /** 标题行自「第」起到行尾超过 50 字符的，视为正文而非标题。 */
+    private static final String LONG_LINE_SAMPLE = String.join("\n",
+            "第一章 开端",
+            "他站在雨里。",
+            "第5章而且这一整段其实是正文，只是碰巧以「第5章」开头，" + "写了很多很多很多很多很多很多很多很多很多很多很多很多的内容",
+            "第二章 后续",
+            "雨停了。");
+
+    @Test
+    void longLineStartingWithChapterNumber_isNotHeading() {
+        List<SplitChapter> chapters = splitter.split(LONG_LINE_SAMPLE, configs);
+
+        assertThat(chapters).as("超长行不得被当成章节标题").hasSize(2);
+        assertThat(chapters).extracting(SplitChapter::title).containsExactly("开端", "后续");
+        assertThat(chapters.get(0).content()).as("超长行应留在上一章正文里").contains("第5章而且这一整段");
+    }
+
+    @Test
+    void whenNoShortHeadingExists_relaxedFallbackStillSplits() {
+        // 整本书的标题行都很长（标题与正文挤在同一行）：严格模式一条都命中不了，
+        // 此时必须回落到「不限行长度」的旧行为，否则整本合并成一章。
+        String text = String.join("\n",
+                "第1章标题与正文挤在一行" + "这是一段很长的正文内容".repeat(4),
+                "这里是第一章剩下的段落。",
+                "第2章标题与正文也挤在一行" + "这是另一段很长的正文内容".repeat(4),
+                "这里是第二章剩下的段落。");
+
+        List<SplitChapter> chapters = splitter.split(text, configs);
+
+        assertThat(chapters).as("严格模式无解时应放宽重试，不能整本合成一章").hasSize(2);
+    }
+
     private int indexOf(String name) {
         for (int i = 0; i < configs.size(); i++) {
             if (name.equals(configs.get(i).getName())) {

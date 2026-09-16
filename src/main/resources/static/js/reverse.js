@@ -236,6 +236,8 @@ function reverseProgress() {
         phaseText: '等待中',
         phaseBadgeClass: 'bg-secondary',
         progressText: '',
+        // 防止 init() 重复调用（Alpine 自动调用 init() + 模板 x-init="init()"）导致重复打开 SSE
+        esRef: null,
 
         init() {
             if (!this.jobId) return;
@@ -277,7 +279,9 @@ function reverseProgress() {
         },
 
         connectSSE() {
+            if (this.esRef) return; // 已连接，避免重复订阅导致输出翻倍
             const es = new EventSource('/import/txt/' + this.jobId + '/stream');
+            this.esRef = es;
             es.addEventListener('token', (e) => {
                 this.output += e.data;
                 this.scrollOutput();
@@ -376,6 +380,7 @@ function reverseProgress() {
                 this.output += '\n\n=== 逆向工程完成 ===\n';
                 this.scrollOutput();
                 es.close();
+                this.esRef = null;
             });
             es.addEventListener('error', (e) => {
                 this.active = false;
@@ -384,6 +389,7 @@ function reverseProgress() {
                 this.output += '\n\n[错误] ' + (e.data || '未知错误') + '\n';
                 this.scrollOutput();
                 es.close();
+                this.esRef = null;
             });
             es.addEventListener('stopped', () => {
                 this.active = false;
@@ -393,6 +399,7 @@ function reverseProgress() {
                 this.output += '\n\n[已停止] 已完成的进度已保留，可到「逆向选项」继续执行。\n';
                 this.scrollOutput();
                 es.close();
+                this.esRef = null;
             });
             es.onerror = () => {
                 // 连接断开：项目已存在，展示静态状态即可，可刷新重连。
@@ -406,6 +413,7 @@ function reverseProgress() {
                     }
                 }
                 es.close();
+                this.esRef = null;
             };
         },
 
