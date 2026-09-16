@@ -52,6 +52,19 @@ public class WorkflowController {
     private final WorldFacetElaborationService worldFacetElaborationService;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
+    /**
+     * 路由段 -> 工作流步骤 的映射。拆分成独立接口后，前端按 /workflow/{step}/data 访问，
+     * 不再通过 ?step= 参数区分（避免单一巨页 + 单一带参接口的复杂度）。
+     */
+    private static final Map<String, WorkflowStep> ROUTE_TO_STEP = Map.of(
+            "world-building", WorkflowStep.WORLD_BUILDING,
+            "characters", WorkflowStep.CHARACTER_DESIGN,
+            "outline", WorkflowStep.OUTLINE_GENERATION,
+            "chapters", WorkflowStep.CHAPTER_WRITING,
+            "polishing", WorkflowStep.POLISHING,
+            "proofreading", WorkflowStep.PROOFREADING
+    );
+
     public WorkflowController(WorkflowEngine workflowEngine,
                              ProjectRepository projectRepository,
                              WorkflowStateRepository workflowStateRepository,
@@ -225,6 +238,22 @@ public class WorkflowController {
         data.put("characterStateDims", dimConfigs);
 
         return data;
+    }
+
+    /**
+     * 按步骤拆分的数据接口（替代 /workflow/data?step=X 的参数区分方式）。
+     * 路径：/projects/{projectId}/workflow/{step}/data
+     * step ∈ {world-building, characters, outline, chapters, polishing, proofreading}
+     */
+    @GetMapping(value = "/workflow/{step}/data", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> workflowStepData(@PathVariable Long projectId,
+                                                              @PathVariable String step) {
+        WorkflowStep ws = ROUTE_TO_STEP.get(step);
+        if (ws == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "未知的工作流步骤: " + step));
+        }
+        return ResponseEntity.ok(buildWorkflowBootstrap(projectId, ws));
     }
 
     @PostMapping("/step-model")
@@ -491,11 +520,17 @@ public class WorkflowController {
     @GetMapping("/chapters/list")
     @ResponseBody
     public List<Map<String, Object>> getChapterList(@PathVariable Long projectId) {
+        // 章节大纲存于 chapter_outlines 表（正常工作流与 TXT 逆向工程共用），按章号取出供前端展示
+        Map<Integer, String> outlineSummaries = new HashMap<>();
+        for (ChapterOutlineEntity co : chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId)) {
+            outlineSummaries.put(co.getChapterNumber(), co.getSummary());
+        }
         List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
         return chapters.stream().map(ch -> {
             Map<String, Object> map = new HashMap<>();
             map.put("chapterNumber", ch.getChapterNumber());
             map.put("title", ch.getTitle());
+            map.put("summary", outlineSummaries.get(ch.getChapterNumber()));
             map.put("wordCount", ch.getWordCount());
             map.put("status", ch.getStatus().name());
             map.put("polishStatus", ch.getPolishStatus() != null ? ch.getPolishStatus().name() : "NOT_STARTED");

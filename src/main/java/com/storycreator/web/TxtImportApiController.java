@@ -4,6 +4,7 @@ import com.storycreator.persistence.entity.TxtImportChapterEntity;
 import com.storycreator.persistence.entity.TxtImportJobEntity;
 import com.storycreator.txtimport.ChapterSplitConfigService;
 import com.storycreator.txtimport.ReProtocol;
+import com.storycreator.txtimport.TxtFilenameParser;
 import com.storycreator.txtimport.TxtImportBackgroundService;
 import com.storycreator.txtimport.TxtImportBackgroundService.GenerationTask;
 import com.storycreator.txtimport.TxtImportService;
@@ -62,11 +63,12 @@ public class TxtImportApiController {
             }
 
             if (title == null || title.isBlank()) {
-                String fileName = file.getOriginalFilename();
-                if (fileName != null && fileName.contains(".")) {
-                    title = fileName.substring(0, fileName.lastIndexOf('.'));
-                } else {
-                    title = fileName != null ? fileName : "未命名";
+                title = TxtFilenameParser.parseTitle(file.getOriginalFilename());
+            }
+            if (author == null || author.isBlank()) {
+                String parsedAuthor = TxtFilenameParser.parseAuthor(file.getOriginalFilename());
+                if (parsedAuthor != null) {
+                    author = parsedAuthor;
                 }
             }
 
@@ -90,7 +92,6 @@ public class TxtImportApiController {
         List<Long> configIds = configIdNums != null
                 ? configIdNums.stream().map(Number::longValue).toList()
                 : null;
-
         List<TxtImportChapterEntity> chapters = importService.splitJob(jobId, configIds);
         return ResponseEntity.ok(Map.of(
                 "status", "ok",
@@ -129,6 +130,29 @@ public class TxtImportApiController {
                 "chapterCount", job.getChapterCount(),
                 "totalWordCount", job.getTotalWordCount()
         ));
+    }
+
+    /**
+     * 保存基础项目信息（项目标题 / 题材 / 作者），并立即创建（或更新）对应项目。
+     * <p>供第 2 步「保存并开启下一步」调用，使项目在进入逆向工程之前就已建好。
+     */
+    @PostMapping("/{jobId}/basic-info")
+    public ResponseEntity<Map<String, Object>> saveBasicInfo(@PathVariable Long jobId,
+                                                             @RequestBody(required = false) Map<String, Object> body) {
+        String title = body != null ? (String) body.get("title") : null;
+        String genre = body != null ? (String) body.get("genre") : null;
+        String author = body != null ? (String) body.get("author") : null;
+
+        Long projectId = importService.saveBasicInfo(jobId, title, genre, author);
+        TxtImportJobEntity job = importService.getJob(jobId);
+
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("status", "ok");
+        resp.put("projectId", projectId);
+        resp.put("title", job.getTitle() != null ? job.getTitle() : "");
+        resp.put("genre", job.getGenre() != null ? job.getGenre() : "");
+        resp.put("author", job.getAuthor() != null ? job.getAuthor() : "");
+        return ResponseEntity.ok(resp);
     }
 
     @PostMapping("/{jobId}/start-reverse")

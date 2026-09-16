@@ -69,6 +69,7 @@ class PageRenderingIntegrationTest {
     @Autowired private GuidanceLibraryRepository guidanceLibraryRepository;
     @Autowired private MaterialLibraryRepository materialLibraryRepository;
     @Autowired private TtsReplacementTemplateRepository ttsReplacementTemplateRepository;
+    @Autowired private TxtImportJobRepository txtImportJobRepository;
     @Autowired private TransactionTemplate transactionTemplate;
 
     private Long projectId;
@@ -451,30 +452,96 @@ class PageRenderingIntegrationTest {
         assertThat(missing.getStatusCode()).as("未知项目 read-data 应 404").isEqualTo(HttpStatus.NOT_FOUND);
     }
 
-    // ==================== Workflow Page ====================
+    // ==================== Workflow Pages (split into hub + 6 step pages) ====================
 
+    /** Hub 页：列出 6 个步骤供选择，引导脚本拉取 world-building 数据拿到 projectId/title。 */
     @Test
-    void workflow_rendersSuccessfully() {
+    void workflowHub_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/workflow"), String.class);
-        assertPageOk(response, "workflow");
-        // 静态化后：灵感入口以 Alpine 表达式拼出 URL，并以新标签页打开；页面通过同步 XHR 拉取引导数据
-        assertThat(response.getBody())
-                .as("创作页应包含以新标签页打开的灵感入口，并通过同步 XHR 拉取引导数据")
-                .contains("'/inspirations'")
-                .contains("target=\"_blank\"")
-                .contains("/workflow/data");
+        assertPageOk(response, "workflow-hub");
+        String body = response.getBody();
+        assertThat(body)
+                .as("工作流 Hub 页应通过 workflowHubApp() 渲染，并列出可进入的 6 个步骤页")
+                .contains("workflowHubApp()")
+                .contains("/workflow/world-building")
+                .contains("/workflow/characters")
+                .contains("/workflow/outline")
+                .contains("/workflow/chapters")
+                .contains("/workflow/polishing")
+                .contains("/workflow/proofreading")
+                .as("Hub 引导脚本拉取首步数据")
+                .contains("/workflow/world-building/data");
     }
 
+    /** 6 个按步骤拆分的工作流页面各自独立渲染，并通过同步 XHR 拉取自己的引导数据。 */
     @Test
-    void workflow_withStepParam_rendersSuccessfully() {
+    void workflowStepPages_renderSuccessfully() {
+        java.util.Map<String, String> routeApp = java.util.Map.of(
+                "world-building", "worldBuildingApp()",
+                "characters", "charactersApp()",
+                "outline", "outlineApp()",
+                "chapters", "chaptersApp()",
+                "polishing", "polishingApp()",
+                "proofreading", "proofreadingApp()");
+        for (var e : routeApp.entrySet()) {
+            String route = e.getKey();
+            ResponseEntity<String> response = restTemplate.getForEntity(
+                    url("/projects/" + projectId + "/workflow/" + route), String.class);
+            assertThat(response.getStatusCode())
+                    .as("workflow step page %s should return 200", route)
+                    .isEqualTo(HttpStatus.OK);
+            assertThat(response.getBody())
+                    .as("step page %s 应挂载对应 app 并通过同步 XHR 拉取自己的引导数据", route)
+                    .contains(e.getValue())
+                    .contains("var step = '" + route + "'");
+        }
+    }
+
+    /** 按步骤拆分的数据接口返回合法引导 JSON，且 currentStep 与路由一致。 */
+    @Test
+    void workflowStepData_returnsBootstrapJson() {
+        java.util.Map<String, String> expected = java.util.Map.of(
+                "world-building", "WORLD_BUILDING",
+                "characters", "CHARACTER_DESIGN",
+                "outline", "OUTLINE_GENERATION",
+                "chapters", "CHAPTER_WRITING",
+                "polishing", "POLISHING",
+                "proofreading", "PROOFREADING");
+        for (var e : expected.entrySet()) {
+            ResponseEntity<String> response = restTemplate.getForEntity(
+                    url("/projects/" + projectId + "/workflow/" + e.getKey() + "/data"), String.class);
+            assertThat(response.getStatusCode())
+                    .as("workflow/%s/data should return 200", e.getKey())
+                    .isEqualTo(HttpStatus.OK);
+            assertThat(response.getBody())
+                    .as("workflow/%s/data 应包含项目引导数据且 currentStep 一致", e.getKey())
+                    .contains("\"projectId\"")
+                    .contains("\"projectTitle\"")
+                    .contains("\"currentStep\":\"" + e.getValue() + "\"");
+        }
+    }
+
+    /** 旧链接 /workflow?step=X 应重定向到对应的按步骤页面（兼容书签）。 */
+    @Test
+    void workflowLegacyStepParam_redirectsToStepPage() {
         for (WorkflowStep step : WorkflowStep.values()) {
             ResponseEntity<String> response = restTemplate.getForEntity(
                     url("/projects/" + projectId + "/workflow?step=" + step.name()), String.class);
-            assertThat(response.getStatusCode())
-                    .as("workflow page with step=%s should return 200", step.name())
-                    .isEqualTo(HttpStatus.OK);
+            assertThat(response.getStatusCode().is2xxSuccessful())
+                    .as("legacy /workflow?step=%s 经重定向后应落到步骤页", step.name())
+                    .isTrue();
         }
+    }
+
+    /** 不存在的项目访问按步骤数据接口应给出 400（与旧接口一致，避免静默 200）。 */
+    @Test
+    void workflowStepData_unknownProject_returns400() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/999999/workflow/world-building/data"), String.class);
+        assertThat(response.getStatusCode())
+                .as("未知项目的步骤数据应返回 400")
+                .isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     // ==================== Side Story Pages ====================
@@ -1150,12 +1217,8 @@ class PageRenderingIntegrationTest {
     // ==================== TXT 导入页（静态页 + 引导 JSON） ====================
 
     /**
-     * TXT 导入页（含逆向工程流程控制与 SSE 实时显示脚本）。
-     *
-     * <p>迁移后为静态页 {@code static/pages/txt-import.html}，引导数据由
-     * {@code GET /import/txt/data} 提供。此处保留 SSE 监听器断言：页面若被意外截断，
-     * 尾部的监听器会全部缺失（历史故障：Thymeleaf 文本内联会把协议标记字面量当作
-     * 内联表达式，渲染中断但状态码仍是 200，只能靠内容断言发现）。
+     * TXT 导入页：拆分后只负责第 1 步（上传分割）与第 2 步（预览调整），
+     * 之后的逆向选项 / 执行监控拆到 /projects/{id}/reverse/* 独立页面（见 reverse 相关用例）。
      */
     @Test
     void txtImport_rendersSuccessfully() {
@@ -1164,18 +1227,11 @@ class PageRenderingIntegrationTest {
 
         String body = response.getBody();
         assertThat(body).as("txt-import 页面必须完整渲染到 </script> 结束").contains("</script>");
-        // 位于协议标记字面量之后的监听器——若页面被截断，这些会全部缺失
-        for (String listener : new String[] {
-                "addEventListener('phase'",
-                "addEventListener('phase-done'",
-                "addEventListener('phase-skip'",
-                "addEventListener('note'",
-                "addEventListener('item'",
-                "addEventListener('progress'",
-                "addEventListener('done'",
-                "addEventListener('stopped'" }) {
-            assertThat(body).as("txt-import 页面应包含 SSE 监听器 %s", listener).contains(listener);
-        }
+        // 第 1/2 步关键元素仍然在页面上
+        assertThat(body).as("应包含上传分割入口").contains("uploadAndSplit");
+        assertThat(body).as("应包含保存并进入逆向工程").contains("saveAndGoToOptions");
+        // 完成第 2 步后跳转到按项目定位的逆向选项页
+        assertThat(body).as("完成后应跳转逆向选项页").contains("/reverse/options");
     }
 
     @Test
@@ -1188,6 +1244,95 @@ class PageRenderingIntegrationTest {
                 .contains("\"genres\"")
                 .contains("\"modelConfigs\"")
                 .contains("displayName");
+    }
+
+    // ==================== Reverse Engineering Pages (split from /import/txt step 3/4) ====================
+
+    @Test
+    void reverseOptionsPage_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/reverse/options"), String.class);
+        assertStaticPage(response, "reverse-options", "__REVERSE_DATA__");
+        assertThat(response.getBody())
+                .as("逆向选项页应挂载 reverseOptions()、包含启动逻辑并引用共享 JS")
+                .contains("reverseOptions()")
+                .contains("startReverse")
+                .contains("/js/reverse.js");
+    }
+
+    @Test
+    void reverseProgressPage_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/reverse/progress"), String.class);
+        assertStaticPage(response, "reverse-progress", "__REVERSE_DATA__");
+
+        String body = response.getBody();
+        assertThat(body).as("监控页必须完整渲染到 </script> 结束").contains("</script>");
+        assertThat(body)
+                .as("监控页应挂载 reverseProgress()、含输出区并引用共享 JS")
+                .contains("reverseProgress()")
+                .contains("id=\"reOutput\"")
+                .contains("/js/reverse.js");
+    }
+
+    /** 逆向流程页的 SSE 监听器与启动跳转集中在共享 JS（自 txt-import 页拆出）。 */
+    @Test
+    void reverseSharedJs_containsSseListenersAndRedirect() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/js/reverse.js"), String.class);
+        assertThat(response.getStatusCode()).as("/js/reverse.js 应返回 200").isEqualTo(HttpStatus.OK);
+
+        String body = response.getBody();
+        // 位于协议标记字面量之后的监听器——若脚本被截断，这些会全部缺失
+        for (String listener : new String[] {
+                "addEventListener('phase'",
+                "addEventListener('phase-done'",
+                "addEventListener('phase-skip'",
+                "addEventListener('note'",
+                "addEventListener('item'",
+                "addEventListener('progress'",
+                "addEventListener('done'",
+                "addEventListener('stopped'" }) {
+            assertThat(body).as("reverse.js 应包含 SSE 监听器 %s", listener).contains(listener);
+        }
+        assertThat(body).as("启动成功后应跳转到独立监控页").contains("/reverse/progress");
+    }
+
+    @Test
+    void reverseData_withoutImportJob_returns404() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/reverse/data"), String.class);
+        assertThat(response.getStatusCode()).as("无导入任务的项目应返回 404").isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody()).contains("error");
+    }
+
+    @Test
+    void reverseData_withImportJob_returnsJobBootstrap() {
+        Long jobId = transactionTemplate.execute(status -> {
+            TxtImportJobEntity job = new TxtImportJobEntity();
+            job.setProjectId(projectId);
+            job.setTitle("逆向引导数据测试");
+            job.setStatus("DONE");
+            job.setChapterCount(3);
+            job.setTotalWordCount(600);
+            job.setRunWorldBuilding(true);
+            job.setRunCharacters(true);
+            job.setRunOutline(false);
+            job.setChaptersPerVolume(3);
+            return txtImportJobRepository.save(job).getId();
+        });
+        try {
+            ResponseEntity<String> response = restTemplate.getForEntity(
+                    url("/projects/" + projectId + "/reverse/data"), String.class);
+            assertThat(response.getStatusCode()).as("有关联导入任务的项目应返回 200").isEqualTo(HttpStatus.OK);
+            assertThat(response.getBody())
+                    .as("引导数据应包含 job 关键字段与模型列表")
+                    .contains("\"jobId\":" + jobId)
+                    .contains("\"runOutline\":false")
+                    .contains("\"chaptersPerVolume\":3")
+                    .contains("\"modelConfigs\"");
+        } finally {
+            transactionTemplate.executeWithoutResult(status -> txtImportJobRepository.deleteById(jobId));
+        }
     }
 
     // ==================== TTS Export / Full Play Pages ====================

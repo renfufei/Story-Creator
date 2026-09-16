@@ -7,12 +7,17 @@
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/common.js"></script>
+    <script src="/js/nav.js"></script>
     <style>
         body { margin: 0; }
         [x-cloak] { display: none !important; }
     </style>
 </head>
 <body>
+<header id="site-nav"></header>
+
     <script>
     window.__SIDE_STORY_DATA__ = (function () {
         var d = {};
@@ -20,7 +25,7 @@
             var parts = location.pathname.split('/');
             var pid = parts[2];
             var ssid = parts[4];
-            var url = '/projects/' + pid + '/side-stories/' + ssid + '/data'';
+            var url = '/projects/' + pid + '/side-stories/' + ssid + '/data';
             var xhr = new XMLHttpRequest();
             xhr.open('GET', url, false);
             xhr.send();
@@ -523,6 +528,10 @@ function sideStoryWorkflow() {
     const initAttachedVolume = window.__SIDE_STORY_DATA__.sideStory.attachedVolume;
 
     return {
+        // 模板 :href 直接引用 projectId，必须挂到 Alpine data 上（函数内 const 局部变量不可见）
+        projectId: projectId,
+        // 模板直接用 sideStory.status，必须挂到 data 上（函数内 const 局部变量不可见）
+        sideStory: window.__SIDE_STORY_DATA__.sideStory || {},
         projectTitle: window.__SIDE_STORY_DATA__.projectTitle,
         volumes: window.__SIDE_STORY_DATA__.volumes || [],
         // Basic Info

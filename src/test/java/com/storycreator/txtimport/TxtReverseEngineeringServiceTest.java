@@ -15,7 +15,9 @@ import com.storycreator.persistence.entity.TxtImportJobEntity;
 import com.storycreator.persistence.entity.TxtImportReStepEntity;
 import com.storycreator.persistence.entity.VolumeOutlineEntity;
 import com.storycreator.persistence.entity.WorldSettingEntity;
+import com.storycreator.persistence.entity.WorkflowStateEntity;
 import com.storycreator.persistence.repository.ChapterOutlineRepository;
+import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.CharacterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.StoryOutlineRepository;
@@ -24,7 +26,12 @@ import com.storycreator.persistence.repository.TxtImportJobRepository;
 import com.storycreator.persistence.repository.TxtImportReStepRepository;
 import com.storycreator.persistence.repository.VolumeOutlineRepository;
 import com.storycreator.persistence.repository.WorldSettingRepository;
+import com.storycreator.persistence.repository.WorkflowStateRepository;
 import com.storycreator.workflow.engine.AiUsageTracker;
+import com.storycreator.workflow.background.BackgroundGenerationService;
+import com.storycreator.workflow.engine.ContextSummaryService;
+import com.storycreator.workflow.engine.WorldFacetElaborationService;
+import com.storycreator.workflow.engine.WorkflowStateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -78,10 +85,14 @@ class TxtReverseEngineeringServiceTest {
     @Autowired private CharacterRepository characterRepository;
     @Autowired private StoryOutlineRepository storyOutlineRepository;
     @Autowired private ProjectRepository projectRepository;
+    @Autowired private WorkflowStateRepository workflowStateRepository;
+    @Autowired private ChapterRepository chapterRepository;
     @Autowired private TestEntityManager em;
 
     private FakeProvider provider;
     private TxtReverseEngineeringService service;
+    private WorkflowStateService workflowStateService;
+    private ContextSummaryService contextSummaryService;
 
     @BeforeEach
     void setUp() {
@@ -100,9 +111,19 @@ class TxtReverseEngineeringServiceTest {
 
         AiUsageTracker usageTracker = mock(AiUsageTracker.class);
 
+        // 真实 WorkflowStateService（用于验证 workflow_states 回填），仅 mock 其重依赖
+        contextSummaryService = mock(ContextSummaryService.class);
+        workflowStateService = new WorkflowStateService(
+                workflowStateRepository, projectRepository, worldSettingRepository,
+                characterRepository, storyOutlineRepository, chapterOutlineRepository,
+                chapterRepository,
+                mock(BackgroundGenerationService.class), contextSummaryService,
+                mock(WorldFacetElaborationService.class));
+
         service = new TxtReverseEngineeringService(jobRepository, importChapterRepository, reStepRepository,
                 chapterOutlineRepository, volumeOutlineRepository, worldSettingRepository,
-                characterRepository, storyOutlineRepository, router, promptRegistry, usageTracker);
+                characterRepository, storyOutlineRepository, projectRepository, router, promptRegistry, usageTracker,
+                workflowStateService, contextSummaryService);
     }
 
     // ==================================================================
@@ -120,8 +141,9 @@ class TxtReverseEngineeringServiceTest {
         ReProtocol.RePlan plan = service.plan(job.getId());
 
         assertThat(plan.totalChapters()).isEqualTo(6);
-        assertThat(plan.totalVolumes()).isEqualTo(2);          // 6 章 / 每卷 3 章
-        assertThat(plan.totalUnits()).isEqualTo(11);           // 6 章 + 2 卷 + 3 汇总
+        assertThat(plan.totalVolumes()).isEqualTo(2);
+        // 6 章 + 2 卷 + 4 汇总（世界/角色汇总/角色卡预估1/总纲）
+        assertThat(plan.totalUnits()).isEqualTo(12);
         assertThat(plan.completedUnits()).isEqualTo(2);
         assertThat(plan.resumable()).isTrue();
         assertThat(plan.completed()).isFalse();
@@ -148,11 +170,13 @@ class TxtReverseEngineeringServiceTest {
         addVolumeOutline(projectId, 2, "第二卷弧线");
         addWorldSetting(projectId, "世界观内容");
         addReverseCharacter(projectId, "角色汇总内容");
+        addCharacterCard(projectId, 1, "姓名：林动\n身份：家族少年");
         addStoryOutline(projectId, "故事总纲内容");
 
         ReProtocol.RePlan plan = service.plan(job.getId());
 
-        assertThat(plan.completedUnits()).isEqualTo(11);
+        // 6 章 + 2 卷 + 4 汇总（世界/角色汇总/角色卡/总纲）
+        assertThat(plan.completedUnits()).isEqualTo(12);
         assertThat(plan.completed()).isTrue();
         assertThat(plan.resumable()).isFalse();
         assertThat(plan.phases()).allMatch(p -> !p.runnable() || "COMPLETED".equals(p.status()));
@@ -217,8 +241,9 @@ class TxtReverseEngineeringServiceTest {
                     assertThat(i.body()).isEqualTo("第一章已完成大纲");
                 });
 
-        // 跳过已完成：章节阶段实际只发了 5 次 LLM 请求；弧线阶段再 2 次 → 共 7 次非流式调用
-        assertThat(provider.generateCallCount()).isEqualTo(7);
+        // 跳过已完成：章节阶段实际只发了 5 次 LLM 请求；弧线阶段再 2 次；角色清单提取再 1 次
+        // （默认响应无编号清单 → 角色卡阶段 0 张卡，直接跳过）
+        assertThat(provider.generateCallCount()).isEqualTo(8);
 
         // 6 章大纲最终全部落库（含新补的 5 章）
         assertThat(chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId)).hasSize(6);
@@ -253,6 +278,7 @@ class TxtReverseEngineeringServiceTest {
         addVolumeOutline(projectId, 2, "第二卷弧线");
         addWorldSetting(projectId, "世界观");
         addReverseCharacter(projectId, "角色");
+        addCharacterCard(projectId, 1, "姓名：林动\n身份：家族少年");
         addStoryOutline(projectId, "总纲");
 
         List<String> out = service.runReverseEngineering(job.getId(), projectId, () -> false)
@@ -263,6 +289,41 @@ class TxtReverseEngineeringServiceTest {
         assertThat(noteTexts(out)).allMatch(t -> t.contains("已完成") || t.contains("自动跳过"));
         assertThat(out).contains("[[RE_PHASE_DONE:CHAPTER_OUTLINE|6|6]]");
         assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus()).isEqualTo("DONE");
+    }
+
+    @Test
+    void runReverseEngineering_detectsGenreWhenOther() {
+        Long projectId = newProject();
+        // 模拟导入时未指定题材：项目与任务都停留在「其他」
+        ProjectEntity project = projectRepository.findById(projectId).orElseThrow();
+        project.setGenre(Genre.OTHER);
+        projectRepository.save(project);
+        TxtImportJobEntity job = newJob(projectId, 3, true, true, true);
+        job.setGenre("OTHER");
+        job = jobRepository.save(job);
+        addChapters(job.getId(), 2);
+        // 非流式首调用即题材识别，返回可解析的题材行；其余调用返回角色清单
+        provider.response = "题材：科幻";
+        provider.streamResponse = "姓名：林动\n身份：少年";
+
+        // 计划中 GENRE 阶段应可执行
+        ReProtocol.RePlan plan = service.plan(job.getId());
+        assertThat(phaseOf(plan, "GENRE").status()).isEqualTo("PENDING");
+        assertThat(phaseOf(plan, "GENRE").runnable()).isTrue();
+
+        service.runReverseEngineering(job.getId(), projectId, () -> false).collectList().block();
+
+        // AI 识别结果写回项目与任务
+        assertThat(projectRepository.findById(projectId).orElseThrow().getGenre()).isEqualTo(Genre.KEHUAN);
+        assertThat(jobRepository.findById(job.getId()).orElseThrow().getGenre()).isEqualTo("KEHUAN");
+        TxtImportReStepEntity step = reStepRepository
+                .findByJobIdAndPhase(job.getId(), "GENRE").orElseThrow();
+        assertThat(step.getStatus()).isEqualTo("COMPLETED");
+
+        // 续跑：题材已明确，GENRE 阶段不再执行
+        ReProtocol.RePlan replan = service.plan(job.getId());
+        assertThat(phaseOf(replan, "GENRE").status()).isEqualTo("COMPLETED");
+        assertThat(phaseOf(replan, "GENRE").runnable()).isFalse();
     }
 
     @Test
@@ -279,6 +340,53 @@ class TxtReverseEngineeringServiceTest {
         assertThat(saved.getSummary()).isEqualTo("主角初入宗门，遭遇神秘老者");
         // 「沈砚」重复出现，按「、」去重且保持出现顺序
         assertThat(saved.getCharacterNames()).isEqualTo("沈砚、周穆");
+    }
+
+    @Test
+    void runReverseEngineering_generatesCharacterCardsAndBackfillsWorkflowStates() {
+        Long projectId = newProject();
+        TxtImportJobEntity job = newJob(projectId, 3, true, true, true);
+        addChapters(job.getId(), 3);
+        // 非流式调用（章节/弧线/角色汇总/角色清单）返回编号角色清单
+        provider.response = "1. 林动：家族少年，性格坚韧\n2. 应欢欢：道宗天才少女";
+        // 流式调用（世界/角色/总纲/角色卡）返回字段化卡片
+        provider.streamResponse = "姓名：林动\n性别：男\n年龄：16\n身份：家族少年\n性格：坚韧不拔\n"
+                + "背景：青阳镇林家子弟\n动机：为家族复仇\n能力：吞噬祖符\n关系：与应欢欢亦敌亦友";
+
+        service.runReverseEngineering(job.getId(), projectId, () -> false).collectList().block();
+
+        // 清单提取出 2 人 → 2 张卡（2 次流式卡片调用）
+        assertThat(provider.streamCallCount()).isEqualTo(5); // 世界1 + 角色汇总1 + 卡片2 + 总纲1
+        assertThat(provider.generateCallCount()).isEqualTo(5); // 章节3 + 弧线1 + 角色清单1
+
+        List<CharacterEntity> chars = characterRepository.findByProjectIdOrderBySortOrder(projectId);
+        assertThat(chars).hasSize(3); // 汇总(sortOrder=0) + 2 张独立卡
+        assertThat(chars.get(0).getSortOrder()).isZero();
+        assertThat(chars.get(0).getName()).isEqualTo(REVERSE_CHARACTER_NAME);
+        CharacterEntity card1 = chars.get(1);
+        assertThat(card1.getSortOrder()).isEqualTo(1);
+        assertThat(card1.getName()).isEqualTo("林动");
+        assertThat(card1.getRole()).isEqualTo("家族少年");
+        assertThat(card1.getAbilities()).isEqualTo("吞噬祖符");
+        assertThat(chars.get(2).getSortOrder()).isEqualTo(2);
+
+        // 流程步骤表：CHARACTER_CARDS 完成，单元数被校正为真实卡数 2
+        TxtImportReStepEntity step = reStepRepository
+                .findByJobIdAndPhase(job.getId(), "CHARACTER_CARDS").orElseThrow();
+        assertThat(step.getStatus()).isEqualTo("COMPLETED");
+        assertThat(step.getTotalUnits()).isEqualTo(2);
+
+        // workflow_states 回填：世界/角色/总纲三步均有真实内容（非占位符）
+        for (com.storycreator.core.domain.WorkflowStep ws : com.storycreator.core.domain.WorkflowStep.values()) {
+            if (ws == com.storycreator.core.domain.WorkflowStep.WORLD_BUILDING
+                    || ws == com.storycreator.core.domain.WorkflowStep.CHARACTER_DESIGN
+                    || ws == com.storycreator.core.domain.WorkflowStep.OUTLINE_GENERATION) {
+                assertThat(workflowStateRepository.findByProjectIdAndStep(projectId, ws))
+                        .as("workflow_states 应含 %s", ws)
+                        .hasValueSatisfying(s -> assertThat(s.getGeneratedContent()).isNotBlank());
+            }
+        }
+        assertThat(jobRepository.findById(job.getId()).orElseThrow().getStatus()).isEqualTo("DONE");
     }
 
     @Test
@@ -338,7 +446,11 @@ class TxtReverseEngineeringServiceTest {
         addVolumeOutline(projectId, 1, "弧线");
         addWorldSetting(projectId, "世界");
         addReverseCharacter(projectId, "角色");
+        addCharacterCard(projectId, 1, "姓名：林动\n身份：家族少年");
         addStoryOutline(projectId, "总纲");
+        // 模拟逆向工程回填的 workflow_states
+        workflowStateService.saveStepContent(projectId, com.storycreator.core.domain.WorkflowStep.WORLD_BUILDING, "世界观回填");
+        workflowStateService.saveStepContent(projectId, com.storycreator.core.domain.WorkflowStep.CHARACTER_DESIGN, "角色回填");
         saveStep(job.getId(), "CHAPTER_OUTLINE", "COMPLETED", 1, 1);
         saveStep(job.getId(), "WORLD", "COMPLETED", 1, 1);
         em.flush();
@@ -351,7 +463,14 @@ class TxtReverseEngineeringServiceTest {
         assertThat(volumeOutlineRepository.findByProjectIdOrderByVolumeNumber(projectId)).isEmpty();
         assertThat(worldSettingRepository.findByProjectId(projectId)).isEmpty();
         assertThat(storyOutlineRepository.findByProjectId(projectId)).isEmpty();
+        // 汇总与角色卡一并清空
         assertThat(characterRepository.findByProjectIdOrderBySortOrder(projectId)).isEmpty();
+        // 回填内容被清空，状态复位
+        assertThat(workflowStateRepository.findByProjectId(projectId))
+                .allSatisfy(s -> {
+                    assertThat(s.getGeneratedContent()).isNull();
+                    assertThat(s.getStatus()).isEqualTo(com.storycreator.core.domain.StepStatus.NOT_STARTED);
+                });
 
         assertThat(reStepRepository.findByJobIdOrderBySortOrder(job.getId()))
                 .allSatisfy(s -> {
@@ -440,6 +559,16 @@ class TxtReverseEngineeringServiceTest {
         characterRepository.save(entity);
     }
 
+    private void addCharacterCard(Long projectId, int sortOrder, String content) {
+        CharacterEntity entity = new CharacterEntity();
+        entity.setProjectId(projectId);
+        entity.setName("角色" + sortOrder);
+        entity.setContent(content);
+        entity.setStatus("GENERATED");
+        entity.setSortOrder(sortOrder);
+        characterRepository.save(entity);
+    }
+
     private void addStoryOutline(Long projectId, String content) {
         StoryOutlineEntity entity = new StoryOutlineEntity();
         entity.setProjectId(projectId);
@@ -495,6 +624,8 @@ class TxtReverseEngineeringServiceTest {
         private final List<AiRequest> generateCalls = new ArrayList<>();
         private final List<AiRequest> streamCalls = new ArrayList<>();
         volatile String response = "===大纲===\n本章大纲内容\n===角色===\n沈砚、周穆";
+        /** 流式（streamText）响应；为 null 时回落到 response。角色卡生成走流式。 */
+        volatile String streamResponse;
 
         @Override
         public String getProviderName() {
@@ -510,7 +641,7 @@ class TxtReverseEngineeringServiceTest {
         @Override
         public Flux<String> streamText(AiRequest request) {
             streamCalls.add(request);
-            return Flux.just(response);
+            return Flux.just(streamResponse != null ? streamResponse : response);
         }
 
         int generateCallCount() {

@@ -8,6 +8,7 @@ import com.storycreator.persistence.entity.WorkflowStateEntity;
 import com.storycreator.persistence.repository.AiUsageStatRepository;
 import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
+import com.storycreator.persistence.repository.TxtImportJobRepository;
 import com.storycreator.persistence.repository.WorkflowStateRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,15 +38,18 @@ public class ProjectApiController {
     private final ChapterRepository chapterRepository;
     private final WorkflowStateRepository workflowStateRepository;
     private final AiUsageStatRepository aiUsageStatRepository;
+    private final TxtImportJobRepository txtImportJobRepository;
 
     public ProjectApiController(ProjectRepository projectRepository,
                                 ChapterRepository chapterRepository,
                                 WorkflowStateRepository workflowStateRepository,
-                                AiUsageStatRepository aiUsageStatRepository) {
+                                AiUsageStatRepository aiUsageStatRepository,
+                                TxtImportJobRepository txtImportJobRepository) {
         this.projectRepository = projectRepository;
         this.chapterRepository = chapterRepository;
         this.workflowStateRepository = workflowStateRepository;
         this.aiUsageStatRepository = aiUsageStatRepository;
+        this.txtImportJobRepository = txtImportJobRepository;
     }
 
     /** 项目列表（含章节数与字数统计），按更新时间倒序 */
@@ -64,7 +68,13 @@ public class ProjectApiController {
     @GetMapping("/{id}")
     public ResponseEntity<Map<String, Object>> detail(@PathVariable Long id) {
         return projectRepository.findById(id)
-                .map(p -> ResponseEntity.ok(toDto(p, statsOf(id), workflowStatesOf(id), usageStatsOf(id))))
+                .map(p -> {
+                    Map<String, Object> dto = toDto(p, statsOf(id), workflowStatesOf(id), usageStatsOf(id));
+                    // TXT 逆向工程入口：最近一次关联的导入任务（无则不返回该字段，前端不渲染按钮）
+                    txtImportJobRepository.findFirstByProjectIdOrderByIdDesc(id)
+                            .ifPresent(job -> dto.put("txtImportJobId", job.getId()));
+                    return ResponseEntity.ok(dto);
+                })
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 

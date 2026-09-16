@@ -190,6 +190,25 @@ public class PromptExploreService {
                             "genre", project.getGenre() != null ? project.getGenre().getDisplayName() : "",
                             "totalChapters", String.valueOf(project.getTotalChapters()),
                             "arcsInfo", "(导入时自动填充)");
+            case REVERSE_CHARACTER_LIST -> Map.of("title", safe(project.getTitle()),
+                    "genre", project.getGenre() != null ? project.getGenre().getDisplayName() : "",
+                    "arcsInfo", "(导入时自动填充)",
+                    "characterOverview", "(导入时自动填充)");
+            case REVERSE_CHARACTER_CARD -> Map.of("title", safe(project.getTitle()),
+                    "genre", project.getGenre() != null ? project.getGenre().getDisplayName() : "",
+                    "description", "",
+                    "worldSetting", "(导入时自动填充)",
+                    "roleName", "(导入时自动填充)",
+                    "roleBrief", "(导入时自动填充)",
+                    "previousContext", "(导入时自动填充)",
+                    "cardNumber", String.valueOf(cardNumber != null ? cardNumber : 1),
+                    "totalCards", String.valueOf(totalCards != null ? totalCards : 5),
+                    "stepGuidance", "");
+            case REVERSE_GENRE -> Map.of("title", safe(project.getTitle()),
+                    "genreOptions", java.util.Arrays.stream(com.storycreator.core.domain.Genre.values())
+                            .map(com.storycreator.core.domain.Genre::getDisplayName)
+                            .collect(java.util.stream.Collectors.joining("、")),
+                    "sampleText", "(导入时自动填充：前几章正文样本)");
             case WORLD_BUILDING_PRIMARY, CHAPTER_WRITING_PRIMARY, POLISHING_PRIMARY ->
                     throw new IllegalStateException("PRIMARY sub-steps should be intercepted before reaching switch");
         };

@@ -19,8 +19,8 @@ window.__PROMPT_EDIT_DATA__ = (function () {
     try {
         var parts = location.pathname.split('/');
         var url;
+        // /prompts/builtin/{key} → 片段为 ['', 'prompts', 'builtin', key]
         if (parts[2] === 'builtin') {
-            // /prompts/builtin/{key}
             var key = decodeURIComponent(parts[3] || '');
             url = '/prompts/builtin/' + encodeURIComponent(key) + '/edit-data';
         } else {

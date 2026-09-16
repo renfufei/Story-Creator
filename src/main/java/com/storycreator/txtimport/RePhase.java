@@ -8,6 +8,9 @@ package com.storycreator.txtimport;
  */
 public enum RePhase {
 
+    /** 题材为空或其他时，由 AI 依据章节样本识别题材并写回项目（导入时用户未指定题材则执行）。 */
+    GENRE("题材识别", 5),
+
     /** 逐章推断章节大纲 + 本章出场角色。 */
     CHAPTER_OUTLINE("章节大纲与角色", 10),
 
@@ -19,6 +22,9 @@ public enum RePhase {
 
     /** 由全部故事弧线汇总主要角色信息。 */
     CHARACTERS("角色汇总", 40),
+
+    /** 由角色汇总逐个生成独立角色卡（每张卡一次大模型调用）。 */
+    CHARACTER_CARDS("角色卡片", 45),
 
     /** 由全部故事弧线汇总整部作品的故事总纲。 */
     STORY_OUTLINE("故事总纲", 50);

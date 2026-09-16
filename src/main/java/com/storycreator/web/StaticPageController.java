@@ -3,6 +3,7 @@ package com.storycreator.web;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 
 /**
  * 静态页路由：URL -> {@code classpath:/static/pages/*.html}。
@@ -67,9 +68,33 @@ public class StaticPageController {
         return "forward:/pages/settings.html";
     }
 
+    /** 工作流步骤名 -> 前端路由段（与 workflow 拆分后的页面目录、core.js stepList.route 保持一致）。 */
+    private static final java.util.Map<String, String> WORKFLOW_STEP_ROUTE = java.util.Map.of(
+            "WORLD_BUILDING", "world-building",
+            "CHARACTER_DESIGN", "characters",
+            "OUTLINE_GENERATION", "outline",
+            "CHAPTER_WRITING", "chapters",
+            "POLISHING", "polishing",
+            "PROOFREADING", "proofreading"
+    );
+
+    /**
+     * 工作流 Hub：列出 6 个步骤供选择。
+     * 兼容旧链接 {@code /projects/{projectId}/workflow?step=X}，重定向到新的按步骤页面。
+     */
     @GetMapping("/projects/{projectId}/workflow")
-    public String workflow() {
-        return "forward:/pages/workflow.html";
+    public String workflow(@PathVariable Long projectId,
+                           @RequestParam(required = false) String step) {
+        if (step != null && WORKFLOW_STEP_ROUTE.containsKey(step)) {
+            return "redirect:/projects/" + projectId + "/workflow/" + WORKFLOW_STEP_ROUTE.get(step);
+        }
+        return "forward:/pages/workflow/index.html";
+    }
+
+    /** 按步骤拆分后的独立工作流页面（world-building/characters/outline/chapters/polishing/proofreading）。 */
+    @GetMapping("/projects/{projectId}/workflow/{step:world-building|characters|outline|chapters|polishing|proofreading}")
+    public String workflowStep(@PathVariable Long projectId, @PathVariable String step) {
+        return "forward:/pages/workflow/" + step + ".html";
     }
 
     @GetMapping("/projects/{id}/read")

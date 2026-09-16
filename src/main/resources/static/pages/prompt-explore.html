@@ -243,7 +243,7 @@ window.__PROMPT_EXPLORE_DATA__ = (function () {
                 <!-- Result display -->
                 <div class="mt-3" x-show="aiResult !== null">
                     <div class="d-flex justify-content-between align-items-center mb-1">
-                        <label class="form-label fw-bold mb-0">AI 输出 <span class="text-muted fw-normal" x-show="aiResult" x-text="'(' + aiResult.length + ' 字)'"></span></label>
+                        <label class="form-label fw-bold mb-0">AI 输出 <span class="text-muted fw-normal" x-show="aiResult" x-text="aiResult ? '(' + aiResult.length + ' 字)' : ''"></span></label>
                         <button class="btn btn-sm btn-outline-secondary" @click="copyResult()">
                             <i class="bi bi-clipboard"></i> 复制
                         </button>

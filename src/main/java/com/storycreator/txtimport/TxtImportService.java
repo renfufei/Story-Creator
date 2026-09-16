@@ -150,6 +150,50 @@ public class TxtImportService {
     }
 
     /**
+     * 保存「基础项目信息」：把第一步填写的标题 / 题材 / 作者落库到导入任务，并立即创建（或更新）
+     * 对应项目 —— 让「第二步 → 下一步」就把项目建好，而不是拖到开始逆向工程时才建。
+     *
+     * @return 项目 id
+     */
+    @Transactional
+    public Long saveBasicInfo(Long jobId, String title, String genre, String author) {
+        TxtImportJobEntity job = getJob(jobId);
+        if (title != null && !title.isBlank()) {
+            job.setTitle(title.trim());
+        }
+        job.setGenre(genre == null || genre.isBlank() ? null : genre.trim());
+        job.setAuthor(author == null || author.isBlank() ? null : author.trim());
+        jobRepository.save(job);
+
+        Long projectId = ensureProjectFromJob(jobId);
+        // 已存在项目时 ensureProjectFromJob 只刷新章节数，这里显式同步基础信息
+        projectRepository.findById(projectId).ifPresent(project -> {
+            applyBasicInfo(project, job);
+            projectRepository.save(project);
+        });
+        return projectId;
+    }
+
+    /** 把导入任务的标题 / 题材 / 作者写入项目（题材无法识别时回落 OTHER，作者留空时用全局默认）。 */
+    private void applyBasicInfo(ProjectEntity project, TxtImportJobEntity job) {
+        project.setTitle(job.getTitle());
+        if (job.getGenre() != null && !job.getGenre().isBlank()) {
+            try {
+                project.setGenre(Genre.valueOf(job.getGenre()));
+            } catch (IllegalArgumentException e) {
+                project.setGenre(Genre.OTHER);
+            }
+        } else {
+            project.setGenre(Genre.OTHER);
+        }
+        String author = job.getAuthor();
+        if (author == null || author.isBlank()) {
+            author = globalSettingService.getDefaultAuthor();
+        }
+        project.setAuthor(author);
+    }
+
+    /**
      * 取得导入任务对应的项目：首次创建，后续（断点续跑）复用同一个项目。
      * <p>复用是断点续跑的前提 —— 已完成的大纲/弧线/汇总都挂在项目上，
      * 每次重建项目会导致完成度扫描结果为 0。
@@ -179,21 +223,7 @@ public class TxtImportService {
 
         // Create project
         ProjectEntity project = new ProjectEntity();
-        project.setTitle(job.getTitle());
-        if (job.getGenre() != null && !job.getGenre().isBlank()) {
-            try {
-                project.setGenre(Genre.valueOf(job.getGenre()));
-            } catch (IllegalArgumentException e) {
-                project.setGenre(Genre.OTHER);
-            }
-        } else {
-            project.setGenre(Genre.OTHER);
-        }
-        String author = job.getAuthor();
-        if (author == null || author.isBlank()) {
-            author = globalSettingService.getDefaultAuthor();
-        }
-        project.setAuthor(author);
+        applyBasicInfo(project, job);
         project.setDescription("由TXT导入生成");
         project.setTotalChapters(chapters.size());
         project.setChaptersPerVolume(job.getChaptersPerVolume() > 0 ? job.getChaptersPerVolume() : 30);

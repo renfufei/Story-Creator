@@ -167,4 +167,70 @@ class TxtChapterSplitterTest {
         assertThat(chapters).hasSize(2);
         assertThat(chapters.get(0).title()).isEqualTo("开端");
     }
+
+    @Test
+    void builtinConfig_runsEvenWhenDisabled() {
+        // cnHandler 匹配「第一章」；其配置 enabled=false，但内置应始终参与分割
+        ChapterSplitConfigEntity cnCfg = new ChapterSplitConfigEntity();
+        cnCfg.setId(5L); cnCfg.setName("中文数字章节号"); cnCfg.setBuiltin(true); cnCfg.setEnabled(false);
+        TxtChapterSplitter s = new TxtChapterSplitter(List.of(cnHandler), null, new GenericConfigSplitHandler());
+        // 标题与内容分行，匹配该 Handler「整行即标题」的语义
+        List<SplitChapter> r = s.split("第一章\n内容A\n第二章\n内容B", List.of(cnCfg));
+        assertThat(r).hasSize(2);
+        assertThat(r.get(0).content()).contains("内容A");
+        assertThat(r.get(1).content()).contains("内容B");
+    }
+
+    // ── 调度器：只切出 1 章的命中不得抢占后续 Handler（真实案例回归）──
+
+    /** 分隔线 Handler：命中正文顶部的一条「------」，按定义只能切出 1 章。 */
+    private static AbstractRegexChapterHandler separatorHandler() {
+        return new TestHandler("分隔线", "(?m)^\\s*([=\\-*—]{3,})\\s*$", -1, false);
+    }
+
+    private static ChapterSplitConfigEntity cfg(String name) {
+        ChapterSplitConfigEntity cfg = new ChapterSplitConfigEntity();
+        cfg.setName(name);
+        cfg.setBuiltin(true);
+        cfg.setEnabled(true);
+        return cfg;
+    }
+
+    @Test
+    void dispatcher_singleChapterHit_doesNotPreemptLaterHandler() {
+        // 分隔线排在前面并命中顶部那条「------」，但只切出 1 章 → 必须让位给章节号 Handler
+        String text = "---------------------------------------\n《书名》\n作者：某人\n第一章 开端\n内容A\n第二章 发展\n内容B";
+        List<SplitChapter> result = new TxtChapterSplitter(
+                List.of(separatorHandler(), cnHandler), null, new GenericConfigSplitHandler())
+                .split(text, List.of(cfg("分隔线"), cfg("中文数字章节号")));
+
+        assertThat(result).as("1 章命中不得把整本书合成一章").hasSize(2);
+        assertThat(result.get(0).title()).isEqualTo("开端");
+        assertThat(result.get(1).title()).isEqualTo("发展");
+    }
+
+    @Test
+    void dispatcher_noHandlerReachesTwoChapters_fallsBackToFirstNonEmptyResult() {
+        // 全文只有一段：任何 Handler 都只能切出 1 章 → 兜底返回首个非空结果（而不是「全文」）
+        String text = "---------------------------------------\n第一章 唯一的一章\n只有这一段内容。";
+        List<SplitChapter> result = new TxtChapterSplitter(
+                List.of(separatorHandler(), cnHandler), null, new GenericConfigSplitHandler())
+                .split(text, List.of(cfg("分隔线"), cfg("中文数字章节号")));
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).title()).as("兜底取首个非空结果，而不是回落成「全文」").isEqualTo("第1章");
+    }
+
+    @Test
+    void dispatcher_singleChapterResult_keepsItsTitleAndContent() {
+        // 只勾选中文数字章节号 → 单章文本照旧保留标题与正文，不降级为「全文」
+        String text = "第一章 唯一的一章\n只有这一段内容。";
+        List<SplitChapter> result = new TxtChapterSplitter(
+                List.of(cnHandler), null, new GenericConfigSplitHandler())
+                .split(text, List.of(cfg("中文数字章节号")));
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).title()).isEqualTo("唯一的一章");
+        assertThat(result.get(0).content()).isEqualTo("只有这一段内容。");
+    }
 }

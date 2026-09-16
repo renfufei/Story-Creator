@@ -61,7 +61,11 @@ public class ChapterSplitConfigBuiltinLoader {
                     entity.setIncludeMatch(Boolean.TRUE.equals(data.get("includeMatch")));
                     entity.setBuiltin(true);
                     entity.setEnabled(true);
-                    entity.setSortOrder(loaded);
+                    // 优先级以 YAML 的 order 为准：精确的章节号匹配必须排在启发式（独立标题行 /
+                    // 分隔线）之前，否则正文顶部一条「------」就会把整本书合成一章。
+                    // 不用扫描顺序，保证加载顺序变化不会打乱优先级；未声明时回落到扫描序号。
+                    Object order = data.get("order");
+                    entity.setSortOrder(order instanceof Number ? ((Number) order).intValue() : loaded);
                     repository.save(entity);
                     loaded++;
                 } catch (Exception e) {

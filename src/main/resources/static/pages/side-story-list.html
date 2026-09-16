@@ -7,12 +7,17 @@
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/common.js"></script>
+    <script src="/js/nav.js"></script>
     <style>
         body { margin: 0; }
         [x-cloak] { display: none !important; }
     </style>
 </head>
 <body>
+<header id="site-nav"></header>
+
     <script>
     window.__SIDE_STORY_LIST_DATA__ = (function () {
         var d = {};
@@ -224,6 +229,10 @@
 function sideStoryList() {
     const projectId = window.__SIDE_STORY_LIST_DATA__.projectId;
     return {
+        // 模板里 :href 直接引用 projectId，必须挂到 Alpine data 上，
+        // 否则 Alpine 求值时报 ReferenceError（函数内的 const 局部变量不可见）
+        projectId: projectId,
+        projectTitle: window.__SIDE_STORY_LIST_DATA__.projectTitle || '',
         sideStories: window.__SIDE_STORY_LIST_DATA__.sideStories || [],
         characters: window.__SIDE_STORY_LIST_DATA__.characters || [],
         volumes: window.__SIDE_STORY_LIST_DATA__.volumes || [],

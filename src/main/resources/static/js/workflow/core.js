@@ -47,12 +47,12 @@ function workflowCoreMixin() {
         guidanceToastMsg: '',
         guidanceToastType: 'success',
         stepList: [
-            { name: 'WORLD_BUILDING', label: '世界观设定', order: 1 },
-            { name: 'CHARACTER_DESIGN', label: '角色设计', order: 2 },
-            { name: 'OUTLINE_GENERATION', label: '大纲生成', order: 3 },
-            { name: 'CHAPTER_WRITING', label: '分章节写作', order: 4 },
-            { name: 'POLISHING', label: '润色修改', order: 5 },
-            { name: 'PROOFREADING', label: '校对精修', order: 6 },
+            { name: 'WORLD_BUILDING', label: '世界观设定', order: 1, route: 'world-building' },
+            { name: 'CHARACTER_DESIGN', label: '角色设计', order: 2, route: 'characters' },
+            { name: 'OUTLINE_GENERATION', label: '大纲生成', order: 3, route: 'outline' },
+            { name: 'CHAPTER_WRITING', label: '分章节写作', order: 4, route: 'chapters' },
+            { name: 'POLISHING', label: '润色修改', order: 5, route: 'polishing' },
+            { name: 'PROOFREADING', label: '校对精修', order: 6, route: 'proofreading' },
         ],
 
         init() {
@@ -566,4 +566,49 @@ function workflowApp() {
         workflowStateMixin(),
         materialsMixin()
     );
+}
+
+// ---- 拆分后的按步骤入口 ----
+// 页面路由与后端 ROUTE_TO_STEP 保持一致。
+// 注意：各分步页的共享布局（头部按钮 + 全局替换/修改意见等模态框）引用了
+// 几乎所有 mixin 的成员——loadCharacterList（characters）、polishNoteChapter（polishing）、
+// globalReplacing/openGlobalReplace（proofreading）等，缺任一个都会在 init/render 阶段
+// 抛 ReferenceError 并中断数据加载（曾致大纲页空白）。
+// 因此每个分步 app 与 workflowApp 一样合并全部 mixin；保留命名入口，
+// 待未来把共享布局抽成独立组件后再按页精简。
+function worldBuildingApp() {
+    return workflowApp();
+}
+function charactersApp() {
+    return workflowApp();
+}
+function outlineApp() {
+    return workflowApp();
+}
+function chaptersApp() {
+    return workflowApp();
+}
+function polishingApp() {
+    return workflowApp();
+}
+function proofreadingApp() {
+    return workflowApp();
+}
+
+// Hub 页面入口：仅展示步骤导航卡片，轻量、无重逻辑。
+// 引导脚本先拉取 world-building 数据以拿到 projectId / projectTitle，这里直接读取。
+function workflowHubApp() {
+    const d = window.__WORKFLOW_DATA__ || {};
+    return {
+        projectId: d.projectId || 0,
+        projectTitle: d.projectTitle || '',
+        stepList: [
+            { name: 'WORLD_BUILDING', label: '世界观设定', order: 1, route: 'world-building' },
+            { name: 'CHARACTER_DESIGN', label: '角色设计', order: 2, route: 'characters' },
+            { name: 'OUTLINE_GENERATION', label: '大纲生成', order: 3, route: 'outline' },
+            { name: 'CHAPTER_WRITING', label: '分章节写作', order: 4, route: 'chapters' },
+            { name: 'POLISHING', label: '润色修改', order: 5, route: 'polishing' },
+            { name: 'PROOFREADING', label: '校对精修', order: 6, route: 'proofreading' },
+        ],
+    };
 }

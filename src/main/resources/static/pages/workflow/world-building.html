@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>创作工作流 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="sc-page" data-nav="projects">
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+    <div x-data="worldBuildingApp()">
+        <!-- Sticky header area -->
+        <div class="sticky-top bg-white pb-2" style="z-index: 100;">
+<div class="d-flex justify-content-between align-items-center mb-2">
+        <h4 class="mb-0"><a :href="'/projects/' + projectId + ''" class="text-decoration-none text-dark" x-text="projectTitle">项目名</a></h4>
+        <div class="d-flex gap-2">
+            <a :href="'/projects/' + projectId + '/side-stories'" class="btn btn-sm btn-outline-warning">
+                <i class="bi bi-journal-bookmark"></i> 番外
+            </a>
+            <a :href="'/projects/' + projectId + '/inspirations'" class="btn btn-sm btn-outline-dark" target="_blank">
+                <i class="bi bi-lightbulb"></i> 灵感
+            </a>
+            <a :href="'/projects/' + projectId + '/expansion'" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-arrows-angle-expand"></i> 扩写
+            </a>
+            <a :href="'/projects/' + projectId + '/read'" class="btn btn-sm btn-outline-success" target="_blank">
+                <i class="bi bi-book"></i> 全文阅读
+            </a>
+            <a :href="'/projects/' + projectId + '/inspect'" class="btn btn-sm btn-outline-info" target="_blank">
+                <i class="bi bi-eye"></i> 创作透视
+            </a>
+            <button class="btn btn-sm btn-outline-secondary" @click="openGlobalReplace()"
+                    :disabled="generating || fullAutoRunning">
+                <i class="bi bi-arrow-repeat"></i> 全局替换
+            </button>
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-download"></i> 导出
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" :href="'/projects/' + projectId + '/export?format=markdown'"><i class="bi bi-filetype-md me-2"></i>Markdown (.md)</a></li>
+                    <li><a class="dropdown-item" :href="'/projects/' + projectId + '/export?format=txt'"><i class="bi bi-file-text me-2"></i>纯文本 (.txt)</a></li>
+                    <li><a class="dropdown-item" :href="'/projects/' + projectId + '/export?format=pdf'"><i class="bi bi-filetype-pdf me-2"></i>PDF (.pdf)</a></li>
+                    <li><a class="dropdown-item" :href="'/projects/' + projectId + '/export?format=epub'"><i class="bi bi-book me-2"></i>电子书 (.epub)</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" :href="'/projects/' + projectId + '/export?format=json'"><i class="bi bi-filetype-json me-2"></i>完整备份 (.json)</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" :href="'/tts-export?projectId=' + projectId"><i class="bi bi-music-note-beamed me-2"></i>导出MP3</a></li>
+                </ul>
+            </div>
+            <a :href="'/projects/' + projectId + '/edit'" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-pencil-square"></i> 编辑项目
+            </a>
+        </div>
+    </div>
+
+    <!-- Step Navigation (clickable, reactive) -->
+    <div class="workflow-steps mb-0">
+        <template x-for="(s, idx) in stepList" :key="s.name">
+            <a class="workflow-step text-decoration-none"
+               :class="s.name === autoRunActiveStep ? 'active' : (s.order < autoRunActiveOrder ? 'completed' : '')"
+               :href="'/projects/' + projectId + '/workflow/' + s.route">
+                <div class="step-number" x-text="idx + 1"></div>
+                <div class="small" x-text="s.label"></div>
+            </a>
+        </template>
+    </div>
+
+    <!-- Full Auto Mode Control Bar -->
+    <template x-if="autoMode">
+        <div class="alert mb-0 mt-2 py-2"
+             :class="fullAutoRunning ? 'alert-info' : (fullAutoError ? 'alert-danger' : 'alert-secondary')">
+            <div class="d-flex justify-content-between align-items-center">
+                <span>
+                    <template x-if="!fullAutoRunning && !fullAutoError">
+                        <span><i class="bi bi-lightning"></i> 全自动模式已开启</span>
+                    </template>
+                    <template x-if="fullAutoRunning">
+                        <span><span class="spinner-border spinner-border-sm me-1"></span> <span x-text="fullAutoStatus"></span></span>
+                    </template>
+                    <template x-if="!fullAutoRunning && fullAutoError">
+                        <span><i class="bi bi-exclamation-triangle"></i> 出错: <span x-text="fullAutoError"></span></span>
+                    </template>
+                </span>
+                <div class="d-flex gap-2">
+                    <button x-show="!fullAutoRunning" class="btn btn-sm btn-outline-secondary" @click="openWorkflowStateModal()">
+                        <i class="bi bi-gear"></i> 设置工作流状态
+                    </button>
+                    <button x-show="!fullAutoRunning" class="btn btn-sm btn-primary" @click="startFullAuto()">
+                        <i class="bi bi-play-fill"></i> 开始全自动创作
+                    </button>
+                    <button x-show="fullAutoRunning" class="btn btn-sm btn-outline-info" @click="openAutoRunStream()">
+                        <i class="bi bi-reception-4"></i> 实时显示
+                    </button>
+                    <button x-show="fullAutoRunning" class="btn btn-sm btn-outline-danger" @click="stopFullAuto()">
+                        <i class="bi bi-stop-fill"></i> 停止
+                    </button>
+                </div>
+            </div>
+            <div x-show="!fullAutoRunning" class="mt-2" style="font-size:0.85rem;">
+                <div class="d-flex align-items-center mb-2">
+                    <button class="btn btn-sm p-0 me-1 border-0 text-muted" style="line-height:1;"
+                            @click="autoRunConfigExpanded = !autoRunConfigExpanded; localStorage.setItem('autoRunConfigExpanded', String(autoRunConfigExpanded))">
+                        <i class="bi" :class="autoRunConfigExpanded ? 'bi-caret-down-fill' : 'bi-caret-right-fill'"></i>
+                    </button>
+                    <span class="text-muted me-1">当前策略:</span>
+                    <span class="badge bg-primary" x-text="currentStrategyLabel()"></span>
+                </div>
+                <div x-show="autoRunConfigExpanded">
+                    <div class="d-flex flex-nowrap gap-2 overflow-x-auto pb-1">
+                        <template x-for="s in stepList" :key="s.name">
+                            <div class="border rounded p-2" style="min-width:130px; flex-shrink:0;"
+                                 :style="isMainStepEnabled(s.name) ? '' : 'opacity:0.5'">
+                                <label class="form-check form-switch mb-0">
+                                    <input class="form-check-input" type="checkbox"
+                                           :checked="isMainStepEnabled(s.name)"
+                                           @change="toggleStepConfig(s.name, $event.target.checked)">
+                                    <span class="form-check-label fw-bold" x-text="s.label" style="font-size:0.8rem;"></span>
+                                </label>
+                                <template x-if="stepPrimaryLabel(s.name) || orderedSubStepsForStep(s.name).length > 0">
+                                    <div class="mt-1 ms-2" style="max-height: 8rem; overflow-y: auto;">
+                                        <template x-if="stepPrimaryLabel(s.name)">
+                                            <label class="form-check form-switch mb-0 d-block" style="font-size:0.75rem; min-height:1.4rem; opacity:0.5;">
+                                                <input class="form-check-input" type="checkbox" style="width:1.6em; height:0.9em;"
+                                                       checked disabled>
+                                                <span class="form-check-label text-muted" x-text="stepPrimaryLabel(s.name)"></span>
+                                            </label>
+                                        </template>
+                                        <template x-for="sub in orderedSubStepsForStep(s.name)" :key="sub">
+                                            <label class="form-check form-switch mb-0 d-block"
+                                                   style="font-size:0.75rem; min-height:1.4rem;"
+                                                   :style="isSubStepLocked(sub) ? 'opacity:0.5' : ''">
+                                                <input class="form-check-input" type="checkbox" style="width:1.6em; height:0.9em;"
+                                                       :checked="isSubStepLocked(sub) || autoRunStepConfigs[sub] !== false"
+                                                       :disabled="isSubStepLocked(sub) || !isMainStepEnabled(s.name)"
+                                                       @change="!isSubStepLocked(sub) && toggleStepConfig(sub, $event.target.checked)">
+                                                <span class="form-check-label text-muted"
+                                                      x-text="AUTO_RUN_STEP_LABELS[sub] || sub"></span>
+                                            </label>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+        </div>
+
+        <!-- Main Content Card (step content + outline + generic) -->
+<!-- Main Content Card -->
+    <div class="card mt-2">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>
+                <strong x-text="viewStepDisplayName">当前步骤</strong>
+                <span class="badge bg-info ms-2" x-text="genreDisplayName">题材</span>
+                <span x-show="currentStepOrder < projectCurrentStepOrder" class="badge bg-warning ms-1">已完成步骤</span>
+            </span>
+            <div class="d-flex gap-2 align-items-center">
+                <!-- Step-level model selector (hidden for OUTLINE_GENERATION and CHAPTER_WRITING) -->
+                <form :action="'/projects/' + projectId + '/step-model'" method="post" class="d-flex gap-1 align-items-center"
+                      x-show="currentStep !== 'OUTLINE_GENERATION' && currentStep !== 'CHAPTER_WRITING'">
+                    <input type="hidden" name="step" :value="currentStep">
+                    <select class="form-select form-select-sm" name="modelConfigId" style="max-width:200px; font-size:0.8rem;">
+                        <option value="">默认模型</option>
+                        <template x-for="mc in modelConfigs" :key="mc.id">
+                            <option :value="mc.id" :selected="mc.id === stepModelConfigId" x-text="mc.displayName"></option>
+                        </template>
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="保存步骤模型">
+                        <i class="bi bi-check"></i>
+                    </button>
+                </form>
+                <!-- 全部自动生成 button hidden for CHAPTER_WRITING -->
+                <template x-if="currentStep === 'POLISHING'">
+                    <button class="btn btn-sm btn-primary" @click="batchPolish()"
+                            :disabled="generating || fullAutoRunning">
+                        <span x-show="!generating"><i class="bi bi-brush"></i> 批量自动润色</span>
+                        <span x-show="generating"><span class="spinner-border spinner-border-sm"></span> 润色中...</span>
+                    </button>
+                </template>
+                <template x-if="currentStep !== 'CHAPTER_WRITING' && currentStep !== 'POLISHING' && currentStep !== 'PROOFREADING' && currentStep !== 'OUTLINE_GENERATION'">
+                    <button class="btn btn-sm btn-primary" @click="generate()"
+                            :disabled="generating || fullAutoRunning">
+                        <span x-show="!generating"><i class="bi bi-magic"></i> AI生成</span>
+                        <span x-show="generating"><span class="spinner-border spinner-border-sm"></span> 生成中...</span>
+                    </button>
+                </template>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- Step Guidance Section -->
+            <div class="mb-3 border rounded p-2 bg-light">
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted fw-bold">
+                        <i class="bi bi-compass"></i> 创作指导
+                        <span x-show="stepGuidance && !editingGuidance" class="ms-1 text-success"><i class="bi bi-check-circle-fill"></i></span>
+                    </small>
+                    <div x-show="!editingGuidance" class="btn-group">
+                        <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                                @click="editingGuidance = true; stepGuidanceEdit = stepGuidance"
+                                :disabled="fullAutoRunning">
+                            <i class="bi bi-pencil"></i> 配置
+                        </button>
+                        <button class="btn btn-sm btn-outline-success py-0 px-1"
+                                @click="saveGuidanceAsShared()"
+                                :disabled="fullAutoRunning || !stepGuidance">
+                            <i class="bi bi-box-arrow-up"></i> 存为通用
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary py-0 px-1"
+                                @click="openReuseModal()"
+                                :disabled="fullAutoRunning">
+                            <i class="bi bi-journal-arrow-down"></i> 复用指导
+                        </button>
+                    </div>
+                </div>
+                <div x-show="!editingGuidance && stepGuidance" class="mt-1">
+                    <small class="text-muted" style="white-space: pre-line;" x-text="stepGuidance"></small>
+                </div>
+                <div x-show="!editingGuidance && !stepGuidance" class="mt-1">
+                    <small class="text-muted fst-italic">未设置（可配置风格偏好、写作要求等指导信息）</small>
+                </div>
+                <div x-show="editingGuidance" class="mt-2">
+                    <textarea class="form-control form-control-sm" rows="3" x-model="stepGuidanceEdit"
+                              placeholder="输入创作指导信息，例如：文风要求、情节偏好、禁忌内容等..."></textarea>
+                    <div class="d-flex justify-content-end gap-1 mt-1">
+                        <button class="btn btn-sm btn-outline-secondary" @click="editingGuidance = false">取消</button>
+                        <button class="btn btn-sm btn-primary" @click="saveGuidance()">保存配置</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Material Library Section -->
+            <div class="mb-3 border rounded p-2 bg-light">
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted fw-bold">
+                        <i class="bi bi-collection"></i> 素材库
+                        <span x-show="selectedMaterialIds.length > 0" class="ms-1 badge bg-success" x-text="'已选 ' + selectedMaterialIds.length + ' 项'"></span>
+                    </small>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                                @click="openDistillModal()"
+                                :disabled="fullAutoRunning">
+                            <i class="bi bi-funnel"></i> 蒸馏素材
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary py-0 px-1"
+                                @click="openMaterialRefModal()"
+                                :disabled="fullAutoRunning">
+                            <i class="bi bi-bookmark-plus"></i> 引用素材
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1"
+                                x-show="selectedMaterialIds.length > 0"
+                                @click="clearMaterialSelection()">
+                            <i class="bi bi-x"></i> 清除
+                        </button>
+                    </div>
+                </div>
+                <div x-show="selectedMaterialIds.length > 0" class="mt-1">
+                    <small class="text-success"><i class="bi bi-check-circle"></i> 已选中素材将在下次AI生成时注入提示词</small>
+                </div>
+            </div>
+
+            <!-- Chapter title indicator (only for CHAPTER_WRITING during generation) -->
+            <template x-if="currentStep === 'CHAPTER_WRITING' && generating">
+                <div class="mb-2">
+                    <span x-show="viewingChapterNum > 0" class="badge bg-primary fs-6">
+                        <i class="bi bi-bookmark"></i>
+                        <span x-text="'第' + viewingChapterNum + '章'"></span>
+                        <span x-show="viewingChapterTitle" x-text="' ' + viewingChapterTitle"></span>
+                    </span>
+                </div>
+            </template>
+
+            <!-- === NON-OUTLINE STEPS: Generic content display === -->
+            <template x-if="currentStep !== 'OUTLINE_GENERATION' && currentStep !== 'PROOFREADING'">
+                <div>
+                    <!-- === DEFAULT: Generating (not POLISHING, not CHAPTER_WRITING) === -->
+                    <div x-show="generating && currentStep !== 'POLISHING' && currentStep !== 'CHAPTER_WRITING'" class="mb-3">
+                        <div class="streaming-output" x-ref="output" style="max-height: 50vh; overflow-y: auto;">
+                            <span x-text="generatedContent"></span>
+                            <span class="cursor"></span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <small class="text-muted">
+                                当前字数: <strong x-text="generatedContent.length"></strong>
+                                <template x-if="currentStep === 'CHAPTER_WRITING' || currentStep === 'POLISHING'">
+                                    <span> / 目标 <span x-text="chapterWordCount"></span>字（<span x-text="chapterWordCountMin"></span>-<span x-text="chapterWordCountMax"></span>）</span>
+                                </template>
+                                <span class="ms-3"><i class="bi bi-clock"></i> <span x-text="generateElapsed"></span></span>
+                            </small>
+                            <button class="btn btn-sm btn-outline-danger" @click="stopAutoGenerate()">
+                                <i class="bi bi-stop-circle"></i> 停止生成
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- === DEFAULT: Has content, not generating (not POLISHING, not CHAPTER_WRITING, not CHARACTER_DESIGN) === -->
+                    <div x-show="!generating && currentStep !== 'POLISHING' && currentStep !== 'CHAPTER_WRITING' && currentStep !== 'CHARACTER_DESIGN' && (generatedContent || existingContent)" class="mb-3">
+                        <!-- Read-only view -->
+                        <div x-show="!editing">
+                            <pre class="streaming-output mb-0" style="max-height: 50vh; overflow-y: auto; white-space:pre-wrap; font-family:inherit;" x-text="editableContent"></pre>
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <small class="text-muted">
+                                    字数: <strong x-text="editableContent.length"></strong>
+                                    <span x-show="generateElapsed" class="ms-3"><i class="bi bi-clock"></i> 耗时 <span x-text="generateElapsed"></span></span>
+                                </small>
+                                <div class="d-flex gap-2">
+                                    <button x-show="currentStep === 'WORLD_BUILDING'" type="button" class="btn btn-outline-info btn-sm"
+                                            @click="regenerateWorldFacets()" :disabled="fullAutoRunning">
+                                        <i class="bi bi-diagram-3"></i> 展开分面
+                                    </button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" @click="editing = true"
+                                            :disabled="fullAutoRunning">
+                                        <i class="bi bi-pencil"></i> 编辑
+                                    </button>
+                                    <button x-show="isCurrentStep" type="button" class="btn btn-success btn-sm"
+                                            @click="confirmStep()" :disabled="fullAutoRunning || stepConfirmed">
+                                        <i class="bi bi-check-lg"></i> <span x-text="stepConfirmed ? '已确认' : '确认'"></span>
+                                    </button>
+                                    <button x-show="isCurrentStep && hasNextStep" type="button" class="btn btn-primary btn-sm"
+                                            @click="advanceStep()" :disabled="fullAutoRunning">
+                                        <i class="bi bi-arrow-right"></i> 进入下一步
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Editable view -->
+                        <div x-show="editing">
+                            <form :action="'/projects/' + projectId + '/save-edit'" method="post">
+                                <input type="hidden" name="step" :value="currentStep">
+                                <textarea class="form-control content-editor" name="content"
+                                          style="height: 50vh; overflow-y: auto;"
+                                          x-model="editableContent"
+                                          placeholder="在此编辑内容..."></textarea>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <small class="text-muted">字数: <strong x-text="editableContent.length"></strong></small>
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" @click="editing = false">
+                                            <i class="bi bi-x-lg"></i> 取消
+                                        </button>
+                                        <button type="submit" class="btn btn-primary btn-sm">
+                                            <i class="bi bi-save"></i> 保存编辑
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- State 3: Empty -->
+                    <div x-show="!generating && !generatedContent && !existingContent && currentStep !== 'CHAPTER_WRITING' && currentStep !== 'POLISHING' && currentStep !== 'CHARACTER_DESIGN'" class="text-center py-4 text-muted">
+                        <i class="bi bi-robot display-4"></i>
+                        <p class="mt-2">点击"AI生成"开始创作此步骤的内容</p>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+        <!-- Advance Step (仅在「当前步」且非最后一步显示；OUTLINE_GENERATION / CHAPTER_WRITING 步骤隐藏) -->
+        <div class="mt-3 text-end"
+             x-show="!generating && !fullAutoRunning && isCurrentStep && hasNextStep && currentStep !== 'OUTLINE_GENERATION' && currentStep !== 'CHAPTER_WRITING'">
+            <button type="button" class="btn btn-outline-primary" @click="advanceStep()">
+                <i class="bi bi-arrow-right"></i> 跳过当前步骤，进入下一步
+            </button>
+        </div>
+
+        <!-- Modals -->
+<!-- Workflow State Setting Modal -->
+    <div class="modal fade" id="workflowStateModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-gear"></i> 设置工作流状态</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">设置各步骤状态以指导全自动工作流的起始位置。全自动创作从"当前步骤"开始执行。</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">当前步骤（自动创作起点）</label>
+                        <select class="form-select form-select-sm" x-model="wfStateCurrentStep"
+                                :disabled="fullAutoRunning">
+                            <template x-for="s in stepList" :key="s.name">
+                                <option :value="s.name" x-text="s.label"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <hr>
+                    <label class="form-label fw-bold">各步骤状态</label>
+                    <template x-for="s in stepList" :key="s.name">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="small" x-text="s.label" style="min-width:100px;"></span>
+                            <select class="form-select form-select-sm" style="max-width:180px;"
+                                    x-model="wfStateSteps[s.name]"
+                                    :disabled="fullAutoRunning">
+                                <template x-for="opt in (wfStateAllowedStatuses[s.name] || [{name:'NOT_STARTED',label:'未开始'},{name:'GENERATED',label:'已生成'},{name:'CONFIRMED',label:'已确认'}])" :key="opt.name">
+                                    <option :value="opt.name" x-text="opt.label"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </template>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary btn-sm" @click="saveWorkflowState()"
+                            :disabled="fullAutoRunning">
+                        <i class="bi bi-save"></i> 保存
+                    </button>
+                    <span x-show="fullAutoRunning" class="text-warning small ms-2">
+                        <i class="bi bi-exclamation-triangle"></i> 自动创作运行中，无法修改
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Polish Note Edit Modal -->
+    <div class="modal fade" id="polishNoteModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" x-text="'第' + polishNoteChapter + '章 - 修改意见'">修改意见</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <textarea class="form-control" rows="5" x-model="polishNoteText"
+                              placeholder="请输入对本章的修改意见，AI润色时会参考这些意见..."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" @click="savePolishNote()">保存意见</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Replace Modal -->
+    <div class="modal fade" id="globalReplaceModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-arrow-repeat"></i> 全局替换</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" :disabled="globalReplacing"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-2">替换将应用于：世界观、角色、大纲、章节等所有内容</p>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>查找文本</th>
+                                <th>替换为</th>
+                                <th style="width:40px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="(pair, idx) in replacePairs" :key="idx">
+                                <tr>
+                                    <td><input type="text" class="form-control form-control-sm" x-model="pair.oldText" placeholder="查找..." :disabled="globalReplacing"></td>
+                                    <td><input type="text" class="form-control form-control-sm" x-model="pair.newText" placeholder="替换为..." :disabled="globalReplacing"></td>
+                                    <td><button class="btn btn-sm btn-outline-danger" @click="replacePairs.splice(idx, 1)" :disabled="globalReplacing || replacePairs.length <= 1"><i class="bi bi-x"></i></button></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                    <button class="btn btn-sm btn-outline-secondary" @click="replacePairs.push({oldText:'',newText:''})" :disabled="globalReplacing">
+                        <i class="bi bi-plus"></i> 增加一行
+                    </button>
+
+                    <div x-show="globalReplaceLog.length > 0" class="mt-3">
+                        <strong class="small">执行进度：</strong>
+                        <div class="border rounded p-2 mt-1" style="max-height:200px; overflow-y:auto; font-size:0.85rem;">
+                            <template x-for="(msg, i) in globalReplaceLog" :key="i">
+                                <div x-text="msg"></div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" :disabled="globalReplacing">取消</button>
+                    <button type="button" class="btn btn-primary" @click="executeGlobalReplace()" :disabled="globalReplacing">
+                        <span x-show="!globalReplacing">执行替换</span>
+                        <span x-show="globalReplacing"><span class="spinner-border spinner-border-sm"></span> 替换中...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AutoRun Stream Modal -->
+    <div class="modal fade" id="autoRunStreamModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-reception-4"></i> 全自动创作 - 实时显示
+                        <span class="badge bg-info ms-2" x-text="autoRunStreamStep"></span>
+                        <span class="badge bg-secondary ms-1" x-show="autoRunStreamChapter > 0" x-text="'第' + autoRunStreamChapter + '章'"></span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" @click="closeAutoRunStream()"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <pre class="p-3 m-0 bg-light" style="min-height:60vh; max-height:60vh; overflow-y:auto; white-space:pre-wrap; word-break:break-all; font-size:0.85rem;" x-ref="autoRunStreamOutput" x-text="autoRunStreamContent"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Reuse Guidance Modal -->
+    <div class="modal fade" id="reuseGuidanceModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-journal-arrow-down"></i> 复用创作指导</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="reuseFilterSwitch"
+                                   x-model="reuseFilterByStep">
+                            <label class="form-check-label" for="reuseFilterSwitch">
+                                只显示当前步骤（<span x-text="currentStepLabel()"></span>）的指导
+                            </label>
+                        </div>
+                    </div>
+                    <div x-show="guidanceLibraryLoading" class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm"></div> 加载中...
+                    </div>
+                    <div x-show="!guidanceLibraryLoading && guidanceLibraryItems.length === 0" class="text-muted text-center py-3">
+                        暂无可用的创作指导。请先在创作指导库中添加指导。
+                    </div>
+                    <div x-show="!guidanceLibraryLoading && guidanceLibraryItems.length > 0" class="list-group" style="max-height: 50vh; overflow-y: auto;">
+                        <template x-for="item in guidanceLibraryItems" :key="item.id">
+                            <label class="list-group-item list-group-item-action d-flex align-items-start gap-2"
+                                   :class="{ 'active': selectedGuidanceId === item.id }">
+                                <input type="radio" class="form-check-input mt-1" name="reuseGuidanceRadio"
+                                       :value="item.id" x-model="selectedGuidanceId">
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <strong class="text-truncate" x-text="item.name"></strong>
+                                        <span class="badge bg-info ms-2 flex-shrink-0" x-text="item.stepLabel"></span>
+                                    </div>
+                                    <small class="text-muted d-block mt-1" style="white-space: pre-line; max-height: 60px; overflow: hidden;"
+                                           x-text="item.guidance.substring(0, 150) + (item.guidance.length > 150 ? '...' : '')"></small>
+                                </div>
+                            </label>
+                        </template>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" @click="applyReuseGuidance()"
+                            :disabled="!selectedGuidanceId">
+                        <i class="bi bi-check-lg"></i> 使用选中指导
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Distill Material Modal -->
+    <div class="modal fade" id="distillMaterialModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-funnel"></i> 蒸馏素材</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">从当前项目内容中提取素材，AI将压缩蒸馏为可复用的通用素材。</p>
+                    <div class="mb-3">
+                        <label class="form-label">素材来源</label>
+                        <select class="form-select form-select-sm" x-model="distillSourceType" @change="onDistillSourceChange()">
+                            <option value="world">世界观设定</option>
+                            <option value="outline">故事大纲</option>
+                            <option value="character">角色卡</option>
+                            <option value="chapter_outline">章节大纲</option>
+                            <option value="chapter">章节正文</option>
+                        </select>
+                    </div>
+                    <!-- Secondary select for character/chapter_outline/chapter -->
+                    <div class="mb-3" x-show="distillNeedsSecondary">
+                        <label class="form-label" x-text="distillSecondaryLabel"></label>
+                        <select class="form-select form-select-sm" x-model="distillSecondaryValue">
+                            <option value="">-- 请选择 --</option>
+                            <template x-for="opt in distillSecondaryOptions" :key="opt.value">
+                                <option :value="opt.value" x-text="opt.label"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">素材分类</label>
+                        <select class="form-select form-select-sm" x-model="distillCategory">
+                            <option value="CHARACTER">角色</option>
+                            <option value="WORLD">世界观</option>
+                            <option value="OUTLINE">大纲</option>
+                            <option value="SKILL">金手指/技能</option>
+                            <option value="ITEM">道具/武器</option>
+                            <option value="OTHER">其他</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">AI模型</label>
+                        <select class="form-select form-select-sm" x-model="distillConfigId">
+                            <option value="">使用全局默认</option>
+                            <template x-for="mc in modelConfigs" :key="mc.id">
+                            <option :value="mc.id" x-text="mc.displayName"></option>
+                        </template>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">素材名称（可选）</label>
+                        <input type="text" class="form-control form-control-sm" x-model="distillName" placeholder="自动生成名称">
+                    </div>
+
+                    <!-- Result display -->
+                    <div x-show="distillLoading" class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm"></div> AI蒸馏中，请稍候...
+                    </div>
+                    <div x-show="distillError" class="alert alert-danger small" x-text="distillError"></div>
+                    <div x-show="distillResult" class="alert alert-success small">
+                        <strong>蒸馏成功!</strong>
+                        <div class="mt-1" x-text="'素材名: ' + (distillResult && distillResult.name)"></div>
+                        <div class="mt-1 border rounded p-2 bg-white" style="max-height: 150px; overflow-y: auto; white-space: pre-line; font-size: 0.8rem;"
+                             x-text="distillResult && distillResult.content"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary btn-sm" @click="executeDistill()"
+                            :disabled="distillLoading || !canExecuteDistill">
+                        <i class="bi bi-funnel"></i> 开始蒸馏
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Material Reference Modal -->
+    <div class="modal fade" id="materialRefModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-bookmark-plus"></i> 引用素材</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <select class="form-select form-select-sm" x-model="materialFilterCategory"
+                                @change="loadMaterialLibrary()">
+                            <option value="">全部分类</option>
+                            <option value="CHARACTER">角色</option>
+                            <option value="WORLD">世界观</option>
+                            <option value="OUTLINE">大纲</option>
+                            <option value="SKILL">金手指/技能</option>
+                            <option value="ITEM">道具/武器</option>
+                            <option value="OTHER">其他</option>
+                        </select>
+                    </div>
+                    <div x-show="materialLibraryLoading" class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm"></div> 加载中...
+                    </div>
+                    <div x-show="!materialLibraryLoading && materialLibraryItems.length === 0" class="text-muted text-center py-3">
+                        暂无素材。请先在素材库中添加或蒸馏素材。
+                    </div>
+                    <div x-show="!materialLibraryLoading && materialLibraryItems.length > 0"
+                         class="list-group" style="max-height: 50vh; overflow-y: auto;">
+                        <template x-for="item in materialLibraryItems" :key="item.id">
+                            <label class="list-group-item list-group-item-action d-flex align-items-start gap-2"
+                                   :class="{ 'list-group-item-success': isMaterialSelected(item.id) }">
+                                <input type="checkbox" class="form-check-input mt-1"
+                                       :checked="isMaterialSelected(item.id)"
+                                       @change="toggleMaterial(item.id)">
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <strong class="text-truncate" x-text="item.name"></strong>
+                                        <span class="badge bg-secondary ms-2 flex-shrink-0" x-text="item.categoryLabel"></span>
+                                    </div>
+                                    <small class="text-muted d-block mt-1" style="white-space: pre-line; max-height: 60px; overflow: hidden;"
+                                           x-text="item.content.substring(0, 120) + (item.content.length > 120 ? '...' : '')"></small>
+                                    <small x-show="item.sourceHint" class="text-info d-block" x-text="'来源: ' + item.sourceHint"></small>
+                                </div>
+                            </label>
+                        </template>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <span class="me-auto small text-muted" x-text="'已选 ' + selectedMaterialIds.length + ' 项素材'"></span>
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary btn-sm" data-bs-dismiss="modal">
+                        <i class="bi bi-check-lg"></i> 确认选择
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast for guidance actions -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100">
+        <div class="toast align-items-center" :class="guidanceToastType === 'success' ? 'text-bg-success' : 'text-bg-danger'"
+             x-ref="guidanceToast" role="alert">
+            <div class="d-flex">
+                <div class="toast-body" x-text="guidanceToastMsg"></div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    </div>
+    </div>
+</main>
+
+<!-- 同步拉取创作引导数据，等价替代原 th:inline 服务端注入；Alpine(defer) 在解析时全局已就绪 -->
+<script>
+(function () {
+    try {
+        var parts = location.pathname.split('/');
+        var pid = parts[2];
+        var step = 'world-building';
+        var url = '/projects/' + pid + '/workflow/' + step + '/data';
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url, false);
+        xhr.send();
+        if (xhr.status === 200) {
+            window.__WORKFLOW_DATA__ = JSON.parse(xhr.responseText);
+        } else {
+            window.__WORKFLOW_DATA__ = { projectId: Number(pid) };
+        }
+    } catch (e) {
+        window.__WORKFLOW_DATA__ = window.__WORKFLOW_DATA__ || { projectId: 0 };
+    }
+})();
+</script>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script src="/js/workflow/workflow-state.js"></script>
+<script src="/js/workflow/outline.js"></script>
+<script src="/js/workflow/characters.js"></script>
+<script src="/js/workflow/chapters.js"></script>
+<script src="/js/workflow/polishing.js"></script>
+<script src="/js/workflow/proofreading.js"></script>
+<script src="/js/workflow/materials.js"></script>
+<script src="/js/workflow/autorun.js"></script>
+<script src="/js/workflow/core.js"></script>
+<script defer src="/vendor/alpinejs/cdn.min.js"></script>
+</body>
+</html>

@@ -51,7 +51,10 @@ public enum PromptSubStep {
     REVERSE_STORY_ARC("逆向故事弧线", 410),
     REVERSE_FINAL_STORY_OUTLINE("逆向故事总纲汇总", 420),
     REVERSE_FINAL_WORLD("逆向世界观汇总", 430),
-    REVERSE_FINAL_CHARACTERS("逆向角色汇总", 440);
+    REVERSE_FINAL_CHARACTERS("逆向角色汇总", 440),
+    REVERSE_CHARACTER_LIST("逆向角色清单提取", 450),
+    REVERSE_CHARACTER_CARD("逆向角色卡生成", 460),
+    REVERSE_GENRE("逆向题材识别", 470);
 
     private final String displayName;
     private final int sortOrder;
@@ -105,7 +108,10 @@ public enum PromptSubStep {
             Map.entry(REVERSE_STORY_ARC, WorkflowStep.OUTLINE_GENERATION),
             Map.entry(REVERSE_FINAL_STORY_OUTLINE, WorkflowStep.OUTLINE_GENERATION),
             Map.entry(REVERSE_FINAL_WORLD, WorkflowStep.WORLD_BUILDING),
-            Map.entry(REVERSE_FINAL_CHARACTERS, WorkflowStep.CHARACTER_DESIGN)
+            Map.entry(REVERSE_FINAL_CHARACTERS, WorkflowStep.CHARACTER_DESIGN),
+            Map.entry(REVERSE_CHARACTER_LIST, WorkflowStep.CHARACTER_DESIGN),
+            Map.entry(REVERSE_CHARACTER_CARD, WorkflowStep.CHARACTER_DESIGN),
+            Map.entry(REVERSE_GENRE, WorkflowStep.WORLD_BUILDING)
     );
 
     public WorkflowStep getParentStep() {

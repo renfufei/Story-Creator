@@ -8,7 +8,8 @@ import java.util.List;
  * 设计目标：把「一种类型的 TXT 分割方式」封装成一个实现类，方便后期扩展。
  * 调度器（TxtChapterSplitter）会按顺序遍历所有 Handler：
  *  1. 调用 {@link #canHandle(String)} 让每个 Handler 自行判断能否处理该文本；
- *  2. 第一个返回 true 的 Handler 通过 {@link #split(String)} 完成分割。
+ *  2. 首个切出 ≥2 章（真正完成切分）的 Handler 胜出；只切出 1 章的命中仅作兜底候选，
+ *     不会抢占后续 Handler——避免一条偶发命中的分隔线把整本书合成一章。
  *
  * 每个 Handler 通过 {@link #getConfigName()} 绑定到数据库中的一条
  * {@code chapter_split_configs} 配置（按 name 匹配），从而复用其启用/排序/自定义正则等设置。

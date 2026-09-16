@@ -110,6 +110,47 @@ public class WorkflowStateService {
         }
     }
 
+    /**
+     * 回填工作流步骤内容（不带业务表副作用）。
+     * <p>与 {@link #saveGeneratedContent} 不同，本方法会把真实内容写入 {@code generatedContent}
+     * （不替换为 [data saved incrementally] 占位符），且不向各业务表重复落库。
+     * 适用于逆向工程等「产出已另存业务表、此处仅回填工作流展示内容」的场景。
+     */
+    @Transactional
+    public void saveStepContent(Long projectId, WorkflowStep step, String content) {
+        if (content == null || content.isBlank()) return;
+        content = stripAiFormatting(content);
+        log.info("[P{}] saveStepContent step={} contentLen={}", projectId, step, content.length());
+        WorkflowStateEntity state = workflowStateRepository
+                .findByProjectIdAndStep(projectId, step)
+                .orElseGet(() -> {
+                    WorkflowStateEntity s = new WorkflowStateEntity();
+                    s.setProjectId(projectId);
+                    s.setStep(step);
+                    return s;
+                });
+        state.setGeneratedContent(content);
+        state.setStatus(StepStatus.GENERATED);
+        workflowStateRepository.save(state);
+    }
+
+    /**
+     * 清空某步骤的回填内容（用于逆向工程重置进度）。
+     * <p>仅清除 {@code generatedContent} 并把状态复位为 NOT_STARTED；
+     * 若用户已手动编辑过（userEditedContent 非空），保留用户编辑内容不动。
+     */
+    @Transactional
+    public void resetStepContent(Long projectId, WorkflowStep step) {
+        workflowStateRepository.findByProjectIdAndStep(projectId, step).ifPresent(state -> {
+            state.setGeneratedContent(null);
+            if (state.getUserEditedContent() == null || state.getUserEditedContent().isBlank()) {
+                state.setStatus(StepStatus.NOT_STARTED);
+            }
+            workflowStateRepository.save(state);
+            log.info("[P{}] resetStepContent step={}", projectId, step);
+        });
+    }
+
     @Transactional
     public void ensureWorkflowStateExists(Long projectId, WorkflowStep step) {
         workflowStateRepository.findByProjectIdAndStep(projectId, step)

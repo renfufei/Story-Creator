@@ -8,11 +8,15 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface TxtImportJobRepository extends JpaRepository<TxtImportJobEntity, Long> {
 
     List<TxtImportJobEntity> findByStatusIn(List<String> statuses);
+
+    /** 按项目找最近一次 TXT 导入任务（项目详情页「逆向工程」入口、逆向流程页引导数据都用它定位）。 */
+    Optional<TxtImportJobEntity> findFirstByProjectIdOrderByIdDesc(Long projectId);
 
     /**
      * 应用启动时把上次遗留的「执行中」任务标记为已中断。

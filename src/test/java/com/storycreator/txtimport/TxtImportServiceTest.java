@@ -146,6 +146,50 @@ class TxtImportServiceTest {
     }
 
     // ==================================================================
+    // 第 2 步「保存并开启下一步」：保存基础项目信息
+    // ==================================================================
+
+    @Test
+    void saveBasicInfo_createsProjectThenSyncsBasicsWithoutCreatingAnother() {
+        TxtImportJobEntity job = newJob("原始标题", 3);
+        addChapter(job.getId(), 1, "第1章", "内容一");
+
+        // 首次点击：立即建项目并写入基础信息（不再等到开始逆向工程）
+        Long projectId = service.saveBasicInfo(job.getId(), "和青梅做了十年朋友后", "YANQING", "晨曦之主");
+
+        ProjectEntity project = projectRepository.findById(projectId).orElseThrow();
+        assertThat(project.getTitle()).isEqualTo("和青梅做了十年朋友后");
+        assertThat(project.getGenre()).isEqualTo(Genre.YANQING);
+        assertThat(project.getAuthor()).isEqualTo("晨曦之主");
+        assertThat(project.getTotalChapters()).isEqualTo(1);
+        assertThat(projectRepository.count()).isEqualTo(1);
+
+        // 回第 1 步改标题后重存：必须复用同一项目并同步基础信息，不得新建
+        Long again = service.saveBasicInfo(job.getId(), "改过的标题", "YANQING", "晨曦之主");
+
+        assertThat(again).isEqualTo(projectId);
+        assertThat(projectRepository.count()).isEqualTo(1);
+        assertThat(projectRepository.findById(projectId).orElseThrow().getTitle()).isEqualTo("改过的标题");
+        assertThat(jobRepository.findById(job.getId()).orElseThrow().getTitle()).isEqualTo("改过的标题");
+    }
+
+    @Test
+    void saveBasicInfo_blankGenreFallsBackToOtherAndBlankAuthorToGlobalDefault() {
+        TxtImportJobEntity job = newJob("留空测试", 3);
+        job.setAuthor("原作者");
+        jobRepository.save(job);
+        addChapter(job.getId(), 1, "第1章", "内容一");
+        when(globalSettingService.getDefaultAuthor()).thenReturn("全局默认作者");
+
+        Long projectId = service.saveBasicInfo(job.getId(), "留空测试", "  ", "  ");
+
+        ProjectEntity project = projectRepository.findById(projectId).orElseThrow();
+        assertThat(project.getGenre()).isEqualTo(Genre.OTHER);
+        assertThat(project.getAuthor()).isEqualTo("全局默认作者");
+        assertThat(jobRepository.findById(job.getId()).orElseThrow().getGenre()).isNull();
+    }
+
+    // ==================================================================
     // 测试数据
     // ==================================================================
 

@@ -9,7 +9,9 @@ import com.storycreator.core.port.ai.AiRequest;
 import com.storycreator.persistence.entity.*;
 import com.storycreator.persistence.repository.*;
 import com.storycreator.workflow.engine.AiUsageTracker;
+import com.storycreator.workflow.engine.ContextSummaryService;
 import com.storycreator.workflow.engine.VolumeRange;
+import com.storycreator.workflow.engine.WorkflowStateService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -20,12 +22,14 @@ import reactor.core.publisher.Flux;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
-import static com.storycreator.workflow.engine.TextProcessingUtils.applyResolvedConfig;
+import static com.storycreator.workflow.engine.TextProcessingUtils.*;
 
 /**
  * TXT 导入的逆向工程：专用流程控制 + 实时下发 + 断点续跑。
@@ -69,9 +73,12 @@ public class TxtReverseEngineeringService {
     private final WorldSettingRepository worldSettingRepository;
     private final CharacterRepository characterRepository;
     private final StoryOutlineRepository storyOutlineRepository;
+    private final ProjectRepository projectRepository;
     private final AiProviderRouter providerRouter;
     private final PromptTemplateRegistry promptRegistry;
     private final AiUsageTracker aiUsageTracker;
+    private final WorkflowStateService workflowStateService;
+    private final ContextSummaryService contextSummaryService;
 
     public TxtReverseEngineeringService(TxtImportJobRepository jobRepository,
                                         TxtImportChapterRepository importChapterRepository,
@@ -81,9 +88,12 @@ public class TxtReverseEngineeringService {
                                         WorldSettingRepository worldSettingRepository,
                                         CharacterRepository characterRepository,
                                         StoryOutlineRepository storyOutlineRepository,
+                                        ProjectRepository projectRepository,
                                         AiProviderRouter providerRouter,
                                         PromptTemplateRegistry promptRegistry,
-                                        AiUsageTracker aiUsageTracker) {
+                                        AiUsageTracker aiUsageTracker,
+                                        WorkflowStateService workflowStateService,
+                                        ContextSummaryService contextSummaryService) {
         this.jobRepository = jobRepository;
         this.importChapterRepository = importChapterRepository;
         this.reStepRepository = reStepRepository;
@@ -92,9 +102,12 @@ public class TxtReverseEngineeringService {
         this.worldSettingRepository = worldSettingRepository;
         this.characterRepository = characterRepository;
         this.storyOutlineRepository = storyOutlineRepository;
+        this.projectRepository = projectRepository;
         this.providerRouter = providerRouter;
         this.promptRegistry = promptRegistry;
         this.aiUsageTracker = aiUsageTracker;
+        this.workflowStateService = workflowStateService;
+        this.contextSummaryService = contextSummaryService;
     }
 
     // ==================================================================
@@ -136,11 +149,17 @@ public class TxtReverseEngineeringService {
         // ---- 扫描产出物 ----
         int doneChapters = 0;
         int doneVolumes = 0;
+        int doneCharCards = 0;
+        boolean genreDone = false;
         boolean worldDone = false;
         boolean charsDone = false;
         boolean outlineDone = false;
 
         if (projectId != null) {
+            // 题材已明确（非空且非「其他」）视为完成；否则由 GENRE 阶段识别
+            genreDone = projectRepository.findById(projectId)
+                    .map(p -> p.getGenre() != null && p.getGenre() != Genre.OTHER)
+                    .orElse(false);
             for (ChapterOutlineEntity co : chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId)) {
                 if (hasText(co.getSummary())) doneChapters++;
             }
@@ -153,13 +172,22 @@ public class TxtReverseEngineeringService {
                     .anyMatch(c -> REVERSE_CHARACTER_NAME.equals(c.getName()) && hasText(c.getContent()));
             outlineDone = storyOutlineRepository.findByProjectId(projectId)
                     .map(o -> hasText(o.getContent())).orElse(false);
+            doneCharCards = (int) characterRepository.findByProjectIdOrderBySortOrder(projectId).stream()
+                    .filter(c -> c.getSortOrder() > 0 && hasText(c.getContent()))
+                    .count();
         }
 
         List<ReProtocol.PhasePlan> phases = new ArrayList<>();
+        phases.add(phasePlan(RePhase.GENRE, 1, genreDone ? 1 : 0, !genreDone));
         phases.add(phasePlan(RePhase.CHAPTER_OUTLINE, totalChapters, doneChapters, true));
         phases.add(phasePlan(RePhase.STORY_ARC, totalVolumes, doneVolumes, needArc));
         phases.add(phasePlan(RePhase.WORLD, 1, worldDone ? 1 : 0, job.isRunWorldBuilding()));
         phases.add(phasePlan(RePhase.CHARACTERS, 1, charsDone ? 1 : 0, job.isRunCharacters()));
+        // 角色卡片阶段：在角色总览基础上逐个生成独立角色卡。
+        // 只要角色阶段启用就至少预留 1 个单元（避免 0/0 被误判为已完成而跳过），
+        // 运行时由 runCharacterCards 按真实角色数 updateStepTotalUnits 校正
+        int charCardsTotal = job.isRunCharacters() ? Math.max(doneCharCards, 1) : 0;
+        phases.add(phasePlan(RePhase.CHARACTER_CARDS, charCardsTotal, doneCharCards, job.isRunCharacters()));
         phases.add(phasePlan(RePhase.STORY_OUTLINE, 1, outlineDone ? 1 : 0, job.isRunOutline()));
 
         int totalUnits = 0;
@@ -218,7 +246,8 @@ public class TxtReverseEngineeringService {
                 .orElseThrow(() -> new IllegalArgumentException("Job not found: " + jobId));
 
         List<TxtImportChapterEntity> chapters = importChapterRepository.findByJobIdOrderByChapterNumber(jobId);
-        Genre genre = parseGenre(job.getGenre());
+        // 题材用引用持有：GENRE 阶段识别写回后，后续阶段在各自 defer 执行时立即可见
+        AtomicReference<Genre> genreRef = new AtomicReference<>(parseGenre(job.getGenre()));
         AiProviderRouter.ResolvedModel resolved = job.getModelConfigId() != null
                 ? providerRouter.resolveModelByConfigId(job.getModelConfigId())
                 : providerRouter.resolveModel(projectId, WorkflowStep.WORLD_BUILDING);
@@ -228,6 +257,8 @@ public class TxtReverseEngineeringService {
         // 1) 扫描 → 生成计划 → 同步流程步骤表
         ReProtocol.RePlan plan = plan(job);
         syncSteps(job, plan);
+        // 幂等回填：对已存在的产出物，把内容补写进 workflow_states（旧项目续跑时 saver 不再触发）
+        backfillWorkflowStates(projectId);
         log.info("[Import:{}] 逆向工程计划: {} 项中已完成 {} 项", jobId, plan.totalUnits(), plan.completedUnits());
 
         // 2) 按阶段顺序执行；未启用或已完成的阶段直接跳过
@@ -250,8 +281,8 @@ public class TxtReverseEngineeringService {
 
             parts.add(Flux.just(ReProtocol.phase(phase)));
             parts.add(Flux.just(ReProtocol.note(phase, resumeNote(pp))));
-            parts.add(Flux.defer(() -> runPhase(job, projectId, phase, chapters, title, genre,
-                    resolved, perVolume, pp, cancelled)));
+            parts.add(Flux.defer(() -> runPhase(job, projectId, phase, chapters, title, genreRef.get(),
+                    resolved, perVolume, pp, cancelled, genreRef)));
         }
 
         parts.add(Flux.defer(() -> finish(jobId, cancelled)));
@@ -269,31 +300,46 @@ public class TxtReverseEngineeringService {
     private Flux<String> runPhase(TxtImportJobEntity job, Long projectId, RePhase phase,
                                   List<TxtImportChapterEntity> chapters, String title, Genre genre,
                                   AiProviderRouter.ResolvedModel resolved, int perVolume,
-                                  ReProtocol.PhasePlan planItem, BooleanSupplier cancelled) {
+                                  ReProtocol.PhasePlan planItem, BooleanSupplier cancelled,
+                                  AtomicReference<Genre> genreRef) {
         if (cancelled.getAsBoolean()) {
             log.info("[Import:{}] 已停止，跳过阶段 {}", job.getId(), phase.name());
             return Flux.empty();
         }
         markStepRunning(job, phase, planItem);
         Flux<String> flux = switch (phase) {
+            case GENRE -> runGenreDetection(job, projectId, phase, chapters, title,
+                    genreRef, resolved, cancelled);
             case CHAPTER_OUTLINE -> runChapterOutlines(job, projectId, phase, chapters, title,
                     genre, resolved, perVolume, cancelled);
             case STORY_ARC -> runStoryArcs(job, projectId, phase, chapters.size(), title,
                     genre, resolved, perVolume, cancelled);
             case WORLD -> runFinalPhase(job, projectId, phase, title, genre, resolved,
                     WorkflowStep.WORLD_BUILDING, PromptSubStep.REVERSE_FINAL_WORLD,
-                    Map.of(), content -> saveWorldSetting(projectId, content), cancelled);
+                    Map.of(), content -> {
+                        saveWorldSetting(projectId, content);
+                        workflowStateService.saveStepContent(projectId, WorkflowStep.WORLD_BUILDING, content);
+                    }, cancelled);
             case CHARACTERS -> runFinalPhase(job, projectId, phase, title, genre, resolved,
                     WorkflowStep.CHARACTER_DESIGN, PromptSubStep.REVERSE_FINAL_CHARACTERS,
-                    Map.of(), content -> saveCharacters(projectId, content), cancelled);
+                    Map.of(), content -> {
+                        saveCharacters(projectId, content);
+                        workflowStateService.saveStepContent(projectId, WorkflowStep.CHARACTER_DESIGN, content);
+                    }, cancelled);
+            case CHARACTER_CARDS -> runCharacterCards(job, projectId, phase, title, genre,
+                    resolved, planItem, cancelled);
             case STORY_OUTLINE -> runFinalPhase(job, projectId, phase, title, genre, resolved,
                     WorkflowStep.OUTLINE_GENERATION, PromptSubStep.REVERSE_FINAL_STORY_OUTLINE,
                     Map.of("totalChapters", String.valueOf(chapters.size())),
-                    content -> saveStoryOutline(projectId, content), cancelled);
+                    content -> {
+                        saveStoryOutline(projectId, content);
+                        workflowStateService.saveStepContent(projectId, WorkflowStep.OUTLINE_GENERATION, content);
+                    }, cancelled);
         };
         return flux
                 .doOnComplete(() -> {
-                    if (!cancelled.getAsBoolean()) {
+                    // CHARACTER_CARDS 阶段由 runCharacterCards 自行完成步骤标记（单元数运行时确定）
+                    if (!cancelled.getAsBoolean() && phase != RePhase.CHARACTER_CARDS) {
                         markStepCompleted(job.getId(), phase, planItem.totalUnits());
                     }
                 })
@@ -463,6 +509,99 @@ public class TxtReverseEngineeringService {
     }
 
     // ------------------------------------------------------------------
+    // 阶段 0：题材识别（题材为空或「其他」时，由 AI 依据章节样本判断）
+    // ------------------------------------------------------------------
+
+    /** 参与题材识别判断的章节数上限。 */
+    private static final int GENRE_SAMPLE_CHAPTERS = 3;
+
+    /** 每章参与判断的最大字符数。 */
+    private static final int GENRE_SAMPLE_CHARS_PER_CHAPTER = 1200;
+
+    private Flux<String> runGenreDetection(TxtImportJobEntity job, Long projectId, RePhase phase,
+                                           List<TxtImportChapterEntity> chapters, String title,
+                                           AtomicReference<Genre> genreRef,
+                                           AiProviderRouter.ResolvedModel resolved,
+                                           BooleanSupplier cancelled) {
+        if (cancelled.getAsBoolean()) {
+            return Flux.empty();
+        }
+        // 取前几章正文作为样本（每章截断），足够判断题材且控制上下文长度
+        StringBuilder sample = new StringBuilder();
+        for (TxtImportChapterEntity ch : chapters.stream().limit(GENRE_SAMPLE_CHAPTERS).toList()) {
+            String body = truncateNullable(ch.getContent(), GENRE_SAMPLE_CHARS_PER_CHAPTER);
+            if (!hasText(body)) {
+                continue;
+            }
+            if (sample.length() > 0) {
+                sample.append("\n\n");
+            }
+            sample.append("【").append(safe(ch.getTitle())).append("】\n").append(body);
+        }
+        String genreOptions = Arrays.stream(Genre.values())
+                .map(Genre::getDisplayName)
+                .collect(Collectors.joining("、"));
+        Map<String, String> vars = Map.of(
+                "title", safe(title),
+                "genreOptions", genreOptions,
+                "sampleText", sample.length() == 0 ? "（无章节正文）" : sample.toString());
+
+        String raw = callLlm(resolved, projectId, WorkflowStep.WORLD_BUILDING,
+                PromptSubStep.REVERSE_GENRE, Genre.OTHER, vars, 512, 0.2);
+        Genre detected = extractGenre(raw);
+        // 识别失败时保留原值（通常为 OTHER），不阻断后续阶段
+        Genre effective = detected != null ? detected
+                : (genreRef.get() != null ? genreRef.get() : Genre.OTHER);
+        genreRef.set(effective);
+
+        // 写回 job 与 project，让本次流程的后续阶段与续跑扫描都能看到
+        job.setGenre(effective.name());
+        jobRepository.save(job);
+        projectRepository.findById(projectId).ifPresent(p -> {
+            p.setGenre(effective);
+            projectRepository.save(p);
+        });
+
+        updateStepProgress(job.getId(), phase, 1);
+        String note = detected != null
+                ? "AI 识别题材：" + effective.getDisplayName()
+                : "AI 未识别出题材，保留「" + effective.getDisplayName() + "」";
+        log.info("[Import:{}] {}", job.getId(), note);
+        return Flux.just(ReProtocol.note(phase, note), ReProtocol.progress(1, 1));
+    }
+
+    /** 从 AI 输出中提取题材：优先取「题材：xx」，失败时接受短整句；匹配显示名或枚举名，含包含匹配兜底。 */
+    private Genre extractGenre(String raw) {
+        if (!hasText(raw)) {
+            return null;
+        }
+        String token = null;
+        Matcher m = Pattern.compile("题材[:：]\\s*([^\\s，,。\\n]+)").matcher(raw);
+        if (m.find()) {
+            token = m.group(1).trim();
+        } else {
+            String t = raw.trim();
+            if (t.length() <= 12 && !t.contains("\n")) {
+                token = t;
+            }
+        }
+        if (token == null || token.isEmpty()) {
+            return null;
+        }
+        for (Genre g : Genre.values()) {
+            if (g.getDisplayName().equals(token) || g.name().equalsIgnoreCase(token)) {
+                return g;
+            }
+        }
+        for (Genre g : Genre.values()) {
+            if (token.contains(g.getDisplayName())) {
+                return g;
+            }
+        }
+        return null;
+    }
+
+    // ------------------------------------------------------------------
     // 阶段 3：由故事弧线汇总【世界观 / 角色 / 故事总纲】
     // ------------------------------------------------------------------
 
@@ -539,6 +678,201 @@ public class TxtReverseEngineeringService {
             ReProtocol.ReItem item = new ReProtocol.ReItem(phase.name(), 1, 1, phase.getLabel(),
                     phase.getLabel(), result, null, false);
             return Flux.just(ReProtocol.item(item), ReProtocol.progress(1, 1));
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // 阶段 3b：由角色总览逐个生成独立角色卡（每张卡一次大模型调用）
+    // ------------------------------------------------------------------
+
+    private record RoleBrief(String name, String brief) {}
+
+    private Flux<String> runCharacterCards(TxtImportJobEntity job, Long projectId, RePhase phase,
+                                           String title, Genre genre,
+                                           AiProviderRouter.ResolvedModel resolved,
+                                           ReProtocol.PhasePlan planItem, BooleanSupplier cancelled) {
+        if (cancelled.getAsBoolean()) {
+            return Flux.empty();
+        }
+        final String genreName = genreName(genre);
+
+        // 读取角色总览作为清单提取上下文
+        String characterOverview = characterRepository.findByProjectIdOrderBySortOrder(projectId).stream()
+                .filter(c -> REVERSE_CHARACTER_NAME.equals(c.getName()))
+                .map(c -> safe(c.getContent()))
+                .findFirst().orElse("（暂无角色总览）");
+
+        // 提取角色清单（名字 + 定位）
+        List<String> blocks = volumeBlocks(projectId);
+        Map<String, String> listVars = new LinkedHashMap<>();
+        listVars.put("title", safe(title));
+        listVars.put("genre", genreName);
+        listVars.put("arcsInfo", blocks.isEmpty() ? "（暂无故事弧线）" : String.join("\n\n", blocks));
+        listVars.put("characterOverview", characterOverview);
+        String listRaw = callLlm(resolved, projectId, WorkflowStep.CHARACTER_DESIGN,
+                PromptSubStep.REVERSE_CHARACTER_LIST, genre, listVars, 2048, 0.5);
+        List<RoleBrief> roles = extractCharacterList(listRaw);
+        if (roles.isEmpty()) {
+            log.warn("[Import:{}] 未提取到角色清单，跳过角色卡片生成", job.getId());
+            markStepCompleted(job.getId(), phase, 0);
+            return Flux.just(ReProtocol.note(phase, "未提取到角色清单，已跳过卡片生成"));
+        }
+
+        final int total = roles.size();
+        updateStepTotalUnits(job.getId(), phase, total);
+
+        // 已有独立角色卡数（断点续跑）
+        int doneCards = (int) characterRepository.findByProjectIdOrderBySortOrder(projectId).stream()
+                .filter(c -> c.getSortOrder() > 0 && hasText(c.getContent()))
+                .count();
+
+        final String worldSetting = worldSettingRepository.findByProjectId(projectId)
+                .map(w -> safe(w.getContent())).orElse("");
+
+        return Flux.range(1, total).concatMap(idx -> Flux.defer(() -> {
+            if (cancelled.getAsBoolean()) return Flux.empty();
+            RoleBrief rb = roles.get(idx - 1);
+
+            if (idx <= doneCards) {
+                // 已完成：跳过 LLM，仅回报进度
+                return Flux.just(
+                        ReProtocol.item(new ReProtocol.ReItem(phase.name(), idx, total,
+                                "角色" + idx, rb.name(), "", null, true)),
+                        ReProtocol.progress(idx, total));
+            }
+
+            // 已生成角色摘要，用于差异化
+            StringBuilder prev = new StringBuilder();
+            List<String> prevSummaries = new ArrayList<>();
+            for (int k = 1; k < idx; k++) {
+                final int ki = k;
+                characterRepository.findByProjectIdOrderBySortOrder(projectId).stream()
+                        .filter(c -> c.getSortOrder() == ki && hasText(c.getContent()))
+                        .findFirst().ifPresent(c -> prevSummaries.add(extractBrief(c.getContent())));
+            }
+            if (!prevSummaries.isEmpty()) {
+                prev.append("\n\n【已生成角色】\n");
+                for (int i = 0; i < prevSummaries.size(); i++) {
+                    prev.append(i + 1).append(". ").append(prevSummaries.get(i)).append("\n");
+                }
+                prev.append("\n【差异化要求】新角色须与已生成角色在身份、性格、能力上有本质区别，并建立具体关系。\n");
+            }
+
+            Map<String, String> vars = new LinkedHashMap<>();
+            vars.put("title", safe(title));
+            vars.put("genre", genreName);
+            vars.put("description", "");
+            vars.put("worldSetting", wrapContent(worldSetting));
+            vars.put("roleName", rb.name());
+            vars.put("roleBrief", rb.brief());
+            vars.put("previousContext", prev.toString());
+            vars.put("cardNumber", String.valueOf(idx));
+            vars.put("totalCards", String.valueOf(total));
+            vars.put("stepGuidance", "");
+
+            String userPrompt = promptRegistry.resolveTemplate(
+                    promptRegistry.getSubStepTemplate(WorkflowStep.CHARACTER_DESIGN, PromptSubStep.REVERSE_CHARACTER_CARD, genre), vars);
+            String systemPrompt = promptRegistry.getSubStepSystemPrompt(WorkflowStep.CHARACTER_DESIGN, PromptSubStep.REVERSE_CHARACTER_CARD, genre);
+            if (systemPrompt == null || systemPrompt.isBlank()) {
+                systemPrompt = "你是一位网络小说角色设计师，请基于给定角色的名字与定位生成详细的角色信息卡。";
+            }
+            AiRequest request = AiRequest.builder()
+                    .systemPrompt(systemPrompt).userPrompt(userPrompt)
+                    .maxTokens(2048).temperature(0.7).build();
+            applyResolvedConfig(request, resolved);
+
+            StringBuilder content = new StringBuilder();
+            return resolved.provider().streamText(request)
+                    .doOnNext(content::append)
+                    .doOnComplete(() -> {
+                        String text = content.toString();
+                        saveSingleCharacterCard(projectId, idx, text);
+                        updateStepProgress(job.getId(), phase, idx);
+                        log.info("[Import:{}] 角色卡片 {}/{} 已保存: {}", job.getId(), idx, total, rb.name());
+                    })
+                    .thenMany(Flux.just(
+                            ReProtocol.item(new ReProtocol.ReItem(phase.name(), idx, total,
+                                    "角色" + idx, rb.name(), content.toString(), null, false)),
+                            ReProtocol.progress(idx, total)));
+        })).doOnComplete(() -> {
+            if (!cancelled.getAsBoolean()) {
+                markStepCompleted(job.getId(), phase, total);
+            }
+        });
+    }
+
+    private void saveSingleCharacterCard(Long projectId, int sortOrder, String content) {
+        content = stripAiFormatting(content);
+        CharacterEntity card = characterRepository.findByProjectIdOrderBySortOrder(projectId).stream()
+                .filter(c -> sortOrder == c.getSortOrder())
+                .findFirst()
+                .orElseGet(() -> {
+                    CharacterEntity e = new CharacterEntity();
+                    e.setProjectId(projectId);
+                    e.setSortOrder(sortOrder);
+                    return e;
+                });
+        card.setContent(content);
+        card.setStatus("GENERATED");
+        card.setName(truncateNullable(extractField(content, "姓名"), 100));
+        if (card.getName() == null || card.getName().isBlank()) card.setName("角色" + sortOrder);
+        card.setGender(truncateNullable(extractField(content, "性别"), 20));
+        card.setAge(truncateNullable(extractField(content, "年龄"), 20));
+        card.setRole(truncateNullable(extractField(content, "身份"), 50));
+        card.setPersonality(truncateNullable(extractField(content, "性格"), 500));
+        card.setAppearance(truncateNullable(extractField(content, "外貌"), 500));
+        card.setBackground(extractField(content, "背景"));
+        card.setMotivation(truncateNullable(extractField(content, "动机"), 500));
+        card.setAbilities(truncateNullable(extractField(content, "能力"), 500));
+        card.setRelationships(truncateNullable(extractField(content, "关系"), 500));
+        String summary = contextSummaryService != null
+                ? contextSummaryService.summarizeCharacterCard(projectId, content) : null;
+        if (summary != null) card.setSummary(summary);
+        characterRepository.save(card);
+    }
+
+    private List<RoleBrief> extractCharacterList(String raw) {
+        List<RoleBrief> list = new ArrayList<>();
+        if (!hasText(raw)) return list;
+        Pattern p1 = Pattern.compile("(?m)^\\s*\\d+[\\.、)]\\s*(.+?)[\\s：:](.+)$");
+        Matcher m = p1.matcher(raw);
+        while (m.find()) {
+            String name = m.group(1).trim();
+            String brief = m.group(2).trim();
+            if (!name.isEmpty() && name.length() <= 40) {
+                list.add(new RoleBrief(name, brief));
+            }
+        }
+        if (!list.isEmpty()) return list;
+        Pattern p2 = Pattern.compile("(?m)^\\s*[-*]?\\s*(.+?)[\\s：:](.+)$");
+        Matcher m2 = p2.matcher(raw);
+        while (m2.find()) {
+            String name = m2.group(1).trim();
+            String brief = m2.group(2).trim();
+            if (!name.isEmpty() && name.length() <= 40 && brief.length() > name.length()) {
+                list.add(new RoleBrief(name, brief));
+            }
+        }
+        return list;
+    }
+
+    private String extractBrief(String cardContent) {
+        String name = extractField(cardContent, "姓名");
+        String role = extractField(cardContent, "身份");
+        String personality = truncateNullable(extractField(cardContent, "性格"), 30);
+        return (hasText(name) ? name : "角色") + (hasText(role) ? "：" + role : "")
+                + (hasText(personality) ? "（" + personality + "）" : "");
+    }
+
+    private static String truncateNullable(String s, int max) {
+        if (s == null) return null;
+        return s.length() > max ? s.substring(0, max) : s;
+    }
+
+    private void updateStepTotalUnits(Long jobId, RePhase phase, int total) {
+        reStepRepository.findByJobIdAndPhase(jobId, phase.name()).ifPresent(step -> {
+            step.setTotalUnits(total);
+            reStepRepository.save(step);
         });
     }
 
@@ -635,9 +969,14 @@ public class TxtReverseEngineeringService {
             volumeOutlineRepository.deleteByProjectId(projectId);
             worldSettingRepository.findByProjectId(projectId).ifPresent(worldSettingRepository::delete);
             storyOutlineRepository.findByProjectId(projectId).ifPresent(storyOutlineRepository::delete);
+            // 逆向工程产出的全部角色（sortOrder=0 汇总 + sortOrder>0 角色卡）一并清空
             characterRepository.findByProjectIdOrderBySortOrder(projectId).stream()
-                    .filter(c -> REVERSE_CHARACTER_NAME.equals(c.getName()))
+                    .filter(c -> REVERSE_CHARACTER_NAME.equals(c.getName()) || c.getSortOrder() > 0)
                     .forEach(characterRepository::delete);
+            // 同步清空回填到 workflow_states 的步骤内容（保留用户手编内容）
+            workflowStateService.resetStepContent(projectId, WorkflowStep.WORLD_BUILDING);
+            workflowStateService.resetStepContent(projectId, WorkflowStep.CHARACTER_DESIGN);
+            workflowStateService.resetStepContent(projectId, WorkflowStep.OUTLINE_GENERATION);
         }
         for (TxtImportReStepEntity s : reStepRepository.findByJobIdOrderBySortOrder(jobId)) {
             s.setStatus(RePhase.Status.PENDING.name());
@@ -682,6 +1021,28 @@ public class TxtReverseEngineeringService {
     // ==================================================================
     // 落库
     // ==================================================================
+
+    /**
+     * 幂等回填：把已落库的逆向产出物同步写入 workflow_states 对应步骤行。
+     * <p>用于旧项目续跑/重跑场景——各阶段若已 COMPLETED 会被自动跳过、saver 不再执行，
+     * 此时 workflow_states 的内容由本方法补齐（用户手编内容经 effectiveContent 优先级保留）。
+     */
+    private void backfillWorkflowStates(Long projectId) {
+        if (projectId == null) return;
+        worldSettingRepository.findByProjectId(projectId)
+                .filter(w -> hasText(w.getContent()))
+                .ifPresent(w -> workflowStateService.saveStepContent(
+                        projectId, WorkflowStep.WORLD_BUILDING, w.getContent()));
+        characterRepository.findByProjectIdOrderBySortOrder(projectId).stream()
+                .filter(c -> REVERSE_CHARACTER_NAME.equals(c.getName()) && hasText(c.getContent()))
+                .findFirst()
+                .ifPresent(c -> workflowStateService.saveStepContent(
+                        projectId, WorkflowStep.CHARACTER_DESIGN, c.getContent()));
+        storyOutlineRepository.findByProjectId(projectId)
+                .filter(o -> hasText(o.getContent()))
+                .ifPresent(o -> workflowStateService.saveStepContent(
+                        projectId, WorkflowStep.OUTLINE_GENERATION, o.getContent()));
+    }
 
     private void saveWorldSetting(Long projectId, String content) {
         WorldSettingEntity ws = worldSettingRepository.findByProjectId(projectId)

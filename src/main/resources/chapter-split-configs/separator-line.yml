@@ -4,3 +4,4 @@ description: "匹配由3个以上相同符号组成的分隔线（===、---、**
 pattern: "(?m)^\\s*([=\\-*—]{3,})\\s*$"
 titleGroup: -1
 includeMatch: false
+order: 50

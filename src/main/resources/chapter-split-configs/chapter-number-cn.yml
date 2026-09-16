@@ -4,3 +4,4 @@ description: "匹配「第X章」格式，X为中文数字（一、二、十三�
 pattern: "(?m)^\\s*第[零一二三四五六七八九十百千万]+章[ \\t　]*(.*)$"
 titleGroup: 1
 includeMatch: false
+order: 30

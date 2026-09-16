@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>逆向工程选项 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="sc-page" data-nav="import">
+
+<script>
+/* 引导数据：同步 XHR，确保 reverseOptions() 构造时已就绪。
+   按项目 id 解析最近一次 TXT 导入 job（见 ReversePageController#data）。 */
+window.__REVERSE_DATA__ = (function () {
+    var projectId = (location.pathname.match(/\/projects\/(\d+)/) || [])[1];
+    var d = { error: '无效的项目地址' };
+    if (projectId) {
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/projects/' + projectId + '/reverse/data', false);
+            xhr.send();
+            d = JSON.parse(xhr.responseText || '{}');
+        } catch (e) { console.error('__REVERSE_DATA__ load failed', e); d = { error: '引导数据加载失败' }; }
+    }
+    return d;
+})();
+</script>
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+<div x-data="reverseOptions()" x-init="init()">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0"><i class="bi bi-arrow-up-right-circle"></i> 逆向工程 · 选项</h2>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-secondary btn-sm" href="/import/txt"><i class="bi bi-file-earmark-text"></i> 导入 &amp; 分割</a>
+            <a class="btn btn-outline-secondary btn-sm" x-show="projectId" :href="'/projects/' + projectId"><i class="bi bi-folder"></i> 项目详情</a>
+        </div>
+    </div>
+    <div class="text-muted small mb-4" x-show="jobTitle">
+        <span x-text="'《' + jobTitle + '》'"></span>（由 TXT 导入创建，支持中断后随时回到本页继续）
+    </div>
+
+    <!-- 引导数据加载失败：项目不存在 / 没有关联导入任务 -->
+    <div class="alert alert-warning" x-show="bootError" x-cloak>
+        <i class="bi bi-exclamation-triangle"></i> <span x-text="bootError"></span>
+        <div class="mt-2"><a href="/import/txt" class="btn btn-sm btn-outline-primary">去导入 TXT</a></div>
+    </div>
+
+    <div x-show="!bootError" x-cloak>
+        <!-- 流程控制：进度扫描结果 -->
+        <div class="card border-info mb-3" x-show="plan" x-cloak>
+            <div class="card-body py-2">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong x-text="planHeadline"></strong>
+                        <div class="small text-muted" x-text="planSubline"></div>
+                    </div>
+                    <div class="text-end">
+                        <button class="btn btn-sm btn-outline-secondary me-2" @click="refreshPlan()"
+                                :disabled="starting">
+                            <i class="bi bi-arrow-clockwise"></i> 重新扫描
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger me-2" @click="resetPlan()"
+                                :disabled="starting || !plan || plan.completedUnits === 0">
+                            <i class="bi bi-eraser"></i> 清空进度
+                        </button>
+                        <span class="badge bg-secondary"
+                              x-text="plan ? ((plan.completedUnits || 0) + ' / ' + (plan.totalUnits || 0)) : '0 / 0'"></span>
+                    </div>
+                </div>
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    <template x-for="p in phases" :key="p.phase">
+                        <span class="badge" :class="phaseBadge(p)">
+                            <span x-text="p.label"></span>
+                            <span x-show="p.runnable"
+                                  x-text="' ' + p.completedUnits + '/' + p.totalUnits"></span>
+                        </span>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><strong>逆向工程选项</strong></div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>逆向工程内容</h6>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" x-model="runWorldBuilding" id="sw-world">
+                            <label class="form-check-label" for="sw-world">反推世界观</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" x-model="runCharacters" id="sw-chars">
+                            <label class="form-check-label" for="sw-chars">反推角色</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" x-model="runOutline" id="sw-outline">
+                            <label class="form-check-label" for="sw-outline">反推大纲</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>汇总设置</h6>
+                        <div class="mb-3">
+                            <label class="form-label">每卷章节数</label>
+                            <input type="number" class="form-control" x-model.number="chaptersPerVolume" min="1" max="200">
+                            <div class="form-text">逆向工程按「章节大纲 → 故事弧线 → 世界观/角色/总纲」逐级汇总，此处决定每多少章归为一卷推断故事弧线。</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">AI模型</label>
+                            <select class="form-select" x-model="modelConfigId">
+                                <option value="">默认</option>
+                                <template x-for="mc in modelConfigs" :key="mc.id">
+                                    <option :value="mc.id" x-text="mc.displayName + ' (' + mc.provider + ')'"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-end mt-3">
+                    <button class="btn btn-primary" @click="startReverse()"
+                            :disabled="starting || (plan && plan.completed)">
+                        <span x-show="starting" class="spinner-border spinner-border-sm me-1"></span>
+                        <span x-text="startButtonText"></span>
+                        <i class="bi bi-play-fill"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script src="/js/reverse.js"></script>
+<script src="/vendor/alpinejs/cdn.min.js" defer></script>
+</body>
+</html>
