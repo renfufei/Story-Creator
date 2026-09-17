@@ -238,6 +238,10 @@ function reverseProgress() {
         progressText: '',
         // 防止 init() 重复调用（Alpine 自动调用 init() + 模板 x-init="init()"）导致重复打开 SSE
         esRef: null,
+        // 断线自动重连：指数退避，最多 5 次；重连成功后由后端 replay-buffer 恢复完整输出
+        reconnectAttempts: 0,
+        reconnectTimer: null,
+        terminal: false,
 
         init() {
             if (!this.jobId) return;
@@ -251,6 +255,7 @@ function reverseProgress() {
                 const d = await resp.json();
                 if (d.active) {
                     this.active = true;
+                    this.reconnectAttempts = 0; // 状态探测成功，连接没问题
                     this.connectSSE();
                     return;
                 }
@@ -275,6 +280,7 @@ function reverseProgress() {
             } catch (e) {
                 this.phaseText = '状态查询失败';
                 this.phaseBadgeClass = 'bg-danger';
+                if (this.reconnectAttempts > 0) this.scheduleReconnect(); // 重连期间探测失败：继续退避重试
             }
         },
 
@@ -287,6 +293,7 @@ function reverseProgress() {
                 this.scrollOutput();
             });
             es.addEventListener('replay-buffer', (e) => {
+                this.reconnectAttempts = 0; // 重放成功 = 已重新接上
                 this.output = this.stripControlMarkers(e.data);
                 this.scrollOutput();
             });
@@ -371,6 +378,7 @@ function reverseProgress() {
                 }
             });
             es.addEventListener('done', () => {
+                this.terminal = true;
                 this.active = false;
                 this.done = true;
                 this.phaseText = '完成';
@@ -382,16 +390,22 @@ function reverseProgress() {
                 es.close();
                 this.esRef = null;
             });
+            // 注意区分两种 error 事件：服务端业务错误（带 data，任务真的失败了）与
+            // EventSource 传输层错误（无 data，连接断了 —— 此时应自动重连，而不是吓用户）。
+            // 后端所有业务 error 事件都带非空 data（SseErrorHelper 兜底文案），以此区分。
             es.addEventListener('error', (e) => {
+                if (e.data == null) return; // 传输层断连：交给 es.onerror 走自动重连
+                this.terminal = true;
                 this.active = false;
                 this.phaseText = '错误';
                 this.phaseBadgeClass = 'bg-danger';
-                this.output += '\n\n[错误] ' + (e.data || '未知错误') + '\n';
+                this.output += '\n\n[错误] ' + e.data + '\n';
                 this.scrollOutput();
                 es.close();
                 this.esRef = null;
             });
             es.addEventListener('stopped', () => {
+                this.terminal = true;
                 this.active = false;
                 this.interrupted = true;
                 this.phaseText = '已停止（可继续）';
@@ -402,23 +416,43 @@ function reverseProgress() {
                 this.esRef = null;
             });
             es.onerror = () => {
-                // 连接断开：项目已存在，展示静态状态即可，可刷新重连。
-                if (!this.done) {
-                    this.active = false;
-                    if (this.phaseText === '等待中' || this.phaseText === '错误') {
-                        this.phaseText = '监控已结束';
-                        this.phaseBadgeClass = 'bg-secondary';
-                        this.output += '\n\n[提示] 实时监控连接已断开，可刷新页面重新连接。\n';
-                        this.scrollOutput();
-                    }
-                }
+                // 传输层断连（emitter 超时 / 网络抖动 / 代理切断）。EventSource 的原生重连
+                // 被我们 close() 掉了，改为自己的带退避重连：先探测 /status，任务仍在跑才重接；
+                // 后端会用 replay-buffer 补齐全部输出，内容不丢不重。
                 es.close();
                 this.esRef = null;
+                this.scheduleReconnect();
             };
+        },
+
+        scheduleReconnect() {
+            if (this.terminal || this.done) return;
+            if (this.reconnectTimer) return; // 已在等待，避免 onerror 与 error 事件双跳重连
+            if (this.reconnectAttempts >= 5) {
+                this.active = false;
+                this.phaseText = '监控已断开';
+                this.phaseBadgeClass = 'bg-secondary';
+                this.output += '\n\n[提示] 实时监控已断开（自动重连 5 次未成功），可刷新页面重新连接；后台任务不受影响。\n';
+                this.scrollOutput();
+                return;
+            }
+            const attempt = ++this.reconnectAttempts;
+            const delay = Math.min(2000 * Math.pow(2, attempt - 1), 15000);
+            this.phaseText = '连接中断，' + Math.round(delay / 1000) + ' 秒后自动重连（第 ' + attempt + '/5 次）';
+            this.phaseBadgeClass = 'bg-warning';
+            this.reconnectTimer = setTimeout(() => {
+                this.reconnectTimer = null;
+                this.watchStatus();
+            }, delay);
+        },
+
+        destroy() {
+            if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
         },
 
         async stopReverse() {
             await fetch('/import/txt/' + this.jobId + '/stop', {method: 'POST'});
+            this.terminal = true;
             this.active = false;
             this.interrupted = true;
             this.phaseText = '已停止（可继续）';

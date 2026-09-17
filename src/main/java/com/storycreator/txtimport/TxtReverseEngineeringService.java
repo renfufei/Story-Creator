@@ -21,6 +21,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -324,12 +325,31 @@ public class TxtReverseEngineeringService {
 
             parts.add(Flux.just(ReProtocol.phase(phase)));
             parts.add(Flux.just(ReProtocol.note(phase, resumeNote(pp))));
-            parts.add(Flux.defer(() -> runPhase(job, projectId, phase, chapters, title, genreRef.get(),
+            parts.add(phasePart(() -> runPhase(job, projectId, phase, chapters, title, genreRef.get(),
                     resolved, perVolume, pp, cancelled, genreRef)));
         }
 
-        parts.add(Flux.defer(() -> finish(jobId, cancelled)));
+        parts.add(phasePart(() -> finish(jobId, cancelled)));
         return Flux.concat(parts);
+    }
+
+    /**
+     * 订阅线程守卫：阶段体在订阅时同步执行（含阻塞的 callLlm 与 JDBC），不允许落在
+     * reactor-netty 事件循环线程上 —— 上一个流式阶段（streamText/WebClient）在事件循环线程
+     * 完成时，{@code Flux.concat} 会在该线程上订阅下一个阶段，{@code Mono.block()} 会直接抛
+     * {@code IllegalStateException: block() ... not supported in thread reactor-http-nio-*}
+     * （jobId=24 CHARACTER_CARDS 阶段事故根因）。
+     *
+     * <p>仅在检测到当前是 NonBlocking 线程时才把阶段体切到 boundedElastic；
+     * 普通线程（虚拟线程、测试线程）维持同线程执行，事务与既有行为完全不变。</p>
+     */
+    private Flux<String> phasePart(java.util.function.Supplier<Flux<String>> body) {
+        return Flux.defer(() -> {
+            Flux<String> flux = Flux.defer(body::get);
+            return Schedulers.isInNonBlockingThread()
+                    ? flux.subscribeOn(Schedulers.boundedElastic())
+                    : flux;
+        });
     }
 
     private String resumeNote(ReProtocol.PhasePlan pp) {

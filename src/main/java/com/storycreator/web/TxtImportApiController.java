@@ -273,10 +273,11 @@ public class TxtImportApiController {
 
     @GetMapping(value = "/{jobId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@PathVariable Long jobId) {
-        // No aggressive timeout: reverse engineering legitimately takes minutes per LLM call
-        // (and 5min was the root cause of the AsyncRequestTimeoutException crash). Heartbeats
-        // below keep the async context / proxies alive, and onCompletion/onTimeout tidy up.
-        SseEmitter emitter = new SseEmitter(30 * 60 * 1000L);
+        // Generous timeout: reverse engineering legitimately takes minutes per LLM call and can
+        // run for hours on big books (5min was the root cause of the AsyncRequestTimeoutException
+        // crash). Heartbeats below keep the async context / proxies alive; should this cap ever be
+        // hit, the frontend auto-reconnects and resumes from the replay buffer.
+        SseEmitter emitter = new SseEmitter(120 * 60 * 1000L);
 
         final ScheduledExecutorService heartbeat = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "sse-heartbeat-" + jobId);
