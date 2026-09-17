@@ -17,17 +17,37 @@
         }
         .multiplication-grid {
             display: grid;
-            grid-template-columns: repeat(10, 1fr);
-            grid-template-rows: repeat(10, 1fr);
+            grid-template-columns: repeat(11, 1fr);
+            grid-template-rows: repeat(11, 1fr);
             gap: 3px;
             width: 100%;
-            max-width: 450px;
+            max-width: 500px;
             aspect-ratio: 1;
         }
         .grid-cell {
             border: 1px solid #dee2e6;
             border-radius: 3px;
             transition: background-color 0.3s ease, border-color 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        /* 末格乘积数字：红色小字 */
+        .cell-number {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #e53935;
+            line-height: 1;
+            pointer-events: none;
+        }
+        /* 行列号标签：小字号、黑色、居中，不占方格（第 1 行/列） */
+        .grid-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            color: #000;
+            user-select: none;
         }
         .grid-cell.highlighted {
             opacity: 0.85;
@@ -131,14 +151,25 @@
         <div class="fs-4 text-muted" x-text="currentFormula.mathExpression"></div>
     </div>
 
-    <!-- 10x10 Grid -->
+    <!-- 10x10 Grid（第 1 行/列为行列号标签，方格从第 2 行/列开始） -->
     <div class="d-flex justify-content-center mb-4">
         <div class="multiplication-grid">
+            <!-- 左上角：0（对齐左侧行号与顶部列号） -->
+            <div class="grid-label" style="grid-row:1; grid-column:1;">0</div>
+            <!-- 顶部列号 1-10 -->
+            <template x-for="col in 10" :key="'h'+col">
+                <div class="grid-label" :style="'grid-row:1; grid-column:' + (col + 1)" x-text="col"></div>
+            </template>
+            <!-- 左侧行号 1-10 -->
+            <template x-for="row in 10" :key="'v'+row">
+                <div class="grid-label" :style="'grid-row:' + (row + 1) + '; grid-column:1'" x-text="row"></div>
+            </template>
             <template x-for="row in 10" :key="'r'+row">
                 <template x-for="col in 10" :key="'c'+row+'-'+col">
                     <div class="grid-cell"
                          :class="{ 'highlighted': isHighlighted(row, col), 'changed': isChanged(row, col) }"
-                         :style="'grid-row:' + row + '; grid-column:' + col + ';' + (isHighlighted(row, col) ? 'background-color:' + currentColor + '; border-color:' + currentColor : '')">
+                         :style="'grid-row:' + (row + 1) + '; grid-column:' + (col + 1) + ';' + (isHighlighted(row, col) ? 'background-color:' + currentColor + '; border-color:' + currentColor : '')">
+                        <span class="cell-number" x-text="cellLabel(row, col)"></span>
                     </div>
                 </template>
             </template>
@@ -291,6 +322,36 @@ function multiplicationApp() {
         isFirstInGroup(index) {
             if (index === 0) return true;
             return this.formulas[index].b !== this.formulas[index - 1].b;
+        },
+
+        /**
+         * 末格乘积数字：本组内从组起点到当前步骤，每一步在其“最后一格”显示 a*b。
+         * 纯状态推导——前进时前面的数字自然保留；后退时超出 currentIndex 的数字自动消失；
+         * 换组后组起点变化，上一组数字全部不再显示。
+         */
+        groupStartOf(index) {
+            let i = index;
+            while (i > 0 && !this.isFirstInGroup(i)) i--;
+            return i;
+        },
+        lastCellOf(index) {
+            const f = this.formulas[index];
+            if (this.gridLayout === 'rect') {
+                return { row: f.a, col: f.b };
+            }
+            // linear：按填充顺序的最后一格
+            const total = f.a * f.b;
+            return { row: Math.floor((total - 1) / 10) + 1, col: ((total - 1) % 10) + 1 };
+        },
+        cellLabel(row, col) {
+            const start = this.groupStartOf(this.currentIndex);
+            for (let j = this.currentIndex; j >= start; j--) {
+                const c = this.lastCellOf(j);
+                if (c.row === row && c.col === col) {
+                    return String(this.formulas[j].a * this.formulas[j].b);
+                }
+            }
+            return '';
         },
 
         async playCurrentAudio() {

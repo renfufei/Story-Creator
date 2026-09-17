@@ -54,30 +54,32 @@ window.__TXT_IMPORT_DATA__ = (function () {
     <!-- Step 1: Upload & Config -->
     <div x-show="step === 1">
         <div class="card">
-            <div class="card-header"><strong>第一步：上传文件 &amp; 选择分割配置</strong></div>
+            <div class="card-header"><strong>第一步：选择并上传文件</strong></div>
             <div class="card-body">
                 <div class="mb-3">
                     <label class="form-label">选择 TXT 文件</label>
                     <input type="file" class="form-control" accept=".txt" @change="onFileSelect($event)">
                 </div>
-                <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label">项目标题</label>
-                        <input type="text" class="form-control" x-model="title" placeholder="默认取文件名">
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label">题材</label>
-                        <select class="form-select" x-model="genre" @change="onGenreChange()">
-                            <option value="">未指定</option>
-                            <template x-for="g in genres" :key="g.name">
-                                <option :value="g.name" x-text="g.displayName"></option>
-                            </template>
-                        </select>
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <label class="form-label">作者</label>
-                        <input type="text" class="form-control" x-model="author" placeholder="留空使用全局默认作者">
-                    </div>
+                <div class="mb-3" x-show="fileBaseName">
+                    <label class="form-label">文件名（去后缀）</label>
+                    <input type="text" class="form-control" x-model="fileBaseName" readonly title="可选中拷贝部分信息">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">项目标题</label>
+                    <input type="text" class="form-control" x-model="title" placeholder="默认取文件名">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">作者</label>
+                    <input type="text" class="form-control" x-model="author" placeholder="留空使用全局默认作者">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">题材</label>
+                    <select class="form-select" x-model="genre" @change="onGenreChange()">
+                        <option value="">未指定</option>
+                        <template x-for="g in genres" :key="g.name">
+                            <option :value="g.name" x-text="g.displayName"></option>
+                        </template>
+                    </select>
                 </div>
 
                 <label class="form-label">章节分割策略</label>
@@ -197,6 +199,7 @@ function txtImport() {
         genres: BOOT.genres || [],
         // Step 1
         file: null,
+        fileBaseName: '',
         title: '',
         genre: '',
         genreTouched: false,
@@ -253,7 +256,9 @@ function txtImport() {
 
         onFileSelect(event) {
             this.file = event.target.files[0];
-            if (!this.file) return;
+            if (!this.file) { this.fileBaseName = ''; return; }
+            // 只读展示用：去掉扩展名的文件名（供用户拷贝部分信息）
+            this.fileBaseName = (this.file.name || '').replace(/\.[^.]+$/, '');
             const parsed = this.parseFilename(this.file.name);
             // 仅在用户尚未手动修改时自动填充，避免覆盖用户编辑
             if (!this.title) this.title = parsed.title;
