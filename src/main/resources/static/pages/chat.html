@@ -11,6 +11,11 @@
     <link rel="stylesheet" href="/css/app.css">
     <style>
         [x-cloak] { display: none !important; }
+        .msg-time {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.72rem;
+            color: #adb5bd; /* 灰色，浅色主题下仍可读 */
+        }
     </style>
 </head>
 <body class="sc-page" data-nav="chat">
@@ -78,6 +83,7 @@ window.__CHAT_DATA__ = (function () {
                 </template>
                 <template x-for="msg in messages" :key="msg.id || msg.tempId">
                     <div class="mb-3" :class="{'text-end': msg.role === 'user'}">
+                        <div class="msg-time" x-text="fmtTime(msg.createdAt)"></div>
                         <div class="d-inline-block p-2 rounded-3" style="max-width: 80%;"
                              :class="msg.role === 'user' ? 'bg-primary text-white' : 'bg-light border'">
                             <!-- Text content -->
@@ -104,6 +110,7 @@ window.__CHAT_DATA__ = (function () {
                 <!-- Streaming response -->
                 <template x-if="streaming">
                     <div class="mb-3">
+                        <div class="msg-time" x-text="fmtTime(streamStartedAt)"></div>
                         <div class="d-inline-block p-2 rounded-3 bg-light border" style="max-width: 80%;">
                             <div style="white-space: pre-wrap; word-break: break-word;" x-text="streamingContent || '...'"></div>
                         </div>
@@ -172,6 +179,7 @@ function chatApp() {
         streaming: false,
         sending: false,
         streamingContent: '',
+        streamStartedAt: null,
         selectedType: 'TEXT',
         selectedConfigId: null,
         ttsVoice: 'alloy',
@@ -306,6 +314,7 @@ function chatApp() {
             var self = this;
             var input = self.userInput.trim();
             self.userInput = '';
+            self.streamStartedAt = new Date().toISOString();
 
             if (self.selectedType === 'TEXT') {
                 self.sendTextMessage(input);
@@ -428,6 +437,12 @@ function chatApp() {
         scrollToBottom: function() {
             var el = this.$refs.messageContainer;
             if (el) el.scrollTop = el.scrollHeight;
+        },
+
+        /* 时间展示：本地临时消息没有 createdAt 时取当前时间（仅首次渲染求值，之后不会跳动） */
+        fmtTime: function(iso) {
+            var s = iso || new Date().toISOString();
+            return s.substring(0, 10) + ' ' + s.substring(11, 19);
         }
     };
 }

@@ -35,16 +35,17 @@
         .grid-cell.changed {
             z-index: 2;
             position: relative;
+            border-width: 0.5px;
             animation: gold-flash 0.9s ease-in-out infinite;
         }
         @keyframes gold-flash {
             0%, 100% {
-                border-color: rgba(255, 215, 0, 0.4);
-                box-shadow: 0 0 0 1px rgba(255, 215, 0, 0.4);
+                border-color: rgba(229, 57, 53, 0.4);
+                box-shadow: 0 0 0 0.5px rgba(229, 57, 53, 0.4);
             }
             50% {
-                border-color: rgba(255, 215, 0, 1);
-                box-shadow: 0 0 0 1px rgba(255, 215, 0, 1);
+                border-color: rgba(229, 57, 53, 1);
+                box-shadow: 0 0 0 0.5px rgba(229, 57, 53, 1);
             }
         }
     </style>
