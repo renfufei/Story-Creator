@@ -27,6 +27,9 @@ public class TxtImportService {
 
     private static final Logger log = LoggerFactory.getLogger(TxtImportService.class);
 
+    /** 逆向工程完成前的项目简介占位文案；SYNOPSIS 阶段生成真实简介后替换。 */
+    public static final String IMPORT_DESCRIPTION_PLACEHOLDER = "由TXT导入生成";
+
     private TxtImportJobRepository jobRepository;
     private TxtImportChapterRepository importChapterRepository;
     private ChapterSplitConfigRepository configRepository;
@@ -246,7 +249,7 @@ public class TxtImportService {
         // Create project
         ProjectEntity project = new ProjectEntity();
         applyBasicInfo(project, job);
-        project.setDescription("由TXT导入生成");
+        project.setDescription(IMPORT_DESCRIPTION_PLACEHOLDER);
         project.setTotalChapters(chapters.size());
         project.setChaptersPerVolume(job.getChaptersPerVolume() > 0 ? job.getChaptersPerVolume() : 30);
         project.setCurrentStep(WorkflowStep.WORLD_BUILDING);

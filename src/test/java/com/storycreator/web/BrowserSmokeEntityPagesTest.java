@@ -185,10 +185,11 @@ class BrowserSmokeEntityPagesTest extends BrowserSmokeSupport {
         smoke("/tts-fullplay?taskId=" + ttsTaskId, null, "全文收听", true, null);
     }
 
-    // ==================== Workflow (split hub + 6 step pages) ====================
+    // ==================== Workflow (6 step pages) ====================
 
+    /** Hub 已下线：入口 /workflow 应重定向并渲染出第一步「世界观设定」。 */
     @Test
-    void workflowHubPage_rendersStepCards() {
+    void workflowEntry_redirectsToWorldBuilding() {
         smoke("/projects/" + projectId + "/workflow", null, "世界观设定", true, null);
     }
 

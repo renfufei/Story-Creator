@@ -6,6 +6,8 @@
     <title>番外篇</title>
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="/js/common.js"></script>
@@ -15,7 +17,7 @@
         [x-cloak] { display: none !important; }
     </style>
 </head>
-<body>
+<body class="sc-page" data-nav="projects">
 <header id="site-nav"></header>
 
     <script>
@@ -36,14 +38,14 @@
     </script>
 
 
-<div x-data="sideStoryList()" x-init="init()" x-cloak>
+<main class="sc-main container py-4" x-data="sideStoryList()" x-cloak>
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="mb-0">番外篇</h2>
             <small class="text-muted" x-text="projectTitle">项目名</small>
         </div>
         <div>
-            <a :href="'/projects/' + projectId + '/workflow'" class="btn btn-outline-secondary btn-sm me-2">
+            <a :href="'/projects/' + projectId + '/workflow/world-building'" class="btn btn-outline-secondary btn-sm me-2">
                 <i class="bi bi-arrow-left"></i> 返回创作
             </a>
             <button class="btn btn-primary btn-sm" @click="showWizard = true; wizardStep = 1">
@@ -293,7 +295,7 @@ function sideStoryList() {
     };
 }
 </script>
-</div>
+</main>
 
     <script src="/vendor/alpinejs/cdn.min.js" defer></script>
 </body>

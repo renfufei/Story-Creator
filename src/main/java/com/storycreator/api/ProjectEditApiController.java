@@ -260,7 +260,7 @@ public class ProjectEditApiController {
 
         Map<String, Object> body = new HashMap<>();
         body.put("id", project.getId());
-        body.put("redirect", "/projects/" + project.getId() + "/workflow");
+        body.put("redirect", "/projects/" + project.getId() + "/workflow/world-building");
         return ResponseEntity.ok(body);
     }
 

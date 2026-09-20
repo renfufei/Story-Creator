@@ -251,7 +251,10 @@ class PageRenderingIntegrationTest {
                 .contains("id=\"site-nav\"")
                 .contains("/js/common.js")
                 .contains("/js/nav.js")
-                .contains("/api/projects");
+                .contains("/api/projects")
+                .as("首页「导入项目」按钮应指向 TXT 导入页，而非备份导入 /import")
+                .contains("href=\"/import/txt\"")
+                .doesNotContain("href=\"/import\"");
     }
 
     @Test
@@ -452,26 +455,22 @@ class PageRenderingIntegrationTest {
         assertThat(missing.getStatusCode()).as("未知项目 read-data 应 404").isEqualTo(HttpStatus.NOT_FOUND);
     }
 
-    // ==================== Workflow Pages (split into hub + 6 step pages) ====================
+    // ==================== Workflow Pages (6 step pages) ====================
 
-    /** Hub 页：列出 6 个步骤供选择，引导脚本拉取 world-building 数据拿到 projectId/title。 */
+    /**
+     * 工作流入口：Hub 选择页已下线，{@code /workflow} 直接落到第一步「世界观设定」。
+     * TestRestTemplate 会跟随重定向，故以最终落地的页面内容做断言。
+     */
     @Test
-    void workflowHub_rendersSuccessfully() {
+    void workflowEntry_redirectsToWorldBuilding() {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/workflow"), String.class);
-        assertPageOk(response, "workflow-hub");
-        String body = response.getBody();
-        assertThat(body)
-                .as("工作流 Hub 页应通过 workflowHubApp() 渲染，并列出可进入的 6 个步骤页")
-                .contains("workflowHubApp()")
-                .contains("/workflow/world-building")
-                .contains("/workflow/characters")
-                .contains("/workflow/outline")
-                .contains("/workflow/chapters")
-                .contains("/workflow/polishing")
-                .contains("/workflow/proofreading")
-                .as("Hub 引导脚本拉取首步数据")
-                .contains("/workflow/world-building/data");
+        assertPageOk(response, "workflow-entry");
+        assertThat(response.getBody())
+                .as("/workflow 应重定向并渲染 world-building 步骤页（Hub 已下线）")
+                .contains("worldBuildingApp()")
+                .contains("var step = 'world-building'")
+                .doesNotContain("workflowHubApp()");
     }
 
     /** 6 个按步骤拆分的工作流页面各自独立渲染，并通过同步 XHR 拉取自己的引导数据。 */
@@ -1060,8 +1059,23 @@ class PageRenderingIntegrationTest {
                 .doesNotContain("th:action")
                 .as("导入页应挂载导航栏、提交到 /import 并保留 TXT 导入入口")
                 .contains("id=\"site-nav\"")
+                .contains("data-nav=\"import\"")
                 .contains("action=\"/import\"")
-                .contains("/import/txt");
+                .as("备份导入页应提供跳转到 TXT 导入页的按钮")
+                .contains("href=\"/import/txt\"")
+                .contains("TXT导入");
+    }
+
+    @Test
+    void navigationImportEntry_pointsToTxtImportPage() {
+        // 导航栏「导入项目」的默认入口是 TXT 导入页；备份导入（/import）靠页内按钮进入。
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/js/nav.js"), String.class);
+        assertThat(response.getStatusCode()).as("/js/nav.js 应可访问").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("导航栏「导入项目」应指向 /import/txt")
+                .contains("text: '导入项目'")
+                .contains("href: '/import/txt'")
+                .doesNotContain("href: '/import'");
     }
 
     // ==================== 创作指导库 ====================
@@ -1262,6 +1276,10 @@ class PageRenderingIntegrationTest {
         assertThat(body).as("应包含保存并进入逆向工程").contains("saveAndGoToOptions");
         // 完成第 2 步后跳转到按项目定位的逆向选项页
         assertThat(body).as("完成后应跳转逆向选项页").contains("/reverse/options");
+        // 与「备份导入」页（/import）互为入口，避免用户只能靠手改 URL 来回切
+        assertThat(body).as("TXT 导入页应提供跳转到备份导入页的按钮")
+                .contains("href=\"/import\"")
+                .contains("备份导入");
     }
 
     @Test
@@ -1581,6 +1599,41 @@ class PageRenderingIntegrationTest {
         entity.setDescription("probe description");
         entity.setEnabled(true);
         return transactionTemplate.execute(status -> ttsReplacementTemplateRepository.save(entity).getId());
+    }
+
+    // ==================== 页面骨架一致性（防回归） ====================
+
+    /**
+     * 常规静态页必须套统一骨架：{@code body.sc-page} + {@code main.sc-main.container py-4}
+     * + 公共样式 {@code /css/style.css}、{@code /css/app.css}。
+     *
+     * <p>历史上多个页面直接裸放内容（既无容器也无公共 CSS），内容会贴到视口左右边缘、
+     * 背景也与其它页不一致。此用例锁死这层约定，新增页面漏骨架会立刻失败。
+     * 沉浸式全屏页（{@code /read}、{@code /inspect/chapters/{n}}）刻意不套，不在清单内。
+     */
+    @Test
+    void regularPages_shareCommonSkeleton() {
+        List<String> paths = List.of(
+                "/projects/" + projectId + "/expansion",
+                "/projects/" + projectId + "/inspect",
+                "/projects/" + projectId + "/inspect/characters",
+                "/projects/" + projectId + "/side-stories",
+                "/projects/" + projectId + "/side-stories/" + sideStoryId,
+                "/projects/" + projectId + "/inspirations",
+                "/projects/" + projectId + "/inspirations/" + inspirationId,
+                "/projects/" + projectId + "/inspirations/" + inspirationId + "/edit",
+                "/inspirations"
+        );
+        for (String path : paths) {
+            ResponseEntity<String> response = restTemplate.getForEntity(url(path), String.class);
+            assertPageOk(response, path);
+            assertThat(response.getBody())
+                    .as("%s 应套用公共页面骨架（body.sc-page + main.sc-main + 公共样式）", path)
+                    .contains("<body class=\"sc-page\"")
+                    .contains("sc-main container")
+                    .contains("/css/style.css")
+                    .contains("/css/app.css");
+        }
     }
 
     // ==================== Helpers ====================

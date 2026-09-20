@@ -6,6 +6,8 @@
     <title>创作透视</title>
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="/js/common.js"></script>
@@ -15,8 +17,10 @@
         [x-cloak] { display: none !important; }
     </style>
 </head>
-<body x-data="inspectOverview()" x-cloak>
+<body class="sc-page" data-nav="projects">
 <header id="site-nav"></header>
+
+<main class="sc-main container py-4" x-data="inspectOverview()" x-cloak>
 
     <!-- Breadcrumb -->
     <nav aria-label="breadcrumb" class="mb-3">
@@ -32,7 +36,7 @@
             <a :href="'/projects/' + projectId + '/inspect/characters'" class="btn btn-sm btn-outline-primary">
                 <i class="bi bi-people"></i> 角色透视
             </a>
-            <a :href="'/projects/' + projectId + '/workflow'" class="btn btn-sm btn-outline-secondary">
+            <a :href="'/projects/' + projectId + '/workflow/world-building'" class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-arrow-left"></i> 返回创作
             </a>
         </div>
@@ -237,5 +241,6 @@
         }
     </script>
     <script src="/vendor/alpinejs/cdn.min.js" defer></script>
+</main>
 </body>
 </html>

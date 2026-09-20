@@ -6,6 +6,8 @@
     <title>番外创作</title>
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="/js/common.js"></script>
@@ -15,7 +17,7 @@
         [x-cloak] { display: none !important; }
     </style>
 </head>
-<body>
+<body class="sc-page" data-nav="projects">
 <header id="site-nav"></header>
 
     <script>
@@ -36,7 +38,7 @@
     </script>
 
 
-<div x-data="sideStoryWorkflow()" x-init="init()" x-cloak>
+<main class="sc-main container py-4" x-data="sideStoryWorkflow()" x-cloak>
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
@@ -81,7 +83,7 @@
                   x-text="sideStory.status == 'DRAFT' ? '草稿' :
                              sideStory.status == 'OUTLINE_READY' ? '大纲就绪' :
                              sideStory.status == 'IN_PROGRESS' ? '创作中' : '已完成'">状态</span>
-            <a :href="'/projects/' + projectId + '/workflow'" class="btn btn-sm btn-outline-secondary">
+            <a :href="'/projects/' + projectId + '/workflow/world-building'" class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-arrow-left"></i> 返回主线
             </a>
         </div>
@@ -1026,7 +1028,7 @@ function sideStoryWorkflow() {
     };
 }
     </script>
-</div>
+</main>
 
     <script src="/vendor/alpinejs/cdn.min.js" defer></script>
 </body>

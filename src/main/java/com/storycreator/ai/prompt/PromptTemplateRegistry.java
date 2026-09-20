@@ -60,6 +60,7 @@ public class PromptTemplateRegistry {
             Map.entry(PromptSubStep.REVERSE_CHARACTER_LIST, List.of("title", "genre", "arcsInfo", "characterOverview")),
             Map.entry(PromptSubStep.REVERSE_CHARACTER_CARD, List.of("title", "genre", "description", "worldSetting", "roleName", "roleBrief", "previousContext", "cardNumber", "totalCards", "stepGuidance")),
             Map.entry(PromptSubStep.REVERSE_GENRE, List.of("title", "genreOptions", "sampleText")),
+            Map.entry(PromptSubStep.REVERSE_SYNOPSIS, List.of("title", "genre", "sampleText")),
             Map.entry(PromptSubStep.REVERSE_OUTLINE_GENERATION, List.of("title", "genre", "sampledChapters", "chapterCount", "worldSetting", "characters"))
     );
 

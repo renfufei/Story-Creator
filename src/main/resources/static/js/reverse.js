@@ -14,6 +14,8 @@ function reverseMixin() {
         phases: [],
         interrupted: false,
         phaseLabels: {
+            'GENRE': '题材识别',
+            'SYNOPSIS': '故事简介',
             'CHAPTER_OUTLINE': '章节大纲',
             'STORY_ARC': '故事弧线',
             'WORLD': '世界观',
@@ -168,6 +170,37 @@ function reverseMixin() {
         formatWordCount(n) {
             if (n >= 10000) return (n / 10000).toFixed(1) + '万';
             return n;
+        },
+
+        /**
+         * 发起「开始 / 继续逆向工程」请求（选项页与监控页共用）。
+         * 未提交的选项字段由后端沿用 job 上次保存的值，因此监控页可以无参续跑。
+         * @returns {Promise<boolean>} 是否已成功启动
+         */
+        async startReverseRequest() {
+            if (this.starting || !this.jobId) return false;
+            this.starting = true;
+            try {
+                const resp = await fetch('/import/txt/' + this.jobId + '/start-reverse', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        runWorldBuilding: this.runWorldBuilding,
+                        runCharacters: this.runCharacters,
+                        runOutline: this.runOutline,
+                        chaptersPerVolume: this.chaptersPerVolume,
+                        modelConfigId: this.modelConfigId ? parseInt(this.modelConfigId) : null
+                    })
+                });
+                const data = await resp.json();
+                if (data.error) { alert(data.error); return false; }
+                return true;
+            } catch (e) {
+                alert('启动失败: ' + e.message);
+                return false;
+            } finally {
+                this.starting = false;
+            }
         }
     };
 }
@@ -196,28 +229,8 @@ function reverseOptions() {
 
         /** 启动（或继续）逆向工程，成功后跳转到独立的执行监控页。 */
         async startReverse() {
-            if (this.starting) return;
-            this.starting = true;
-            try {
-                const resp = await fetch('/import/txt/' + this.jobId + '/start-reverse', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        runWorldBuilding: this.runWorldBuilding,
-                        runCharacters: this.runCharacters,
-                        runOutline: this.runOutline,
-                        chaptersPerVolume: this.chaptersPerVolume,
-                        modelConfigId: this.modelConfigId ? parseInt(this.modelConfigId) : null
-                    })
-                });
-                const data = await resp.json();
-                if (data.error) { alert(data.error); return; }
-                location.href = '/projects/' + this.projectId + '/reverse/progress';
-            } catch (e) {
-                alert('启动失败: ' + e.message);
-            } finally {
-                this.starting = false;
-            }
+            if (!(await this.startReverseRequest())) return;
+            location.href = '/projects/' + this.projectId + '/reverse/progress';
         }
     });
 }
@@ -243,9 +256,58 @@ function reverseProgress() {
         reconnectTimer: null,
         terminal: false,
 
+        // 逆向选项：直接复用 job 上次保存的选项续跑（后端对未提交的字段沿用旧值）
+        runWorldBuilding: BOOT.runWorldBuilding !== false,
+        runCharacters: BOOT.runCharacters !== false,
+        runOutline: BOOT.runOutline !== false,
+        chaptersPerVolume: BOOT.chaptersPerVolume || 30,
+        modelConfigId: BOOT.modelConfigId || '',
+        starting: false,
+
         init() {
             if (!this.jobId) return;
             this.refreshPlan().then(() => this.watchStatus());
+        },
+
+        /** 是否已全部完成：完成态不再提供「开始」入口，避免误触发重跑。 */
+        get allCompleted() {
+            return this.done || !!(this.plan && this.plan.completed);
+        },
+
+        /** 在监控页直接开始 / 继续逆向工程，成功后原地进入实时监控（无需回选项页）。 */
+        async startReverse() {
+            if (!(await this.startReverseRequest())) return;
+            this.output = '';
+            this.done = false;
+            this.terminal = false;
+            this.interrupted = false;
+            this.active = true; // 立即切到执行态：显示停止按钮、隐藏开始按钮
+            this.phaseText = '启动中';
+            this.phaseBadgeClass = 'bg-primary';
+            this.refreshPlan();
+            this.waitUntilActive(0);
+        },
+
+        /** 后端真正进入运行态有短暂延迟：轮询探测到 active 后再接 SSE。 */
+        waitUntilActive(tries) {
+            setTimeout(async () => {
+                try {
+                    const resp = await fetch('/import/txt/' + this.jobId + '/status');
+                    const d = await resp.json();
+                    if (d.active) {
+                        this.active = true;
+                        this.connectSSE();
+                        return;
+                    }
+                } catch (e) { /* 忽略，继续重试 */ }
+                if (tries < 8) {
+                    this.waitUntilActive(tries + 1);
+                } else {
+                    // 一直没进运行态：回落静态查询，把真实情况（未开始 / 失败）如实展示
+                    this.active = false;
+                    this.watchStatus();
+                }
+            }, 600);
         },
 
         /** 查询任务是否在执行：在跑则接 SSE 实时流，否则展示静态状态。 */

@@ -79,16 +79,16 @@ public class StaticPageController {
     );
 
     /**
-     * 工作流 Hub：列出 6 个步骤供选择。
-     * 兼容旧链接 {@code /projects/{projectId}/workflow?step=X}，重定向到新的按步骤页面。
+     * 工作流入口：Hub 选择页已下线，无 step 参数时直接重定向到第一步（世界观设定）。
+     * 兼容旧链接 {@code /projects/{projectId}/workflow?step=X}，重定向到对应的按步骤页面。
      */
     @GetMapping("/projects/{projectId}/workflow")
     public String workflow(@PathVariable Long projectId,
                            @RequestParam(required = false) String step) {
-        if (step != null && WORKFLOW_STEP_ROUTE.containsKey(step)) {
-            return "redirect:/projects/" + projectId + "/workflow/" + WORKFLOW_STEP_ROUTE.get(step);
-        }
-        return "forward:/pages/workflow/index.html";
+        String route = (step != null && WORKFLOW_STEP_ROUTE.containsKey(step))
+                ? WORKFLOW_STEP_ROUTE.get(step)
+                : WORKFLOW_STEP_ROUTE.get("WORLD_BUILDING");
+        return "redirect:/projects/" + projectId + "/workflow/" + route;
     }
 
     /** 按步骤拆分后的独立工作流页面（world-building/characters/outline/chapters/polishing/proofreading）。 */

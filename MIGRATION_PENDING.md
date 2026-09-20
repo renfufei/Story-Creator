@@ -19,7 +19,7 @@
 | 项目编辑 | `/projects/{id}/edit` | `pages/project-form.html` | — |
 | 灵感 | `/projects/{id}/inspirations*` | `pages/inspirations/*` | `InspirationController` |
 | 设置 | `/settings` | `pages/settings.html` | — |
-| 工作流（六步） | `/projects/{id}/workflow` | `pages/workflow.html` | `WorkflowController` → `/workflow/data` |
+| 工作流（六步，已拆 6 个分步页） | `/projects/{id}/workflow` → 302 `/workflow/world-building`（Hub 页已下线） | `pages/workflow/*.html` | `StaticPageController` 重定向；数据 → `/workflow/{step}/data` |
 | 阅读 | `/projects/{id}/read` | `pages/reader.html` | 新增 `ReaderApiController` → `/api/projects/{id}/read-data` |
 | 番外列表 | `/projects/{id}/side-stories` | `pages/side-story-list.html` | `SideStoryController`（`@RestController`）→ `/list-data` |
 | 番外详情/编辑 | `/projects/{id}/side-stories/{ssid}` | `pages/side-story.html` | `SideStoryController` 复用 `SideStoryApiController` 业务 → `/{id}/data` |

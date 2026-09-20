@@ -14,7 +14,7 @@
         { key: 'chat', text: '聊天', href: '/chat', icon: 'bi-chat-dots' },
         { key: 'tts', text: '语音导出', href: '/tts-export', icon: 'bi-megaphone' },
         { key: 'learn', text: '教学', href: '/learn', icon: 'bi-mortarboard' },
-        { key: 'import', text: '导入项目', href: '/import', icon: 'bi-upload' }
+        { key: 'import', text: '导入项目', href: '/import/txt', icon: 'bi-upload' }
     ];
 
     var SETTING_ITEMS = [

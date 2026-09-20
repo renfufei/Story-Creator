@@ -258,6 +258,9 @@ public class PromptExploreService {
                             .map(com.storycreator.core.domain.Genre::getDisplayName)
                             .collect(java.util.stream.Collectors.joining("、")),
                     "sampleText", "(导入时自动填充：前几章正文样本)");
+            case REVERSE_SYNOPSIS -> Map.of("title", safe(project.getTitle()),
+                    "genre", project.getGenre() != null ? project.getGenre().getDisplayName() : "",
+                    "sampleText", "(导入时自动填充：前几章正文样本)");
             case WORLD_BUILDING_PRIMARY, CHAPTER_WRITING_PRIMARY, POLISHING_PRIMARY ->
                     throw new IllegalStateException("PRIMARY sub-steps should be intercepted before reaching switch");
         };

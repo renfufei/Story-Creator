@@ -160,8 +160,8 @@ class TxtReverseEngineeringServiceTest {
 
         assertThat(plan.totalChapters()).isEqualTo(6);
         assertThat(plan.totalVolumes()).isEqualTo(2);
-        // 6 章 + 2 卷 + 4 汇总（世界/角色汇总/角色卡预估1/总纲）
-        assertThat(plan.totalUnits()).isEqualTo(12);
+        // 6 章 + 2 卷 + 5 汇总（简介/世界/角色汇总/角色卡预估1/总纲）
+        assertThat(plan.totalUnits()).isEqualTo(13);
         assertThat(plan.completedUnits()).isEqualTo(2);
         assertThat(plan.resumable()).isTrue();
         assertThat(plan.completed()).isFalse();
@@ -190,10 +190,15 @@ class TxtReverseEngineeringServiceTest {
         addReverseCharacter(projectId, "角色汇总内容");
         addCharacterCard(projectId, 1, "姓名：林动\n身份：家族少年");
         addStoryOutline(projectId, "故事总纲内容");
+        // 简介已生成（非占位）→ SYNOPSIS 阶段视为完成
+        projectRepository.findById(projectId).ifPresent(p -> {
+            p.setDescription("一个少年的逆天崛起之路。");
+            projectRepository.save(p);
+        });
 
         ReProtocol.RePlan plan = service.plan(job.getId());
 
-        // 6 章 + 2 卷 + 4 汇总（世界/角色汇总/角色卡/总纲）
+        // 6 章 + 2 卷 + 4 汇总（世界/角色汇总/角色卡/总纲）；简介已完成 → SYNOPSIS 不可执行，排除在总数外
         assertThat(plan.completedUnits()).isEqualTo(12);
         assertThat(plan.completed()).isTrue();
         assertThat(plan.resumable()).isFalse();
@@ -213,8 +218,8 @@ class TxtReverseEngineeringServiceTest {
         assertThat(phaseOf(plan, "WORLD").status()).isEqualTo("SKIPPED");
         assertThat(phaseOf(plan, "CHARACTERS").status()).isEqualTo("SKIPPED");
         assertThat(phaseOf(plan, "STORY_OUTLINE").status()).isEqualTo("SKIPPED");
-        // 只有章节阶段参与总进度
-        assertThat(plan.totalUnits()).isEqualTo(6);
+        // 只有章节阶段与简介阶段参与总进度（简介未生成，始终可执行）
+        assertThat(plan.totalUnits()).isEqualTo(7);
     }
 
     @Test
@@ -259,9 +264,9 @@ class TxtReverseEngineeringServiceTest {
                     assertThat(i.body()).isEqualTo("第一章已完成大纲");
                 });
 
-        // 跳过已完成：章节阶段实际只发了 5 次 LLM 请求；弧线阶段再 2 次；角色清单提取再 1 次
+        // 跳过已完成：章节阶段实际只发了 5 次 LLM 请求；弧线阶段再 2 次；角色清单提取再 1 次；简介再 1 次
         // （默认响应无编号清单 → 角色卡阶段 0 张卡，直接跳过）
-        assertThat(provider.generateCallCount()).isEqualTo(8);
+        assertThat(provider.generateCallCount()).isEqualTo(9);
 
         // 6 章大纲最终全部落库（含新补的 5 章）
         assertThat(chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId)).hasSize(6);
@@ -298,6 +303,11 @@ class TxtReverseEngineeringServiceTest {
         addReverseCharacter(projectId, "角色");
         addCharacterCard(projectId, 1, "姓名：林动\n身份：家族少年");
         addStoryOutline(projectId, "总纲");
+        // 简介已生成 → SYNOPSIS 阶段自动跳过，不产生 LLM 调用
+        projectRepository.findById(projectId).ifPresent(p -> {
+            p.setDescription("一个少年的逆天崛起之路。");
+            projectRepository.save(p);
+        });
 
         List<String> out = service.runReverseEngineering(job.getId(), projectId, () -> false)
                 .collectList().block();
@@ -345,6 +355,38 @@ class TxtReverseEngineeringServiceTest {
     }
 
     @Test
+    void runReverseEngineering_synopsisPlaceholderTreatedAsPendingAndGenerated() {
+        Long projectId = newProject();
+        TxtImportJobEntity job = newJob(projectId, 3, false, false, false);
+        addChapters(job.getId(), 1);
+        // 模拟导入建项目时写入的占位简介
+        projectRepository.findById(projectId).ifPresent(p -> {
+            p.setDescription(TxtImportService.IMPORT_DESCRIPTION_PLACEHOLDER);
+            projectRepository.save(p);
+        });
+
+        // 占位简介 → SYNOPSIS 待执行
+        ReProtocol.RePlan plan = service.plan(job.getId());
+        assertThat(phaseOf(plan, "SYNOPSIS").status()).isEqualTo("PENDING");
+        assertThat(phaseOf(plan, "SYNOPSIS").runnable()).isTrue();
+
+        provider.response = "故事简介：\n一个少年在乱世中崛起，历经磨难，终成一代强者的热血故事。";
+
+        service.runReverseEngineering(job.getId(), projectId, () -> false).collectList().block();
+
+        // 真实简介写回项目（占位文案被替换、前缀被清洗）
+        assertThat(projectRepository.findById(projectId).orElseThrow().getDescription())
+                .isEqualTo("一个少年在乱世中崛起，历经磨难，终成一代强者的热血故事。");
+        assertThat(reStepRepository.findByJobIdAndPhase(job.getId(), "SYNOPSIS").orElseThrow().getStatus())
+                .isEqualTo("COMPLETED");
+
+        // 续跑：简介已生成，SYNOPSIS 阶段不再执行
+        ReProtocol.RePlan replan = service.plan(job.getId());
+        assertThat(phaseOf(replan, "SYNOPSIS").status()).isEqualTo("COMPLETED");
+        assertThat(phaseOf(replan, "SYNOPSIS").runnable()).isFalse();
+    }
+
+    @Test
     void runReverseEngineering_parsesSummaryAndDeduplicatesCharacterNames() {
         Long projectId = newProject();
         TxtImportJobEntity job = newJob(projectId, 3, false, false, false);
@@ -375,7 +417,7 @@ class TxtReverseEngineeringServiceTest {
 
         // 清单提取出 2 人 → 2 张卡（2 次流式卡片调用）
         assertThat(provider.streamCallCount()).isEqualTo(5); // 世界1 + 角色汇总1 + 卡片2 + 总纲1
-        assertThat(provider.generateCallCount()).isEqualTo(5); // 章节3 + 弧线1 + 角色清单1
+        assertThat(provider.generateCallCount()).isEqualTo(6); // 简介1 + 章节3 + 弧线1 + 角色清单1
 
         List<CharacterEntity> chars = characterRepository.findByProjectIdOrderBySortOrder(projectId);
         assertThat(chars).hasSize(3); // 汇总(sortOrder=0) + 2 张独立卡

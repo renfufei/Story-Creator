@@ -597,21 +597,3 @@ function polishingApp() {
 function proofreadingApp() {
     return workflowApp();
 }
-
-// Hub 页面入口：仅展示步骤导航卡片，轻量、无重逻辑。
-// 引导脚本先拉取 world-building 数据以拿到 projectId / projectTitle，这里直接读取。
-function workflowHubApp() {
-    const d = window.__WORKFLOW_DATA__ || {};
-    return {
-        projectId: d.projectId || 0,
-        projectTitle: d.projectTitle || '',
-        stepList: [
-            { name: 'WORLD_BUILDING', label: '世界观设定', order: 1, route: 'world-building' },
-            { name: 'CHARACTER_DESIGN', label: '角色设计', order: 2, route: 'characters' },
-            { name: 'OUTLINE_GENERATION', label: '大纲生成', order: 3, route: 'outline' },
-            { name: 'CHAPTER_WRITING', label: '分章节写作', order: 4, route: 'chapters' },
-            { name: 'POLISHING', label: '润色修改', order: 5, route: 'polishing' },
-            { name: 'PROOFREADING', label: '校对精修', order: 6, route: 'proofreading' },
-        ],
-    };
-}

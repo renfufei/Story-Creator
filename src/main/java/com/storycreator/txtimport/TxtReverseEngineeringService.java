@@ -195,6 +195,7 @@ public class TxtReverseEngineeringService {
         int doneVolumes = 0;
         int doneCharCards = 0;
         boolean genreDone = false;
+        boolean synopsisDone = false;
         boolean worldDone = false;
         boolean charsDone = false;
         boolean outlineDone = false;
@@ -203,6 +204,11 @@ public class TxtReverseEngineeringService {
             // 题材已明确（非空且非「其他」）视为完成；否则由 GENRE 阶段识别
             genreDone = projectRepository.findById(projectId)
                     .map(p -> p.getGenre() != null && p.getGenre() != Genre.OTHER)
+                    .orElse(false);
+            // 简介已生成（非空且非导入占位文案）视为完成；占位/空由 SYNOPSIS 阶段生成
+            synopsisDone = projectRepository.findById(projectId)
+                    .map(p -> hasText(p.getDescription())
+                            && !TxtImportService.IMPORT_DESCRIPTION_PLACEHOLDER.equals(p.getDescription()))
                     .orElse(false);
             for (ChapterOutlineEntity co : chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId)) {
                 if (hasText(co.getSummary())) doneChapters++;
@@ -223,6 +229,7 @@ public class TxtReverseEngineeringService {
 
         List<ReProtocol.PhasePlan> phases = new ArrayList<>();
         phases.add(phasePlan(RePhase.GENRE, 1, genreDone ? 1 : 0, !genreDone));
+        phases.add(phasePlan(RePhase.SYNOPSIS, 1, synopsisDone ? 1 : 0, !synopsisDone));
         phases.add(phasePlan(RePhase.CHAPTER_OUTLINE, totalChapters, doneChapters, true));
         phases.add(phasePlan(RePhase.STORY_ARC, totalVolumes, doneVolumes, needArc));
         phases.add(phasePlan(RePhase.WORLD, 1, worldDone ? 1 : 0, job.isRunWorldBuilding()));
@@ -373,6 +380,8 @@ public class TxtReverseEngineeringService {
         Flux<String> flux = switch (phase) {
             case GENRE -> runGenreDetection(job, projectId, phase, chapters, title,
                     genreRef, resolved, cancelled);
+            case SYNOPSIS -> runSynopsis(job, projectId, phase, chapters, title,
+                    genre, resolved, cancelled);
             case CHAPTER_OUTLINE -> runChapterOutlines(job, projectId, phase, chapters, title,
                     genre, resolved, perVolume, cancelled);
             case STORY_ARC -> runStoryArcs(job, projectId, phase, chapters.size(), title,
@@ -633,9 +642,72 @@ public class TxtReverseEngineeringService {
         return Flux.just(ReProtocol.note(phase, note), ReProtocol.progress(1, 1));
     }
 
-    /** 从 AI 输出中提取题材：优先取「题材：xx」，失败时接受短整句；匹配显示名或枚举名，含包含匹配兜底。 */
-    private Genre extractGenre(String raw) {
+    // ------------------------------------------------------------------
+    // 阶段 0.5：故事简介（题材识别之后，为项目生成 100-200 字简介替换占位文案）
+    // ------------------------------------------------------------------
+
+    private Flux<String> runSynopsis(TxtImportJobEntity job, Long projectId, RePhase phase,
+                                     List<TxtImportChapterEntity> chapters, String title, Genre genre,
+                                     AiProviderRouter.ResolvedModel resolved,
+                                     BooleanSupplier cancelled) {
+        if (cancelled.getAsBoolean()) {
+            return Flux.empty();
+        }
+        // 与题材识别同源取样：前 3 章正文（每章截断），足够概括且控制上下文长度
+        StringBuilder sample = new StringBuilder();
+        for (TxtImportChapterEntity ch : chapters.stream().limit(GENRE_SAMPLE_CHAPTERS).toList()) {
+            String body = truncateNullable(ch.getContent(), GENRE_SAMPLE_CHARS_PER_CHAPTER);
+            if (!hasText(body)) {
+                continue;
+            }
+            if (sample.length() > 0) {
+                sample.append("\n\n");
+            }
+            sample.append("【").append(safe(ch.getTitle())).append("】\n").append(body);
+        }
+        Map<String, String> vars = Map.of(
+                "title", safe(title),
+                "genre", genreName(genre),
+                "sampleText", sample.length() == 0 ? "（无章节正文）" : sample.toString());
+
+        String raw = callLlm(resolved, projectId, WorkflowStep.WORLD_BUILDING,
+                PromptSubStep.REVERSE_SYNOPSIS, Genre.OTHER, vars, 512, 0.4);
+        String synopsis = cleanSynopsis(raw);
+
+        // 写回项目 description，替换「由TXT导入生成」占位；续跑扫描据此判定完成
+        String finalSynopsis = hasText(synopsis) ? synopsis
+                : TxtImportService.IMPORT_DESCRIPTION_PLACEHOLDER;
+        projectRepository.findById(projectId).ifPresent(p -> {
+            p.setDescription(finalSynopsis);
+            projectRepository.save(p);
+        });
+
+        updateStepProgress(job.getId(), phase, 1);
+        String note = hasText(synopsis)
+                ? "AI 生成故事简介完成（" + synopsis.length() + " 字）"
+                : "AI 未生成有效简介，保留占位文案";
+        log.info("[Import:{}] {}", job.getId(), note);
+        return Flux.just(ReProtocol.note(phase, note), ReProtocol.progress(1, 1));
+    }
+
+    /** 清洗简介输出：去「简介：/故事简介：」前缀、首尾引号，换行折叠为空格，超长截断。 */
+    private String cleanSynopsis(String raw) {
         if (!hasText(raw)) {
+            return "";
+        }
+        String s = raw.trim();
+        s = s.replaceFirst("^(故事简介|简介)[:：]\\s*", "");
+        s = s.replaceAll("^[\"“”]+|[\"“”]+$", "");
+        s = s.replaceAll("\\s*\\n+\\s*", " ");
+        s = s.trim();
+        if (s.length() > 300) {
+            s = s.substring(0, 300);
+        }
+        return s;
+    }
+
+    /** 从 AI 输出中提取题材：优先取「题材：xx」，失败时接受短整句；匹配显示名或枚举名，含包含匹配兜底。 */
+    private Genre extractGenre(String raw) {        if (!hasText(raw)) {
             return null;
         }
         String token = null;

@@ -26,10 +26,10 @@ class PromptSubStepTest {
     }
 
     @Test
-    void totalSubStepCountIs33() {
+    void totalSubStepCountIs34() {
         // 25 个通用子步骤 + 3 个旧版逆向子步骤 + 5 个 TXT 导入逐级汇总子步骤
-        // + 3 个逆向工程新增子步骤（REVERSE_CHARACTER_LIST/REVERSE_CHARACTER_CARD/REVERSE_GENRE）
-        assertThat(PromptSubStep.values()).hasSize(33);
+        // + 4 个逆向工程新增子步骤（REVERSE_CHARACTER_LIST/REVERSE_CHARACTER_CARD/REVERSE_GENRE/REVERSE_SYNOPSIS）
+        assertThat(PromptSubStep.values()).hasSize(34);
     }
 
     @Test

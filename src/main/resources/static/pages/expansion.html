@@ -6,6 +6,8 @@
     <title>情节拓展</title>
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="/js/common.js"></script>
@@ -15,7 +17,7 @@
         [x-cloak] { display: none !important; }
     </style>
 </head>
-<body>
+<body class="sc-page" data-nav="projects">
 <header id="site-nav"></header>
 
     <script>
@@ -36,14 +38,13 @@
     </script>
 
 
-<div>
-<div x-data="expansionPage()" x-init="init()">
+<main class="sc-main container py-4" x-data="expansionPage()">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h4 class="mb-0">情节拓展</h4>
             <small class="text-muted" x-text="projectTitle">项目名</small>
         </div>
-        <a :href="'/projects/' + PROJECT_ID + '/workflow'" class="btn btn-sm btn-outline-secondary">
+        <a :href="'/projects/' + PROJECT_ID + '/workflow/world-building'" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> 返回创作
         </a>
     </div>
@@ -233,7 +234,7 @@
             </template>
         </div>
     </div>
-</div>
+</main>
 
 <script>
     const PROJECT_ID = window.__EXPANSION_DATA__.projectId;
@@ -637,7 +638,6 @@
         };
     }
 </script>
-</div>
 
     <script src="/vendor/alpinejs/cdn.min.js" defer></script>
 </body>

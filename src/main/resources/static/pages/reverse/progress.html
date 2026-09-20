@@ -36,7 +36,7 @@ window.__REVERSE_DATA__ = (function () {
 <header id="site-nav"></header>
 
 <main class="sc-main container py-4">
-<div x-data="reverseProgress()" x-init="init()">
+<div x-data="reverseProgress()">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 class="mb-0"><i class="bi bi-arrow-up-right-circle"></i> 逆向工程 · 执行监控</h2>
         <div class="d-flex gap-2">
@@ -61,6 +61,15 @@ window.__REVERSE_DATA__ = (function () {
                 <div class="d-flex align-items-center gap-2">
                     <span class="badge" :class="phaseBadgeClass"
                           x-text="phaseText + (progressText ? ' ' + progressText : '')"></span>
+                    <!-- 运行中 → 停止；未运行且未全部完成 → 开始 / 继续（沿用 job 里保存的选项） -->
+                    <button class="btn btn-sm btn-outline-danger" @click="stopReverse()"
+                            x-show="active" x-cloak>
+                        <i class="bi bi-stop-fill"></i> 停止
+                    </button>
+                    <button class="btn btn-sm btn-primary" @click="startReverse()"
+                            x-show="!active && !allCompleted" :disabled="starting" x-cloak>
+                        <i class="bi bi-play-fill"></i> <span x-text="startButtonText"></span>
+                    </button>
                     <button class="btn btn-sm btn-outline-secondary" @click="refreshPlan()" :disabled="active">
                         <i class="bi bi-arrow-clockwise"></i> 刷新
                     </button>
@@ -90,16 +99,14 @@ window.__REVERSE_DATA__ = (function () {
                 </div>
                 <div class="text-muted small mt-2" x-show="!active && !output">
                     <i class="bi bi-info-circle"></i>
-                    <span x-text="plan && plan.completedUnits > 0 ? '任务未在运行。已完成的产出可在工作流各步骤页查看；点击下方「逆向选项」可继续或重跑。' : '任务尚未开始，请先到「逆向选项」页启动。'"></span>
+                    <span x-text="plan && plan.completedUnits > 0 ? '任务未在运行。已完成的产出可在工作流各步骤页查看；点击上方「继续执行」可接着跑完剩余部分。' : '任务尚未开始，点击上方「开始逆向工程」即可启动（沿用「逆向选项」页保存的选项）。'"></span>
                 </div>
 
                 <div class="mt-3 d-flex justify-content-between align-items-center">
                     <div>
-                        <button class="btn btn-outline-danger btn-sm" @click="stopReverse()" x-show="active">
-                            <i class="bi bi-stop-fill"></i> 停止（已完成的进度会保留）
-                        </button>
-                        <span class="text-muted small ms-2" x-show="!active && interrupted">
-                            <i class="bi bi-info-circle"></i> 上次执行被中断，可到逆向选项页继续
+                        <span class="text-muted small" x-show="!active && interrupted">
+                            <i class="bi bi-info-circle"></i>
+                            上次执行被中断，点击上方「继续执行」可接着完成剩余部分（已完成进度保留）
                         </span>
                     </div>
                     <div>
@@ -107,7 +114,7 @@ window.__REVERSE_DATA__ = (function () {
                            :href="'/projects/' + projectId + '/reverse/options'">
                             <i class="bi bi-arrow-left"></i> 逆向选项
                         </a>
-                        <a :href="'/projects/' + projectId + '/workflow'" class="btn btn-success btn-sm">
+                        <a :href="'/projects/' + projectId + '/workflow/world-building'" class="btn btn-success btn-sm">
                             <i class="bi bi-arrow-right"></i> 进入项目创作
                         </a>
                     </div>
