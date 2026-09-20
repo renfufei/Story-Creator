@@ -432,7 +432,19 @@ class PageRenderingIntegrationTest {
         assertStaticPage(response, "reader", "readerApp()");
         assertThat(response.getBody())
                 .as("阅读页应通过同步 XHR 拉取引导数据")
-                .contains("/read-data");
+                .contains("/read-data")
+                .as("阅读页应内置护眼背景色选择器：浮动按钮 + 弹出层 + 预设 + 本地记忆")
+                .contains("class=\"bg-fab\"")
+                .contains("阅读背景色")
+                .contains("class=\"bg-popover\"")
+                .contains("bgPresets: [")
+                .contains("--reader-bg")
+                .contains("reader_bg")
+                .as("侧边栏与「恢复默认」按钮也要跟随背景色（侧栏配色由 mixHex 从底色+文字色推导）")
+                .contains("--reader-sidebar-bg")
+                .contains("--reader-sidebar-muted")
+                .contains("mixHex(p.bg, p.fg")
+                .contains("class=\"btn btn-sm w-100 bg-reset-btn\"");
     }
 
     @Test
@@ -965,6 +977,32 @@ class PageRenderingIntegrationTest {
                 .contains("workflowTagNamesCsv");
     }
 
+    /**
+     * 逆向工程的内置模板原先没有登记流程标签（workflowTagNamesCsv 为空），
+     * 导致 /prompts 页面既筛不出【逆向】，流程列也显示为空。
+     */
+    @Test
+    void promptsData_reverseTemplatesCarryReverseWorkflowTag() throws Exception {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/prompts/data"), String.class);
+        assertThat(response.getStatusCode()).as("/prompts/data 应返回 200").isEqualTo(HttpStatus.OK);
+
+        var root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(response.getBody());
+        int reverseCount = 0;
+        for (var t : root.get("templates")) {
+            String subStep = t.path("subStep").asText("");
+            if (!subStep.startsWith("REVERSE_")) continue;
+            reverseCount++;
+            assertThat(t.path("workflowTagNamesCsv").asText())
+                    .as("逆向模板 %s 应带 REVERSE 流程标签（否则页面【逆向】筛选命中不到）", subStep)
+                    .contains("REVERSE");
+        }
+        assertThat(reverseCount).as("应存在逆向子步骤模板").isGreaterThan(0);
+
+        assertThat(response.getBody())
+                .as("/prompts/data 应下发【逆向】标签的展示名")
+                .contains("\"displayName\":\"逆向\"");
+    }
+
     @Test
     void promptExplore_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/prompts/explore"), String.class);
@@ -1092,6 +1130,49 @@ class PageRenderingIntegrationTest {
                 .contains("id=\"site-nav\"")
                 .contains("/settings/guidances/data")
                 .contains("__GUIDANCES_DATA__");
+    }
+
+    @Test
+    void guidances_usesCardLayoutWithHiddenSelectionControls() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/settings/guidances"), String.class);
+        assertPageOk(response, "guidances");
+        assertThat(response.getBody())
+                .as("列表应改为卡片式布局")
+                .contains("sc-guidance-grid")
+                .contains("sc-guidance-card")
+                .as("勾选工具条默认不展示：勾选框、确认/取消导出仅进入导出模式后由脚本显示")
+                .contains("id=\"exportBar\"")
+                .contains("id=\"checkAll\"")
+                .contains("id=\"checkAllText\"")
+                .contains("id=\"btnExportConfirm\"")
+                .contains("id=\"btnExportCancel\"")
+                .as("全选控件应是带文字提示的独立按钮（放在最左）")
+                .contains("class=\"sc-selectall\"")
+                .as("删除入口应从列表页移除，只保留在编辑页")
+                .doesNotContain("/delete");
+    }
+
+    @Test
+    void guidanceEdit_deleteEntryMovedToEditPage() {
+        Long id = createGuidance("__probe_guidance_delete__", WorkflowStep.WORLD_BUILDING, "delete probe");
+        try {
+            ResponseEntity<String> page = restTemplate.getForEntity(
+                    url("/settings/guidances/" + id + "/edit"), String.class);
+            assertPageOk(page, "guidance-edit");
+            assertThat(page.getBody())
+                    .as("删除按钮应出现在编辑页（列表页已移除）")
+                    .contains("id=\"deleteForm\"")
+                    .contains("btn-outline-danger");
+
+            restTemplate.postForEntity(url("/settings/guidances/" + id + "/delete"), null, String.class);
+            assertThat(guidanceLibraryRepository.findById(id))
+                    .as("编辑页删除入口实际生效：库里应查不到该创作指导")
+                    .isEmpty();
+        } finally {
+            if (guidanceLibraryRepository.existsById(id)) {
+                guidanceLibraryRepository.deleteById(id);
+            }
+        }
     }
 
     @Test
@@ -1280,6 +1361,10 @@ class PageRenderingIntegrationTest {
         assertThat(body).as("TXT 导入页应提供跳转到备份导入页的按钮")
                 .contains("href=\"/import\"")
                 .contains("备份导入");
+        // 第 2 步只做预览，必须回显第 1 步填写的项目名称，否则用户不知道自己在导入哪本书
+        assertThat(body).as("第 2 步应回显项目名称")
+                .contains("项目名称")
+                .contains("x-text=\"title\"");
     }
 
     @Test

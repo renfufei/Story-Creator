@@ -3,7 +3,8 @@ package com.storycreator.ai.prompt;
 public enum TemplateWorkflowTag {
     STANDARD("标准"),
     IMAGE("图像"),
-    SIDE_STORY("番外");
+    SIDE_STORY("番外"),
+    REVERSE("逆向");
 
     private final String displayName;
 

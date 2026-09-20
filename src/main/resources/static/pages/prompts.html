@@ -58,6 +58,7 @@ window.__PROMPTS_DATA__ = (function () {
             <button type="button" class="btn btn-outline-primary btn-sm" data-workflow="STANDARD">标准</button>
             <button type="button" class="btn btn-outline-secondary btn-sm" data-workflow="IMAGE">图像</button>
             <button type="button" class="btn btn-outline-warning btn-sm" data-workflow="SIDE_STORY">番外</button>
+            <button type="button" class="btn btn-outline-info btn-sm" data-workflow="REVERSE">逆向</button>
         </div>
     </div>
 
@@ -205,6 +206,7 @@ window.__PROMPTS_DATA__ = (function () {
     function tagClass(name) {
         if (name === 'STANDARD') return 'bg-primary';
         if (name === 'SIDE_STORY') return 'bg-warning text-dark';
+        if (name === 'REVERSE') return 'bg-info text-dark';
         return 'bg-secondary';
     }
 

@@ -68,7 +68,7 @@ window.__TXT_IMPORT_DATA__ = (function () {
                     <input type="text" class="form-control" x-model="fileBaseName" readonly title="可选中拷贝部分信息">
                 </div>
                 <div class="mb-3">
-                    <label class="form-label">项目标题</label>
+                    <label class="form-label">项目名称</label>
                     <input type="text" class="form-control" x-model="title" placeholder="默认取文件名">
                 </div>
                 <div class="mb-3">
@@ -124,11 +124,17 @@ window.__TXT_IMPORT_DATA__ = (function () {
     <!-- Step 2: Preview & Adjust -->
     <div x-show="step === 2">
         <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center">
                 <strong>第二步：预览 &amp; 调整章节</strong>
                 <div>
                     <span class="badge bg-info me-2" x-text="'共 ' + chapters.length + ' 章'"></span>
                     <span class="badge bg-secondary" x-text="formatWordCount(totalWordCount) + ' 字'"></span>
+                </div>
+                <!-- 第 1 步填写的项目名称：第 2 步只做预览，这里回显以免用户忘了自己在导入哪本书 -->
+                <div class="w-100 mt-1 small d-flex align-items-center flex-wrap gap-1" x-show="title" x-cloak>
+                    <i class="bi bi-book text-muted"></i>
+                    <span class="text-muted">项目名称：</span>
+                    <span class="fw-semibold" x-text="title"></span>
                 </div>
             </div>
             <div class="card-body">

@@ -31,20 +31,39 @@ window.__GUIDANCES_DATA__ = (function () {
 <main class="sc-main container py-4" id="main">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
         <h2 class="mb-0">创作指导库</h2>
-        <div>
-            <a href="/settings" class="btn btn-outline-secondary btn-sm me-2">
+        <div class="d-flex flex-wrap gap-2">
+            <a href="/settings" class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-arrow-left"></i> 返回设置
             </a>
-            <button type="button" id="btnExport" class="btn btn-outline-success btn-sm me-1" style="display:none;">
+            <button type="button" id="btnExport" class="btn btn-outline-success btn-sm" style="display:none;">
                 <i class="bi bi-download"></i> 导出
             </button>
-            <button type="button" id="btnImport" class="btn btn-outline-info btn-sm me-1">
+            <button type="button" id="btnImport" class="btn btn-outline-info btn-sm">
                 <i class="bi bi-upload"></i> 导入
             </button>
             <button type="button" id="btnNew" class="btn btn-primary btn-sm">
                 <i class="bi bi-plus"></i> 新建指导
             </button>
         </div>
+    </div>
+
+    <!-- 导出（勾选）模式工具条：全选在最左，确认/取消导出居中，计数在右 -->
+    <div class="sc-export-bar mb-3" id="exportBar" style="display:none;">
+        <div class="sc-export-left">
+            <label class="sc-selectall" id="selectAllLabel">
+                <input class="form-check-input" type="checkbox" id="checkAll">
+                <span id="checkAllText">全选</span>
+            </label>
+        </div>
+        <div class="sc-export-center">
+            <button type="button" id="btnExportConfirm" class="btn btn-success btn-sm">
+                <i class="bi bi-check2-circle"></i> 确认导出
+            </button>
+            <button type="button" id="btnExportCancel" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-x-circle"></i> 取消导出
+            </button>
+        </div>
+        <div class="sc-export-right text-muted small" id="exportCount"></div>
     </div>
 
     <!-- 隐藏的导入表单（原生 multipart POST） -->
@@ -80,11 +99,14 @@ window.__GUIDANCES_DATA__ = (function () {
 
     <!-- 列表 -->
     <div class="card">
-        <div class="card-header">
-            <strong><i class="bi bi-journal-text"></i> 指导列表</strong>
-            <small class="text-muted ms-2">可从工作流页面"存为通用"按钮快速保存，也可在此手动管理</small>
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span>
+                <strong><i class="bi bi-journal-text"></i> 指导列表</strong>
+                <small class="text-muted ms-2 d-none d-lg-inline">可从工作流页面"存为通用"按钮快速保存，也可在此手动管理</small>
+            </span>
+            <span class="text-muted small" id="listMeta"></span>
         </div>
-        <div class="card-body p-0" id="listArea"></div>
+        <div class="card-body" id="listArea"></div>
     </div>
 </main>
 
@@ -97,10 +119,22 @@ window.__GUIDANCES_DATA__ = (function () {
 
     var data = window.__GUIDANCES_DATA__ || { items: [], itemIds: [], steps: [] };
     var items = data.items || [];
-    var allIds = (data.itemIds || []).map(String);
-    var selectedIds = allIds.slice();
-    var main = document.getElementById('main');
     var listArea = document.getElementById('listArea');
+    var exportBar = document.getElementById('exportBar');
+    var btnExport = document.getElementById('btnExport');
+    var btnImport = document.getElementById('btnImport');
+    var btnNew = document.getElementById('btnNew');
+    var checkAll = document.getElementById('checkAll');
+    var checkAllText = document.getElementById('checkAllText');
+    var exportCount = document.getElementById('exportCount');
+
+    /* 勾选（导出）模式：默认关闭——勾选框、确认/取消导出都不展示 */
+    var exportMode = false;
+    /* 已勾选条目 id（字符串，避免 Number / String 比较踩坑） */
+    var selectedIds = [];
+
+    function idOf(it) { return String(it.id); }
+    function allItemIds() { return items.map(idOf); }
 
     /* ===================== 步骤下拉 ===================== */
     function fillSteps() {
@@ -133,57 +167,117 @@ window.__GUIDANCES_DATA__ = (function () {
         document.getElementById('flashArea').innerHTML = html;
     }
 
-    /* ===================== 列表渲染 ===================== */
+    /* ===================== 卡片渲染 ===================== */
+    function cardHtml(it) {
+        var id = idOf(it);
+        var checked = selectedIds.indexOf(id) >= 0;
+        var editHref = '/settings/guidances/' + it.id + '/edit';
+        var title = exportMode
+            ? '<span class="sc-guidance-title">' + SC.escape(it.name) + '</span>'
+            : '<a class="sc-guidance-title" href="' + editHref + '">' + SC.escape(it.name) + '</a>';
+        var cls = 'sc-guidance-card' + (exportMode ? ' sc-selectable' : '') + (exportMode && checked ? ' is-selected' : '');
+        var attrs = exportMode
+            ? ' role="button" tabindex="0" aria-pressed="' + checked + '" title="点击切换勾选状态"'
+            : '';
+        var checkBox = exportMode
+            ? '<input type="checkbox" class="form-check-input sc-guidance-check" tabindex="-1"' + (checked ? ' checked' : '') + '>'
+            : '';
+        var editBtn = exportMode ? '' :
+            '<a class="btn btn-sm btn-outline-primary" href="' + editHref + '">' +
+            '<i class="bi bi-pencil"></i> 编辑</a>';
+        var body = it.guidance || it.preview || '（暂无内容）';
+
+        return '<div class="' + cls + '" data-id="' + SC.escape(id) + '"' + attrs + '>' +
+            '<div class="sc-guidance-body">' +
+                '<div class="sc-guidance-head">' +
+                    checkBox + title +
+                    '<span class="badge bg-info sc-guidance-step">' + SC.escape(it.stepLabel) + '</span>' +
+                '</div>' +
+                '<p class="sc-guidance-preview">' + SC.escape(body) + '</p>' +
+                '<div class="sc-guidance-foot">' +
+                    '<span class="text-muted small"><i class="bi bi-clock"></i> ' +
+                        SC.escape(SC.fmt.datetime(it.updatedAt)) + '</span>' +
+                    editBtn +
+                '</div>' +
+            '</div>' +
+        '</div>';
+    }
+
+    function renderMeta() {
+        document.getElementById('listMeta').textContent = '共 ' + items.length + ' 条创作指导';
+    }
+
     function renderList() {
+        renderMeta();
         if (!items.length) {
-            listArea.innerHTML = '<div class="p-3"><p class="text-muted small mb-0">' +
-                '暂无创作指导。可在工作流页面中将某步骤的创作指导存为通用，或点击"新建指导"创建。</p></div>';
+            listArea.innerHTML = '<div class="sc-empty"><i class="bi bi-journal-x"></i>' +
+                '<p class="mb-1 mt-2">暂无创作指导。</p>' +
+                '<p class="small mb-0">可在工作流页面中将某步骤的创作指导存为通用，或点击"新建指导"创建。</p></div>';
             return;
         }
-        var rows = items.map(function (it) {
-            return '<tr>' +
-                '<td><input type="checkbox" class="form-check-input item-checkbox" data-id="' + it.id + '"' +
-                    (selectedIds.indexOf(String(it.id)) >= 0 ? ' checked' : '') + '></td>' +
-                '<td><strong>' + SC.escape(it.name) + '</strong></td>' +
-                '<td><span class="badge bg-info">' + SC.escape(it.stepLabel) + '</span></td>' +
-                '<td class="text-muted small text-truncate" style="max-width:200px;">' + SC.escape(it.preview) + '</td>' +
-                '<td class="small text-muted">' + SC.escape(SC.fmt.datetime(it.updatedAt)) + '</td>' +
-                '<td>' +
-                    '<a href="/settings/guidances/' + it.id + '/edit" class="btn btn-sm btn-outline-primary me-1" title="编辑">' +
-                        '<i class="bi bi-pencil"></i></a>' +
-                    '<form action="/settings/guidances/' + it.id + '/delete" method="post" class="d-inline" ' +
-                        'data-confirm="确定删除此创作指导？">' +
-                        '<button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>' +
-                    '</form>' +
-                '</td>' +
-                '</tr>';
-        }).join('');
+        listArea.innerHTML = '<div class="sc-guidance-grid">' + items.map(cardHtml).join('') + '</div>';
+    }
 
-        listArea.innerHTML =
-            '<table class="table table-sm table-hover mb-0">' +
-            '<thead><tr>' +
-            '<th style="width:40px;">' +
-                '<input type="checkbox" class="form-check-input" id="checkAll"' +
-                (selectedIds.length === allIds.length && allIds.length > 0 ? ' checked' : '') + '>' +
-            '</th>' +
-            '<th>名称</th><th style="width:120px;">步骤</th><th style="width:200px;">内容预览</th>' +
-            '<th style="width:160px;">更新时间</th><th style="width:140px;">操作</th>' +
-            '</tr></thead><tbody>' + rows + '</tbody></table>';
+    /* ===================== 勾选状态 ===================== */
+    function renderExportBar() {
+        var allSelected = items.length > 0 && selectedIds.length === items.length;
+        checkAll.checked = allSelected;
+        checkAll.indeterminate = !allSelected && selectedIds.length > 0;
+        checkAllText.textContent = allSelected ? '取消全选' : '全选';
+        exportCount.textContent = '已选 ' + selectedIds.length + ' / ' + items.length;
+    }
+
+    function toggleCard(id) {
+        id = String(id);
+        var i = selectedIds.indexOf(id);
+        if (i >= 0) selectedIds.splice(i, 1); else selectedIds.push(id);
+
+        var on = selectedIds.indexOf(id) >= 0;
+        var card = listArea.querySelector('.sc-guidance-card[data-id="' + id + '"]');
+        if (card) {
+            card.classList.toggle('is-selected', on);
+            card.setAttribute('aria-pressed', String(on));
+            var cb = card.querySelector('.sc-guidance-check');
+            if (cb) cb.checked = on;
+        }
+        renderExportBar();
+    }
+
+    function applyMode() {
+        exportBar.style.display = exportMode ? '' : 'none';
+        btnExport.style.display = (!exportMode && items.length) ? '' : 'none';
+        btnImport.style.display = exportMode ? 'none' : '';
+        btnNew.style.display = exportMode ? 'none' : '';
+        if (exportMode) document.getElementById('addCard').style.display = 'none';
+    }
+
+    function enterExportMode() {
+        if (!items.length) return;
+        exportMode = true;
+        /* 进入即默认全选，保持"点导出＝导出全部"的旧习惯 */
+        selectedIds = allItemIds();
+        applyMode();
+        renderExportBar();
+        renderList();
+        SC.toast.info('勾选要导出的创作指导，点击卡片即可切换');
+    }
+
+    function exitExportMode() {
+        exportMode = false;
+        selectedIds = [];
+        applyMode();
+        renderList();
     }
 
     /* ===================== 导出 ===================== */
     async function doExport() {
-        if (selectedIds.length === 0) {
-            alert('请至少选择一个指导条目');
-            return;
-        }
         try {
             var resp = await fetch('/settings/guidances/export', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(selectedIds.map(Number))
             });
-            if (!resp.ok) { alert('导出失败'); return; }
+            if (!resp.ok) { SC.toast.error('导出失败'); return false; }
             var blob = await resp.blob();
             var disposition = resp.headers.get('Content-Disposition');
             var filename = 'guidances-export.json';
@@ -197,51 +291,74 @@ window.__GUIDANCES_DATA__ = (function () {
             a.download = filename;
             a.click();
             URL.revokeObjectURL(url);
+            return true;
         } catch (err) {
-            alert('导出失败: ' + err.message);
+            SC.toast.error('导出失败: ' + err.message);
+            return false;
         }
     }
 
     /* ===================== 事件绑定 ===================== */
-    document.getElementById('btnNew').addEventListener('click', function () {
+    btnNew.addEventListener('click', function () {
         document.getElementById('addCard').style.display = '';
     });
     document.getElementById('btnCancelAdd').addEventListener('click', function () {
         document.getElementById('addCard').style.display = 'none';
     });
-    document.getElementById('btnImport').addEventListener('click', function () {
+    btnImport.addEventListener('click', function () {
         document.getElementById('importFile').click();
     });
     document.getElementById('importFile').addEventListener('change', function () {
         if (this.files && this.files.length) document.getElementById('importForm').submit();
     });
-    document.getElementById('btnExport').addEventListener('click', doExport);
 
-    listArea.addEventListener('change', function (e) {
-        var cb = e.target.closest('.item-checkbox');
-        if (cb) {
-            var id = String(cb.dataset.id);
-            if (cb.checked) {
-                if (selectedIds.indexOf(id) < 0) selectedIds.push(id);
-            } else {
-                selectedIds = selectedIds.filter(function (i) { return i !== id; });
-            }
-        } else if (e.target.id === 'checkAll') {
-            selectedIds = e.target.checked ? allIds.slice() : [];
+    /* 导出：进入勾选模式（确认/取消按钮随之出现） */
+    btnExport.addEventListener('click', enterExportMode);
+    document.getElementById('btnExportCancel').addEventListener('click', exitExportMode);
+    document.getElementById('btnExportConfirm').addEventListener('click', async function () {
+        if (!selectedIds.length) {
+            SC.toast.warn('请至少勾选一条创作指导');
+            return;
         }
+        var count = selectedIds.length;
+        if (await doExport()) {
+            exitExportMode();
+            SC.toast.success('已导出 ' + count + ' 条创作指导');
+        }
+    });
+
+    checkAll.addEventListener('change', function () {
+        selectedIds = this.checked ? allItemIds() : [];
+        renderExportBar();
         renderList();
     });
 
-    main.addEventListener('submit', function (e) {
-        var form = e.target.closest('form[data-confirm]');
-        if (form && !confirm(form.dataset.confirm)) e.preventDefault();
+    /* 勾选模式下整卡可点（卡片内此时没有链接/按钮，可放心接管点击） */
+    listArea.addEventListener('click', function (e) {
+        if (!exportMode) return;
+        var card = e.target.closest('.sc-guidance-card');
+        if (!card) return;
+        e.preventDefault();
+        toggleCard(card.dataset.id);
+    });
+
+    listArea.addEventListener('keydown', function (e) {
+        if (!exportMode || (e.key !== 'Enter' && e.key !== ' ')) return;
+        var card = e.target.closest('.sc-guidance-card');
+        if (!card) return;
+        e.preventDefault();
+        toggleCard(card.dataset.id);
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (exportMode && e.key === 'Escape') exitExportMode();
     });
 
     /* ===================== 初始化 ===================== */
     fillSteps();
     renderFlash();
     renderList();
-    if (items.length) document.getElementById('btnExport').style.display = '';
+    applyMode();
 })();
 </script>
 </body>

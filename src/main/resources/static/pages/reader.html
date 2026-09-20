@@ -8,8 +8,13 @@
     <link href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <style>
-        body { margin: 0; }
+        body {
+            margin: 0;
+            background: var(--reader-bg, #fff);
+            color: var(--reader-fg, #212529);
+        }
         [x-cloak] { display: none !important; }
+        /* 侧边栏跟随阅读背景色：--reader-sidebar-* 由 applyBg() 按当前底色/文字色推导 */
         .reader-sidebar {
             width: 260px;
             position: fixed;
@@ -17,11 +22,32 @@
             left: 0;
             height: 100vh;
             overflow-y: auto;
-            background: #f8f9fa;
-            border-right: 1px solid #dee2e6;
+            background: var(--reader-sidebar-bg, #f8f9fa);
+            color: var(--reader-sidebar-fg, #212529);
+            border-right: 1px solid var(--reader-sidebar-border, #dee2e6);
             padding: 1rem;
             transition: transform 0.3s ease;
             z-index: 1000;
+        }
+        .reader-sidebar hr {
+            border-color: var(--reader-sidebar-border, #dee2e6);
+            opacity: 1;
+        }
+        /* Bootstrap 的 .text-muted 带 !important，这里靠更高特异性覆盖 */
+        .reader-sidebar .text-muted {
+            color: var(--reader-sidebar-muted, #6c757d) !important;
+        }
+        /* 侧边栏内按钮：描边/文字跟随当前配色（比 Bootstrap 固定灰更协调，深色底也不会看不见）*/
+        .reader-sidebar .btn-side {
+            color: var(--reader-sidebar-muted, #6c757d);
+            border: 1px solid var(--reader-sidebar-muted, #6c757d);
+            background: transparent;
+        }
+        .reader-sidebar .btn-side:hover,
+        .reader-sidebar .btn-side:focus-visible {
+            color: var(--reader-sidebar-fg, #212529);
+            border-color: var(--reader-sidebar-fg, #212529);
+            background: var(--reader-sidebar-hover, #e9ecef);
         }
         .reader-sidebar.collapsed {
             transform: translateX(-100%);
@@ -58,14 +84,14 @@
         .toc-link {
             display: block;
             padding: 0.3rem 0.5rem;
-            color: #333;
+            color: var(--reader-sidebar-fg, #333);
             text-decoration: none;
             border-radius: 4px;
             font-size: 0.9rem;
         }
         .toc-link:hover {
-            background: #e9ecef;
-            color: #000;
+            background: var(--reader-sidebar-hover, #e9ecef);
+            color: var(--reader-sidebar-fg, #000);
         }
         .toc-volume-header {
             display: flex;
@@ -75,17 +101,22 @@
             margin-top: 0.3rem;
             font-weight: 600;
             font-size: 0.9rem;
-            color: #333;
+            color: var(--reader-sidebar-fg, #333);
             cursor: pointer;
             border-radius: 4px;
             user-select: none;
         }
         .toc-volume-header:hover {
-            background: #e9ecef;
+            background: var(--reader-sidebar-hover, #e9ecef);
         }
         .toc-volume-header i {
             font-size: 0.75rem;
             transition: transform 0.2s;
+        }
+        /* 番外分组标题：比卷标题更次要 */
+        .toc-sub {
+            font-size: 0.85rem;
+            color: var(--reader-sidebar-muted, #6c757d);
         }
         .toc-volume-chapters {
             overflow: hidden;
@@ -105,26 +136,123 @@
         .tts-chapter-btn:hover, .tts-chapter-btn.active {
             opacity: 1;
         }
+        /* ===== 阅读背景色选择器（网文护眼配色）===== */
+        /* 浮动按钮：紧贴折叠(☰)按钮下方，位置随侧边栏开合同步偏移 */
+        .bg-fab {
+            position: fixed;
+            top: 50px;
+            left: 10px;
+            z-index: 1100;
+            transition: left 0.3s ease;
+        }
+        .bg-fab.shifted { left: 270px; }
+        .bg-popover {
+            position: absolute;
+            top: 0;
+            left: calc(100% + 8px);
+            width: 228px;
+            z-index: 1200;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+            padding: .6rem;
+        }
+        .bg-swatch {
+            height: 34px;
+            border-radius: 6px;
+            border: 1px solid rgba(0, 0, 0, .18);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .72rem;
+            line-height: 1;
+            transition: transform .15s ease;
+        }
+        .bg-swatch:hover { transform: scale(1.06); }
+        .bg-swatch.active { outline: 2px solid #0d6efd; outline-offset: 2px; }
+        /* 弹层内的「恢复默认」：虚线描边按钮，与色板区分开 */
+        .bg-reset-row {
+            border-top: 1px dashed #dee2e6;
+            margin-top: .55rem;
+            padding-top: .55rem;
+        }
+        .bg-reset-btn {
+            font-size: .78rem;
+            color: #495057;
+            border: 1px dashed #b9c0c7;
+            background: #fbfbfc;
+        }
+        .bg-reset-btn:hover {
+            color: #212529;
+            border-color: #8f979e;
+            background: #f1f3f5;
+        }
+        .bg-reset-btn:active {
+            background: #e9ecef;
+        }
+        /* 深色底时正文区的次要文字/分隔线跟随底色（侧边栏已在 applyBg 中单独推导配色）*/
+        body.reader-dark .reader-main .text-muted { color: #9aa0a6 !important; }
+        body.reader-dark .reader-main .chapter-divider { border-top-color: #4b4f55; }
+        body.reader-dark .reader-main .tts-toolbar { background: #33363a; border-color: #4b4f55; }
+        /* 深色底上 Bootstrap 的 outline-secondary 只有 ~2.5:1 对比度，提亮到可辨识 */
+        body.reader-dark .reader-main .btn-outline-secondary {
+            color: #c9ccd1;
+            border-color: #71767d;
+        }
         @media (max-width: 768px) {
             .reader-sidebar { transform: translateX(-100%); }
             .reader-sidebar.show-mobile { transform: translateX(0); }
             .reader-main { margin-left: 0; }
             .toggle-btn { left: 10px !important; }
+            .bg-fab { left: 10px !important; }
         }
     </style>
 </head>
-<body x-data="readerApp()" x-init="initVolumes(); initTts()">
+<body x-data="readerApp()" x-init="initVolumes(); initTts(); initBg()">
 
-    <button class="btn btn-sm btn-outline-dark toggle-btn"
-            :class="{ 'shifted': sidebarOpen && window.innerWidth > 768 }"
+    <button class="btn btn-sm toggle-btn"
+            :class="{ 'shifted': sidebarOpen && window.innerWidth > 768,
+                      'btn-outline-light': isDarkBg(bgColor), 'btn-outline-dark': !isDarkBg(bgColor) }"
             @click="sidebarOpen = !sidebarOpen">
         <i class="bi bi-list"></i>
     </button>
 
+    <!-- 阅读背景色：贴在折叠按钮下方，收起侧边栏后也能一键换底色 -->
+    <div class="bg-fab" :class="{ 'shifted': sidebarOpen && window.innerWidth > 768 }"
+         @click.outside="bgPanelOpen = false">
+        <button class="btn btn-sm" title="阅读背景色（护眼配色）"
+                :class="{ 'btn-outline-light': isDarkBg(bgColor), 'btn-outline-dark': !isDarkBg(bgColor) }"
+                @click="bgPanelOpen = !bgPanelOpen">
+            <i class="bi bi-palette"></i>
+        </button>
+        <div class="bg-popover" x-show="bgPanelOpen" x-cloak>
+            <div class="small text-muted mb-2"><i class="bi bi-eye"></i> 护眼背景色</div>
+            <div class="row g-2">
+                <template x-for="p in bgPresets" :key="p.name">
+                    <div class="col-4">
+                        <div class="bg-swatch" :class="{ 'active': p.bg === bgColor }"
+                             :style="'background:' + p.bg + ';color:' + p.fg"
+                             :title="p.name + ' — ' + p.desc"
+                             @click="applyBg(p)"
+                             x-text="p.name"></div>
+                    </div>
+                </template>
+            </div>
+            <div class="bg-reset-row" x-show="bgColor !== '#ffffff'">
+                <button type="button" class="btn btn-sm w-100 bg-reset-btn"
+                        @click="applyBg(bgPresets[0])">
+                    <i class="bi bi-arrow-counterclockwise"></i> 恢复默认（纯白）
+                </button>
+            </div>
+        </div>
+    </div>
+
     <aside class="reader-sidebar"
            :class="{ 'collapsed': !sidebarOpen, 'show-mobile': sidebarOpen }">
         <div class="mb-3 mt-4">
-            <a :href="'/projects/' + projectId" class="btn btn-sm btn-outline-secondary w-100">
+            <a :href="'/projects/' + projectId" class="btn btn-sm w-100 btn-side">
                 <i class="bi bi-arrow-left"></i> 返回项目
             </a>
         </div>
@@ -133,7 +261,7 @@
              x-text="'作者：' + author"></div>
         <hr>
         <!-- 全部折叠/展开 -->
-        <button class="btn btn-sm btn-outline-secondary w-100 mb-2" x-show="hasCollapsibleGroups" x-cloak
+        <button class="btn btn-sm w-100 mb-2 btn-side" x-show="hasCollapsibleGroups" x-cloak
                 @click="toggleAllGroups()">
             <i class="bi" :class="allGroupsExpanded ? 'bi-chevron-contract' : 'bi-chevron-expand'"></i>
             <span x-text="allGroupsExpanded ? '全部折叠' : '全部展开'"></span>
@@ -157,7 +285,7 @@
                         <!-- Side stories attached to this volume -->
                         <template x-for="ss in sideStoriesForVolume(vol.volumeNumber)" :key="ss.id">
                             <div>
-                                <div class="toc-volume-header" style="font-size:0.85rem; color:#6c757d;" @click="toggleSideStory(ss.id)">
+                                <div class="toc-volume-header toc-sub" @click="toggleSideStory(ss.id)">
                                     <i class="bi" :class="openSideStories.includes(ss.id) ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
                                     <span x-text="'番外: ' + ss.title"></span>
                                 </div>
@@ -178,7 +306,7 @@
             <!-- Side stories without attached volume -->
             <template x-for="ss in sideStoriesForVolume(null)" :key="ss.id">
                 <div>
-                    <div class="toc-volume-header" style="font-size:0.85rem; color:#6c757d;" @click="toggleSideStory(ss.id)">
+                    <div class="toc-volume-header toc-sub" @click="toggleSideStory(ss.id)">
                         <i class="bi" :class="openSideStories.includes(ss.id) ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
                         <span x-text="'番外: ' + ss.title"></span>
                     </div>
@@ -856,6 +984,65 @@
             },
             exportUrl() {
                 return `/tts-export?projectId=${projectId}`;
+            },
+            // ===== 阅读背景色 =====
+            // 每个预设都自带配套文字色，保证对比度；浅色系偏暖/低饱和以降低眩光
+            bgPanelOpen: false,
+            bgColor: '#ffffff',
+            bgPresets: [
+                { name: '纯白',   bg: '#ffffff', fg: '#212529', desc: '默认，最亮' },
+                { name: '米白',   bg: '#faf7f0', fg: '#2f2b26', desc: '暖白，几乎无眩光' },
+                { name: '羊皮纸', bg: '#f6ecd8', fg: '#4a3d28', desc: '仿纸质，长读最舒服' },
+                { name: '豆沙绿', bg: '#c7edcc', fg: '#26331f', desc: '经典护眼绿' },
+                { name: '薄荷',   bg: '#e2f0e4', fg: '#2c3a2e', desc: '比豆沙绿更轻的淡绿' },
+                { name: '淡青',   bg: '#dfeeea', fg: '#25352f', desc: '青绿偏冷，清爽' },
+                { name: '淡蓝',   bg: '#e3ecf7', fg: '#262f3b', desc: '冷调，强光环境下舒服' },
+                { name: '浅灰',   bg: '#ededed', fg: '#2b2b2b', desc: '中性无色偏' },
+                { name: '夜读',   bg: '#26282b', fg: '#c9ccd1', desc: '夜间低亮度' }
+            ],
+            applyBg(p) {
+                this.bgColor = p.bg;
+                const root = document.documentElement.style;
+                root.setProperty('--reader-bg', p.bg);
+                root.setProperty('--reader-fg', p.fg);
+                // 侧边栏不透明底，直接复用正文配色推导；深浅两套配色都能自适应：
+                //   底色混入 5% 文字色 → 略深/略浅的面板色（白底得 #f3f3f4，夜读底得 #2e3033）
+                root.setProperty('--reader-sidebar-bg', this.mixHex(p.bg, p.fg, 0.05));
+                root.setProperty('--reader-sidebar-fg', p.fg);
+                root.setProperty('--reader-sidebar-muted', this.mixHex(p.fg, p.bg, 0.38));
+                root.setProperty('--reader-sidebar-hover', this.mixHex(p.bg, p.fg, 0.10));
+                root.setProperty('--reader-sidebar-border', this.mixHex(p.bg, p.fg, 0.16));
+                document.body.classList.toggle('reader-dark', this.isDarkBg(p.bg));
+                try {
+                    localStorage.setItem('reader_bg', JSON.stringify({ bg: p.bg, fg: p.fg }));
+                } catch (e) { /* 隐私模式下忽略 */ }
+                this.bgPanelOpen = false;
+            },
+            initBg() {
+                let saved = null;
+                try { saved = JSON.parse(localStorage.getItem('reader_bg') || 'null'); } catch (e) { saved = null; }
+                const p = (saved && this.bgPresets.find(x => x.bg === saved.bg)) || this.bgPresets[0];
+                this.applyBg(p);
+            },
+            /** '#rrggbb' -> [r,g,b]；非法输入返回 null */
+            parseHex(hex) {
+                const c = String(hex || '').replace('#', '');
+                if (!/^[0-9a-fA-F]{6}$/.test(c)) return null;
+                return [0, 2, 4].map(i => parseInt(c.substring(i, i + 2), 16));
+            },
+            /** 按比例混合两色，t 为 b 的占比（0~1）；任一色非法时原样返回 a */
+            mixHex(a, b, t) {
+                const pa = this.parseHex(a), pb = this.parseHex(b);
+                if (!pa || !pb) return a;
+                return '#' + [0, 1, 2]
+                    .map(i => Math.round(pa[i] * (1 - t) + pb[i] * t).toString(16).padStart(2, '0'))
+                    .join('');
+            },
+            /** 亮度 < 128 视为深色底，用于切换次要文字/工具条配色 */
+            isDarkBg(hex) {
+                const c = this.parseHex(hex);
+                if (!c) return false;
+                return (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) < 128;
             }
         };
     }

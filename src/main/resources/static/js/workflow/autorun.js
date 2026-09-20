@@ -68,6 +68,11 @@ function workflowAutorunMixin() {
         autoRunStreamChapter: 0,
         autoRunStreamEventSource: null,
 
+        toggleAutoRunConfig() {
+            this.autoRunConfigExpanded = !this.autoRunConfigExpanded;
+            localStorage.setItem('autoRunConfigExpanded', String(this.autoRunConfigExpanded));
+        },
+
         checkAutoRunStatus() {
             fetch(`/projects/${this.projectId}/auto-run/status`)
                 .then(checkResponse)

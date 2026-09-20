@@ -12,6 +12,8 @@ import static com.storycreator.ai.prompt.TemplateWorkflowTag.*;
  * Declares which workflow(s) each PromptSubStep is used by.
  * STANDARD = used by the default auto-run strategy.
  * IMAGE = used only by image generation features.
+ * SIDE_STORY = used only by side-story features.
+ * REVERSE = used only by the TXT reverse-engineering flow.
  */
 public final class TemplateWorkflowUsage {
 
@@ -48,6 +50,20 @@ public final class TemplateWorkflowUsage {
         map.put(PromptSubStep.SIDE_STORY_OUTLINE, Set.of(SIDE_STORY));
         map.put(PromptSubStep.SIDE_STORY_CHAPTER_OUTLINE, Set.of(SIDE_STORY));
         map.put(PromptSubStep.SIDE_STORY_WRITING, Set.of(SIDE_STORY));
+
+        // TXT 导入逆向工程子步骤（这些模板只被逆向流程使用，不打 STANDARD）
+        map.put(PromptSubStep.REVERSE_WORLD_BUILDING, Set.of(REVERSE));
+        map.put(PromptSubStep.REVERSE_CHARACTER_EXTRACTION, Set.of(REVERSE));
+        map.put(PromptSubStep.REVERSE_OUTLINE_GENERATION, Set.of(REVERSE));
+        map.put(PromptSubStep.REVERSE_CHAPTER_OUTLINE, Set.of(REVERSE));
+        map.put(PromptSubStep.REVERSE_STORY_ARC, Set.of(REVERSE));
+        map.put(PromptSubStep.REVERSE_FINAL_STORY_OUTLINE, Set.of(REVERSE));
+        map.put(PromptSubStep.REVERSE_FINAL_WORLD, Set.of(REVERSE));
+        map.put(PromptSubStep.REVERSE_FINAL_CHARACTERS, Set.of(REVERSE));
+        map.put(PromptSubStep.REVERSE_CHARACTER_LIST, Set.of(REVERSE));
+        map.put(PromptSubStep.REVERSE_CHARACTER_CARD, Set.of(REVERSE));
+        map.put(PromptSubStep.REVERSE_GENRE, Set.of(REVERSE));
+        map.put(PromptSubStep.REVERSE_SYNOPSIS, Set.of(REVERSE));
 
         USAGE_MAP = Map.copyOf(map);
     }

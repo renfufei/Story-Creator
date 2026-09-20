@@ -66,6 +66,8 @@ body.sc-page main.sc-main {
     flex-direction: column;
     gap: .5rem;
     max-width: 22rem;
+    /* toast 只是提示，不可交互：不能吞掉下方元素的点击 */
+    pointer-events: none;
 }
 
 .sc-toast {
@@ -138,4 +140,211 @@ body.sc-page main.sc-main {
 
 .sc-empty i {
     font-size: 3rem;
+}
+
+/* ---------- 自动运行策略折叠头（整行可点击） ---------- */
+.sc-config-header {
+    cursor: pointer;
+    user-select: none;
+    width: fit-content;
+    border-radius: .375rem;
+    padding: .2rem .5rem;
+    margin-left: -.5rem;
+}
+
+.sc-config-header:hover {
+    background-color: rgba(13, 110, 253, .08);
+}
+
+.sc-config-header:focus-visible {
+    outline: 2px solid rgba(13, 110, 253, .45);
+    outline-offset: 1px;
+}
+
+.sc-config-header .sc-config-caret {
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
+}
+
+/* ---------- 创作指导库：卡片式列表 ---------- */
+.sc-guidance-grid {
+    display: grid;
+    /* 每行最多 2 张卡片（宽屏也不铺满 3 列，阅读更从容） */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+@media (max-width: 767.98px) {
+    .sc-guidance-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.sc-guidance-card {
+    display: flex;
+    height: 100%;
+    border: 1px solid #e3e6ea;
+    border-radius: .625rem;
+    background-color: #fff;
+    transition: box-shadow .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.sc-guidance-card:hover {
+    border-color: #cfd6de;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .08);
+    transform: translateY(-2px);
+}
+
+.sc-guidance-body {
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+    width: 100%;
+    padding: 1rem;
+}
+
+.sc-guidance-head {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.sc-guidance-title {
+    font-weight: 600;
+    font-size: 1rem;
+    line-height: 1.35;
+    color: #212529;
+    overflow-wrap: anywhere;
+}
+
+a.sc-guidance-title {
+    text-decoration: none;
+}
+
+a.sc-guidance-title:hover {
+    color: var(--bs-primary);
+    text-decoration: underline;
+}
+
+.sc-guidance-head .sc-guidance-step {
+    flex-shrink: 0;
+    margin-left: auto;
+    font-weight: 500;
+}
+
+.sc-guidance-check {
+    flex-shrink: 0;
+    margin: 0;
+    /* 整卡点击统一由卡片处理，避免与卡片事件双重切换 */
+    pointer-events: none;
+}
+
+.sc-guidance-preview {
+    margin: 0;
+    color: #6c757d;
+    font-size: .85rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.sc-guidance-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    margin-top: auto;
+    padding-top: .55rem;
+    border-top: 1px dashed #eceff2;
+}
+
+/* 勾选（导出）模式：整卡可点选 */
+.sc-guidance-card.sc-selectable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.sc-guidance-card.sc-selectable:hover {
+    border-color: rgba(13, 110, 253, .5);
+}
+
+.sc-guidance-card.sc-selectable:focus-visible {
+    outline: 2px solid rgba(13, 110, 253, .5);
+    outline-offset: 2px;
+}
+
+.sc-guidance-card.is-selected {
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 .18rem rgba(13, 110, 253, .14);
+}
+
+/* ---------- 导出模式工具条 ---------- */
+.sc-export-bar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: .75rem;
+    padding: .6rem .9rem;
+    border: 1px solid rgba(25, 135, 84, .35);
+    border-radius: .5rem;
+    background-color: rgba(25, 135, 84, .06);
+}
+
+.sc-export-bar .sc-export-left {
+    justify-self: start;
+}
+
+.sc-export-bar .sc-export-center {
+    display: flex;
+    justify-self: center;
+    gap: .5rem;
+}
+
+.sc-export-bar .sc-export-right {
+    justify-self: end;
+    white-space: nowrap;
+}
+
+.sc-selectall {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    margin: 0;
+    padding: .3rem .7rem;
+    border: 1px solid #ced4da;
+    border-radius: .375rem;
+    background-color: #fff;
+    font-size: .875rem;
+    line-height: 1.2;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color .15s ease, background-color .15s ease;
+}
+
+.sc-selectall:hover {
+    border-color: var(--bs-primary);
+    background-color: #f8f9fa;
+}
+
+.sc-selectall input {
+    margin: 0;
+    cursor: pointer;
+}
+
+@media (max-width: 575.98px) {
+    .sc-export-bar {
+        grid-template-columns: 1fr;
+        justify-items: center;
+    }
+
+    .sc-export-bar .sc-export-left,
+    .sc-export-bar .sc-export-center,
+    .sc-export-bar .sc-export-right {
+        justify-self: center;
+    }
 }

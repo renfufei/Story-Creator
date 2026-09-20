@@ -52,7 +52,7 @@ class BrowserSmokePagesTest extends BrowserSmokeSupport {
                 new PageCase("/prompts", "#templateTbody tr", "Prompt模板管理", true),
                 new PageCase("/prompts/explore", null, "提示词探索", true),
                 new PageCase("/settings/materials", null, "素材列表", true),
-                new PageCase("/settings/guidances", "#listArea", "指导列表", true),
+                new PageCase("/settings/guidances", "#listArea", "条创作指导", true),
                 new PageCase("/settings/chapter-split-configs", "#configList", "阿拉伯数字章节号", true),
                 new PageCase("/settings/tts-templates", "#userArea", "内置模板", true),
 

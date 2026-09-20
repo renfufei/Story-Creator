@@ -30,11 +30,18 @@ window.__GUIDANCE_EDIT_DATA__ = (function () {
 <header id="site-nav"></header>
 
 <main class="sc-main container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
         <h2 class="mb-0">编辑创作指导</h2>
-        <a href="/settings/guidances" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-arrow-left"></i> 返回列表
-        </a>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="/settings/guidances" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> 返回列表
+            </a>
+            <form id="deleteForm" method="post" class="d-inline">
+                <button type="submit" class="btn btn-outline-danger btn-sm">
+                    <i class="bi bi-trash"></i> 删除
+                </button>
+            </form>
+        </div>
     </div>
 
     <div class="card">
@@ -76,6 +83,22 @@ window.__GUIDANCE_EDIT_DATA__ = (function () {
         return '<option value="' + SC.escape(s.name) + '"' + (s.name === d.step ? ' selected' : '') + '>' +
             SC.escape(s.displayName) + '</option>';
     }).join('');
+
+    /* 删除入口（从列表页移到这里，放在右上角），提交前二次确认 */
+    var delForm = document.getElementById('deleteForm');
+    delForm.setAttribute('action', '/settings/guidances/' + d.id + '/delete');
+    delForm.addEventListener('submit', function (e) {
+        if (delForm.dataset.confirmed === '1') return;
+        e.preventDefault();
+        SC.confirm({
+            title: '删除创作指导',
+            message: '确定删除「' + (d.name || '') + '」？此操作不可撤销。',
+            confirmText: '删除',
+            danger: true
+        }).then(function (ok) {
+            if (ok) { delForm.dataset.confirmed = '1'; delForm.submit(); }
+        });
+    });
 })();
 </script>
 </body>

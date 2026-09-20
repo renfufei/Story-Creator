@@ -105,11 +105,14 @@
                 </div>
             </div>
             <div x-show="!fullAutoRunning" class="mt-2" style="font-size:0.85rem;">
-                <div class="d-flex align-items-center mb-2">
-                    <button class="btn btn-sm p-0 me-1 border-0 text-muted" style="line-height:1;"
-                            @click="autoRunConfigExpanded = !autoRunConfigExpanded; localStorage.setItem('autoRunConfigExpanded', String(autoRunConfigExpanded))">
+                <div class="d-flex align-items-center mb-2 sc-config-header" role="button" tabindex="0"
+                     title="点击展开/折叠创作策略"
+                     @click="toggleAutoRunConfig()"
+                     @keydown.enter.prevent="toggleAutoRunConfig()"
+                     @keydown.space.prevent="toggleAutoRunConfig()">
+                    <span class="sc-config-caret me-1 text-muted">
                         <i class="bi" :class="autoRunConfigExpanded ? 'bi-caret-down-fill' : 'bi-caret-right-fill'"></i>
-                    </button>
+                    </span>
                     <span class="text-muted me-1">当前策略:</span>
                     <span class="badge bg-primary" x-text="currentStrategyLabel()"></span>
                 </div>
