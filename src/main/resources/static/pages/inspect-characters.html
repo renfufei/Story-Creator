@@ -47,7 +47,9 @@
                 <div class="card-header"><small class="fw-bold">角色列表</small></div>
                 <div class="list-group list-group-flush">
                     <template x-for="ch in characters" :key="ch.id">
-                        <a class="list-group-item list-group-item-action" :href="'#char-' + ch.id" x-text="ch.name">角色名</a>
+                        <a class="list-group-item list-group-item-action sc-anchor-link" :href="'#char-' + ch.id">
+                            <i class="bi bi-person-badge"></i><span x-text="ch.name">角色名</span>
+                        </a>
                     </template>
                 </div>
             </div>

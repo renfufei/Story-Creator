@@ -1379,6 +1379,58 @@ class PageRenderingIntegrationTest {
                 .contains("displayName");
     }
 
+    // ==================== 全站链接外观统一（sc-link 样式族） ====================
+
+    /**
+     * app.css 必须提供整套链接样式族。缺任何一个，对应页面就会退回浏览器默认的
+     * 蓝色下划线链接（「朴素链」），所以这里把族成员钉住防回归。
+     */
+    @Test
+    void appCss_providesLinkStyleFamily() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/css/app.css"), String.class);
+        assertThat(response.getStatusCode()).as("/css/app.css 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("app.css 应提供完整链接样式族")
+                .contains(".sc-link {")
+                .contains(".sc-chip-link {")
+                .contains(".sc-card-link {")
+                .contains(".sc-toc-link {")
+                .contains(".sc-icon-link {")
+                .contains(".sc-card-block {")
+                .contains(".sc-card-cta {")
+                .contains("a.list-group-item.sc-anchor-link")
+                // 面包屑直接覆盖 Bootstrap，5 个页面无需改标记即可生效
+                .contains("--bs-breadcrumb-divider")
+                .contains(".breadcrumb-item > a");
+    }
+
+    /**
+     * 关键页面必须用共享链接类，而不是旧的 text-decoration-none 裸链写法。
+     */
+    @Test
+    void linkUpgrade_keyPagesUseSharedLinkClasses() {
+        // 六步流程页：步骤导航带图标、项目名用卡片链
+        String wf = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/workflow/chapters"), String.class).getBody();
+        assertThat(wf).as("流程页步骤导航应渲染图标").contains(":class=\"s.icon\"");
+        assertThat(wf).as("流程页项目名应用卡片链").contains("class=\"sc-card-link\"");
+        assertThat(wf).as("流程页不应残留裸标题链").doesNotContain("text-decoration-none text-dark");
+        assertThat(wf).as("流程页步骤链不应再靠 text-decoration-none 去下划线")
+                .doesNotContain("class=\"workflow-step text-decoration-none\"");
+
+        // 灵感列表：卡片标题链
+        String insp = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/inspirations"), String.class).getBody();
+        assertThat(insp).as("灵感列表标题应用卡片链").contains("sc-card-link");
+        assertThat(insp).as("灵感列表「所属项目」应用内联链").contains("class=\"sc-link\" id=\"project-link\"");
+
+        // 设置页：推荐模型用胶囊链
+        String settings = restTemplate.getForEntity(url("/settings"), String.class).getBody();
+        assertThat(settings).as("设置页推荐模型应用胶囊链").contains("class=\"sc-chip-link\"");
+        assertThat(settings).as("设置页不应残留灰底徽章链")
+                .doesNotContain("badge bg-secondary text-decoration-none");
+    }
+
     // ==================== Reverse Engineering Pages (split from /import/txt step 3/4) ====================
 
     @Test

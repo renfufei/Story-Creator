@@ -76,7 +76,7 @@
     function cardHtml(p) {
         var desc = SC.fmt.abbreviate(p.description, 80);
         return '' +
-            '<a href="/projects/' + p.id + '" class="text-decoration-none text-reset">' +
+            '<a href="/projects/' + p.id + '" class="text-decoration-none text-reset sc-card-block">' +
             '  <div class="card h-100 project-card sc-card">' +
             '    <div class="card-body">' +
             '      <h5 class="card-title mb-2">' + SC.escape(p.title) + '</h5>' +
@@ -92,7 +92,7 @@
             '    <div class="card-footer bg-transparent">' +
             '      <div class="d-flex justify-content-between align-items-center">' +
             '        <small class="text-muted">' + SC.escape(SC.fmt.datetime(p.updatedAt)) + '</small>' +
-            '        <span class="btn btn-sm btn-outline-primary"><i class="bi bi-info-circle"></i> 项目详情</span>' +
+            '        <span class="sc-card-cta"><i class="bi bi-box-arrow-in-right"></i> 项目详情 <i class="bi bi-arrow-right"></i></span>' +
             '      </div>' +
             '    </div>' +
             '  </div>' +

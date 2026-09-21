@@ -6,6 +6,7 @@
     <title>全文阅读</title>
     <link href="/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/css/app.css">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <style>
         body {
@@ -83,15 +84,25 @@
         }
         .toc-link {
             display: block;
-            padding: 0.3rem 0.5rem;
+            padding: 0.3rem 0.55rem;
+            border-left: 3px solid transparent;
             color: var(--reader-sidebar-fg, #333);
             text-decoration: none;
             border-radius: 4px;
             font-size: 0.9rem;
+            line-height: 1.45;
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
         }
         .toc-link:hover {
             background: var(--reader-sidebar-hover, #e9ecef);
+            border-left-color: var(--reader-sidebar-muted, #6c757d);
             color: var(--reader-sidebar-fg, #000);
+        }
+        .toc-link.active {
+            background: var(--reader-sidebar-hover, #e9ecef);
+            border-left-color: var(--reader-sidebar-fg, #333);
+            color: var(--reader-sidebar-fg, #000);
+            font-weight: 600;
         }
         .toc-volume-header {
             display: flex;

@@ -348,3 +348,256 @@ a.sc-guidance-title:hover {
         justify-self: center;
     }
 }
+
+/* ============================================================
+   链接样式族（sc-link-*）——统一全站「朴素文字链」的观感
+   设计原则：默认低调（灰/主色文字，无重型下划线），hover 才给
+   浅底 + 主色反馈，让链接「像可点的地方」但不抢占正文注意力。
+   ============================================================ */
+:root {
+    --sc-link: #0d6efd;
+    --sc-link-strong: #0a58ca;
+    --sc-link-subtle-bg: #eef4ff;
+    --sc-link-subtle-bg-hover: #e0ebff;
+    --sc-link-subtle-border: #d3e2fd;
+    --sc-link-ink: #1652b8;
+    --sc-ink: #212529;
+    --sc-ink-soft: #495057;
+    --sc-muted: #6c757d;
+}
+
+/* ---------- 1. 内联文字链：正文 / 说明文字里的链接 ---------- */
+.sc-link {
+    color: var(--sc-link);
+    text-decoration: underline;
+    text-decoration-color: rgba(13, 110, 253, .35);
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    border-radius: .2rem;
+    padding: 0 .1rem;
+    transition: color .15s ease, background-color .15s ease, text-decoration-color .15s ease;
+}
+
+.sc-link:hover {
+    color: var(--sc-link-strong);
+    background-color: var(--sc-link-subtle-bg);
+    text-decoration-color: currentColor;
+}
+
+.sc-link i,
+.sc-link .bi {
+    font-size: .9em;
+    margin-right: .15rem;
+}
+
+/* ---------- 2. 胶囊链：模型名 / 标签 / 状态等短链接 ---------- */
+.sc-chip-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .12rem .6rem;
+    border-radius: 999px;
+    background-color: var(--sc-link-subtle-bg);
+    border: 1px solid var(--sc-link-subtle-border);
+    color: var(--sc-link-ink);
+    font-size: .8rem;
+    font-weight: 500;
+    line-height: 1.5;
+    text-decoration: none;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.sc-chip-link:hover {
+    background-color: var(--sc-link-subtle-bg-hover);
+    border-color: #b9cffa;
+    color: var(--sc-link-strong);
+}
+
+.sc-chip-link .bi {
+    font-size: .95em;
+    opacity: .8;
+}
+
+/* ---------- 3. 面包屑：直接覆盖 Bootstrap .breadcrumb（5 个页面已在用） ---------- */
+.breadcrumb {
+    --bs-breadcrumb-divider: '\203A';
+    /* › 比默认的 / 更轻 */
+    --bs-breadcrumb-divider-color: #b9bfc7;
+    --bs-breadcrumb-item-padding-x: .3rem;
+    --bs-breadcrumb-item-active-color: var(--sc-ink-soft);
+    align-items: center;
+    margin-bottom: 0;
+    font-size: .82rem;
+}
+
+.breadcrumb-item > a {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .12rem .45rem;
+    border-radius: .3rem;
+    color: var(--sc-muted);
+    text-decoration: none;
+    transition: color .15s ease, background-color .15s ease;
+}
+
+.breadcrumb-item > a:hover {
+    color: var(--sc-link);
+    background-color: var(--sc-link-subtle-bg);
+}
+
+.breadcrumb-item.active {
+    padding: .12rem .45rem;
+    font-weight: 600;
+}
+
+/* ---------- 4. 卡片/列表标题链 ---------- */
+.sc-card-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    color: var(--sc-ink);
+    font-weight: 600;
+    text-decoration: none;
+    transition: color .15s ease;
+}
+
+.sc-card-link:hover {
+    color: var(--sc-link);
+    text-decoration: underline;
+    text-decoration-color: rgba(13, 110, 253, .4);
+    text-underline-offset: 3px;
+}
+
+.sc-card-link .bi {
+    color: var(--sc-muted);
+    font-size: .9em;
+    transition: color .15s ease, transform .15s ease;
+}
+
+.sc-card-link:hover .bi {
+    color: var(--sc-link);
+    transform: translateX(2px);
+}
+
+/* ---------- 5. 目录链：阅读页 / 章节透视侧栏 ---------- */
+.sc-toc-link {
+    display: block;
+    padding: .32rem .6rem;
+    border-left: 3px solid transparent;
+    border-radius: .3rem;
+    color: var(--sc-ink-soft);
+    font-size: .84rem;
+    line-height: 1.45;
+    text-decoration: none;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.sc-toc-link:hover {
+    background-color: var(--sc-link-subtle-bg);
+    border-left-color: var(--sc-link);
+    color: var(--sc-link-strong);
+}
+
+.sc-toc-link.active {
+    background-color: var(--sc-link-subtle-bg);
+    border-left-color: var(--sc-link);
+    color: var(--sc-link);
+    font-weight: 600;
+}
+
+/* ---------- 6. 图标链：仅图标的小入口 ---------- */
+.sc-icon-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: .4rem;
+    color: var(--sc-muted);
+    text-decoration: none;
+    transition: color .15s ease, background-color .15s ease;
+}
+
+.sc-icon-link:hover {
+    color: var(--sc-link);
+    background-color: var(--sc-link-subtle-bg);
+}
+
+/* ---------- 7. 整卡链接：卡片整体可点（如首页项目卡片） ---------- */
+.sc-card-block {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+}
+
+.sc-card-block .card-title {
+    transition: color .15s ease;
+}
+
+.sc-card-block:hover .card-title {
+    color: var(--sc-link);
+}
+
+/* 卡片右下角的「进入」胶囊，hover 整卡时才点亮 */
+.sc-card-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .15rem .6rem;
+    border-radius: .4rem;
+    background-color: var(--sc-link-subtle-bg);
+    border: 1px solid var(--sc-link-subtle-border);
+    color: var(--sc-link-ink);
+    font-size: .78rem;
+    font-weight: 500;
+    line-height: 1.5;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.sc-card-cta .bi {
+    transition: transform .15s ease;
+}
+
+.sc-card-block:hover .sc-card-cta {
+    background-color: var(--sc-link);
+    border-color: var(--sc-link);
+    color: #fff;
+}
+
+.sc-card-block:hover .sc-card-cta .bi {
+    transform: translateX(2px);
+}
+
+/* ---------- 8. 锚点列表链：list-group 里的页内跳转（角色列表等） ---------- */
+a.list-group-item.sc-anchor-link {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    border-left: 3px solid transparent;
+    color: var(--sc-ink-soft);
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+a.list-group-item.sc-anchor-link .bi {
+    color: #adb5bd;
+    transition: color .15s ease;
+}
+
+a.list-group-item.sc-anchor-link:hover,
+a.list-group-item.sc-anchor-link:focus {
+    background-color: var(--sc-link-subtle-bg);
+    border-left-color: var(--sc-link);
+    color: var(--sc-link-strong);
+}
+
+a.list-group-item.sc-anchor-link:hover .bi,
+a.list-group-item.sc-anchor-link:focus .bi {
+    color: var(--sc-link);
+}
+
+/* ---------- 兼容：旧的 text-decoration-none 标题链 ---------- */
+.sc-card-link.text-decoration-none:hover,
+a.sc-link.text-decoration-none:hover {
+    text-decoration: underline;
+}

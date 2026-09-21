@@ -19,7 +19,7 @@
         <div>
             <h2 class="mb-1"><i class="bi bi-pencil"></i> 编辑灵感</h2>
             <small class="text-muted">
-                所属项目：<a class="text-decoration-none" id="project-link" href="#">项目名</a>
+                所属项目：<a class="sc-link" id="project-link" href="#">项目名</a>
             </small>
         </div>
         <a id="back-list" class="btn btn-outline-secondary btn-sm me-2">
@@ -80,7 +80,7 @@
             'placeholder="记录灵感片段、想法、场景、对白、设定……">' + esc(it.content) + '</textarea>' +
             '</div>' +
             '<button type="submit" class="btn btn-sm btn-primary">保存修改</button>' +
-            '<a class="btn btn-sm btn-secondary ms-2" href="/projects/' + pid + '/inspirations/' + inspId + '">取消</a>' +
+            '<a class="btn btn-sm btn-secondary ms-2" href="/projects/' + pid + '/inspirations/' + inspId + '"><i class="bi bi-x-lg"></i> 取消</a>' +
             (it.createdAt ? '<span class="text-muted small ms-3">创建于 ' + esc(it.createdAt) + '</span>' : '') +
             '</form>';
         $('edit-form').addEventListener('submit', onSubmit);

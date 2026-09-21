@@ -19,7 +19,7 @@
         <!-- Sticky header area -->
         <div class="sticky-top bg-white pb-2" style="z-index: 100;">
 <div class="d-flex justify-content-between align-items-center mb-2">
-        <h4 class="mb-0"><a :href="'/projects/' + projectId + ''" class="text-decoration-none text-dark" x-text="projectTitle">项目名</a></h4>
+        <h4 class="mb-0"><a :href="'/projects/' + projectId + ''" class="sc-card-link" title="查看项目详情"><i class="bi bi-journal-text"></i><span x-text="projectTitle">项目名</span></a></h4>
         <div class="d-flex gap-2">
             <a :href="'/projects/' + projectId + '/side-stories'" class="btn btn-sm btn-outline-warning">
                 <i class="bi bi-journal-bookmark"></i> 番外
@@ -64,11 +64,14 @@
     <!-- Step Navigation (clickable, reactive) -->
     <div class="workflow-steps mb-0">
         <template x-for="(s, idx) in stepList" :key="s.name">
-            <a class="workflow-step text-decoration-none"
+            <a class="workflow-step"
                :class="s.name === autoRunActiveStep ? 'active' : (s.order < autoRunActiveOrder ? 'completed' : '')"
                :href="'/projects/' + projectId + '/workflow/' + s.route">
                 <div class="step-number" x-text="idx + 1"></div>
-                <div class="small" x-text="s.label"></div>
+                <div class="small d-flex align-items-center justify-content-center gap-1">
+                    <i class="bi" :class="s.icon"></i>
+                    <span x-text="s.label"></span>
+                </div>
             </a>
         </template>
     </div>

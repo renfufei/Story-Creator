@@ -19,7 +19,7 @@
         <div>
             <h2 class="mb-0"><i class="bi bi-lightbulb"></i> 灵感</h2>
             <small class="text-muted">
-                所属项目：<a class="text-decoration-none" id="project-link" href="#">项目名</a>
+                所属项目：<a class="sc-link" id="project-link" href="#">项目名</a>
                 <span class="ms-2">共 <strong id="count">0</strong> 条</span>
             </small>
         </div>
@@ -98,7 +98,7 @@
         return '<div class="card">' +
             '<div class="card-body pb-2">' +
             '<div class="d-flex align-items-center gap-2 mb-1">' +
-            '<a class="text-decoration-none fw-semibold fs-5" href="/projects/' + pid + '/inspirations/' + it.id + '">' + esc(it.title) + '</a>' +
+            '<a class="sc-card-link fs-5" href="/projects/' + pid + '/inspirations/' + it.id + '">' + esc(it.title) + '</a>' +
             '</div>' +
             '<div class="text-muted small mb-2"><i class="bi bi-clock"></i> ' + fmtTime(it.createdAt) + '</div>' +
             '<p class="card-text text-muted mb-0" style="white-space:pre-wrap;word-break:break-word;">' + esc(it.contentPreview) + '</p>' +

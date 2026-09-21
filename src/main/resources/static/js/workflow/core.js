@@ -47,12 +47,12 @@ function workflowCoreMixin() {
         guidanceToastMsg: '',
         guidanceToastType: 'success',
         stepList: [
-            { name: 'WORLD_BUILDING', label: '世界观设定', order: 1, route: 'world-building' },
-            { name: 'CHARACTER_DESIGN', label: '角色设计', order: 2, route: 'characters' },
-            { name: 'OUTLINE_GENERATION', label: '大纲生成', order: 3, route: 'outline' },
-            { name: 'CHAPTER_WRITING', label: '分章节写作', order: 4, route: 'chapters' },
-            { name: 'POLISHING', label: '润色修改', order: 5, route: 'polishing' },
-            { name: 'PROOFREADING', label: '校对精修', order: 6, route: 'proofreading' },
+            { name: 'WORLD_BUILDING', label: '世界观设定', order: 1, route: 'world-building', icon: 'bi-globe2' },
+            { name: 'CHARACTER_DESIGN', label: '角色设计', order: 2, route: 'characters', icon: 'bi-people' },
+            { name: 'OUTLINE_GENERATION', label: '大纲生成', order: 3, route: 'outline', icon: 'bi-diagram-3' },
+            { name: 'CHAPTER_WRITING', label: '分章节写作', order: 4, route: 'chapters', icon: 'bi-pencil-square' },
+            { name: 'POLISHING', label: '润色修改', order: 5, route: 'polishing', icon: 'bi-magic' },
+            { name: 'PROOFREADING', label: '校对精修', order: 6, route: 'proofreading', icon: 'bi-check2-square' },
         ],
 
         init() {

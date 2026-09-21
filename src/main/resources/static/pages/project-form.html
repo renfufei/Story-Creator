@@ -155,7 +155,7 @@
             '<div class="d-flex gap-2">' +
             '  <button type="submit" class="btn btn-primary" id="btnSubmit"><i class="bi bi-check-lg"></i> ' +
             (isEdit ? '保存修改' : '创建并开始创作') + '</button>' +
-            '  <a class="btn btn-outline-secondary" href="' + (isEdit ? '/projects/' + projectId : '/') + '">取消</a>' +
+            '  <a class="btn btn-outline-secondary" href="' + (isEdit ? '/projects/' + projectId : '/') + '"><i class="bi bi-x-lg"></i> 取消</a>' +
             (isEdit && form.projectStatus === 'ABANDONED'
                 ? '<button type="button" class="btn btn-danger ms-auto" id="btnDelete"><i class="bi bi-trash"></i> 删除项目</button>'
                 : '') +
