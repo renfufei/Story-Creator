@@ -1,0 +1,2689 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>英语单词匹配 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+    <style>
+        [x-cloak] { display: none !important; }
+
+        /* ==================== 英语单词匹配 ==================== */
+        .wm-root {
+            --wm-ink: #2b3138;
+            --wm-muted: #86909c;
+            --wm-line: #e5e8ec;
+            --wm-surface: #ffffff;
+            --wm-sel-bg: #d8edfd;
+            --wm-sel-line: #35a3f3;
+            --wm-sel-ink: #0f6cbd;
+            --wm-done-bg: #f1f3f5;
+            --wm-done-line: #e8ebee;
+            --wm-done-ink: #b4bbc4;
+            --wm-wrong-bg: #ffe6e6;
+            --wm-wrong-line: #f96868;
+            --wm-wrong-ink: #d92d20;
+            --wm-accent: #35a3f3;
+            --wm-ok: #34c77b;
+            --wm-auto: #f0a020;
+        }
+
+        .wm-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .75rem;
+            flex-wrap: wrap;
+            margin-bottom: .85rem;
+        }
+
+        .wm-toolbar-sub {
+            font-size: .8rem;
+            color: #86909c;
+        }
+
+        .wm-toolbar-actions {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            flex-wrap: wrap;
+        }
+
+        .wm-book-btn {
+            max-width: 12rem;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .wm-caret { font-size: .7rem; opacity: .6; }
+
+        /* 错题数量：贴着按钮内的计数胶囊，不用绝对定位，免得压住旁边的按钮 */
+        .wm-count {
+            display: inline-block;
+            min-width: 1.1em;
+            padding: 0 .3em;
+            margin-left: .2rem;
+            border-radius: 999px;
+            background: #e5484d;
+            color: #fff;
+            font-size: .68rem;
+            font-weight: 700;
+            line-height: 1.5;
+            text-align: center;
+        }
+
+        /* ---------- 设置弹层：错题本 / 重做本关 / 朗读 / 重置进度 归到齿轮按钮里 ---------- */
+        .wm-set-wrap { position: relative; }
+
+        /* 打开时按钮保持高亮，让「弹层从哪冒出来的」一目了然 */
+        .wm-set-btn.is-open {
+            border-color: var(--wm-sel-line);
+            color: var(--wm-sel-ink);
+            background: #eef7fe;
+        }
+
+        .wm-set-pop {
+            position: absolute;
+            z-index: 1200;
+            top: calc(100% + .45rem);
+            right: 0;
+            width: min(20rem, calc(100vw - 2rem));
+            background: var(--wm-surface);
+            border: 1px solid var(--wm-line);
+            border-radius: 14px;
+            box-shadow: 0 14px 34px rgba(31, 45, 61, .18);
+            padding: .45rem;
+            text-align: left;
+            animation: wm-pop-soft .18s ease;
+        }
+
+        .wm-set-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: .5rem;
+            padding: .2rem .5rem .45rem;
+            border-bottom: 1px solid var(--wm-line);
+            margin-bottom: .35rem;
+            font-size: .74rem;
+            font-weight: 700;
+            color: var(--wm-muted);
+        }
+
+        .wm-set-item {
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            width: 100%;
+            border: 0;
+            background: transparent;
+            border-radius: 10px;
+            padding: .5rem .55rem;
+            text-align: left;
+            color: var(--wm-ink);
+        }
+
+        .wm-set-item + .wm-set-item { margin-top: 2px; }
+        .wm-set-item:hover { background: #f4f7fa; }
+
+        /* 图标做成小圆角方块：比裸图标更像「条目」，也更容易扫读 */
+        .wm-set-icon {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.9rem;
+            height: 1.9rem;
+            border-radius: 9px;
+            font-size: .95rem;
+            background: #eef4fb;
+            color: var(--wm-sel-ink);
+        }
+
+        .wm-set-item.is-danger .wm-set-icon { background: #fdecec; color: var(--wm-wrong-ink); }
+
+        .wm-set-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+
+        .wm-set-title {
+            display: flex;
+            align-items: center;
+            gap: .3rem;
+            font-size: .9rem;
+            font-weight: 600;
+            line-height: 1.35;
+        }
+
+        .wm-set-item.is-danger .wm-set-title { color: var(--wm-wrong-ink); }
+
+        /* 说明文字最多两行：窄屏宁可换行也别把话截断（这里不是状态条，换行不会顶坏布局） */
+        .wm-set-desc {
+            font-size: .74rem;
+            line-height: 1.35;
+            color: var(--wm-muted);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .wm-set-arrow { flex: 0 0 auto; color: #c2c8d0; font-size: .78rem; }
+
+        /* 朗读开关的右侧状态胶囊 */
+        .wm-set-switch {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            padding: .12rem .5rem;
+            border-radius: 999px;
+            font-size: .72rem;
+            font-weight: 700;
+            background: #eef0f3;
+            color: var(--wm-muted);
+        }
+
+        .wm-set-switch.is-on { background: #e6f7ef; color: #1a8d5a; }
+
+        /* ---------- 舞台 ---------- */
+        .wm-stage {
+            width: 100%;
+            max-width: 640px;
+            margin: 0 auto;
+            background: var(--wm-surface);
+            border: 1px solid var(--wm-line);
+            border-radius: 18px;
+            box-shadow: 0 4px 18px rgba(31, 45, 61, .06);
+            padding: 14px 16px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-height: 480px;
+            color: var(--wm-ink);
+        }
+
+        /* ---------- HUD：关闭 / 进度 / 关卡数 ---------- */
+        .wm-hud {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .wm-close {
+            flex: 0 0 auto;
+            width: 34px;
+            height: 34px;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: var(--wm-muted);
+            font-size: 1.05rem;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color .15s ease, color .15s ease;
+        }
+
+        .wm-close:hover { background: #f1f3f5; color: var(--wm-ink); }
+
+        .wm-progress {
+            flex: 1 1 auto;
+            display: flex;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .wm-seg {
+            flex: 1 1 0;
+            height: 9px;
+            border-radius: 5px;
+            background: #ebedf0;
+            transition: background-color .25s ease;
+        }
+
+        .wm-seg.is-done { background: var(--wm-ok); }
+        .wm-seg.is-current { background: var(--wm-accent); }
+        .wm-progress.is-auto .wm-seg.is-done { background: #f5c46b; }
+        .wm-progress.is-auto .wm-seg.is-current { background: var(--wm-auto); }
+
+        .wm-counter {
+            flex: 0 0 auto;
+            font-size: .95rem;
+            font-variant-numeric: tabular-nums;
+            color: var(--wm-muted);
+            font-weight: 600;
+            letter-spacing: .02em;
+        }
+
+        .wm-counter b { color: var(--wm-accent); }
+        .wm-progress.is-auto ~ .wm-counter b { color: var(--wm-auto); }
+
+        /* ---------- 标题行（浅色面板：与下方信息栏 / 棋盘分区） ---------- */
+        .wm-titlebar {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            flex-wrap: wrap;
+            position: relative;                 /* 过关提示贴着这一行居中（见 .wm-flash） */
+            min-height: 2.9rem;                 /* 保证绝对定位的过关提示不会越出这一带 */
+            background: #f7f9fb;
+            border: 1px solid var(--wm-line);
+            border-radius: 12px;
+            padding: 8px 12px;
+        }
+
+        /* 过关提示出现时把标题/主题标签藏起来（用 visibility 而不是 display，
+           否则这一行会塌成 0 高，绝对定位的提示就没有居中的基准了） */
+        .wm-titlebar.is-flashing .wm-title,
+        .wm-titlebar.is-flashing .wm-theme,
+        .wm-titlebar.is-flashing .wm-auto-badge { visibility: hidden; }
+
+        .wm-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin: 0;
+            letter-spacing: .01em;
+        }
+
+        .wm-theme {
+            font-size: .75rem;
+            color: #0f6cbd;
+            background: #eaf4fe;
+            border-radius: 999px;
+            padding: 2px 9px;
+            font-weight: 600;
+        }
+
+        .wm-auto-badge {
+            font-size: .72rem;
+            color: #8a5a00;
+            background: #fff3d9;
+            border: 1px solid #ffe0a8;
+            border-radius: 999px;
+            padding: 2px 9px;
+            font-weight: 700;
+        }
+
+        /* ---------- 自动学习状态条 ---------- */
+        .wm-auto-bar {
+            display: flex;
+            flex-wrap: nowrap;               /* 状态条只占一行：提示再长也不换行，移动端不会被撑高 */
+            align-items: center;
+            gap: .6rem;
+            min-height: 2.6rem;              /* 高度固定，步骤提示切换时不跳动 */
+            background: linear-gradient(96deg, #fff5e0, #fffaf0);
+            border: 1px solid #ffe0a8;
+            border-radius: 12px;
+            padding: 7px 10px;
+            color: #8a5a00;
+            font-size: .85rem;
+        }
+
+        .wm-auto-bar.is-paused { background: #f4f6f8; border-color: var(--wm-line); color: var(--wm-muted); }
+
+        /* 步骤标签（固定短文案，永远完整可见）+ 详情（单词等，过长省略） */
+        .wm-auto-tip {
+            flex: 1 1 auto;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: .4rem;
+            font-weight: 600;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        .wm-auto-tag {
+            flex: 0 0 auto;
+            background: #fff;
+            border: 1px solid #ffe0a8;
+            border-radius: 999px;
+            padding: 1px 8px;
+            font-size: .72rem;
+            font-weight: 700;
+            line-height: 1.5;
+        }
+
+        .wm-auto-text {
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .wm-auto-count {
+            flex: 0 0 auto;
+            min-width: 2.4rem;
+            text-align: center;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            background: #fff;
+            border: 1px solid #ffe0a8;
+            border-radius: 999px;
+            padding: 1px 8px;
+        }
+
+        .wm-auto-count .wm-auto-sec { font-size: .68rem; font-weight: 600; opacity: .7; }
+
+        .wm-auto-btn {
+            flex: 0 0 auto;
+            border: 1px solid #f0c476;
+            background: #fff;
+            color: #8a5a00;
+            border-radius: 999px;
+            font-size: .78rem;
+            font-weight: 600;
+            padding: 3px 10px;
+            line-height: 1.5;
+        }
+
+        .wm-auto-btn:hover { background: #fff8ea; }
+        .wm-auto-btn.is-exit { border-color: #f2b8b5; color: #b42318; }
+        .wm-auto-btn.is-exit:hover { background: #fff1f0; }
+
+        /* ---------- 配对棋盘（浅色底 + 边框，与上方信息栏分区） ---------- */
+        .wm-board {
+            flex: 1 1 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 12px;
+            align-content: center;
+            background: #fbfcfe;
+            border: 1px solid var(--wm-line);
+            border-radius: 14px;
+            padding: 10px 12px;
+        }
+
+        .wm-col {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            justify-content: center;
+            min-width: 0;
+        }
+
+        .wm-card {
+            position: relative;
+            flex: 1 1 0;
+            min-height: 54px;
+            max-height: 84px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 12px;
+            border: 1.5px solid var(--wm-line);
+            border-radius: 14px;
+            background: var(--wm-surface);
+            color: var(--wm-ink);
+            font-size: clamp(.95rem, 3.2vw, 1.1rem);
+            font-weight: 600;
+            line-height: 1.25;
+            text-align: center;
+            overflow-wrap: anywhere;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            box-shadow: 0 1px 2px rgba(31, 45, 61, .04);
+            transition: background-color .16s ease, border-color .16s ease, color .16s ease, transform .1s ease;
+        }
+
+        .wm-card:hover:not(.is-done) { border-color: #cfd6dd; }
+        .wm-card:active:not(.is-done) { transform: scale(.985); }
+
+        .wm-card:focus-visible {
+            outline: 3px solid rgba(53, 163, 243, .35);
+            outline-offset: 2px;
+        }
+
+        .wm-board.is-auto .wm-card { cursor: default; }
+        .wm-board.is-auto .wm-card:hover { border-color: var(--wm-line); }
+        .wm-board.is-auto .wm-card:active { transform: none; }
+
+        /* 选中 */
+        .wm-card.is-sel {
+            background: var(--wm-sel-bg);
+            border-color: var(--wm-sel-line);
+            color: var(--wm-sel-ink);
+        }
+
+        /* 已完成（置灰） */
+        .wm-card.is-done {
+            background: var(--wm-done-bg);
+            border-color: var(--wm-done-line);
+            color: var(--wm-done-ink);
+            cursor: default;
+            box-shadow: none;
+        }
+
+        /* 不匹配：后选中的那张标红 */
+        .wm-card.is-wrong {
+            background: var(--wm-wrong-bg);
+            border-color: var(--wm-wrong-line);
+            color: var(--wm-wrong-ink);
+            animation: wm-shake .42s ease;
+        }
+
+        @keyframes wm-shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-5px); }
+            40% { transform: translateX(5px); }
+            60% { transform: translateX(-3px); }
+            80% { transform: translateX(3px); }
+        }
+
+        .wm-card-text { pointer-events: none; }
+
+        /* 英文侧右侧留出朗读按钮的位置，中文侧左侧对称留白，两张卡视觉居中一致 */
+        .wm-col-en .wm-card { padding-right: 28px; }
+        .wm-col-zh .wm-card { padding-left: 28px; }
+
+        .wm-speak {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: .8rem;
+            color: var(--wm-muted);
+            padding: 5px;
+            border-radius: 50%;
+            border: 0;
+            background: transparent;
+        }
+
+        .wm-speak:hover { background: rgba(53, 163, 243, .12); color: var(--wm-sel-ink); }
+
+        .wm-card .wm-speak { opacity: .55; }
+        .wm-card .wm-speak:hover { opacity: 1; }
+
+        /* ---------- 单词区上方的信息栏（说明文字 + 关卡导航） ----------
+           原先这两块都在棋盘「下方」：桌面端大窗口下离单词区很远，
+           而且棋盘下方本来就有大片留白，信息沉在最底下更显空旷。
+           现在整体上移到单词区上方，装进一个浅色面板，与棋盘的白色区分开。 */
+        .wm-infobar {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            background: #f7f9fb;
+            border: 1px solid var(--wm-line);
+            border-radius: 12px;
+            padding: 8px 10px;
+        }
+
+        /* 说明文字（面板第一行，最左） */
+        .wm-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .75rem;
+            flex-wrap: wrap;
+            font-size: .8rem;
+            color: var(--wm-muted);
+        }
+
+        .wm-footer b { color: var(--wm-ink); }
+
+        /* 关卡导航（上一关 / 下一关） */
+        .wm-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem;
+        }
+
+        .wm-nav-mid {
+            font-size: .82rem;
+            color: var(--wm-muted);
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .wm-nav-mid b { color: var(--wm-accent); }
+
+        /* ---------- 过关提示：贴在标题行（舞台上方的提示区） ----------
+           以前固定在视口底部，桌面端大窗口下离单词区有 200~300px 空白，等于看不见。
+           现在相对 .wm-titlebar 居中：占的是「状态栏与卡片区之间的那 40px 空隙」，
+           既不压住卡片，也不产生布局位移（绝对定位）。 */
+        .wm-flash {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 5;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            gap: .4rem;
+            background: rgba(29, 41, 55, .94);
+            color: #fff;
+            border-radius: 999px;
+            padding: 7px 18px;
+            font-size: .94rem;
+            font-weight: 700;
+            text-align: center;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, .22);
+            animation: wm-pop .24s ease;
+            width: max-content;                 /* 否则 left:50% 的可用宽度只剩半屏，文案会被折成两行 */
+            max-width: min(92vw, 30rem);
+            line-height: 1.35;
+            white-space: nowrap;                /* 再长的文案也只占一行（超出省略），不会撑成两行 */
+        }
+
+        .wm-flash .wm-flash-emoji { font-size: 1.25rem; line-height: 1; flex: 0 0 auto; }
+
+        /* 文案是 flex 子项：省略号必须挂在它自己身上，且 min-width:0 才允许收缩 */
+        .wm-flash > span:last-child {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* 从标题行中间弹出来（translate(-50%,-50%) 是它的定位基准，动画里必须带上） */
+        @keyframes wm-pop {
+            from { opacity: 0; transform: translate(-50%, -50%) scale(.9); }
+            to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+
+        /* 单页导出件里「退出」（退到站内 /learn）与「导出」入口都不成立，隐藏掉 */
+        body[data-standalone] .wm-close,
+        body[data-standalone] .wm-set-item.is-export { display: none; }
+
+        /* ---------- 弹窗（通关 / 选册 / 错题本 通用） ---------- */
+        .wm-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 1300;
+            background: rgba(23, 32, 44, .45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .wm-modal {
+            width: 100%;
+            max-width: 380px;
+            background: #fff;
+            border-radius: 18px;
+            padding: 22px 20px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, .25);
+            animation: wm-pop-soft .26s ease;
+            max-height: calc(100vh - 2rem);
+            max-height: calc(100dvh - 2rem);
+            overflow: auto;
+            color: var(--wm-ink);
+        }
+
+        .wm-modal.is-wide { max-width: 480px; text-align: left; }
+        .wm-modal h5 { font-weight: 700; margin-bottom: .35rem; }
+        .wm-modal > p { color: #86909c; font-size: .88rem; margin-bottom: 1rem; }
+
+        @keyframes wm-pop-soft {
+            from { opacity: 0; transform: scale(.92); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .wm-modal-emoji { font-size: 2.6rem; line-height: 1; }
+
+        /* ---------- 导出弹窗（册次多选：整列滚动 + 学段头吸顶） ---------- */
+        .wm-export-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem;
+            flex-wrap: wrap;
+            margin-top: .6rem;
+            padding: .45rem .6rem;
+            background: #f7f9fb;
+            border: 1px solid var(--wm-line);
+            border-radius: 10px;
+            font-size: .82rem;
+        }
+
+        .wm-export-all {
+            display: flex;
+            align-items: center;
+            gap: .4rem;
+            margin: 0;
+            font-weight: 600;
+            color: var(--wm-ink);
+            cursor: pointer;
+        }
+
+        .wm-export-all input { width: 16px; height: 16px; margin: 0; accent-color: var(--wm-sel-line); }
+        .wm-export-sum { color: var(--wm-muted); font-variant-numeric: tabular-nums; }
+
+        /* 24 册一次列全：整列滚动 + 学段头吸顶，不折叠也能随时看清自己在哪一段
+           （两处覆盖要带上 .wm-book-list 提高权重，否则会输给它自己的 max-height/gap） */
+        .wm-book-list.wm-export-list { max-height: min(52vh, 380px); gap: 0; padding-right: 2px; }
+        .wm-export-group { display: flex; flex-direction: column; }
+
+        .wm-export-stage {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem;
+            margin-top: .35rem;
+            padding: .3rem .5rem;
+            background: #eef2f6;
+            border-radius: 8px;
+            font-size: .78rem;
+            font-weight: 600;
+            color: #5b6673;
+        }
+
+        .wm-export-stage-btn {
+            border: 0;
+            background: none;
+            padding: 0 .15rem;
+            color: var(--wm-accent);
+            font-size: .74rem;
+        }
+
+        .wm-export-item {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            margin: .3rem 0 0;
+            padding: .42rem .55rem;
+            border: 1px solid var(--wm-line);
+            border-radius: 9px;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        .wm-export-item.is-on { border-color: var(--wm-sel-line); background: #f2f9ff; }
+        .wm-export-item input { width: 16px; height: 16px; margin: 0; flex: 0 0 auto; accent-color: var(--wm-sel-line); }
+        .wm-export-label { flex: 1 1 auto; font-size: .86rem; color: var(--wm-ink); }
+        .wm-export-meta { color: var(--wm-muted); font-size: .75rem; white-space: nowrap; }
+
+        /* ---------- 选册列表（按学段折叠：默认只展开当前册所在学段） ---------- */
+        .wm-book-list {
+            display: flex;
+            flex-direction: column;
+            gap: .55rem;
+            margin-top: .6rem;
+            /* 小学 8 + 初中 5 + 高中 11 = 24 册；限高 + 让「三个学段标题」始终同时可见
+               （展开的分组自己内部滚动，否则后面的学段标题会被顶到滚动区外，用户看不到还有别的学段） */
+            max-height: min(72vh, 560px);
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            padding-right: 2px;
+        }
+
+        .wm-book-group { display: flex; flex-direction: column; gap: .5rem; }
+
+        .wm-book-group-head {
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            width: 100%;
+            text-align: left;
+            background: #f4f7fa;
+            border: 1.5px solid var(--wm-line);
+            border-radius: 12px;
+            padding: 9px 12px;
+            color: var(--wm-ink);
+            font-weight: 700;
+            font-size: .88rem;
+            touch-action: manipulation;
+        }
+
+        .wm-book-group-head:hover { background: #eef2f6; }
+        .wm-book-group-head.is-open { background: #eaf4fe; border-color: var(--wm-sel-line); }
+
+        .wm-book-group-caret {
+            flex: 0 0 auto;
+            color: var(--wm-sel-line);
+            transition: transform .18s ease;
+        }
+
+        /* 折叠时朝右、展开时朝下（旋转 90°） */
+        .wm-book-group-head.is-open .wm-book-group-caret { transform: rotate(90deg); }
+
+        .wm-book-group-name { flex: 0 0 auto; }
+
+        .wm-book-group-sub {
+            flex: 1 1 auto;
+            min-width: 0;
+            font-weight: 400;
+            font-size: .72rem;
+            color: var(--wm-muted);
+            text-align: right;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .wm-book-group-cur { color: var(--wm-sel-line); font-weight: 700; }
+
+        /* 展开的册次列表（内部滚动，别把后面的学段标题顶出可视区） */
+        .wm-book-group-body {
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+            padding-left: .15rem;
+            padding-right: 2px;
+            max-height: min(38vh, 300px);
+            overflow-y: auto;
+            overscroll-behavior: contain;
+        }
+
+        .wm-book-item {
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            width: 100%;
+            text-align: left;
+            background: #fafbfc;
+            border: 1.5px solid var(--wm-line);
+            border-radius: 12px;
+            padding: 9px 12px;
+            color: var(--wm-ink);
+            touch-action: manipulation;
+        }
+
+        .wm-book-item:hover { background: #f4f7fa; border-color: #cfd6dd; }
+        .wm-book-item.is-active { background: #eaf4fe; border-color: var(--wm-sel-line); }
+
+        .wm-book-label { font-weight: 700; flex: 0 0 auto; min-width: 4.2rem; }
+        .wm-book-meta { flex: 1 1 auto; min-width: 0; font-size: .73rem; color: var(--wm-muted); line-height: 1.45; }
+        .wm-book-prog b { color: var(--wm-ok); }
+        .wm-book-prog.is-auto b { color: #d99000; }
+        .wm-book-check { flex: 0 0 auto; color: var(--wm-sel-line); }
+
+        /* ---------- 错题本 ---------- */
+        .wm-wrong-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem;
+        }
+
+        .wm-wrong-head h5 { margin: 0; }
+
+        .wm-wrong-total {
+            font-size: .78rem;
+            color: var(--wm-wrong-ink);
+            background: var(--wm-wrong-bg);
+            border-radius: 999px;
+            padding: 2px 10px;
+            font-weight: 700;
+        }
+
+        .wm-wrong-list {
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+            margin: .7rem 0;
+            max-height: min(52vh, 26rem);
+            overflow: auto;
+        }
+
+        .wm-wrong-item {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            border: 1px solid var(--wm-line);
+            border-left: 3px solid var(--wm-wrong-line);
+            border-radius: 10px;
+            padding: 8px 10px;
+            background: #fffdfd;
+        }
+
+        .wm-wrong-main { flex: 1 1 auto; min-width: 0; }
+        .wm-wrong-en { font-weight: 700; font-size: 1rem; display: flex; align-items: center; gap: .3rem; }
+        .wm-wrong-en .wm-speak { position: static; transform: none; font-size: .85rem; }
+        .wm-wrong-zh { font-size: .8rem; color: #5a6472; }
+        .wm-wrong-zh b { color: var(--wm-ok); }
+        .wm-wrong-miss { color: var(--wm-wrong-ink); }
+        .wm-wrong-src { font-size: .72rem; color: var(--wm-muted); margin-top: 2px; }
+        .wm-wrong-acts { flex: 0 0 auto; display: flex; gap: .35rem; }
+
+        .wm-wrong-empty {
+            text-align: center;
+            color: var(--wm-muted);
+            font-size: .88rem;
+            padding: 1.6rem 0;
+        }
+
+        .wm-wrong-empty i { display: block; font-size: 1.8rem; margin-bottom: .4rem; color: var(--wm-ok); }
+
+        /* ---------- 移动端：沉浸式全屏 ---------- */
+        @media (max-width: 767.98px) {
+            #site-nav { display: none !important; }
+            body.sc-page { background-color: #fff; }
+            body.sc-page main.sc-main { padding: 0 !important; }
+            .wm-toolbar { padding: .45rem .7rem .15rem; margin-bottom: 0; row-gap: .3rem; }
+            .wm-toolbar h2 { font-size: 1rem; }
+            .wm-toolbar-sub { display: none; }
+            .wm-toolbar-actions { gap: .35rem; }
+            .wm-toolbar-actions > .btn { padding: .25rem .5rem; font-size: .78rem; }
+            .wm-book-btn { max-width: 8.6rem; }
+            /* 窄屏工具栏按钮会换行，齿轮不在屏幕右边缘，按它对齐会算出负坐标（实测 left=-68）
+               → 改成贴底面板，宽度恒定落在视口内，也更好点 */
+            .wm-set-pop {
+                position: fixed;
+                left: .6rem;
+                right: .6rem;
+                bottom: calc(.6rem + env(safe-area-inset-bottom));
+                top: auto;
+                width: auto;
+                max-height: 72vh;
+                overflow-y: auto;
+                overscroll-behavior: contain;
+                border-radius: 16px;
+                z-index: 1250;
+            }
+            /* ---- 顶部信息在窄屏整体压缩 ----
+               HUD(34) + 标题行(46) + 信息栏(115) 原本吃掉 ~195px，
+               7 对单词（7 行）在 375x667 上就顶出屏幕 100px。
+               现在：HUD 脱离文档流（细进度条 + 浮动关闭/计数）、标题行单行、
+               信息栏只剩一行可横向滑动的说明文字、上一关/下一关改成浮动胶囊。 */
+            .wm-stage {
+                position: relative;                 /* .wm-hud 绝对定位的基准 */
+                max-width: none;
+                border: 0;
+                border-radius: 0;
+                box-shadow: none;
+                padding: 4px 10px calc(6px + env(safe-area-inset-bottom));
+                /* 顶部工具栏高度由 JS 量出来写进 --wm-stage-top（按钮会换行，写死会裁掉底部） */
+                min-height: calc(100vh - var(--wm-stage-top, 4.7rem));
+                min-height: calc(100dvh - var(--wm-stage-top, 4.7rem));
+                gap: 6px;
+            }
+
+            /* HUD 浮起来：细进度条贴舞台顶边，计数与关闭按钮浮在标题行右上角 */
+            .wm-hud {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 0;                          /* 不占纵向空间 */
+                z-index: 4;
+            }
+            .wm-progress {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 3px;
+                gap: 2px;
+            }
+            .wm-seg { height: 3px; border-radius: 0; }
+            .wm-counter {
+                position: absolute;
+                top: 6px;
+                right: 40px;
+                font-size: .78rem;
+            }
+            .wm-close {
+                position: absolute;
+                top: 2px;
+                right: 2px;
+                width: 30px;
+                height: 30px;
+                font-size: .95rem;
+                background: #f1f3f5;
+            }
+
+            /* 标题行：单行，右侧留出计数与关闭按钮的位置 */
+            .wm-titlebar {
+                min-height: 0;
+                padding: 4px 72px 4px 8px;
+                border-radius: 10px;
+                flex-wrap: nowrap;
+            }
+            .wm-title {
+                font-size: 1rem;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .wm-theme { flex: 0 0 auto; font-size: .7rem; padding: 2px 8px; }
+
+            /* 信息栏：只剩一行说明文字，改成横向滑动，长文案不再折行把区域撑高 */
+            .wm-infobar {
+                gap: 0;
+                padding: 4px 8px;
+                border-radius: 10px;
+            }
+            .wm-footer {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                overflow-y: hidden;
+                overscroll-behavior-x: contain;
+                scrollbar-width: none;
+                font-size: .75rem;
+                gap: .4rem;
+            }
+            .wm-footer::-webkit-scrollbar { display: none; }
+            .wm-footer > span { white-space: nowrap; }
+            /* 「本册已完成 N/M 关」在顶部进度条 + 计数里已有，窄屏不重复占位 */
+            .wm-footer > span:last-child { display: none; }
+
+            /* 上一关 / 下一关浮动胶囊：不占纵向空间，也不会被 7 行单词挤走 */
+            .wm-nav {
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: calc(8px + env(safe-area-inset-bottom));
+                justify-content: center;
+                gap: 10px;
+                z-index: 1150;                      /* 低于设置弹层(1250)与弹窗(1300) */
+                pointer-events: none;               /* 只有按钮可点，别挡住卡片 */
+            }
+            .wm-nav > .btn {
+                pointer-events: auto;
+                min-height: 38px;
+                border-radius: 999px;
+                box-shadow: 0 4px 14px rgba(31, 45, 61, .18);
+                -webkit-backdrop-filter: blur(6px);
+                backdrop-filter: blur(6px);
+            }
+            /* 磨砂白底只给次要按钮；「下一册」是本册收尾的主按钮，
+               保留 btn-primary 的蓝色填充才有「这里可以往前走」的指向性 */
+            .wm-nav > .btn:not(.btn-primary) { background: rgba(255, 255, 255, .94); }
+            .wm-nav-mid { display: none; }           /* 与顶部「第 N/M 关」重复 */
+
+            .wm-board { padding: 8px 10px 46px; }    /* 底部给浮动胶囊留位 */
+            /* 6~7 对时要塞下 7 行：卡片压到 46px（仍 >=44px 触控下限） */
+            .wm-card { min-height: 46px; max-height: 88px; border-radius: 13px; }
+            /* 窄屏状态条更紧凑，给「步骤标签 + 单词」留宽度（依旧只有一行） */
+            .wm-auto-bar { padding: 6px 8px; gap: .4rem; font-size: .8rem; }
+            .wm-auto-tip { gap: .3rem; }
+            .wm-auto-tag { padding: 1px 6px; font-size: .68rem; }
+            .wm-auto-text { font-size: .8rem; }
+            .wm-auto-count { min-width: 2rem; padding: 1px 6px; }
+            .wm-auto-btn { padding: 3px 8px; }
+            /* 窄屏「状态栏↔卡片区」之间只有 ~38px，提示条必须更瘦才塞得进这一行 */
+            .wm-flash { font-size: .88rem; padding: 5px 14px; gap: .3rem; }
+            .wm-modal { padding: 18px 15px; }
+            .wm-modal.is-wide { max-width: none; }
+        }
+
+        /* ---------- 超小屏（如 iPhone SE 一代 320x568）：再压一档 ----------
+           7 对单词 = 7 行，卡片降到 44px（触控下限）、棋盘留白与各区域间隙各收 1~3px，
+           合计再省 ~28px，正好覆盖 320x568 上剩余的 15px 溢出。 */
+        @media (max-width: 767.98px) and (max-height: 620px) {
+            .wm-stage { gap: 5px; padding: 3px 8px 4px; }
+            .wm-titlebar { padding: 3px 70px 3px 7px; }
+            .wm-infobar { padding: 3px 8px; }
+            .wm-board { padding: 6px 8px 40px; gap: 8px 10px; }
+            .wm-card { min-height: 44px; font-size: .92rem; }
+            .wm-nav { bottom: calc(6px + env(safe-area-inset-bottom)); }
+        }
+    </style>
+</head>
+<body class="sc-page" data-nav="learn">
+
+<script>
+/* 引导数据：同步 XHR，确保下方 Alpine 组件读取时已就绪 */
+window.__WORD_MATCH_DATA__ = (function () {
+    var d = { books: [], levels: {} };
+    try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/learn/word-match/data', false);
+        xhr.send();
+        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
+    } catch (e) { console.error('__WORD_MATCH_DATA__ load failed', e); }
+    return d;
+})();
+</script>
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+
+<div class="wm-root" x-data="wordMatchApp()">
+
+    <div class="wm-toolbar">
+        <div>
+            <h2 class="sc-page-title mb-0"><i class="bi bi-translate"></i> 英语单词匹配</h2>
+            <div class="wm-toolbar-sub">人教版小学 / 初中 / 高中英语 · 同一主题的单词在同一关</div>
+        </div>
+        <div class="wm-toolbar-actions">
+            <button type="button" class="btn btn-sm btn-outline-primary wm-book-btn" @click="openBookPicker()"
+                    :title="'当前：' + (bookLabel || '未选择') + '，点击切换册次'">
+                <i class="bi bi-book"></i> <span x-text="bookLabel || '选择册次'"></span>
+                <i class="bi bi-caret-down-fill wm-caret"></i>
+            </button>
+            <button type="button" class="btn btn-sm" :class="autoMode ? 'btn-outline-danger' : 'btn-success'"
+                    @click="autoMode ? stopAuto() : startAuto()"
+                    :title="autoMode ? '退出自动学习' : '从第 1 关开始自动点击配对并朗读'">
+                <i class="bi" :class="autoMode ? 'bi-box-arrow-left' : 'bi-play-circle'"></i>
+                <span x-text="autoMode ? '退出学习' : '自动学习'"></span>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-warning" x-show="autoMode" x-cloak
+                    @click="toggleAutoPause()" :title="autoPaused ? '继续自动学习' : '暂停自动学习'">
+                <i class="bi" :class="autoPaused ? 'bi-play-fill' : 'bi-pause-fill'"></i>
+                <span class="d-none d-sm-inline" x-text="autoPaused ? '继续' : '暂停'"></span>
+            </button>
+            <!-- 错题本 / 重做本关 / 朗读开关 / 重置进度 统一收进「设置」弹层 -->
+            <div class="wm-set-wrap" @click.outside="settingsOpen = false"
+                 @keydown.escape.window="settingsOpen = false">
+                <button type="button" class="btn btn-sm btn-outline-secondary wm-set-btn"
+                        @click="settingsOpen = !settingsOpen" :class="{ 'is-open': settingsOpen }"
+                        title="设置：错题本 / 重做本关 / 朗读 / 重置进度"
+                        aria-haspopup="true" :aria-expanded="settingsOpen ? 'true' : 'false'">
+                    <i class="bi bi-gear"></i>
+                    <span class="d-none d-sm-inline ms-1">设置</span>
+                    <span class="wm-count" x-show="wrongTotal > 0" x-cloak x-text="wrongTotal"></span>
+                </button>
+
+                <div class="wm-set-pop" x-show="settingsOpen" x-cloak aria-label="设置">
+                    <div class="wm-set-head">
+                        <span><i class="bi bi-sliders"></i> 设置</span>
+                        <span>保存在本机浏览器</span>
+                    </div>
+
+                    <button type="button" class="wm-set-item" @click="settingsOpen = false; openWrongBook()"
+                            title="查看答错的单词">
+                        <i class="bi bi-journal-bookmark wm-set-icon"></i>
+                        <span class="wm-set-main">
+                            <span class="wm-set-title">错题本
+                                <span class="wm-count" x-show="wrongTotal > 0" x-cloak
+                                      x-text="wrongTotal"></span>
+                            </span>
+                            <span class="wm-set-desc"
+                                  x-text="wrongTotal > 0 ? ('答错 ' + wrongTotal + ' 个，答对也不会自动移除') : '还没有错题，答错的词自动记在这里'"></span>
+                        </span>
+                        <i class="bi bi-chevron-right wm-set-arrow"></i>
+                    </button>
+
+                    <button type="button" class="wm-set-item" @click="settingsOpen = false; restartLevel()"
+                            title="重新打乱本关">
+                        <i class="bi bi-arrow-repeat wm-set-icon"></i>
+                        <span class="wm-set-main">
+                            <span class="wm-set-title">重做本关</span>
+                            <span class="wm-set-desc">重新打乱第 <span x-text="levelIndex + 1"></span>
+                                关的单词顺序，进度不变</span>
+                        </span>
+                        <i class="bi bi-chevron-right wm-set-arrow"></i>
+                    </button>
+
+                    <button type="button" class="wm-set-item" @click="toggleSound()"
+                            :title="soundOn ? '关闭音效与朗读' : '开启音效与朗读'">
+                        <i class="bi wm-set-icon" :class="soundOn ? 'bi-volume-up' : 'bi-volume-mute'"></i>
+                        <span class="wm-set-main">
+                            <span class="wm-set-title">音效与朗读</span>
+                            <span class="wm-set-desc"
+                                  x-text="soundOn ? '已开启：点到英文会朗读发音' : '已关闭：不朗读也不播提示音'"></span>
+                        </span>
+                        <span class="wm-set-switch" :class="{ 'is-on': soundOn }">
+                            <i class="bi" :class="soundOn ? 'bi-toggle-on' : 'bi-toggle-off'"></i>
+                            <span x-text="soundOn ? '开' : '关'"></span>
+                        </span>
+                    </button>
+
+                    <button type="button" class="wm-set-item is-export" @click="openExport()"
+                            title="导出为单页 HTML：不依赖本站，离线也能玩">
+                        <i class="bi bi-download wm-set-icon"></i>
+                        <span class="wm-set-main">
+                            <span class="wm-set-title">导出</span>
+                            <span class="wm-set-desc">打包成一页 HTML，发给同学也能直接玩</span>
+                        </span>
+                        <i class="bi bi-chevron-right wm-set-arrow"></i>
+                    </button>
+
+                    <button type="button" class="wm-set-item is-danger"
+                            @click="settingsOpen = false; resetProgress()" title="重置进度">
+                        <i class="bi bi-eraser wm-set-icon"></i>
+                        <span class="wm-set-main">
+                            <span class="wm-set-title">重置进度</span>
+                            <span class="wm-set-desc">清空「<span x-text="bookLabel"></span>」的进度记录</span>
+                        </span>
+                        <i class="bi bi-chevron-right wm-set-arrow"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <template x-if="!levels.length">
+        <div class="wm-stage">
+            <div class="wm-fallback text-center text-muted py-5">
+                <i class="bi bi-exclamation-circle fs-1 d-block mb-2"></i>
+                单词库加载失败，请刷新页面重试。
+            </div>
+        </div>
+    </template>
+
+    <template x-if="levels.length">
+        <div class="wm-stage">
+
+            <!-- HUD -->
+            <div class="wm-hud">
+                <button type="button" class="wm-close" @click="exit()" title="退出" aria-label="退出">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+                <div class="wm-progress" :class="{ 'is-auto': autoMode }" role="progressbar"
+                     :aria-valuenow="levelIndex + 1" aria-valuemin="1" :aria-valuemax="levelCount">
+                    <template x-for="i in levelCount" :key="'seg' + i">
+                        <span class="wm-seg" :class="segClass(i - 1)"></span>
+                    </template>
+                </div>
+                <div class="wm-counter"><b x-text="levelIndex + 1"></b>/<span x-text="levelCount"></span></div>
+            </div>
+
+            <!-- 标题（同时也是过关提示的位置：提示出现时整行让位给它） -->
+            <div class="wm-titlebar" :class="{ 'is-flashing': !!flash }">
+                <h3 class="wm-title" x-text="autoMode ? '自动学习' : '选择配对'"></h3>
+                <span class="wm-theme" x-show="currentLevel"><i class="bi bi-tag-fill"></i> <span
+                        x-text="currentLevel ? currentLevel.theme : ''"></span></span>
+                <span class="wm-auto-badge" x-show="autoMode" x-cloak>
+                    <i class="bi bi-magic"></i> 自动学习中
+                </span>
+
+                <!-- 过关提示：绝对定位覆盖这一行，不占额外高度、不产生位移 -->
+                <div class="wm-flash" x-show="flash" x-cloak>
+                    <span class="wm-flash-emoji" x-text="flashEmoji"></span>
+                    <span x-text="flash"></span>
+                </div>
+            </div>
+
+            <!-- 自动学习状态条 -->
+            <div class="wm-auto-bar" x-show="autoMode" x-cloak :class="{ 'is-paused': autoPaused }">
+                <div class="wm-auto-tip">
+                    <span class="wm-auto-tag" x-text="autoPaused ? '已暂停' : autoTag"></span>
+                    <span class="wm-auto-text" x-text="autoPaused ? '点「继续」接着学' : autoTip"></span>
+                </div>
+                <div class="wm-auto-count" x-show="!autoPaused && autoCountdown > 0">
+                    <span x-text="autoCountdown"></span><span class="wm-auto-sec">s</span>
+                </div>
+                <button type="button" class="wm-auto-btn" @click="toggleAutoPause()">
+                    <i class="bi" :class="autoPaused ? 'bi-play-fill' : 'bi-pause-fill'"></i>
+                    <span x-text="autoPaused ? '继续' : '暂停'"></span>
+                </button>
+                <button type="button" class="wm-auto-btn is-exit" @click="stopAuto()">
+                    <i class="bi bi-box-arrow-left"></i> 退出
+                </button>
+            </div>
+
+            <!-- 单词区上方：说明文字 + 关卡导航
+                 （原先这两块在棋盘「下方」，信息沉在最底部，且棋盘下方大片留白） -->
+            <div class="wm-infobar">
+                <div class="wm-footer">
+                    <span x-text="hintText"></span>
+                    <span><span x-text="autoMode ? '本册已学' : '本册已完成'"></span>
+                        <b x-text="doneCount"></b>/<span x-text="levelCount"></span> 关
+                        <template x-if="lastResult !== null && !autoMode">
+                            <span class="ms-2" x-text="lastResult ? '· 上一关一次通过' : '· 上一关有失误'"></span>
+                        </template>
+                    </span>
+                </div>
+                <div class="wm-nav">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @click="prevLevel()"
+                            :disabled="!canPrev" title="上一关（← 方向键）">
+                        <i class="bi bi-chevron-left"></i> 上一关
+                    </button>
+                    <span class="wm-nav-mid">第 <b x-text="levelIndex + 1"></b> 关 / 共 <span x-text="levelCount"></span> 关</span>
+                    <button type="button" class="btn btn-sm"
+                            :class="atBookEnd ? 'btn-primary' : 'btn-outline-secondary'"
+                            @click="navNext()" :disabled="!canNavNext" :title="navNextTitle">
+                        <span x-text="navNextLabel"></span> <i class="bi" :class="navNextIcon"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 棋盘 -->
+            <div class="wm-board" :class="{ 'is-auto': autoMode }">
+                <div class="wm-col wm-col-en">
+                    <template x-for="card in leftCards" :key="card.uid">
+                        <button type="button" class="wm-card" :class="cardClass(card)" @click="pick(card)"
+                                :aria-label="'英文 ' + card.text">
+                            <span class="wm-card-text" x-text="card.text"></span>
+                            <i class="bi bi-volume-up-fill wm-speak" x-show="!card.done" @click.stop="speak(card.text)"
+                               title="朗读"></i>
+                        </button>
+                    </template>
+                </div>
+                <div class="wm-col wm-col-zh">
+                    <template x-for="card in rightCards" :key="card.uid">
+                        <button type="button" class="wm-card" :class="cardClass(card)" @click="pick(card)"
+                                :aria-label="'中文 ' + card.text">
+                            <span class="wm-card-text" x-text="card.text"></span>
+                        </button>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- 册次选择（弹出框） -->
+    <div class="wm-modal-backdrop" x-show="bookPickerOpen" x-cloak @click.self="bookPickerOpen = false">
+        <div class="wm-modal is-wide">
+            <div class="wm-wrong-head">
+                <h5><i class="bi bi-book"></i> 选择年级册次</h5>
+                <span class="wm-wrong-total" x-text="books.length + ' 册'"></span>
+            </div>
+            <p class="mb-0 mt-1">共 <span x-text="totalLevels"></span> 关 · 每关 3~7 对单词（多为 6 对）</p>
+            <div class="wm-book-list">
+                <template x-for="g in bookGroups" :key="g.stage">
+                    <div class="wm-book-group">
+                        <button type="button" class="wm-book-group-head"
+                                :class="{ 'is-open': isStageOpen(g.stage) }"
+                                :aria-expanded="isStageOpen(g.stage) ? 'true' : 'false'"
+                                @click="toggleStage(g.stage)">
+                            <i class="bi bi-chevron-right wm-book-group-caret"></i>
+                            <span class="wm-book-group-name" x-text="g.stage"></span>
+                            <span class="wm-book-group-sub">
+                                <template x-if="stageHasCurrent(g.stage)">
+                                    <span class="wm-book-group-cur"><i class="bi bi-check-circle-fill"></i>
+                                        <span x-text="bookLabel"></span> · </span>
+                                </template>
+                                <span x-text="g.books.length + ' 册 · ' + g.levelCount + ' 关'"></span>
+                            </span>
+                        </button>
+                        <div class="wm-book-group-body" x-show="isStageOpen(g.stage)" x-cloak>
+                            <template x-for="b in g.books" :key="b.id">
+                                <button type="button" class="wm-book-item" :class="{ 'is-active': b.id === bookId }"
+                                        @click="pickBook(b.id)">
+                                    <span class="wm-book-label" x-text="b.label"></span>
+                                    <span class="wm-book-meta">
+                                        <span x-text="b.wordCount + ' 词 · ' + b.levelCount + ' 关'"></span><br>
+                                        <span class="wm-book-prog">练习 <b x-text="bookDone(b.id, false)"></b>/<span
+                                                x-text="b.levelCount"></span> 关</span>
+                                        <template x-if="bookDone(b.id, true) > 0">
+                                            <span class="wm-book-prog is-auto ms-2">学习 <b
+                                                    x-text="bookDone(b.id, true)"></b>/<span
+                                                    x-text="b.levelCount"></span> 关</span>
+                                        </template>
+                                    </span>
+                                    <i class="bi bi-check-circle-fill wm-book-check"
+                                       x-show="b.id === bookId" x-cloak></i>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-3"
+                    @click="bookPickerOpen = false">关闭</button>
+        </div>
+    </div>
+
+    <!-- 错题本 -->
+    <div class="wm-modal-backdrop" x-show="wrongOpen" x-cloak @click.self="wrongOpen = false">
+        <div class="wm-modal is-wide">
+            <div class="wm-wrong-head">
+                <h5><i class="bi bi-journal-bookmark"></i> 错题本</h5>
+                <span class="wm-wrong-total" x-text="wrongTotal + ' 个单词'"></span>
+            </div>
+            <p class="mb-0 mt-1">答错的单词自动记在这里，只保存在本机浏览器；答对后不会自动移除。</p>
+            <div class="wm-wrong-list" x-show="wrongList.length">
+                <template x-for="w in wrongList" :key="w.key">
+                    <div class="wm-wrong-item">
+                        <div class="wm-wrong-main">
+                            <div class="wm-wrong-en">
+                                <span x-text="w.en"></span>
+                                <button type="button" class="wm-speak" @click="speak(w.en)" title="朗读"><i
+                                        class="bi bi-volume-up-fill"></i></button>
+                            </div>
+                            <div class="wm-wrong-zh">正确：<b x-text="w.zh"></b> · 误选：<span class="wm-wrong-miss"
+                                    x-text="w.miss"></span></div>
+                            <div class="wm-wrong-src"><span
+                                    x-text="w.bookLabel + ' · 第 ' + (w.level + 1) + ' 关 · ' + w.theme"></span> ·
+                                错 <b x-text="w.count"></b> 次
+                            </div>
+                        </div>
+                        <div class="wm-wrong-acts">
+                            <button type="button" class="btn btn-sm btn-outline-primary" @click="gotoWrong(w)"
+                                    title="去这一关重新练">去练
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @click="removeWrong(w)"
+                                    title="从错题本移除"><i class="bi bi-trash"></i></button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            <div class="wm-wrong-empty" x-show="!wrongList.length">
+                <i class="bi bi-emoji-smile"></i>
+                还没有错题，继续保持！
+            </div>
+            <div class="d-flex gap-2 mt-3">
+                <button type="button" class="btn btn-outline-danger btn-sm flex-fill" @click="clearWrong()"
+                        :disabled="!wrongTotal">清空错题本
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm flex-fill"
+                        @click="wrongOpen = false">关闭
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导出为单页 HTML -->
+    <div class="wm-modal-backdrop" x-show="exportOpen" x-cloak @click.self="closeExport()">
+        <div class="wm-modal is-wide" id="wm-export-modal">
+            <div class="wm-wrong-head">
+                <h5><i class="bi bi-download"></i> 导出为单页 HTML</h5>
+                <span class="wm-wrong-total" x-text="exportSelCount + ' / ' + books.length + ' 册'"></span>
+            </div>
+            <p class="mb-0 mt-1">导出成一个自包含文件：样式、脚本、词库全在里面，双击就能玩，不依赖本站。</p>
+
+            <div class="wm-export-bar">
+                <label class="wm-export-all">
+                    <input type="checkbox" id="wm-export-all" x-ref="exportAll"
+                           :checked="exportAllSelected" @change="exportToggleAll($event.target.checked)"
+                           x-effect="$refs.exportAll.indeterminate = exportPartSelected">
+                    <span x-text="exportAllSelected ? '取消全选' : '全选'"></span>
+                </label>
+                <span class="wm-export-sum"
+                      x-text="'已选 ' + exportSelCount + ' 册 · ' + exportLevelCount + ' 关 · ' + exportWordCount + ' 词'"></span>
+            </div>
+
+            <div class="wm-book-list wm-export-list">
+                <template x-for="g in bookGroups" :key="'ex-' + g.stage">
+                    <div class="wm-export-group">
+                        <div class="wm-export-stage">
+                            <span x-text="g.stage + ' · ' + g.books.length + ' 册'"></span>
+                            <button type="button" class="wm-export-stage-btn"
+                                    @click="exportToggleStage(g.stage, !exportStageAll(g.stage))"
+                                    x-text="exportStageAll(g.stage) ? '取消本学段' : '全选本学段'"></button>
+                        </div>
+                        <template x-for="b in g.books" :key="'exb-' + b.id">
+                            <label class="wm-export-item" :class="{ 'is-on': isExportSel(b.id) }">
+                                <input type="checkbox" :checked="isExportSel(b.id)"
+                                       @change="toggleExportBook(b.id, $event.target.checked)">
+                                <span class="wm-export-label" x-text="b.label"></span>
+                                <span class="wm-export-meta"
+                                      x-text="b.wordCount + ' 词 · ' + b.levelCount + ' 关'"></span>
+                            </label>
+                        </template>
+                    </div>
+                </template>
+            </div>
+
+            <div class="d-flex gap-2 mt-3">
+                <button type="button" class="btn btn-primary btn-sm flex-fill" id="wm-export-go"
+                        :disabled="!exportSelCount || exporting" @click="runExport()">
+                    <i class="bi bi-download"></i>
+                    <span x-text="exporting ? '正在打包…' : '导出 HTML'"></span>
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm flex-fill" id="wm-export-cancel"
+                        :disabled="exporting" @click="closeExport()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 本册通关弹窗 -->
+    <div class="wm-modal-backdrop" x-show="finishedAll" x-cloak @click.self="finishedAll = false">
+        <div class="wm-modal">
+            <div class="wm-modal-emoji">🏆</div>
+            <h5>本册全部通关！</h5>
+            <p x-text="bookLabel + ' 的 ' + levelCount + ' 关已经全部完成，太厉害了。'"></p>
+            <div class="d-flex gap-2 justify-content-center flex-wrap">
+                <button type="button" class="btn btn-primary btn-sm" @click="replayBook()">
+                    <i class="bi bi-arrow-counterclockwise"></i> 重做本册
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" @click="gotoNextBook()"
+                        x-show="hasNextBook">
+                    <i class="bi bi-arrow-right-circle"></i> 下一册
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" @click="finishedAll = false">
+                    继续看看
+                </button>
+            </div>
+        </div>
+    </div>
+
+</div>
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+function wordMatchApp() {
+    var DATA = window.__WORD_MATCH_DATA__ || { books: [], levels: {} };
+    var PROGRESS_KEY = 'word_match_progress_v2';        // 练习模式进度
+    var AUTO_KEY = 'word_match_auto_progress_v2';       // 自动学习模式进度（与练习进度不共享）
+    // 词库扩容后关卡会重新切分，v1 记录的关卡下标已不对应新关卡，作废一次即可
+    // （错题本存的是单词本身，仍然有效，故不在此清理）
+    try {
+        if (!localStorage.getItem('word_match_v2_migrated')) {
+            localStorage.removeItem('word_match_progress_v1');
+            localStorage.removeItem('word_match_auto_progress_v1');
+            localStorage.setItem('word_match_v2_migrated', '1');
+        }
+    } catch (e) { /* 隐私模式等场景忽略 */ }
+    var WRONG_KEY = 'word_match_wrong_v1';              // 错题本（本机浏览器）
+    var BOOK_KEY = 'word_match_book_v1';
+    var SOUND_KEY = 'word_match_sound_v1';
+    var MAX_WRONG = 300;
+
+    /* 自动学习节奏：每个小步骤间隔 1s，配对朗读后 2s 思考，过关节奏 4s，跨册跳转 5s。
+       支持 ?wmStep=&wmThink=&wmGap=&wmBookGap= 覆盖（自动化测试用，可把整册压到几十秒跑完）。 */
+    var query = new URLSearchParams(window.location.search);
+    var pace = function (name, dft) {
+        var v = parseInt(query.get(name) || '', 10);
+        return (isFinite(v) && v >= 0) ? v : dft;
+    };
+    var AUTO_STEP = pace('wmStep', 1000);
+    var AUTO_THINK = pace('wmThink', 2000);
+    var AUTO_GAP = pace('wmGap', 4000);
+    var AUTO_BOOK_GAP = pace('wmBookGap', 5000);      // 一册学完 -> 下一册的间隔
+    var AUTO_SPEAK_MAX = AUTO_STEP >= 1000 ? 2200 : 300;
+    /* 跨册提示里的秒数按实际节奏算，改节奏时文案不会说谎 */
+    var BOOK_GAP_SEC = Math.max(1, Math.round(AUTO_BOOK_GAP / 1000));
+
+    return {
+        books: DATA.books || [],
+        allLevels: DATA.levels || {},
+
+        /* 当前册 */
+        bookId: '',
+        levels: [],
+        levelIndex: 0,
+
+        /* 本关 */
+        currentLevel: null,
+        leftCards: [],
+        rightCards: [],
+        sel: null,
+        locked: false,
+        matchedCount: 0,
+        levelWrong: 0,
+        buildSeq: 0,          // 每次生成卡片自增，保证 x-for 的 :key 唯一
+
+        /* 练习进度：{ bookId: [已通关的关卡下标] } */
+        progress: {},
+        lastResult: null,
+
+        /* 本会话内每个关卡上一次的排列，用于「每次进来顺序都不一样」 */
+        lastLayout: {},
+
+        /* 自动学习模式 */
+        autoMode: false,
+        autoPaused: false,
+        autoTip: '',
+        autoTag: '',
+        autoStage: '',
+        autoCountdown: 0,
+        autoTimer: null,
+        autoSeq: 0,
+        autoProgress: {},
+
+        /* 错题本 */
+        wrongBook: {},
+        wrongOpen: false,
+
+        /* 册次弹出框（按学段折叠，默认只展开当前册所在学段） */
+        bookPickerOpen: false,
+        stageOpen: {},
+        stageInit: false,
+
+        /* 设置弹层（错题本 / 重做本关 / 朗读开关 / 重置进度 都收在这里） */
+        settingsOpen: false,
+
+        /* 导出为单页 HTML：exportSel 是 { bookId: true } 的勾选表 */
+        exportOpen: false,
+        exportSel: {},
+        exporting: false,
+
+        flash: '',
+        flashEmoji: '',
+        flashTimer: null,
+        advanceTimer: null,
+        finishedAll: false,
+
+        soundOn: true,
+        audioCtx: null,
+
+        init: function () {
+            this.progress = this.loadProgress();
+            this.autoProgress = this.loadAutoProgress();
+            this.wrongBook = this.loadWrong();
+            this.soundOn = localStorage.getItem(SOUND_KEY) !== '0';
+
+            var saved = localStorage.getItem(BOOK_KEY);
+            var valid = this.books.some(function (b) { return b.id === saved; });
+            this.bookId = valid ? saved : (this.books.length ? this.books[0].id : '');
+            this.applyBook(this.bookId, true);
+
+            var self = this;
+            window.addEventListener('resize', function () { self.measureTop(); });
+            window.addEventListener('keydown', function (e) {
+                if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+                if (e.key === 'Escape') {
+                    if (self.bookPickerOpen) { self.bookPickerOpen = false; return; }
+                    if (self.wrongOpen) { self.wrongOpen = false; return; }
+                    if (self.autoMode) self.stopAuto();
+                    return;
+                }
+                if (self.autoMode) return;
+                if (e.key === 'ArrowLeft') self.prevLevel();
+                else if (e.key === 'ArrowRight') self.navNext();
+            });
+            this.measureTop();
+            /* 工具栏会「二次长高」：字体/按钮文案就位后它会换行再涨一截，
+               而 init 里这次测量发生在它定型之前（实测 41px → 67px），
+               少算的 26px 正好把舞台顶出视口、整页被迫滚动。
+               故跟着工具栏的尺寸变化持续重算（量 top 不量高度 ⇒ 不会自我反馈成死循环）。 */
+            if (window.ResizeObserver) {
+                var tb = document.querySelector('.wm-toolbar');
+                if (tb) {
+                    new ResizeObserver(function () { self.measureTop(); }).observe(tb);
+                }
+            }
+            window.addEventListener('load', function () { self.measureTop(); });
+        },
+
+        /* 移动端舞台高度：用「舞台自身到页面顶部的距离」算——标题、工具栏、按钮换行都算在内。
+           只量工具栏底边会少算标题那 26px，舞台被顶出视口、整页被迫滚动（390x844 实测）。
+           量的是 top，不受 min-height 影响，不会自我反馈。舞台尚未渲染时退回工具栏底边。 */
+        measureTop: function () {
+            var st = document.querySelector('.wm-stage');
+            var tb = document.querySelector('.wm-toolbar');
+            var h = st ? Math.round(st.getBoundingClientRect().top + window.scrollY)
+                       : (tb ? Math.round(tb.getBoundingClientRect().bottom) : 78);
+            document.documentElement.style.setProperty('--wm-stage-top', Math.max(h, 40) + 'px');
+        },
+
+        /* ==================== 册 / 关 ==================== */
+        applyBook: function (bookId, restore) {
+            if (this.autoMode) this.stopAuto(true);
+            this.bookId = bookId;
+            localStorage.setItem(BOOK_KEY, bookId);
+            this.levels = this.allLevels[bookId] || [];
+            this.finishedAll = false;
+
+            var done = this.progress[bookId] || [];
+            var start = 0;
+            if (restore && done.length) {
+                // 优先回到第一个未通关的关卡；全部通关则从头再来（可自由重玩）
+                var firstUndone = -1;
+                for (var i = 0; i < this.levels.length; i++) {
+                    if (done.indexOf(i) < 0) { firstUndone = i; break; }
+                }
+                start = firstUndone < 0 ? 0 : firstUndone;
+            }
+            this.levelIndex = Math.min(start, Math.max(0, this.levels.length - 1));
+            this.loadLevel();
+            this.measureTop();
+        },
+
+        openBookPicker: function () {
+            // 首次打开：只展开当前册所在学段，其余（例如学小学时的初中 / 高中）全部折叠
+            if (!this.stageInit) {
+                this.resetStageOpen();
+                this.stageInit = true;
+            }
+            this.bookPickerOpen = true;
+        },
+
+        /* 弹层里各学段分组的展开状态。
+           手风琴式：同时只展开一个学段 —— 这样「小学 / 初中 / 高中」三个标题永远都在可视区内，
+           展开出来的册次列表自己内部滚动（多开会把后面的学段标题顶出滚动区，用户就看不到还有别的学段）。 */
+        openStageOnly: function (stage) {
+            var open = {};
+            for (var i = 0; i < this.bookGroups.length; i++) {
+                open[this.bookGroups[i].stage] = (this.bookGroups[i].stage === stage);
+            }
+            this.stageOpen = open;
+        },
+
+        resetStageOpen: function () { this.openStageOnly(this.stageOf(this.bookId)); },
+
+        isStageOpen: function (stage) { return !!this.stageOpen[stage]; },
+
+        toggleStage: function (stage) { this.openStageOnly(this.stageOpen[stage] ? null : stage); },
+
+        stageOf: function (bookId) {
+            var idx = this.findBookIndex(bookId);
+            return idx >= 0 ? (this.books[idx].stage || '小学') : '';
+        },
+
+        stageHasCurrent: function (stage) {
+            return !!this.bookId && this.stageOf(this.bookId) === stage;
+        },
+
+        pickBook: function (bookId) {
+            this.bookPickerOpen = false;
+            if (bookId !== this.bookId) this.applyBook(bookId, true);
+            // 换册后，下次打开弹层时新册所在学段必须是展开的
+            this.openStageOnly(this.stageOf(bookId));
+        },
+
+        switchBook: function (bookId) { this.pickBook(bookId); },
+
+        loadLevel: function () {
+            if (this.advanceTimer) { clearTimeout(this.advanceTimer); this.advanceTimer = null; }
+            var lv = this.levels[this.levelIndex] || null;
+            this.currentLevel = lv;
+            this.sel = null;
+            this.locked = false;
+            this.matchedCount = 0;
+            this.levelWrong = 0;
+            this.finishedAll = false;
+            if (!lv) { this.leftCards = []; this.rightCards = []; return; }
+            this.buildCards(lv);
+        },
+
+        /* 两列各自独立洗牌：① 不出现「整片一一对应」 ② 同一关再次进入时排列要变 */
+        buildCards: function (lv) {
+            var n = lv.pairs.length;
+            /* uid 必须每次构建都不同：x-for 用 :key 复用节点时不会刷新作用域里的 card 对象，
+               沿用旧 uid 会让「上一关/下一关/重做本关/退出自动学习」后卡片残留旧的选中/已完成样式 */
+            this.buildSeq++;
+            var seq = this.buildSeq;
+            var enBase = [], zhBase = [];
+            for (var i = 0; i < n; i++) {
+                var p = lv.pairs[i];
+                /* mean = 对面的释义：判定只看释义，同一关里若两个词释义相同（同义表达关），
+                   选哪个中文都算对——两张中文卡本来就长得一模一样，用户无从区分也不该被为难 */
+                enBase.push({ uid: 'L' + i + '#' + seq, side: 'L', key: p.key, text: p.en, mean: p.zh, done: false, wrong: false });
+                zhBase.push({ uid: 'R' + i + '#' + seq, side: 'R', key: p.key, text: p.zh, mean: p.en, done: false, wrong: false });
+            }
+            var sig = this.bookId + '#' + this.levelIndex;
+            var lastSig = this.lastLayout[sig] || '';
+            var left = this.shuffle(enBase.slice());
+            var right = this.shuffle(zhBase.slice());
+            for (var att = 0; att < 60; att++) {
+                var l = this.shuffle(enBase.slice());
+                var r = this.shuffle(zhBase.slice());
+                var aligned = this.countAligned(l, r);
+                var repeat = (att < 40) && lastSig && this.layoutSig(l, r) === lastSig;
+                if (aligned <= 1 && !repeat) { left = l; right = r; break; }
+                if (att === 59) { left = l; right = r; }
+            }
+            this.lastLayout[sig] = this.layoutSig(left, right);
+            this.leftCards = left;
+            this.rightCards = right;
+        },
+
+        countAligned: function (left, right) {
+            var n = 0;
+            for (var i = 0; i < left.length && i < right.length; i++) {
+                if (left[i].key === right[i].key) n++;
+            }
+            return n;
+        },
+
+        layoutSig: function (left, right) {
+            return left.map(function (c) { return c.key; }).join(',') + '|' +
+                right.map(function (c) { return c.key; }).join(',');
+        },
+
+        restartLevel: function () { this.loadLevel(); },
+
+        nextLevel: function () {
+            if (this.autoMode) return;
+            if (this.levelIndex < this.levels.length - 1) {
+                this.levelIndex++;
+                this.loadLevel();
+            }
+        },
+
+        /* 导航条右侧按钮（按钮本身 / → 方向键）统一的动作：
+           普通关卡 = 下一关；本册最后一关 = 下一册（见 navNextLabel 处的说明） */
+        navNext: function () {
+            if (this.autoMode) return;
+            if (this.atBookEnd) { this.gotoNextBook(); return; }
+            this.nextLevel();
+        },
+
+        prevLevel: function () {
+            if (this.autoMode) return;
+            if (this.levelIndex > 0) {
+                this.levelIndex--;
+                this.loadLevel();
+            }
+        },
+
+        /* ==================== 交互 ==================== */
+        pick: function (card, auto) {
+            if (this.locked || !card || card.done) return;
+            if (this.autoMode && !auto) return;   // 自动学习中不接受手动点击
+
+            // 再次点击同一张 -> 取消选中
+            if (this.sel && this.sel.uid === card.uid) {
+                this.sel = null;
+                return;
+            }
+            if (!this.sel) {
+                this.sel = card;
+                this.tapFeedback();
+                this.speakOnPick(card);      // 点英文那一下就读
+                return;
+            }
+            // 同侧改选：替换，不判错
+            if (this.sel.side === card.side) {
+                this.sel = card;
+                this.speakOnPick(card);
+                return;
+            }
+            // 异侧：判定。card 是「后选中」的那张
+            this.judge(this.sel, card);
+        },
+
+        /* 左右两张卡是否同义：右侧中文 == 左侧词的释义（同侧比较退回 key，用于布局去重） */
+        sameMeaning: function (first, second) {
+            if (!first || !second) return false;
+            if (first.side === second.side) return first.key === second.key;
+            var l = first.side === 'L' ? first : second;
+            var r = first.side === 'L' ? second : first;
+            return l.mean === r.text;
+        },
+
+        judge: function (first, second) {
+            if (this.sameMeaning(first, second)) {
+                first.done = true;
+                second.done = true;
+                this.sel = null;
+                this.matchedCount++;
+                this.chime(true);
+                /* 朗读时机 = 点英文那一下：英文先选中时 pick() 已读过，
+                   这里只补「中文先选、英文后选」的情况，避免同一个词念两遍 */
+                if (!this.autoMode && second.side === 'L') {
+                    this.speak(second.text);
+                }
+                if (this.matchedCount >= this.currentLevel.pairs.length) this.completeLevel();
+                return;
+            }
+            // 不匹配：后选中的那张标红，先选中的保留，方便直接换一个候选者
+            this.levelWrong++;
+            this.recordWrong(first, second);
+            this.locked = true;
+            second.wrong = true;
+            this.chime(false);
+            var self = this;
+            setTimeout(function () {
+                second.wrong = false;
+                self.locked = false;
+            }, 620);
+        },
+
+        completeLevel: function () {
+            var perfect = this.levelWrong === 0;
+            this.lastResult = perfect;
+            if (this.autoMode) {
+                // 学习模式进度独立记录，绝不写练习进度
+                this.markAutoDone(this.levelIndex);
+                return;
+            }
+            this.markDone(this.levelIndex);
+
+            if (this.levelIndex >= this.levels.length - 1) {
+                this.showFlash(perfect ? '🎉' : '👍', perfect ? '全对通关！本册完成' : '本册完成！');
+                this.finishedAll = true;
+                return;
+            }
+            this.showFlash(perfect ? '⭐️' : '👍', perfect ? '全对！进入下一关' : '通关！进入下一关');
+            var self = this;
+            this.advanceTimer = setTimeout(function () {
+                self.advanceTimer = null;
+                if (!self.finishedAll) self.nextLevel();
+            }, 950);
+        },
+
+        showFlash: function (emoji, text, ms) {
+            this.flashEmoji = emoji;
+            this.flash = text;
+            var self = this;
+            if (this.flashTimer) clearTimeout(this.flashTimer);
+            this.flashTimer = setTimeout(function () { self.flash = ''; }, ms || 900);
+        },
+
+        /* ==================== 导出为单页 HTML ==================== */
+        openExport: function () {
+            this.settingsOpen = false;
+            // 默认只勾当前册（多数人就是要把它带走），要更多再自己勾
+            var sel = {};
+            if (this.bookId) sel[this.bookId] = true;
+            this.exportSel = sel;
+            this.exportOpen = true;
+        },
+
+        closeExport: function () {
+            if (this.exporting) return;          // 打包中不许关，避免半路丢状态
+            this.exportOpen = false;
+        },
+
+        isExportSel: function (id) { return !!this.exportSel[id]; },
+
+        toggleExportBook: function (id, on) {
+            var next = Object.assign({}, this.exportSel);
+            if (on) next[id] = true; else delete next[id];
+            this.exportSel = next;
+        },
+
+        exportToggleAll: function (on) {
+            var next = {};
+            if (on) for (var i = 0; i < this.books.length; i++) next[this.books[i].id] = true;
+            this.exportSel = next;
+        },
+
+        exportStageAll: function (stage) {
+            for (var i = 0; i < this.books.length; i++) {
+                var b = this.books[i];
+                if ((b.stage || '小学') === stage && !this.exportSel[b.id]) return false;
+            }
+            return true;
+        },
+
+        exportToggleStage: function (stage, on) {
+            var next = Object.assign({}, this.exportSel);
+            for (var i = 0; i < this.books.length; i++) {
+                var b = this.books[i];
+                if ((b.stage || '小学') !== stage) continue;
+                if (on) next[b.id] = true; else delete next[b.id];
+            }
+            this.exportSel = next;
+        },
+
+        runExport: function () {
+            var self = this;
+            var ids = this.exportSelList;
+            if (!ids.length) { SC.toast.warn('请先勾选要导出的册次'); return; }
+            this.exporting = true;
+            buildStandaloneWordMatch(ids).then(function (res) {
+                var bytes = downloadHtml(res.html, res.filename);
+                self.exporting = false;
+                self.exportOpen = false;
+                SC.toast.success('已导出 ' + ids.length + ' 册 · ' + Math.round(bytes / 1024) + ' KB', 5000);
+            }).catch(function (e) {
+                console.error('[export] failed', e);
+                self.exporting = false;
+                SC.toast.error('导出失败：' + ((e && e.message) || e));
+            });
+        },
+
+        exit: function () {
+            if (this.autoMode) this.stopAuto(true);
+            if (window.__WM_STANDALONE__) return;   // 单页导出件没有站内可退
+            window.location.href = '/learn';
+        },
+
+        replayBook: function () {
+            this.finishedAll = false;
+            this.progress[this.bookId] = [];
+            this.saveProgress();
+            this.levelIndex = 0;
+            this.loadLevel();
+        },
+
+        /* 下一册（自动学习跨册也用它；不能走 applyBook —— applyBook 会停掉自动学习） */
+        nextBookRef: function () {
+            var idx = this.findBookIndex(this.bookId);
+            return (idx >= 0 && idx < this.books.length - 1) ? this.books[idx + 1] : null;
+        },
+
+        gotoNextBook: function () {
+            var nb = this.nextBookRef();
+            if (nb) this.applyBook(nb.id, false);
+        },
+
+        /* 自动学习里跨册：只换册并重建关卡，不动 autoMode / autoSeq */
+        enterBookInAuto: function (bookId) {
+            if (this.advanceTimer) { clearTimeout(this.advanceTimer); this.advanceTimer = null; }
+            this.bookId = bookId;
+            localStorage.setItem(BOOK_KEY, bookId);
+            this.levels = this.allLevels[bookId] || [];
+            this.levelIndex = 0;
+            this.finishedAll = false;
+            this.loadLevel();
+            this.measureTop();
+        },
+
+        /* ==================== 自动学习模式 ==================== */
+        startAuto: function () {
+            if (this.autoMode) return;
+            this.autoMode = true;
+            this.autoPaused = false;
+            this.finishedAll = false;
+            this.autoProgress = this.loadAutoProgress();
+            this.levelIndex = 0;                 // 每次开启都从第 1 关开始
+            this.loadLevel();
+            this.autoSeq++;
+            var token = this.autoSeq;
+            this.autoStage = 'start';
+            this.setAutoTip('开始学习', '先看英文，再找中文');
+            this.autoCountdown = 0;
+            this.measureTop();
+            var self = this;
+            this.autoLoop(token).catch(function (e) {
+                console.error('auto learn failed', e);
+                self.stopAuto(true);
+            });
+        },
+
+        /* 状态条文案：短标签固定可见 + 详情（单词等）过长时省略号截断，状态条永远只有一行 */
+        setAutoTip: function (tag, tip) {
+            this.autoTag = tag;
+            this.autoTip = tip;
+        },
+
+        autoLoop: async function (token) {
+            while (this.autoMode && this.autoSeq === token) {
+                var lv = this.currentLevel;
+                if (!lv || !lv.pairs.length) return;
+
+                /* 一个单词一个单词地模拟「点英文（同时朗读）-> 点中文 -> 思考 2 秒」 */
+                while (this.autoMode && this.autoSeq === token) {
+                    var remain = this.leftCards.filter(function (c) { return !c.done; });
+                    if (!remain.length) break;
+                    var enCard = remain[0];
+                    var i;
+                    var zhCard = null;
+                    for (i = 0; i < this.rightCards.length; i++) {
+                        var rc = this.rightCards[i];
+                        if (!rc.done && rc.text === enCard.mean) { zhCard = rc; break; }
+                    }
+                    if (!zhCard) break;
+
+                    this.autoStage = 'pick-en';
+                    this.setAutoTip('看英文', enCard.text);
+                    if (!(await this.autoSleep(AUTO_STEP, token))) return;
+
+                    this.pick(enCard, true);                       // 选中英文
+                    this.autoStage = 'listen';                     // 点英文后立即朗读，念完再往下走
+                    this.setAutoTip('听读音', enCard.text);
+                    await this.speakThenWait(enCard.text, token);
+                    if (!this.autoMode || this.autoSeq !== token) return;
+
+                    this.autoStage = 'pick-zh';
+                    this.setAutoTip('找出中文', enCard.text);
+                    if (!(await this.autoSleep(AUTO_STEP, token))) return;
+
+                    this.pick(zhCard, true);          // 配对成功
+                    if (this.matchedCount >= lv.pairs.length) break;   // 本关收尾交给下面的过关节奏
+
+                    this.autoStage = 'think';
+                    this.setAutoTip('记一记', zhCard.text + ' = ' + enCard.text);
+                    if (!(await this.autoSleep(AUTO_THINK, token))) return;
+                }
+
+                if (!this.autoMode || this.autoSeq !== token) return;
+
+                /* 本册学完：先给 5 秒记忆 + 跳转提示，再自动接着学下一册（最后一册才收尾） */
+                if (this.levelIndex >= this.levels.length - 1) {
+                    var nextBook = this.nextBookRef();
+                    if (nextBook) {
+                        var nextLabel = nextBook.label;
+                        this.autoStage = 'book-gap';
+                        this.setAutoTip('本册完成', BOOK_GAP_SEC + ' 秒后进入下一册');
+                        this.showFlash('📚', '本册学完！即将进入「' + nextLabel + '」', AUTO_BOOK_GAP);
+                        if (!(await this.autoSleep(AUTO_BOOK_GAP, token))) return;
+
+                        this.enterBookInAuto(nextBook.id);
+                        this.autoStage = 'book-start';
+                        this.setAutoTip('开始学习', '「' + nextLabel + '」第 1 关');
+                        if (!(await this.autoSleep(AUTO_STEP, token))) return;
+                        continue;
+                    }
+                    this.autoStage = 'finish';
+                    this.setAutoTip('全部完成', '共 ' + this.books.length + ' 册，太棒了！');
+                    this.showFlash('🏆', '全部 ' + this.books.length + ' 册都学完啦！', 2600);
+                    await this.autoSleep(1500, token);
+                    this.stopAuto(true);
+                    if (typeof SC !== 'undefined' && SC.toast) {
+                        SC.toast.success('全部 ' + this.books.length + ' 册自动学习完成');
+                    }
+                    return;
+                }
+
+                /* 本关完成：额外给 4 秒思考与记忆 */
+                this.autoStage = 'gap';
+                this.setAutoTip('本关完成', '即将进入下一关');
+                this.showFlash('✅', '本关完成！即将进入下一关', AUTO_GAP);
+                if (!(await this.autoSleep(AUTO_GAP, token))) return;
+
+                this.levelIndex++;
+                this.loadLevel();
+            }
+        },
+
+        /* 可中断、可暂停的等待：返回 false 表示节奏已被打断（退出/切关） */
+        autoSleep: function (ms, token) {
+            var self = this;
+            return new Promise(function (resolve) {
+                var remain = ms;
+                var tick = ms > 1000 ? 200 : 50;
+                self.autoCountdown = Math.ceil(ms / 1000);
+                var step = function () {
+                    if (!self.autoMode || self.autoSeq !== token) {
+                        self.autoTimer = null;
+                        resolve(false);
+                        return;
+                    }
+                    if (self.autoPaused) { self.autoTimer = setTimeout(step, 150); return; }
+                    remain -= tick;
+                    self.autoCountdown = Math.max(0, Math.ceil(remain / 1000));
+                    if (remain <= 0) { self.autoTimer = null; resolve(true); return; }
+                    self.autoTimer = setTimeout(step, tick);
+                };
+                self.autoTimer = setTimeout(step, tick);
+            });
+        },
+
+        /* 朗读（等它念完再开始计时思考，念不出来也会按上限兜底） */
+        speakThenWait: function (text, token) {
+            var self = this;
+            return new Promise(function (resolve) {
+                var done = false;
+                var finish = function () {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(cap);
+                    resolve();
+                };
+                var cap = setTimeout(finish, AUTO_SPEAK_MAX);
+                if (!self.soundOn || !window.speechSynthesis) {
+                    clearTimeout(cap);
+                    self.autoSleep(600, token).then(finish);
+                    return;
+                }
+                try {
+                    var u = new SpeechSynthesisUtterance(text);
+                    u.lang = 'en-US';
+                    u.rate = 0.85;
+                    u.onend = finish;
+                    u.onerror = finish;
+                    window.speechSynthesis.cancel();
+                    window.speechSynthesis.speak(u);
+                } catch (e) { finish(); }
+            });
+        },
+
+        toggleAutoPause: function () {
+            if (!this.autoMode) return;
+            this.autoPaused = !this.autoPaused;
+            if (this.autoPaused) {
+                try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+            }
+        },
+
+        stopAuto: function (silent) {
+            if (!this.autoMode) {
+                this.autoStage = '';
+                this.autoTag = '';
+                this.autoTip = '';
+                this.autoCountdown = 0;
+                return;
+            }
+            this.autoMode = false;
+            this.autoSeq++;
+            this.autoPaused = false;
+            if (this.autoTimer) { clearTimeout(this.autoTimer); this.autoTimer = null; }
+            try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+            this.autoStage = '';
+            this.autoTag = '';
+            this.autoTip = '';
+            this.autoCountdown = 0;
+            this.loadLevel();          // 回到练习模式的干净状态
+            this.measureTop();
+            if (!silent && typeof SC !== 'undefined' && SC.toast) SC.toast.info('已退出自动学习');
+        },
+
+        /* ==================== 错题本（本机浏览器保存） ==================== */
+        loadWrong: function () {
+            try {
+                var raw = localStorage.getItem(WRONG_KEY);
+                var obj = raw ? JSON.parse(raw) : null;
+                return (obj && typeof obj === 'object') ? obj : {};
+            } catch (e) { return {}; }
+        },
+
+        saveWrong: function () {
+            try { localStorage.setItem(WRONG_KEY, JSON.stringify(this.wrongBook)); } catch (e) { /* 忽略 */ }
+        },
+
+        recordWrong: function (first, second) {
+            var enCard = first.side === 'L' ? first : second;
+            var zhCard = first.side === 'L' ? second : first;
+            if (!enCard || enCard.side !== 'L' || !zhCard || zhCard.side !== 'R') return;
+            var lv = this.currentLevel;
+            var correctZh = '';
+            if (lv) {
+                for (var i = 0; i < lv.pairs.length; i++) {
+                    if (lv.pairs[i].key === enCard.key) { correctZh = lv.pairs[i].zh; break; }
+                }
+            }
+            var old = this.wrongBook[enCard.key];
+            var next = Object.assign({}, this.wrongBook);
+            next[enCard.key] = {
+                key: enCard.key,
+                en: enCard.text,
+                zh: correctZh || (old ? old.zh : ''),
+                miss: zhCard.text,
+                bookId: this.bookId,
+                bookLabel: this.bookLabel,
+                theme: lv ? lv.theme : '',
+                level: this.levelIndex,
+                count: (old ? old.count : 0) + 1,
+                ts: Date.now()
+            };
+            this.wrongBook = this.trimWrong(next);
+            this.saveWrong();
+        },
+
+        trimWrong: function (obj) {
+            var keys = Object.keys(obj);
+            if (keys.length <= MAX_WRONG) return obj;
+            keys.sort(function (a, b) { return (obj[b].ts || 0) - (obj[a].ts || 0); });
+            var out = {};
+            for (var i = 0; i < MAX_WRONG; i++) out[keys[i]] = obj[keys[i]];
+            return out;
+        },
+
+        openWrongBook: function () { this.wrongOpen = true; },
+
+        removeWrong: function (w) {
+            var next = Object.assign({}, this.wrongBook);
+            delete next[w.key];
+            this.wrongBook = next;
+            this.saveWrong();
+        },
+
+        clearWrong: function () {
+            var self = this;
+            if (!this.wrongTotal) return;
+            var msg = '将清空错题本里的 ' + this.wrongTotal + ' 个单词，确定吗？';
+            var ask = (typeof SC !== 'undefined' && SC.confirm)
+                ? SC.confirm({ title: '清空错题本', message: msg, confirmText: '清空', danger: true })
+                : Promise.resolve(window.confirm(msg));
+            ask.then(function (ok) {
+                if (!ok) return;
+                self.wrongBook = {};
+                self.saveWrong();
+                if (typeof SC !== 'undefined' && SC.toast) SC.toast.success('错题本已清空');
+            });
+        },
+
+        gotoWrong: function (w) {
+            this.wrongOpen = false;
+            if (this.autoMode) this.stopAuto(true);
+            if (w.bookId !== this.bookId) {
+                this.applyBook(w.bookId, false);
+            }
+            if (w.level >= 0 && w.level < this.levels.length) {
+                this.levelIndex = w.level;
+                this.loadLevel();
+            }
+        },
+
+        /* ==================== 进度 ==================== */
+        loadProgress: function () {
+            return this.readMap(PROGRESS_KEY);
+        },
+
+        loadAutoProgress: function () {
+            return this.readMap(AUTO_KEY);
+        },
+
+        readMap: function (key) {
+            try {
+                var raw = localStorage.getItem(key);
+                var obj = raw ? JSON.parse(raw) : {};
+                return (obj && typeof obj === 'object') ? obj : {};
+            } catch (e) { return {}; }
+        },
+
+        saveProgress: function () {
+            try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(this.progress)); } catch (e) { /* 忽略 */ }
+        },
+
+        saveAutoProgress: function () {
+            try { localStorage.setItem(AUTO_KEY, JSON.stringify(this.autoProgress)); } catch (e) { /* 忽略 */ }
+        },
+
+        markDone: function (index) {
+            var done = this.progress[this.bookId] || (this.progress[this.bookId] = []);
+            if (done.indexOf(index) < 0) done.push(index);
+            this.progress[this.bookId] = done;
+            this.saveProgress();
+        },
+
+        markAutoDone: function (index) {
+            var done = this.autoProgress[this.bookId] || (this.autoProgress[this.bookId] = []);
+            if (done.indexOf(index) < 0) done.push(index);
+            this.autoProgress[this.bookId] = done;
+            this.saveAutoProgress();
+        },
+
+        resetProgress: function () {
+            var self = this;
+            var kind = this.autoMode ? '自动学习' : '练习';
+            var msg = '将清空「' + this.bookLabel + '」的' + kind + '进度记录，确定吗？';
+            var ask = (typeof SC !== 'undefined' && SC.confirm)
+                ? SC.confirm({ title: '重置进度', message: msg, confirmText: '重置', danger: true })
+                : Promise.resolve(window.confirm(msg));
+            ask.then(function (ok) {
+                if (!ok) return;
+                if (self.autoMode) {
+                    self.autoProgress[self.bookId] = [];
+                    self.saveAutoProgress();
+                } else {
+                    self.progress[self.bookId] = [];
+                    self.saveProgress();
+                }
+                self.levelIndex = 0;
+                self.loadLevel();
+                if (typeof SC !== 'undefined' && SC.toast) {
+                    SC.toast.success('已重置「' + self.bookLabel + '」的' + kind + '进度');
+                }
+            });
+        },
+
+        /* ==================== 视图辅助 ==================== */
+        cardClass: function (card) {
+            return {
+                'is-sel': !!this.sel && this.sel.uid === card.uid,
+                'is-done': card.done,
+                'is-wrong': card.wrong
+            };
+        },
+
+        segClass: function (index) {
+            var done = this.activeProgress[this.bookId] || [];
+            if (done.indexOf(index) >= 0) return 'is-done';
+            if (index === this.levelIndex) return 'is-current';
+            return '';
+        },
+
+        bookDone: function (bookId, auto) {
+            var src = auto ? this.autoProgress : this.progress;
+            return (src[bookId] || []).length;
+        },
+
+        findBookIndex: function (bookId) {
+            for (var i = 0; i < this.books.length; i++) {
+                if (this.books[i].id === bookId) return i;
+            }
+            return -1;
+        },
+
+        shuffle: function (arr) {
+            for (var i = arr.length - 1; i > 0; i--) {
+                var j = Math.floor(Math.random() * (i + 1));
+                var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+            }
+            return arr;
+        },
+
+        /* ==================== 音效 ==================== */
+        toggleSound: function () {
+            this.soundOn = !this.soundOn;
+            localStorage.setItem(SOUND_KEY, this.soundOn ? '1' : '0');
+        },
+
+        tone: function (freq, startAt, duration, type, gain) {
+            var ctx = this.audioCtx;
+            var osc = ctx.createOscillator();
+            var g = ctx.createGain();
+            osc.type = type || 'sine';
+            osc.frequency.value = freq;
+            g.gain.setValueAtTime(0.0001, ctx.currentTime + startAt);
+            g.gain.exponentialRampToValueAtTime(gain || 0.09, ctx.currentTime + startAt + 0.015);
+            g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + startAt + duration);
+            osc.connect(g);
+            g.connect(ctx.destination);
+            osc.start(ctx.currentTime + startAt);
+            osc.stop(ctx.currentTime + startAt + duration + 0.02);
+        },
+
+        ensureCtx: function () {
+            if (!this.soundOn) return null;
+            if (!this.audioCtx) {
+                var Ctor = window.AudioContext || window.webkitAudioContext;
+                if (!Ctor) return null;
+                try { this.audioCtx = new Ctor(); } catch (e) { return null; }
+            }
+            if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+            return this.audioCtx;
+        },
+
+        chime: function (ok) {
+            if (!this.ensureCtx()) return;
+            if (ok) {
+                this.tone(660, 0, 0.12, 'sine', 0.08);
+                this.tone(880, 0.09, 0.16, 'sine', 0.08);
+            } else {
+                this.tone(200, 0, 0.16, 'triangle', 0.06);
+                this.tone(150, 0.12, 0.18, 'triangle', 0.06);
+            }
+        },
+
+        tapFeedback: function () {
+            if (!this.ensureCtx()) return;
+            this.tone(520, 0, 0.06, 'sine', 0.05);
+        },
+
+        /* 选中英文卡片时的朗读：自动学习模式交给 autoLoop 的 speakThenWait 控制节奏 */
+        speakOnPick: function (card) {
+            if (this.autoMode || !card || card.side !== 'L') return;
+            this.speak(card.text);
+        },
+
+        speak: function (text) {
+            if (!this.soundOn || !window.speechSynthesis) return;
+            try {
+                var u = new SpeechSynthesisUtterance(text);
+                u.lang = 'en-US';
+                u.rate = 0.85;
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(u);
+            } catch (e) { /* 忽略：部分浏览器不支持 */ }
+        },
+
+        /* 册次按学段分组（小学 / 初中），册次选择器分组展示 */
+        get bookGroups() {
+            var out = [];
+            for (var i = 0; i < this.books.length; i++) {
+                var b = this.books[i];
+                var stage = b.stage || '小学';
+                var g = null;
+                for (var j = 0; j < out.length; j++) {
+                    if (out[j].stage === stage) { g = out[j]; break; }
+                }
+                if (!g) { g = { stage: stage, books: [], levelCount: 0 }; out.push(g); }
+                g.books.push(b);
+                g.levelCount += b.levelCount;
+            }
+            return out;
+        },
+
+        /* ==================== 文案 ==================== */
+        get bookLabel() {
+            var idx = this.findBookIndex(this.bookId);
+            return idx >= 0 ? this.books[idx].label : '';
+        },
+
+        get levelCount() { return this.levels.length; },
+
+        get totalLevels() {
+            var n = 0;
+            for (var i = 0; i < this.books.length; i++) n += this.books[i].levelCount;
+            return n;
+        },
+
+        /* ---------- 导出：勾选状态（勾选表用对象存，Alpine 才能追踪到变化） ---------- */
+        get exportSelList() {
+            var out = [];
+            for (var i = 0; i < this.books.length; i++) {
+                if (this.exportSel[this.books[i].id]) out.push(this.books[i].id);
+            }
+            return out;
+        },
+
+        get exportSelCount() { return this.exportSelList.length; },
+
+        get exportAllSelected() {
+            return this.books.length > 0 && this.exportSelCount === this.books.length;
+        },
+
+        get exportPartSelected() { return this.exportSelCount > 0 && !this.exportAllSelected; },
+
+        get exportLevelCount() {
+            var n = 0;
+            for (var i = 0; i < this.books.length; i++) {
+                if (this.exportSel[this.books[i].id]) n += this.books[i].levelCount;
+            }
+            return n;
+        },
+
+        get exportWordCount() {
+            var n = 0;
+            for (var i = 0; i < this.books.length; i++) {
+                if (this.exportSel[this.books[i].id]) n += this.books[i].wordCount;
+            }
+            return n;
+        },
+
+        /* 进度条与计数按当前模式取数：学习模式进度与练习模式不共享 */
+        get activeProgress() {
+            return this.autoMode ? this.autoProgress : this.progress;
+        },
+
+        get doneCount() { return (this.activeProgress[this.bookId] || []).length; },
+
+        get wrongTotal() { return Object.keys(this.wrongBook).length; },
+
+        get wrongList() {
+            var book = this.wrongBook;
+            return Object.keys(book)
+                .map(function (k) { return book[k]; })
+                .sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+        },
+
+        get hasNextBook() { return !!this.nextBookRef(); },
+
+        get canPrev() { return !this.autoMode && this.levelIndex > 0; },
+
+        get canNext() { return !this.autoMode && this.levelIndex < this.levels.length - 1; },
+
+        /* ==================== 本册收尾：最后一关 -> 下一册 ====================
+           站到本册最后一关时「下一关」这个说法就不成立了，而 canNext 在那里恒为 false：
+           用户点掉通关弹窗的「继续看看」之后会彻底卡住 —— 既不能前进，也没有换册的入口。
+           所以最后一关起按钮改叫「下一册」，本关打完即可一键进入下一册第一关。 */
+        get atBookEnd() {
+            return !this.autoMode && this.levels.length > 0 && this.levelIndex >= this.levels.length - 1;
+        },
+
+        /* 最后一关本身是否已通关。本册全部完成时它必然为真，所以也覆盖了「整册打完」那种情况 */
+        get lastLevelDone() {
+            return this.atBookEnd
+                && (this.activeProgress[this.bookId] || []).indexOf(this.levelIndex) >= 0;
+        },
+
+        get navNextLabel() {
+            if (!this.atBookEnd) return '下一关';
+            return this.nextBookRef() ? '下一册' : '最后一册';
+        },
+
+        get navNextIcon() {
+            return this.atBookEnd ? 'bi-arrow-right-circle' : 'bi-chevron-right';
+        },
+
+        get navNextTitle() {
+            if (!this.atBookEnd) return '下一关（→ 方向键）';
+            if (!this.nextBookRef()) return '已是最后一册，没有下一册了';
+            return this.lastLevelDone ? '本册已完成，进入下一册' : '先打完本册最后一关，再进入下一册';
+        },
+
+        get canNavNext() {
+            if (!this.atBookEnd) return this.canNext;
+            return this.lastLevelDone && !!this.nextBookRef();
+        },
+
+        get hintText() {
+            if (this.autoMode) return '自动学习中 · 可随时暂停或退出';
+            if (!this.sel) return '先点一个英文单词，再点它对应的中文';
+            var other = this.sel.side === 'L' ? '右' : '左';
+            var want = this.sel.side === 'L' ? '中文' : '英文';
+            return '已选中「' + this.sel.text + '」，请在' + other + '侧找到它的' + want;
+        }
+    };
+}
+
+/* ==========================================================================
+   导出为单页 HTML
+   --------------------------------------------------------------------------
+   做法：把「服务端渲染出来的这份页面」原样取回来做改造，而不是另写一套页面 ——
+   导出的东西永远跟线上页一致，不会出现两套实现各自漂移。改造清单：
+
+     ① 去掉站点导航（#site-nav）与 nav.js；
+     ② 外链 CSS 全删，改成一份内联 <style>（Bootstrap + style.css + app.css + 图标字体 data URI），
+        摆在页面自带 <style> 之前，保证层叠顺序和线上一致；
+     ③ 外链 JS 就地换成内联脚本（位置不变 ⇒ 执行顺序不变），丢掉没用到的 bootstrap.bundle；
+     ④ 词库脚本换成字面量，只含被勾选的册次，不再请求 /learn/word-match/data；
+     ⑤ body 打 data-standalone，隐藏「退出」「导出」这两个只在站内才成立的入口。
+
+   结果：单个 .html，双击即玩，**零网络请求**（图标字体也内联成 data URI）。
+   为什么不是 .mhtml：MHTML 是 multipart/related 容器，靠 Blob 拼出来跨浏览器不通用，
+   Chrome 打开本地 .mht 还会按「邮件存档」另存一份；单文件 HTML + data URI 才是最稳的形态。
+   ========================================================================== */
+
+var EXPORT_CSS = ['/vendor/bootstrap/css/bootstrap.min.css',
+                  '/vendor/bootstrap-icons/css/bootstrap-icons.min.css',
+                  '/css/style.css',
+                  '/css/app.css'];
+var EXPORT_JS = ['/js/common.js',
+                 '/vendor/alpinejs/cdn.min.js'];
+var EXPORT_FONT = '/vendor/bootstrap-icons/css/fonts/bootstrap-icons.woff2';
+
+function fetchText(url) {
+    return fetch(url, { cache: 'no-store' }).then(function (r) {
+        if (!r.ok) throw new Error(url + ' 取不到（HTTP ' + r.status + '）');
+        return r.text();
+    });
+}
+
+function fetchBase64(url) {
+    return fetch(url, { cache: 'no-store' }).then(function (r) {
+        if (!r.ok) throw new Error(url + ' 取不到（HTTP ' + r.status + '）');
+        return r.arrayBuffer();
+    }).then(function (buf) {
+        var bytes = new Uint8Array(buf), step = 0x8000, parts = [];
+        for (var i = 0; i < bytes.length; i += step) {
+            parts.push(String.fromCharCode.apply(null, bytes.subarray(i, i + step)));
+        }
+        return btoa(parts.join(''));
+    });
+}
+
+/* 内联脚本里出现脚本结束标记（script 闭合串）会提前结束脚本块，必须打断。
+   注意连注释里都不能写那个字面量 —— 浏览器只看字符，不看它是不是注释。
+   JS 字符串里 \/ 与 / 等价，所以打断后语义不变。 */
+function escapeScript(code) { return String(code).replace(/<\/script/gi, '<\\/script'); }
+
+/* 图标字体 130KB，但页面真正用到的图标只有二十来个。字体整份内联，只裁剪 CSS 规则；
+   图标名从「页面源码」里扫（含 :class 表达式里的），以后新增图标不用回来改这里。 */
+function pickIconCss(iconCss, sourceText, fontB64) {
+    var used = {}, m, nameRe = /bi-[a-z0-9-]+/g;
+    while ((m = nameRe.exec(sourceText))) used[m[0]] = true;
+
+    var keep = [], r, ruleRe = /\.bi-([a-z0-9-]+)::before\{[^}]*\}/g;
+    while ((r = ruleRe.exec(iconCss))) if (used['bi-' + r[1]]) keep.push(r[0]);
+
+    var face = iconCss.match(/@font-face\{[^}]*\}/);
+    var base = iconCss.match(/\.bi::before,[^{]*\{[^}]*\}/);
+    var faceTxt = face ? face[0].replace(/src:[^}]*/,
+        'src:url(data:font/woff2;base64,' + fontB64 + ') format("woff2")') : '';
+    return faceTxt + (base ? base[0] : '') + keep.join('');
+}
+
+function stampDate(d) {
+    var p = function (x) { return (x < 10 ? '0' : '') + x; };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
+/* 用 a[download] + Blob 落盘，返回字节数（可用于提示体积） */
+function downloadHtml(html, filename) {
+    var blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 5000);
+    return blob.size;
+}
+
+function buildStandaloneWordMatch(ids) {
+    var want = {};
+    (ids || []).forEach(function (id) { want[id] = true; });
+
+    return fetchText(window.location.pathname).then(function (pageHtml) {
+        return Promise.all([
+            Promise.all(EXPORT_CSS.map(fetchText)),
+            Promise.all(EXPORT_JS.map(fetchText)),
+            fetchBase64(EXPORT_FONT)
+        ]).then(function (got) {
+            var cssList = got[0], jsList = got[1], fontB64 = got[2];
+            var codeMap = {};
+            EXPORT_JS.forEach(function (u, n) { codeMap[u] = jsList[n]; });
+            if (!codeMap['/vendor/alpinejs/cdn.min.js']) throw new Error('Alpine 脚本没取到，导出会变成死页面');
+            var doc = new DOMParser().parseFromString(pageHtml, 'text/html');
+            var head = doc.head, body = doc.body;
+
+            /* ① 站点导航 */
+            var nav = doc.getElementById('site-nav');
+            if (nav) nav.remove();
+
+            /* ② 外链 CSS + 图标字体 → 一份内联 <style>（插在页面自带 <style> 之前） */
+            var styleEl = doc.createElement('style');
+            styleEl.setAttribute('data-wm-inline', 'css');
+            styleEl.textContent = '\n/* ===== 内联：Bootstrap 5 ===== */\n' + cssList[0]
+                + '\n/* ===== 内联：Bootstrap Icons（规则按用到的图标裁剪，字体是 data URI） ===== */\n'
+                + pickIconCss(cssList[1], pageHtml, fontB64)
+                + '\n/* ===== 内联：style.css ===== */\n' + cssList[2]
+                + '\n/* ===== 内联：app.css ===== */\n' + cssList[3] + '\n';
+            var ownStyle = head.querySelector('style');
+            head.insertBefore(styleEl, ownStyle || head.firstChild);
+
+            var drop = doc.querySelectorAll('link[rel="stylesheet"], link[rel="icon"], link[rel="shortcut icon"]');
+            for (var i = 0; i < drop.length; i++) drop[i].remove();
+
+            /* ③ 外链 JS：就地换内联（bootstrap.bundle 页面一处没用到，丢掉省 80KB） */
+            var scripts = doc.querySelectorAll('script[src]');
+            for (var j = 0; j < scripts.length; j++) {
+                var el = scripts[j], src = el.getAttribute('src') || '';
+                var code = codeMap[src] || null;      /* 取不到就当没用到，直接删（别写出 undefined） */
+                if (!code) { el.remove(); continue; }
+                var node = doc.createElement('script');
+                node.textContent = escapeScript(code);
+                el.parentNode.replaceChild(node, el);
+            }
+
+            /* ④ 词库：只留勾选的册，就地写死 */
+            var src = window.__WORD_MATCH_DATA__ || { books: [], levels: {} };
+            var payload = { books: [], levels: {} };
+            (src.books || []).forEach(function (b) {
+                if (!want[b.id]) return;
+                payload.books.push(b);
+                payload.levels[b.id] = (src.levels || {})[b.id] || [];
+            });
+            var inlined = false;
+            var own = doc.querySelectorAll('script:not([src])');
+            for (var k = 0; k < own.length; k++) {
+                if (own[k].textContent.indexOf('__WORD_MATCH_DATA__') < 0) continue;
+                own[k].textContent = '\n/* 词库随文件一起带走：只含本次导出的册次 */\n'
+                    + 'window.__WM_STANDALONE__ = true;\n'
+                    + 'window.__WORD_MATCH_DATA__ = ' + JSON.stringify(payload) + ';\n';
+                inlined = true;
+                break;
+            }
+            if (!inlined) throw new Error('页面结构变了：找不到词库引导脚本');
+
+            /* ⑤ 单机模式标记 */
+            body.setAttribute('data-standalone', '1');
+            body.removeAttribute('data-nav');
+
+            var labels = payload.books.map(function (b) { return b.label; });
+            var titleEl = doc.querySelector('title');
+            if (titleEl) {
+                titleEl.textContent = '英语单词匹配' + (labels.length
+                    ? ' · ' + (labels.length <= 2 ? labels.join(' / ') : labels[0] + ' 等 ' + labels.length + ' 册')
+                    : '');
+            }
+
+            return {
+                html: '<!DOCTYPE html>\n' + doc.documentElement.outerHTML,
+                filename: 'word-match-' + stampDate(new Date())
+                    + (ids.length > 1 ? '-' + ids.length + '\u518c' : '') + '.html'
+            };
+        });
+    });
+}
+</script>
+<script src="/vendor/alpinejs/cdn.min.js" defer></script>
+</body>
+</html>

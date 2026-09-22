@@ -47,6 +47,7 @@ class BrowserSmokePagesTest extends BrowserSmokeSupport {
                 new PageCase("/learn", null, "教学模块", true),
                 new PageCase("/learn/multiplication", null, "九九乘法口诀", true),
                 new PageCase("/learn/multiplication/settings", "#voiceList", "音频管理", true),
+                new PageCase("/learn/word-match", ".wm-card", "选择配对", true),
 
                 // —— 设置类 ——
                 new PageCase("/prompts", "#templateTbody tr", "Prompt模板管理", true),

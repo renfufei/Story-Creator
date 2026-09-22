@@ -25,6 +25,10 @@ spring:
 
 server:
   port: 8080
+  # 各页面的引导数据（如单词库 400KB+）走同步 XHR，必须压缩后再下发
+  compression:
+    enabled: true
+    min-response-size: 2048
 
 story-creator:
   ai:

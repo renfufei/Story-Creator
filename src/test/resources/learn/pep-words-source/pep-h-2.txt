@@ -1,0 +1,319 @@
+cultural	文化的
+relic	遗物
+rare	稀罕的
+valuable	贵重的
+survive	幸免
+vase	花瓶
+dynasty	王朝
+Taj Mahal	泰姬陵
+ivory	象牙
+dragon	龙
+amber	琥珀色
+in search of	寻找
+Frederick William I	腓特烈•威廉一世
+Prussia	普鲁士
+amaze	使吃惊
+amazing	惊人的
+select	挑选
+honey	蜜
+design	设计
+fancy	〔酒店、餐厅、汽车等〕昂贵的
+style	风格
+decorate	装修
+jewel	珠宝
+artist	艺术家
+belong	属于
+belong to	属于
+Peter the Great	彼得大帝
+in return	作为报答
+Czar	沙皇
+troop	军队
+St Petersburg	圣彼得堡
+reception	接待
+CatherineⅡ	叶卡捷琳娜二世
+at war	处于交战状态
+remove	移动
+less than	少于
+wooden	木制的
+doubt	怀疑
+Konigsberg	哥尼斯堡
+the Baltic Sea	波罗的海
+mystery	神秘
+former	以前的
+worth	值得的
+rebuild	重建
+local	本地的
+apart	分离地
+take apart	拆开
+Leningrad	列宁格勒
+painting	绘画
+castle	城堡
+Windsor Castle	温莎城堡
+trial	审判
+eyewitness	目击者
+evidence	根据
+Jan Hasek	简•哈兹克
+Czech Republic	捷克共和国
+explode	爆炸
+entrance	入口
+Hans Braun	汉斯•布朗
+sailor	水手
+sink	下沉
+Anna Petrov	安娜•帕特罗夫
+maid	女仆
+Berlin	柏林
+think highly of	看重
+Johann Webber	约翰•韦伯
+informal	非正式的
+debate	争论
+ancient	古代的
+compete	竞争
+competitor	竞争者
+take part in	参加
+medal	奖章
+stand for	代表
+mascot	吉祥物
+Pausanias	帕萨尼亚斯
+Greece	希腊
+Greek	希腊的
+magical	巫术的
+volunteer	志愿者
+homeland	祖国
+regular	定期的
+basis	基础
+athlete	运动员
+admit	容许
+slave	奴隶
+nowadays	现今
+gymnastics	体操
+athletics	体育运动
+Stadium	体育场
+gymnasium	体育馆
+gym	体育馆
+as well	也
+host	做东
+responsibility	责任
+olive	橄榄
+wreath	花圈
+replace	取代
+motto	座右铭
+swift	快的
+similarity	相似点
+Athens	雅典
+charge	收费
+in charge	主管
+physical	身体的
+fine	罚款
+poster	海报
+advertise	做广告
+Atlanta	亚特兰大
+princess	公主
+glory	光荣
+bargain	讨价还价
+prince	王子
+hopeless	没有希望的
+Hippomenes	希波墨涅斯
+foolish	愚蠢的
+goddess	女神
+pain	疼痛
+one after another	陆续地
+deserve	应受
+striker	前锋
+abacus	算盘
+calculator	计算器
+PC	个人电脑
+laptop	手提电脑
+PDA	掌上电脑
+analytical	头脑周密的
+calculate	计算
+universal	普遍的
+simplify	简化
+sum	金额
+Charles Babbage	查尔斯•巴比奇
+operator	电话接线员
+logical	合情理的
+logically	逻辑上
+technology	工艺
+technological	科技的
+revolution	革命
+artificial	人造的
+intelligence	智力
+intelligent	聪明的
+Alan Turing	艾伦•图灵
+solve	解决
+mathematical	数学的
+from ... on	从…时起
+reality	真实
+designer	设计师
+personal	私人的
+personally	就个人而言
+tube	管
+transistor	晶体管
+chip	芯片
+as a result	结果
+total	总的
+totally	完全地
+so ... that ...	如此…以致于…
+network	网络
+web	网
+application	申请
+finance	金融
+mobile	可移动的
+rocket	火箭
+explore	探究
+Mars	火星
+anyhow	无论如何
+goal	目标
+happiness	幸福
+human race	人类
+supporting	配角的
+download	下载
+programmer	程序员
+virus	病毒
+android	机器人
+signal	发信号
+teammate	队友
+Nagoya	名古屋
+Seattle	西雅图
+type	类型
+in a way	在某种程度上
+coach	教练
+arise	出现
+with the help of	在…的帮助下
+electronic	电子的
+appearance	外观
+character	性格
+mop	拖把
+deal with	处理
+watch over	看守
+naughty	顽皮的
+niece	侄女
+spoil	宠坏
+wildlife	野生动植物
+protection	保护
+wild	野生的
+habitat	栖息地自然环境
+threaten	恐吓
+decrease	减少
+endanger	危害
+die out	灭亡
+loss	遗失
+reserve	保护区
+hunt	打猎
+zone	地域
+in peace	和平地
+in danger	在危险中
+Daisy	戴茜
+species	种类
+carpet	地毯
+respond	响应
+distant	远的
+fur	毛
+antelope	羚羊
+Zimbabwe	津巴布韦
+relief	减轻或解除
+in relief	如释重负
+laughter	笑
+burst into laughter	突然笑起来
+mercy	仁慈
+certain	确定的
+importance	重要
+WWF	世界野生生物基金会
+rub	擦
+protect ... from	保护…不受…
+mosquito	蚊子
+millipede	千足虫
+insect	昆虫
+contain	包含
+powerful	强大的
+affect	影响
+attention	注意
+pay attention to	注意
+appreciate	感激
+succeed	成功
+Indonesia	印度尼西亚
+rhino	犀牛
+secure	可靠的
+income	收入
+employ	雇用
+harm	损害
+Milu deer	麋鹿
+bite	咬
+extinction	灭绝
+dinosaur	恐龙
+come into being	形成
+county	县
+inspect	检查
+unexpected	没料到的
+incident	事件
+dust	灰尘
+according to	按照
+Mauritius	毛里求斯
+disappearance	消失
+fierce	凶猛的
+so that	以致于
+ending	结局
+faithfully	忠诚地
+Colobus monkey	疣猴
+classical	古典的
+roll	滚动
+rock’n’roll	摇滚乐
+orchestra	管弦乐队
+rap	说唱乐
+folk	民间的
+jazz	爵士音乐
+choral	唱诗班的
+the Monkees	门基乐队
+musician	音乐家
+dream of	梦见
+karaoke	卡拉OK录音
+pretend	假装
+to be honest	说实在地
+attach	系上
+attach ... to	认为有
+form	组成
+fame	名声
+passer-by	过路人
+earn	赚
+extra	额外的
+instrument	工具
+perform	表演
+performance	表演
+pub	酒馆
+cash	现金
+in cash	用现金
+studio	演播室
+millionaire	百万富翁
+play jokes on	戏弄
+actor	男演员
+rely	依赖
+rely on	依赖
+broadcast	广播
+humorous	幽默的
+familiar	熟悉的
+be familiar with	熟悉
+get familiar with	熟悉
+or so	大约
+break up	打碎
+reunite	再统一
+attractive	吸引人的
+addition	加
+in addition	另外
+sort out	分类
+excitement	兴奋
+ballad	情歌
+overnignt	在晚上
+dip	浸
+tadpole	蝌蚪
+lily	百合
+confident	确信的
+Freddy	弗雷迪
+brief	简短的
+briefly	简要地
+devotion	投入
+afterwards	然后
+invitation	邀请
+beard	胡须
+sensitive	敏感的
+painful	痛苦的
+above all	最重要

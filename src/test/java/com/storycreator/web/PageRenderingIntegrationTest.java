@@ -1676,9 +1676,11 @@ class PageRenderingIntegrationTest {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/learn"), String.class);
         assertStaticPage(response, "learn", "九九乘法口诀");
         assertThat(response.getBody())
-                .as("教学首页应含乘法学习与音频设置入口")
+                .as("教学首页应含乘法学习、音频设置与英语单词匹配入口")
                 .contains("/learn/multiplication")
-                .contains("/learn/multiplication/settings");
+                .contains("/learn/multiplication/settings")
+                .contains("英语单词匹配")
+                .contains("/learn/word-match");
     }
 
     @Test
@@ -1690,6 +1692,120 @@ class PageRenderingIntegrationTest {
                 .as("乘法页应含口诀数据与音频取值逻辑")
                 .contains("九九八十一")
                 .contains("/api/learn/multiplication/audio/");
+    }
+
+    @Test
+    void learnWordMatch_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/learn/word-match"), String.class);
+        assertStaticPage(response, "learn-word-match", "wordMatchApp()");
+        assertThat(response.getBody())
+                .as("单词匹配页应含引导数据钩子、配对状态与音效开关")
+                .contains("__WORD_MATCH_DATA__")
+                .contains("/learn/word-match/data")
+                .contains("选择配对")
+                .contains("is-sel")
+                .contains("is-done")
+                .contains("is-wrong");
+        assertThat(response.getBody())
+                .as("单词匹配页应含自动学习 / 错题本 / 册次弹出框 / 上下关切换")
+                .contains("word_match_auto_progress_v2")
+                .contains("word_match_wrong_v1")
+                .contains("自动学习")
+                .contains("错题本")
+                .contains("上一关")
+                .contains("下一关")
+                .contains("选择年级册次")
+                .contains("听读音")             // 朗读时机前移到「点英文」那一刻
+                .contains("speakOnPick")
+                .doesNotContain("top: 42%")     // 过关提示不再浮在单词区正中遮挡卡片
+                .doesNotContain("wm-select");   // 册次下拉框已改成弹出框
+        assertThat(response.getBody())
+                .as("册次选择器应按学段分组（小学 8 + 初中 5 + 高中 11）并可折叠，默认只展开当前册所在学段")
+                .contains("bookGroups")
+                .contains("wm-book-group-head")
+                .contains("toggleStage")
+                .contains("isStageOpen")
+                .contains("高中");
+        assertThat(response.getBody())
+                .as("本册最后一关应把「下一关」换成「下一册」：否则打完最后一关、"
+                        + "点掉通关窗的「继续看看」之后既不能前进也没有换册入口")
+                .contains("atBookEnd")
+                .contains("lastLevelDone")
+                .contains("canNavNext")
+                .contains("navNextLabel")
+                .contains("navNextIcon")
+                .contains("navNext()")
+                .contains("下一册")
+                .contains("最后一册");
+        assertThat(response.getBody())
+                .as("设置弹层应提供「导出为单页 HTML」：册次多选 + 全选 + 默认勾当前册，"
+                        + "产物零外链（样式/脚本/图标字体/词库全内联），双击即可玩")
+                .contains("wm-set-item is-export")
+                .contains("openExport()")
+                .contains("wm-export-modal")
+                .contains("wm-export-all")
+                .contains("wm-export-stage")
+                .contains("wm-export-item")
+                .contains("wm-export-go")
+                .contains("buildStandaloneWordMatch")
+                .contains("exportSelList")
+                .contains("exportToggleAll")
+                .contains("data-standalone")
+                .contains("downloadHtml")
+                .contains("word-match-");
+    }
+
+    @Test
+    void learnWordMatch_autoLearnAdvancesAcrossBooks() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/learn/word-match"), String.class);
+        assertThat(response.getBody())
+                .as("自动学习应支持跨册续学：本册学完给 5 秒跳转提示后自动进入下一册")
+                .contains("wmBookGap")                 // 节奏可覆盖（测试用）
+                .contains("AUTO_BOOK_GAP")
+                .contains("BOOK_GAP_SEC")
+                .contains("秒后进入下一册")
+                .contains("本册学完！即将进入")
+                .contains("nextBookRef")
+                .contains("enterBookInAuto")
+                .contains("全部 ' + this.books.length + ' 册都学完啦");
+        assertThat(response.getBody())
+                .as("自动学习状态条与过关提示必须单行，移动端不被撑成两行")
+                .contains("wm-auto-tag")               // 固定短标签（步骤名）
+                .contains("wm-auto-text")              // 详情，过长省略
+                .contains("flex-wrap: nowrap")
+                .doesNotContain("white-space: normal");// 原先窄屏把提示放成两行 -> 状态条被撑高
+    }
+
+    @Test
+    void learnWordMatchData_returnsBooksAndLevels() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/learn/word-match/data"), String.class);
+        assertThat(response.getStatusCode()).as("单词匹配引导数据应 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("引导数据应含册列表与按主题切好的关卡")
+                .contains("\"books\"")
+                .contains("\"levels\"")
+                .contains("\"pairs\"")
+                .contains("\"theme\"")
+                .contains("三年级上册")
+                .contains("六年级下册")
+                .contains("pep-3-1")
+                .contains("red")
+                .contains("红色")
+                .contains("\"stage\"")          // 学段，前端据此分组
+                .contains("七年级上册")           // 初中 5 册（7~9 年级）
+                .contains("九年级全一册")
+                .contains("pep-7-1")
+                .contains("environment")
+                .contains("环境")
+                .contains("必修1")              // 高中 11 册（必修1-5 + 选修6-11）
+                .contains("选修11")
+                .contains("pep-h-1")
+                .contains("Unit 1")            // 高中按课本单元分组
+                .contains("astronomy")
+                .contains("天文学");
     }
 
     @Test

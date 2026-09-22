@@ -1,0 +1,463 @@
+matter	重要
+What’s the matter	怎么了？出什么事了？
+sore	疼痛的
+have a cold	感冒
+stomach	胃
+stomachache	胃痛
+have a stomachache	胃痛
+foot	脚
+neck	颈
+throat	喉咙
+fever	发烧
+lie	躺
+lie down	躺下
+rest	放松，休息
+cough	咳嗽
+X-ray	X光
+toothache	牙痛
+take one's temperature	量体温
+headache	头痛
+have a fever	发烧
+break	打破
+take breaks	休息
+hurt	伤害，使受伤
+passenger	乘客
+off	离开
+get off	下车
+to one's surprise	使…惊讶
+onto	向
+trouble	麻烦
+hit	打
+right away	立即
+get into	参与
+herself	她自己
+bandage	绷带
+sick	患病的
+knee	膝盖
+nosebleed	鼻出血
+breathe	呼吸
+sunburned	晒伤的
+ourselves	我们自己
+climber	登山者
+be used to	习惯于…
+risk	风险，危险
+take risks	冒险
+accident	意外事件
+situation	状况
+kg	公斤
+rock	岩石
+run out	用尽
+knife	刀
+cut off	切除
+blood	血
+mean	意味着，意思是
+get out of	离开
+importance	重要性
+decision	决定，抉择
+control	控制
+be in control of	掌管
+spirit	勇气
+death	死亡
+give up	放弃
+nurse	护士
+clean up	打扫干净
+cheer	欢呼
+cheer up	变得更高兴
+give out	分发
+volunteer	志愿者
+come up with	想出
+put off	推迟
+sign	标记，标牌
+notice	注意到
+hand out	分发
+call up	打电话给…某人，征召
+used to	曾经…
+lonely	孤独的
+care for	照顾
+several	几个
+strong	强壮的
+feeling	感觉
+satisfaction	满足
+joy	高兴
+owner	所有者
+try out	试用
+journey	旅行
+raise	抬起，举起
+alone	独自地
+repair	修理
+fix	修理
+fix up	修理
+give away	赠送
+take after	像
+broken	破损的
+wheel	轮子
+letter	信件
+Miss	小姐
+set up	建立
+disabled	有残疾的
+make a difference	影响
+blind	盲的，失明的
+deaf	聋的
+imagine	想象
+difficulty	困难
+open	打开
+door	门
+carry	携带
+train	训练
+training	训练
+excited	激动的
+kindness	仁慈
+clever	聪明的
+understand	懂
+change	改变
+interest	兴趣
+sir	先生
+madam	夫人
+rubbish	垃圾
+take out the rubbish	倒垃圾
+fold	对折
+mess	脏乱
+throw	扔
+all the time	频繁
+neither	二者都不
+shirt	运动衫
+as soon as	一…就…
+pass	经过
+borrow	借
+lend	借给
+finger	手指
+hate	憎恶
+chore	杂务
+while	当…时候
+snack	小吃，点心
+stress	精神压力
+waste	浪费
+in order to	目的是
+provide	提供
+anyway	尽管如此
+depend	依靠，依赖
+depend on	依靠于
+develop	发展，壮大
+independent	独立自主的
+independence	独立
+fair	公平的
+unfair	不公平的
+fairness	公正性
+since	因为
+neighbor	邻居
+take care of	照顾
+ill	生病的
+drop	落下
+allow	允许
+wrong	错误的
+What's wrong	哪儿不舒服？
+midnight	午夜
+look through	浏览
+guess	猜测
+deal	处理
+big deal	重要的事
+work out	解决
+get on well	和睦相处
+relation	联系
+communicate	沟通
+communication	交流
+argue	争论
+cloud	云
+elder	年纪较长的
+instead	代替
+whatever	任何
+nervous	紧张不安的
+offer	提供
+proper	合适的
+secondly	第二
+explain	讲解
+clear	清晰的
+copy	复制
+return	回来，返回
+anymore	不再
+member	成员
+pressure	压力
+compete	比赛
+opinion	意见
+skill	技能
+typical	典型的
+football	足球
+cut out	删去
+quick	快的，短时间的
+continue	继续
+compare	比较
+compare ... with	比较
+crazy	疯狂的
+development	发育
+cause	原因
+usual	通常的
+in one's opinion	依…看
+perhaps	可能
+rainstorm	暴风雨
+alarm	闹钟
+go off	发出响声
+begin	开始
+heavily	在很大程度上
+suddenly	突然地
+pick up	接
+strange	奇怪的，奇特的
+storm	暴风雨
+wind	风
+light	灯
+report	报导
+area	地域，地区
+wood	木材
+window	窗户
+flashlight	手电筒
+match	比赛
+beat	打败
+against	反对
+asleep	睡着的
+fall asleep	进入梦乡
+die down	逐渐变弱
+rise	上升
+fallen	倒下的
+apart	分离
+have a look	看一看
+icy	冰冷的
+kid	小孩
+realize	认识到
+make one's way	前往
+passage	章节
+pupil	学生
+completely	彻底地
+shocked	震惊的
+silence	寂静
+in silence	沉默
+recently	不久前
+take down	取下
+terrorist	恐怖分子
+date	日期
+tower	塔
+at first	首先
+truth	真相
+shoot	射击
+stone	石头
+weak	虚弱的
+god	上帝
+remind	提醒
+bit	一点
+a little bit	有点儿
+silly	愚昧的
+instead of	代替
+turn into	变成
+object	物体，物品
+hide	隐藏
+tail	尾巴
+magic	魔法
+stick	刺
+excite	使激动
+Western	在西部的
+once upon	从前
+stepsister	继姐
+prince	王子
+fall in love	爱上
+fit	适合
+couple	夫妻
+smile	微笑
+marry	与某人结婚
+get married	结婚
+gold	黄金
+emperor	皇帝
+silk	丝绸
+underwear	内衣
+nobody	无人
+stupid	愚蠢的
+cheat	欺骗
+stepmother	继母
+wife	妻子
+husband	丈夫
+whole	全部的
+scene	场景
+moonlight	月光
+shine	照耀
+bright	明亮的
+ground	地面
+lead	带头
+voice	嗓音
+brave	勇敢的
+square	正方形
+meter	米
+deep	深的
+desert	沙漠
+population	人口
+Asia	亚洲
+feel free	随便
+tour	旅行
+wall	墙
+amazing	令人惊异的
+ancient	古代的
+protect	保护
+wide	宽的
+as far as I know	就我所知
+achieve	完成
+achievement	成就
+southwestern	西南的
+thick	厚的
+include	包括
+freezing	极冷的
+condition	条件
+take in	吸入
+succeed	成功
+challenge	挑战
+in the face of	面对
+force	力，力量
+nature	自然界
+even though	即使
+ocean	海洋
+the Pacific Ocean	太平洋
+cm	厘米
+weigh	重量是…
+birth	生孩子
+at birth	出生时
+up to	到达
+adult	成年人
+bamboo	竹子
+endangered	濒临灭绝的，濒危的
+research	研究，调查
+keeper	饲养员
+awake	醒着
+excitement	激动
+walk into	走进
+fall over	倒下
+illness	疾病
+remaining	遗留的
+or so	大约
+artwork	插图，图片
+wild	野生的
+government	政府
+whale	鲸
+protection	保护
+huge	巨大的
+dynasty	王朝
+base	基础
+treasure	财宝
+island	岛屿
+full of	满是…的
+classic	经典著作
+page	页
+hurry	匆忙
+hurry up	赶快
+due	预期的
+ship	船
+tool	工具
+gun	炮
+mark	记号
+sand	沙
+cannibal	食人肉者
+towards	向着，朝着
+land	大地
+fiction	小说
+science fiction	科幻小说
+technology	科技
+French	法语
+pop	流行音乐
+band	乐队
+country music	乡村音乐
+forever	永远
+abroad	在国外
+actually	实际上
+ever since	自从
+fan	狂热爱好者
+southern	南方的
+modern	现代的
+success	成功
+belong	属于
+one another	互相
+laughter	笑
+beauty	美丽
+million	百万
+record	记录
+introduce	介绍，引进
+line	排
+amusement	娱乐，消遣
+amusement park	游乐场
+somewhere	某处
+camera	照相机
+invention	发明
+invent	发明
+unbelievable	难以置信的
+progress	进步
+rapid	迅速的
+unusual	特别的
+toilet	坐便器
+encourage	鼓励
+social	社会的
+peaceful	平静的
+tea art	茶艺
+performance	表演
+perfect	完美的，理想的
+tea set	茶具
+itself	它自己
+collect	收集
+a couple of	一对，两个
+German	德语
+theme	主题，题目
+ride	骑
+province	省
+thousand	一千
+thousands of	数以千计的
+safe	安全的
+simply	仅仅
+fear	恐惧
+whether	或者…或者，是否
+Indian	印度的
+Japanese	日本的
+fox	狐狸
+all year around	全年
+equator	赤道
+whenever	无论何时
+spring	春天
+mostly	大多数地
+location	地点
+yard	院子
+yard sale	庭院拍卖会
+sweet	甜的
+memory	记忆，记忆力
+cent	分
+toy	玩具
+bear	熊
+maker	生产者
+bread maker	面包机
+scarf	围巾
+soft	柔软的
+soft toy	软体玩具
+check	检查
+check out	察看
+board	板子
+board game	棋类游戏
+junior	地位低下的
+junior high school	初中
+clear out	清理
+bedroom	卧室
+no longer	不再
+own	属于自己的
+railway	铁路
+part	部分
+part with	放弃
+certain	确定的，无疑的
+as for	至于
+honest	诚实的
+to be honest	说实在的
+truthful	诚实的
+hometown	家乡
+nowadays	现今
+search	搜索
+among	在其中
+crayon	彩色铅笔
+shame	羞耻
+regard	致敬
+count	计算，计数
+century	世纪
+according	依照
+opposite	在…对面
+especially	特别
+childhood	孩童时期
+consider	仔细考虑，思考
+close to	几乎
+hold	抓住

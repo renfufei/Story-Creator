@@ -1,0 +1,361 @@
+venture	商业
+web	网
+Scottish	苏格兰的
+suffering	苦处
+gall-bladder	胆囊
+strengthen	加强
+Perce Blackborrow	珀斯.布莱克鲍罗
+Sir Ernest Shackleton	欧内斯特.沙克尔顿爵士
+endurance	忍耐
+hut	小屋
+stove	炉子
+unbearable	无法忍受的
+cosy	舒适的
+block out	封闭
+breathless	喘不过气来的
+rotten	腐烂的
+blacken	使变黑
+circumstance	客观环境
+blast	一阵
+hoarse	嘶哑的
+bless	祝福
+selfish	自私的
+Tom Orde-Lees	汤姆.奥德.利兹
+hook	钩
+aboard	在船上
+seasickness	晕船
+anyhow	无论如何
+steward	乘务员
+crush	碾碎
+mourn	哀伤
+urgent	急迫的
+bedding	被褥
+Hussey	赫西
+banjo	班卓琴
+vital	重要的
+cheerful	愉快的
+persevere	坚持
+perseverance	坚持不懈
+faith	信任
+give way to	让路
+framework	框架
+rank	等级
+morale	士气
+select	选择
+booming	发隆声的
+swear	宣誓
+advocate	支持
+freezing	冰冻的
+stool	凳子
+gratitude	感激
+punishment	惩罚
+loyal	忠实的
+tactful	机智的
+Frank Worsley	弗兰克.沃斯利
+odd	古怪的
+stout	结实的
+Hubert Hudson	休伯特.哈德逊
+optimism	乐观
+delay	耽搁
+discourage	使…气馁
+dynamic	动力的
+regular	规则的
+grasp	抓住，抓紧
+give off	发出
+Lionel Greenstreet	莱昂内尔.格林斯特里特
+bored	无聊的
+liver	肝脏
+chef	厨师
+changeable	可改变的
+caution	小心
+sun-blindness	日盲症
+admirable	令人钦佩的
+commitment	许诺
+proverb	谚语
+King Lear	李尔王
+respectful	尊敬的
+disrespectful	失礼的
+disrespectfully	失礼地
+emperor	皇帝
+shorten	缩短
+modernize	使现代化
+throne	王座
+Regan	里根
+Goneril	贡纳莉
+Cordelia	科迪莉亚
+duke	公爵
+Albany	奥尔巴尼
+Cornwall	康沃尔
+Kent	肯特
+burden	负担
+hand over	移交
+responsibility	责任
+boundary	边界
+allocate	分派
+whichever	无论哪一个
+darling	心爱的人
+adore	爱慕
+pray	祈祷
+care for	关怀
+majesty	最高权威，王权
+lord	封建领主，地主，统治者
+bridegroom	新郎
+distribute	分发
+troop	军队
+contradict	同…矛盾或抵触
+hear out	听某人把话说完
+on behalf of	代表…
+flattery	奉承
+flatter	过分夸赞
+beyond question	无可争辩
+speak out	大胆地说
+friction	矛盾，冲突
+forecast	预报
+oppose	反对
+pack up	把…打包
+frontier	国界
+give away	赠送
+fond	喜爱的
+be fond of	喜爱
+deceitful	欺诈的
+corrupt	腐败的，贪污的
+greedy	贪婪的
+greed	贪婪
+innocent	天真的
+cunning	善于骗人的
+strorage	贮藏
+author	作家
+sacrifice	牺牲
+Stratford-on-Avon	埃文河畔斯特拉特福镇
+Latin	拉丁文
+make a name	出名
+allergic	过敏的
+sneeze	喷嚏
+armchair	手扶椅
+confirm	确定
+rewind	重绕
+cash	现金
+cheque	支票
+signature	签名
+terminal	终点站
+vacant	空的
+dusty	满是灰尘的
+Burgundy	勃艮第
+respond	响应，做出反应
+Oswald	奥斯瓦尔德
+staff	职工
+Caius	凯厄斯
+suspect	怀疑
+insult	侮辱
+scold	责骂
+drunken	醉的
+scratch	抓痕
+baggage	行李
+demand	要求
+prop	道具
+civil	公民的
+trolleybus	无轨电车
+register	登记簿
+Maryann Jines	玛丽安.琼斯
+Montgommery	蒙哥马利
+Martin Luther King Jr.	马丁.路德.金
+boycott	抵制
+prohibit	禁止
+offence	违法行为
+unjust	不公平的
+separation	分离
+tradition	传统
+submit	服从
+unwilling	不愿意的
+seize	抓取
+seize on	抓住
+collision	碰撞
+collision course	冲突
+hopeful	怀有希望的
+negotiate	商议
+chaos	混乱
+Serena	赛丽娜
+sandal	凉鞋
+punctual	守时的
+coincidence	巧合
+pedestrian	步行者
+march	行军
+pavement	人行道
+salute	行礼致敬
+abuse	虐待
+hostility	敌意
+resolve	决心
+prayer	祈祷
+bomb	炸弹
+supreme	最高的
+nationwide	全国性的
+constitution	宪法
+constitutional	宪法的
+fundamental	基础的
+battle	战争
+happiness	幸福
+liberty	自由
+skim	浏览
+evident	明显的
+self-evident	不证自明的
+brief	简短的
+discrimination	歧视
+philosophy	哲学
+Scout	斯考特
+Atticus	阿提斯库
+Jem	杰姆
+Arthur	亚瑟
+commit	犯罪
+Walter Cunningham	沃尔特.坎宁安
+Caroline	卡罗琳
+live out	实践
+creed	信条
+brotherhood	手足情意
+oasis	绿洲
+Alabama	阿拉巴马州
+symphony	交响乐
+Jew	犹太人
+Gentile	非犹太人
+Protestant	新教徒
+Catholic	天主教徒
+Negro	[过时的]黑人
+almighty	全能的
+quotation	引语，引文，语录
+metaphor	隐喻
+simile	明喻
+Ewell	尤厄尔
+Mayella	梅耶拉
+dominate	支配
+efficient	有效率的
+efficiently	有效率地
+centigrade	摄氏温度
+diameter	直径
+recipe	菜谱
+booklet	小册子
+endeavour	尽力
+competent	有能力的
+up to	取决于
+caption	标题
+digest	消化
+beneath	在…之下
+adopt	收养
+preview	预习
+frequent	时常发生的
+in detail	详细地
+manual	手册
+New Zealand	新西兰
+assess	评定
+consult	请教
+underneath	在…的下面
+shabby	破旧的
+rainbow	彩虹
+brewery	酿酒厂
+acute	敏锐的
+bent	弯曲的
+cab	出租车
+currency	货币
+lotus	荷花
+cuisine	烹饪
+educator	教育家
+seminar	研讨会
+acquisition	获得
+ballet	芭蕾舞
+album	薄、册
+resemble	像
+cassette	盒式磁带
+tend	倾向
+tend to	易于
+tend to do sth	易于做某事
+messy	脏乱的
+tiresome	令人厌烦的
+vague	含糊的
+bonus	奖金
+auditory	听的
+tactile	触觉的
+oral	口头的
+component	成分
+concrete	具体的
+literary	文学的
+genre	类型
+recount	重新计算选票
+Agnes Grey	艾格妮斯.格雷
+Jane Austin	简.奥斯丁
+Charlotte Bronte	夏洛蒂.勃朗特
+Tess of d’Urbevilles	德伯家的苔丝
+prejudice	偏见
+Wuthering Heights	呼啸山庄
+Margaret Mitchell	玛格丽特.米切尔
+Rudyard Kipling	拉迪亚德.吉普林
+consensus	共识
+equality	等同
+in force	已生效
+twist	扭曲
+contradiction	反驳
+get round	顺利应付
+George Eliot	乔治.艾略特
+limitation	限制
+heroine	女英雄
+obstacle	障碍
+ironic	具有讽刺意味的
+hopeless	没有希望的
+under the name of	用…的名字
+sceptical	怀疑性的
+see through	看破
+deception	欺骗
+approval	赞成
+explicit	直率的
+struggle against	与…作斗争
+outspoken	坦率直言的
+growth	成长
+childhood	孩童时期
+hail	向…欢呼
+revelation	启示
+premier	第一的
+ambiguous	含糊的
+concession	让步
+stand out	杰出
+critic	批评家
+injustice	不公平
+possess	拥有
+sponsor	发起人
+eccentric	古怪的
+Betsy Trotwood	贝特西.特洛特伍德
+generous	慷慨的
+merchant	商人
+staight away	立即
+warehouse	仓库
+bargain	便宜货
+burglar	窃贼
+sequence	顺序
+inspect	检查
+bungalow	平房
+chain	链条
+dangle	悬挂
+semicircle	半圆形
+squeak	尖叫声
+pull oneself up	立起身来
+roof	屋顶
+collar	衣领
+bench	长椅子
+pine	松树
+claw	爪
+squirrel	松鼠
+romance	恋情
+vain	虚荣的
+in vain	徒劳的
+signal	信号
+discount	不信任
+sensitive	敏感的
+decline	拒绝
+arrogant	傲慢的
+at length	详细地
+enquire	询问
+against one’s will	违心地
+think ill of	对…评价不高
+do everything in one’s power to	竭尽全力去做某事
+rejoice	欣喜
+initial	最初的
+fault	错
+hasty	匆忙的
+hastily	匆忙地
+sensible	有感觉的

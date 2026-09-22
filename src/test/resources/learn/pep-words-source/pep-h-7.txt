@@ -1,0 +1,384 @@
+disability	伤残
+disabled	伤残的
+hearing	听力
+eyesight	视力
+syndrome	综合病征
+infantile paralysis	小儿麻痹
+Rosalyn	罗莎琳
+lap	大腿的上方
+ambition	雄心
+ambitious	有雄心的
+dictation	口授
+Sally	萨利
+noisy	吵闹的
+suitable	适合的
+entry	进入
+beneficial	有益的
+Marty	马蒂•菲尔丁
+in other words	换句话说
+clumsy	笨拙的
+bump	碰撞
+outgoing	外向的
+adapt	使适应
+adapt to	使适合
+bench	长凳
+cut out	切去
+microscope	显微镜
+out of breath	上气不接下气
+absence	缺席
+fellow	同伴的
+annoy	使…不悦
+annoyed	颇为生气的
+annoyance	烦恼
+all in all	总而言之
+firm	公司
+software	软件
+sit around	闲坐着
+as well as	和
+parrot	鹦鹉
+tank	大容器
+tortoise	陆龟
+in many ways	在很多方面
+psychology	心理
+psychologically	心理地
+make fun of	取笑
+encouragement	鼓励
+conduct	行为
+mainstream	主流
+fulfilling	令人满意的
+never mind	不必担心
+politics	政治
+abolish	废除
+abolition	废除
+resign	辞职
+slavery	奴隶制
+literature	文学
+Barry Minto	巴里•明托
+Mount Kilimanjaro	乞力马扎罗山
+companion	同伴
+assistance	协助
+congratulate	祝贺
+congratulation	祝贺
+bowling	保龄球
+graduation	毕业
+certificate	证书
+all the best	一切顺利
+architect	建筑师
+Sanders	桑德斯
+adequate	足够的
+access	通路
+accessible	可接近的
+wheelchair	轮椅
+handy	方便的
+earphone	耳机
+impair	削弱
+row	一行
+basement	地下室
+outwards	向外
+exit	出口
+meet with	遇到
+approval	认可
+dignity	尊严
+profit	收益
+italics	斜体
+community	社区
+household	家庭的
+fiction	小说
+desire	渴望
+Isaac Asimov	艾萨克•阿西莫夫
+satisfaction	满意
+Larry Belmont	拉里•贝尔蒙特
+test out	试验
+Claire	克莱尔
+bonus	额外津贴
+alarm	使警觉
+alarmed	担心的
+apron	围裙
+sympathy	同情
+overweight	超重的
+elegant	优雅的
+Gladys Claffern	格拉迪斯•克拉芬
+favour	恩惠
+pile	堆
+scan	细看
+fingernail	手指甲
+absurd	荒谬的
+haircut	理发
+makeup	化妆品
+accompany	陪伴
+cushion	软垫
+bedding	寝具
+necklace	项链
+clerk	售货员
+counter	柜台
+ring up	给…打电话
+turn around	转向
+awful	极坏的
+affair	事务
+armchair	扶手椅
+declare	宣布
+cuisine	烹饪
+envy	忌妒
+leave ... alone	不管
+digital	数字的
+mailbox	邮筒
+state	陈述
+aside	在一边
+set aside	将…放在一边
+grand	雄伟的
+Marion	玛丽安
+alphabetical	字母的
+receiver	电话听筒
+in all	一共
+affection	喜爱
+bound	一定的
+be bound to	一定做…
+biography	传记
+holy	神的
+imagination	想象
+transfusion	输血
+part-time	兼职的
+master’s degree	硕士学位
+staff	全体员工
+Philadelphia	费城
+navy	海军
+junior	较年幼的
+PhD=Doctor of Philosophy	哲学博士学位
+biochemistry	生物化学
+Boston	波士顿
+talent	特殊能力
+chapter	章
+the Foundation	《基地》三部曲
+empire	帝国
+theoretical	理论的
+framework	框架
+thinking	思想
+divorce	离婚
+obey	服从
+disobey	不服从
+assessment	评价
+snorkel	戴潜水通气管潜泳
+aquarium	水族箱
+anecdote	轶事
+Clancy	克兰西
+baleen	鲸须
+baleen whale	须鲸
+annual	每年的
+migration	迁居
+witness	当场见到
+accommodation	住所
+shore	岸
+offshore	近海
+opposite	在…对面
+yell	大叫
+pause	暂停
+oar	桨
+telescope	望远镜
+teamwork	协作
+blow-hole	通风口
+dive	跳水
+flee	逃避
+harpoon	鱼叉
+drag	拖
+depth	深
+meantime	其间
+in the meantime	在此期间
+lip	一片嘴唇
+overboard	越过船舷进入水中
+urge	催促
+abandon	遗弃
+shark	鲨鱼
+Help out	帮助摆脱困境或危难
+relationship	关系
+conservation	保护
+iceberg	冰山
+jog	慢跑
+seaside	海边
+net	网络
+target	目标
+tide	潮
+driftnet	流网
+dimension	方面
+reflect	思考
+pure	纯的
+cell	细胞
+aware	意识到的
+become aware of	对…知道、明白
+be aware of	对…知道、明白
+vivid	生动的
+neat	好的
+seaweed	海草
+narrow	狭窄的
+flashlight	闪光信号灯
+upside down	上下翻转
+suck	吮吸
+sea-slug	海蛞蝓
+turtle	海龟
+eel	鳗
+sharp	锐利的
+tasty	好吃的
+giant	巨人的
+clam	蛤
+grey	灰色
+scare	恐吓
+scared to death	吓死了
+shallow	浅的
+steep	陡峭的
+boundary	分界线
+Antarctic	南极的
+the Antarctic	南极洲
+awesome	使人敬畏的
+leap	跳
+seal	海豹
+refund	退还
+pension	养老金
+pensioner	领取养老金者
+airmail	航空邮件
+Papua	巴布亚新几内亚
+fortnight	两星期
+hear from	接到…的信
+dying to	极想
+roof	屋顶
+muddy	泥泞的
+textbook	教科书
+concept	观念
+bucket	水桶
+the other day	不久前的一天
+weekly	每周
+bubble	起泡
+relevant	有关的
+remote	遥远的
+ridge	山脊
+weed	杂草
+hut	棚屋
+rectangle	矩形
+rectangular	长方形的
+adjust	调整
+platform	月台
+broom	扫帚
+tin	锡
+jar	罐
+sniff	用鼻子吸
+participate	参与
+interpreter	作口译的人
+grill	烤架
+dry out	完全变干
+leftover	剩饭
+evil	邪恶的
+dry up	干涸
+otherwise	否则
+privilege	特权
+paperwork	文书工作
+arrangement	安排
+toast	敬酒
+comb	梳子
+astronaut	宇航员
+angle	角
+catalogue	目录
+donate	捐赠
+voluntary	自愿的
+in need	在困难中
+purchase	买
+anniversary	周年纪念
+seed	种子
+seedling	秧苗
+vaccination	接种疫苗
+loan	贷款
+sew	缝
+sewing machine	缝纫机
+supplement	增补的事物
+ox	公牛
+plough	地
+trunk	树干
+trunk library	箱式图书馆
+tractor	拖拉机
+Kenya	肯尼亚
+Bangladesh	孟加拉国
+click	发出咔嗒声
+tailor	裁缝
+Tanzania	坦桑尼亚
+economic	经济的
+political	政治的
+Nepal	尼泊尔
+Uganda	乌干达
+distribute	分配
+distribution	分配
+financial	财务的
+security	安全
+operate	工作
+Sudan	苏丹
+clinic	门诊部
+Malawi	马拉维
+adjust to	适应
+keep it up	保持优秀成绩
+fit in	相适应
+motherland	祖国
+visa	签证
+queue	队列
+cafeteria	自助食堂
+lecture	演讲
+qualification	资格
+preparation	准备
+recommend	建议
+shopkeeper	店主
+idiom	习语
+comfort	舒适
+substitute	代替者
+academic	学校的
+requirement	需要
+essay	文章
+tutor	家庭教师
+revise	复查
+revision	复查
+draft	草稿
+numb	麻木的
+acknowledge	承认
+as far as one is concerned	就…而言
+contradict	反驳
+autonomous	自治的
+occupy	占据
+be occupied with	忙着做…
+enterprise	事业
+apology	道谦
+seminar	研讨会
+videophone	可视电话
+Rugby	橄榄球
+bachelor	未婚男子
+bachelor’s degree	学士学位
+routine	常规
+minibus	小型公共汽车
+optional	可选择的
+day in and day out	日复一日
+cage	鸟笼
+bark	吠叫
+battery	电池
+site	地方
+Julie	朱莉
+Abigail	阿比盖尔
+drill	钻
+oilfield	油田
+Jamie	杰米
+Sam	萨姆
+Lima	利马
+Cuzco	库斯科
+the Andes	安第斯山脉
+Peru	秘鲁
+Lia	莉亚
+agent	代理人
+travel agent	旅行代办人
+geographical	地理的
+parallel	平行的
+Lake Titicaca	的的喀喀湖
+abundant	丰富的
+Inca	印加帝国
+govern	统治
+onwards	向前地
+destination	目的地
+Machu Picchu	马丘比丘
+inn	客栈
+out of the question	不可能的
+hike	远足
+Puno	普诺
+tomb	坟墓
+the Amazon	亚马孙河热带丛林
+settle in	安顿下来

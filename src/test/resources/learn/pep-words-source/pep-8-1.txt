@@ -1,0 +1,418 @@
+anyone	任何人
+anywhere	任何地方
+wonderful	精彩的
+few	很少的
+quite a few	相当多
+most	最多的
+something	某事物
+nothing	没有什么
+everyone	每人
+of course	当然
+myself	我自己
+yourself	你自己
+hen	母鸡
+pig	猪
+seem	似乎
+bored	无聊的
+someone	某人
+diary	日记
+activity	活动
+decide	决定
+try	尝试
+paragliding	空中滑翔跳伞
+feel like	想要
+bird	鸟
+bicycle	自行车
+building	建筑物
+trader	商人
+wonder	想知道
+difference	差异
+top	顶部
+wait	等
+umbrella	伞
+wet	湿的
+because of	因为
+below	低于
+enough	足够的
+hungry	饥饿的
+as	如同
+hill	小山
+duck	鸭
+dislike	不喜欢
+have a good time	玩得开心
+Central Park	中央公园
+Huangguoshu waterfall	黄果树瀑布
+Hong Kong	香港
+Malaysia	马来西亚
+Georgetown	乔治城
+Weld Quay	海乾街/码头
+Penang Hill	马来西亚槟榔山
+tian'anmen square	天安门广场
+the Palace Museum	故宫博物院
+housework	家务劳动
+hardly	几乎不
+ever	在任何时候
+hardly ever	很少
+once	一次
+twice	两次
+Internet	因特网
+program	程序
+full	满的
+swing	摇摆
+swing dance	摇摆舞
+maybe	或许
+least	最小的
+at least	至少
+junk	垃圾
+junk food	垃圾食品
+coffee	咖啡
+health	健康
+result	结果
+percent	百分之百的
+online	在线的
+television	电视机
+although	虽然
+through	穿过
+mind	头脑
+body	身体
+such	这样的
+such as	例如
+together	共同
+die	死
+writer	作者
+dentist	牙科医生
+magazine	杂志
+however	然而
+than	比
+more than	超过
+almost	几乎
+none	没有人
+less	更少的
+less than	不到
+point	看法
+outgoing	外向的
+better	更好的
+loudly	大声地
+quietly	安静地
+hard-working	勤勉的
+competition	竞争
+fantastic	极好的
+which	哪一个
+clearly	清楚地
+win	赢
+though	虽然
+talented	有才能的
+truly	真实地
+care	在乎
+care about	关心
+serious	严重的
+mirror	镜子
+kid	孩子
+as long as	只要
+necessary	必要的
+be different from	和…不同
+both	两者
+bring out	拿出
+grade	成绩
+should	应该
+the same as	与…同样的
+saying	名言
+reach	到达
+hand	手
+touch	触摸
+heart	心脏
+fact	事实
+in fact	事实上
+break	打碎
+arm	胳膊
+laugh	发笑
+share	分享，共享
+loud	大声的
+similar	类似的
+be similar to	类似于
+primary	初级的
+primary school	小学
+information	信息
+theater	剧场
+comfortable	舒适的
+seat	座位
+screen	屏幕
+close	关
+ticket	票
+worst	最坏的
+cheaply	廉价地
+song	歌曲
+choose	选择
+carefully	小心地
+reporter	记者
+so far	到目前为止
+fresh	新的
+comfortably	舒服地
+worse	更坏的
+service	公共服务
+pretty	相当地
+menu	菜单
+act	行动
+meal	一餐
+creative	创造的
+performer	表演者
+talent	天赋
+common	常见的
+have ... in common	有相同特征
+magician	魔术师
+all kinds of	各种各样
+beautifully	美丽地
+be up to	是…的职责
+role	作用
+play a role	发挥作用
+winner	获胜者
+prize	奖品
+everybody	每人
+make up	编造
+example	例子
+for example	例如
+poor	贫穷的
+seriously	严重地
+take ... seriously	认真对待…
+give	给
+crowded	拥挤的
+sitcom	情景喜剧
+situation comedy	情景喜剧
+news	消息
+soap	肥皂
+soap opera	肥皂剧
+educational	教育的
+plan	计划
+hope	希望
+find out	查明
+discussion	讨论
+stand	站立
+happen	发生
+may	可能，也许
+expect	预期
+joke	笑话
+comedy	喜剧
+meaningless	无意义的
+action	行动
+action movie	动作片
+cartoon	卡通
+culture	文化
+famous	著名的
+appear	似乎
+become	变成
+rich	富有的
+successful	成功的
+might	可能
+main	主要的
+reason	原因
+film	电影
+unlucky	倒霉的
+lose	丢失
+girlfriend	女朋友
+ready	准备好的
+be ready to	愿意做某事
+character	个性
+simple	简单的
+dress up	装扮
+take sb.’s place	代替
+army	军队
+do a good job	工作干得好
+grow up	长大
+computer programmer	计算机管理员
+cook	烹调
+doctor	医生
+engineer	工程师
+violinist	小提琴手
+driver	驾驶员
+pilot	飞行员
+pianist	钢琴家
+scientist	科学家
+be sure about	确信
+make sure	确保
+college	大学
+education	教育
+medicine	药
+university	大学
+London	伦敦
+article	文章
+send	邮寄
+resolution	决定
+team	队
+foreign	外国的
+able	聪明能干的
+be able to	能够做某事
+question	问题
+meaning	意义
+discuss	讨论
+promise	承诺
+beginning	开头
+at the beginning of	起初
+improve	改进
+write down	写下
+physical	身体的
+themselves	他们自己
+have to do with	关于
+self-improvement	自我改进
+take up	学着做
+hobby	业余爱好
+weekly	每周的
+school work	学校作业
+agree	同意
+agree with	同意
+own	自己的
+personal	个人的
+relationship	关系
+paper	纸
+pollution	污染
+prediction	预测
+future	未来
+pollute	污染
+environment	环境
+planet	行星
+earth	地球
+plant	植物
+part	部分
+play a part	参与
+peace	和平
+sea	海
+sky	天空
+astronaut	宇航员
+apartment	公寓
+rocket	火箭
+space	空间
+space station	太空站
+human	人的
+servant	仆人
+dangerous	危险的
+already	已经
+factory	工厂
+over and over again	多次
+believe	相信
+disagree	不同意
+even	甚至
+hundreds of	许多
+shape	形状
+fall	摔倒
+fall down	突然倒下
+inside	里面
+look for	寻找
+possible	可能的
+impossible	不可能的
+side	侧面
+probably	大概
+during	在…的时候
+holiday	假日
+word	字
+shake	摇动
+milk shake	奶昔
+blender	搅拌器
+turn on	打开
+peel	削皮
+pour	倒
+yogurt	酸奶
+honey	蜂蜜
+watermelon	西瓜
+spoon	勺
+pot	壶
+add	增加
+finally	最后
+salt	盐
+sugar	糖
+cheese	干酪
+popcorn	爆米花
+corn	谷物
+machine	机器
+dig	挖，掘
+hole	洞，孔
+sandwich	三明治
+butter	黄油
+turkey	火鸡
+lettuce	莴苣
+piece	件
+Thanksgiving	感恩节
+traditional	传统的
+autumn	秋天
+traveler	旅行者
+England	英格兰
+celebrate	庆祝
+mix	混淆
+pepper	胡椒粉
+fill	装满，使充满
+oven	烤箱
+plate	碟
+cover	遮盖
+gravy	肉汁
+serve	接待
+temperature	温度
+prepare	预备
+prepare for	为…准备
+exam	考试
+flu	流感
+available	可得到的
+another time	其他时间
+until	在…之前
+hang	悬挂
+hang out	常去某处
+catch	抓住
+invite	邀请
+accept	接受
+refuse	拒绝
+the day before yesterday	前天
+the day after tomorrow	后天
+weekday	工作日
+look after	照顾
+invitation	邀请
+turn down	减小
+reply	回答
+forward	向前
+delete	删除
+print	印刷的文字
+sad	难过的
+goodbye	再见
+take a trip	去旅行
+glad	高兴的
+preparation	准备
+glue	粘合
+without	没有
+surprised	感到惊讶的
+look forward to	盼望
+hear from	收到…来信
+housewarming	乔迁庆宴
+opening	开幕式
+concert	音乐会
+headmaster	男校长
+event	大事
+guest	客人
+calendar	日历
+daytime	日间
+meeting	会议
+video	录像
+potato chips	马铃薯片
+chocolate	巧克力
+upset	难过的
+taxi	滑行
+advice	劝告
+travel	旅行
+agent	代理人
+expert	专家
+keep ... to oneself	保守秘密
+teenager	青少年
+normal	正常的
+unless	除非
+certainly	当然
+wallet	皮夹
+mile	英里
+angry	生气的
+understanding	善解人意的
+careless	粗心的
+mistake	错误
+himself	他自己
+careful	小心的
+advise	劝告
+solve	解决
+step	步，脚步
+trust	相信
+experience	经验
+in half	分成两半
+halfway	中途地
+else	别的

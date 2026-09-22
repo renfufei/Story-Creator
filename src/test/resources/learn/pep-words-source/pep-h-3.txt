@@ -1,0 +1,366 @@
+take place	发生
+beauty	美
+harvest	收获
+celebration	庆祝
+hunter	狩猎者
+starve	饿死
+origin	起源
+religious	宗教上的
+seasonal	季节的
+ancestor	祖先
+Obon	盂兰盆节
+grave	坟墓
+incense	熏香
+in memory of	纪念
+Mexico	墨西哥
+feast	节日
+skull	头脑
+bone	骨
+Halloween	万圣节前夕
+belief	信心
+dress up	盛装打扮
+trick	诡计
+play a trick on	搞恶作剧;开玩笑
+poet	诗人
+Columbus Day	哥伦布日
+arrival	到来
+Christopher Columbus	克利斯朵夫•哥伦布
+gain	获得
+independence	独立
+independent	独立的
+gather	集合
+agriculture	农业
+agricultural	农业的
+award	奖
+produce	产品
+rooster	雄禽
+admire	赞美
+energetic	充满活力的
+look forward to	期望
+carnival	狂欢节
+lunar	月的
+Easter	复活节
+parade	游行
+day and night	日夜
+clothing	衣服
+Christian	基督徒
+Jesus	耶稣
+cherry	樱桃
+blossom	花
+as though	好像
+have fun with	玩得开心
+custom	习惯
+worldwide	遍及全世界的
+rosebud	玫瑰花蕾
+fool	愚人
+necessity	必要性
+permission	许可
+prediction	预言
+fashion	时尚
+Trinidad	特立尼达岛
+Carla	卡拉
+Hari	哈利
+parking	停放
+parking lot	停车场
+Valentine’s Day	圣瓦伦廷节
+turn up	出现
+keep one’s word	守信用
+hold one’s breath	屏息
+apologize	道歉
+drown	淹没
+sadness	悲哀
+obvious	明显的
+wipe	擦
+weave	迂回
+herd	牧群
+the Milky Way	银河
+magpie	喜鹊
+weep	哭泣
+announcer	广播员
+set off	出发
+remind	提醒
+remind ... of ...	使…想起…
+forgive	原谅
+Diet	日常饮食
+spaghetti	意大利式细面条
+nut	坚果
+muscle	肌肉
+protective	给予保护的
+bean	豆
+pea	豌豆
+cucumber	黄瓜
+eggplant	茄子
+pepper	辣椒
+mushroom	蘑菇
+peach	桃子
+lemon	柠檬
+balance	平衡
+balanced diet	平衡膳食
+barbecue	烧烤
+mutton	羊肉
+kebab	烤腌羊肉串
+roast	烤制的
+stir	摇动
+fry	油煎
+stir-fry	用旺火炒
+ought	应当
+ought to	应当
+bacon	熏咸肉
+cola	可乐饮料
+sugary	含糖的
+sign	牌示
+lose weight	体重减轻
+slim	变细
+curiosity	好奇心
+hostess	女主人
+raw	生的
+vinegar	醋
+get away with	被放过
+lie	谎话
+tell a lie	说谎
+customer	顾客
+discount	折扣
+win ... back	赢回
+weakness	缺点
+strength	力量
+consult	咨询
+fibre	纤维
+digest	消化
+poisonous	有毒的
+carrot	胡萝卜
+scurvy	坏血病
+rickets	佝偻病
+obesity	过度肥胖
+vitamin	维生素
+protein	蛋白质
+earn one’s living	谋生
+debt	债
+in debt	欠债
+glare	怒目而视
+spy	窥探
+spy on	暗中监视
+limit	限制
+limited	有限的
+benefit	利益
+breast	胸部
+garlic	大蒜
+sigh	叹息
+combine	联合
+cut down	削减
+before long	不久以后
+put on weight	增加体重
+cooperation	合作
+ingredient	材料
+flavour	味道与气味
+Mark Twain	马克•吐温
+birthplace	出生地
+Florida	佛罗里达镇佛罗里达州
+bring up	抚养
+Hannibal	汉尼拔
+Missouri	密苏里州
+Mississippi	密西西比河
+novel	小说
+boyhood	少年时代
+adventure	奇遇
+Tom Sawyer	汤姆•索亚
+Huckleberry Finn	哈克贝利•费恩
+phrase	短语
+fathom	英寻
+author	著者
+Samuel Langhorne Clemens	塞缪尔•兰霍恩•克莱门斯
+scene	一场
+narrator	讲述者
+Roderick	罗德里克
+Oliver	奥利弗
+bet	赌
+make a bet	打赌
+penniless	贫困的
+wander	漫游
+pavement	人行道
+businessman	商人
+permit	许可
+ahead	在前
+go ahead	前进
+by accident	偶然
+bay	海湾
+stare	凝视
+stare at	盯着看
+nightfall	黄昏
+fault	过错
+spot	发现
+passage	〔乘船旅行的〕航程
+unpaid	未付款的
+account	认为
+account for	导致
+embassy	大使馆
+seek	寻找
+patience	耐性
+contrary	反面
+on the contrary	与此相反
+charity	慈善
+envelope	信封
+unbelievable	难以置信的
+Horace	霍勒斯
+steak	肉块
+pineapple	菠萝
+dessert	餐后甜点
+amount	数量
+take a chance	冒险
+rude	粗鲁的
+manner	方式
+scream	尖声叫
+genuine	真的
+issue	发布
+fake	假货
+rag	破布
+in rags	衣衫褴褛
+indeed	真正地
+as for	关于
+bow	鞠躬
+barber	理发师
+astronomy	天文学
+astronomer	天文学家
+solar	太阳的
+system	系统
+solar system	太阳系
+religion	宗教信仰
+theory	学说
+Big Bang	宇宙大爆炸
+atom	原子
+billion	亿万
+globe	地球仪
+global	全球性的
+violent	强暴的
+in time	及时
+carbon	碳
+nitrogen	氮
+vapour	蒸气
+atmosphere	气氛
+unlike	不同
+fundamental	基本的
+presence	出席
+dissolve	溶解
+harmful	有害的
+acid	酸
+chain	链子
+reaction	反应
+multiply	乘
+oxygen	氧
+shellfish	水生有壳动物
+amphibian	两栖动物
+reptile	爬行动物
+lay eggs	下蛋
+dinosaur	恐龙
+exist	存在
+mammal	哺乳动物
+give birth to	产生
+thus	因此
+in one’s turn	轮到某人
+dioxide	二氧化物
+carbon dioxide	二氧化碳
+prevent ... from	阻止
+puzzle	谜
+biology	生物学
+biologist	生物学家
+gravity	万有引力
+satellite	人造卫星
+gentle	温和的
+geologist	地质学家
+physicist	物理学家
+block out	挡住
+extinct	灭绝的
+climate	气候
+comet	慧星
+crash	碰撞
+Isaac Newton	艾萨克•牛顿
+Albert Einstein	阿尔伯特•爱因斯坦
+Stephen Hawking	斯蒂芬•霍金
+spaceship	宇宙飞船
+pull	拉
+lessen	减少
+cheer up	感到高兴
+float	浮动
+weightlessly	失重地
+cabin	小屋
+mass	<复>群众
+now that	既然
+get the hang of	熟悉
+break out	突发
+exhaust	使精疲力尽
+watch out	密切注视
+multicultural	多种文化的
+quiz	问答比赛
+Canadian	加拿大人
+Vancouver	温哥华
+Toronto	多伦多
+Calgary	卡尔加里
+Ottawa	渥太华
+beaver	海狸
+grizzly	灰熊
+polar	极地的
+penguin	企鹅
+prime	首要的
+minister	大臣
+prime minister	首相
+governor	州长
+rather than	与其
+continent	洲
+baggage	行李
+chat	聊天
+scenery	景色
+eastward	向东
+westward	向西
+upward	向上地
+surround	围绕
+the Rocky Mountains	落基山脉
+Harbour	海港
+measure	测量
+aboard	在船
+settle down	定居
+manage to do	设法做
+catch sight of	看见
+eagle	鹰
+stampede	大西部赛马会
+cowboy	牛仔
+have a gift for	对…有天赋
+within	在…之内
+border	边界
+slight	轻微的
+slightly	稍稍
+acre	英亩
+urban	城市的
+Thunder Bay	桑德湾
+Lake Superior	苏必利尔湖
+location	位置
+the Vatican City State	梵蒂冈城国
+topic	话题
+mix	混合
+mixture	混合
+bush	灌木
+maple	枫
+frost	霜冻
+confirm	证实
+wealthy	富有的
+distance	距离
+in the distance	在远处
+mist	薄雾
+misty	有薄雾的
+Niagara	尼亚加拉
+schoolmate	同学
+booth	公用电话间
+downtown	市区的
+pearl	珍珠
+Cantonese	广东人
+approximately	接近
+dawn	黎明
+workplace	工作场所
+buffet	自助餐
+broad	宽阔的
+St Lawrence River	圣劳伦斯河
+nearby	在附近
+tradition	传统
+terrify	使恐怖
+terrified	恐惧的
+pleased	欣喜的
+impress	使印象深刻
+impressive	给人深刻印象的

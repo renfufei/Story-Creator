@@ -4,6 +4,7 @@ import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.ai.router.TtsProviderRegistry;
 import com.storycreator.learn.LearnAudioService;
 import com.storycreator.learn.MultiplicationFormula;
+import com.storycreator.learn.WordMatchBank;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
@@ -18,11 +19,14 @@ public class LearnController {
     private final LearnAudioService learnAudioService;
     private final TtsProviderRegistry ttsProviderRegistry;
     private final AiProviderRouter providerRouter;
+    private final WordMatchBank wordMatchBank;
 
-    public LearnController(LearnAudioService learnAudioService, TtsProviderRegistry ttsProviderRegistry, AiProviderRouter providerRouter) {
+    public LearnController(LearnAudioService learnAudioService, TtsProviderRegistry ttsProviderRegistry,
+                           AiProviderRouter providerRouter, WordMatchBank wordMatchBank) {
         this.learnAudioService = learnAudioService;
         this.ttsProviderRegistry = ttsProviderRegistry;
         this.providerRouter = providerRouter;
+        this.wordMatchBank = wordMatchBank;
     }
 
     @GetMapping("/learn")
@@ -34,6 +38,25 @@ public class LearnController {
     public String multiplication() {
         learnAudioService.ensureFormulaRecordsExist(MultiplicationFormula.MODULE);
         return "forward:/pages/learn-multiplication.html";
+    }
+
+    // ==================== 英语单词匹配 ====================
+
+    @GetMapping("/learn/word-match")
+    public String wordMatch() {
+        return "forward:/pages/learn-word-match.html";
+    }
+
+    /**
+     * 单词匹配引导数据：全部册次 + 每册按主题切好的关卡（含全部单词对）。
+     *
+     * <p>一次性下发（约 500 词），换来切换册次 / 关卡零请求、离线可用；
+     * 进度由前端 localStorage 维护，无需服务端状态。
+     */
+    @GetMapping("/learn/word-match/data")
+    @ResponseBody
+    public Map<String, Object> wordMatchData() {
+        return wordMatchBank.bootstrapData();
     }
 
     @GetMapping("/learn/multiplication/settings")

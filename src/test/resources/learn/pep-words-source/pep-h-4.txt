@@ -1,0 +1,307 @@
+achievement	成就
+Joan of Arc	圣女贞德
+Elizabeth Fry	伊丽莎白•弗赖伊
+Quaker	教友派信徒
+welfare	福利
+project	项目
+institute	学会
+China Welfare Institute	中国福利基金会
+specialist	专家
+specialize	专攻
+Jane Goodall	简•古道尔
+chimp	黑猩猩
+connection	关系
+human being	人类
+Jody Williams	乔迪•威廉斯
+campaign	运动
+landmine	地雷
+organization	组织
+Gombe National Park	贡贝国家公园
+behave	表现
+behaviour	行为
+shade	荫
+move off	离开
+worthwhile	值得的
+nest	巢
+bond	联系
+observe	观察
+observation	观察
+childhood	童年
+outspoken	直言的
+respect	尊敬
+argue	争论
+argument	争论
+entertainment	娱乐
+lead a ... life	过着…的生活
+crowd	人群
+crowd in	涌上心头
+inspire	鼓舞
+inspiration	灵感
+support	支持
+look down on	蔑视
+look down upon	蔑视
+refer	谈到
+refer to	谈到
+audience	观众
+by chance	碰巧
+come across	遇见
+career	事业
+rate	比率
+sickness	疾病
+intend	计划
+emergency	突发事件
+generation	一代
+determination	决心
+kindness	仁慈
+considerate	考虑周到的
+consideration	考虑
+deliver	递送
+carry on	继续
+modest	谦虚的
+statistic	[pl]统计数字
+sunburnt	晒黑的
+struggle	拼搏
+decade	十年
+super	特级的
+hybrid	混合的
+output	产量
+strain	品种
+crop	庄稼
+hunger	饥饿
+disturbing	引起烦恼的
+expand	使变大
+circulate	循环
+Vietnam	越南
+thanks to	幸亏
+battle	战役
+rid	摆脱
+rid ... of	摆脱
+be satisfied with	对…感到满意
+freedom	自由
+would rather	宁愿
+therefore	因为
+equip	配备
+sorghum	高粱
+grain	谷物
+peanut	花生
+export	出口
+nationality	国籍
+occupation	工作
+personality	性格
+confuse	使迷惑
+regret	遗憾
+chemical	化学的
+organic	有机的
+fertile	肥沃的
+fertilizer	肥料
+production	生产
+bacteria	细菌
+pest	害虫
+build up	逐渐增强
+lead to	导致
+nutrition	营养
+mineral	矿物
+discovery	发现
+focus	焦点
+focus on	集中于
+soil	土壤
+reduce	减少
+keep ... free of	使…免受
+keep ... free from	使…免受
+soybean	大豆
+root	根
+skim	浏览
+underline	画底线标出
+summary	总结
+comment	评论
+producer	制片人
+industrial	工业的
+humour	幽默
+punchline	故事、笑话等中的妙语
+verbal	口头的
+nonverbal	不用语言的
+mime	哑剧
+Charlie Chaplin	查理•卓别林
+Edward Lear	爱德华•李尔
+comedy	喜剧
+Victor Hugo	维克多•雨果
+up to now	直到现在
+brighten	使更明亮
+depressed	忧愁的
+content	满足的
+feel content with	对…满足
+be content with	对…满足
+performer	表演者
+astonish	使惊诧
+astonishing	令人感到惊讶的
+fortunate	幸运的
+unfortunately	不幸地
+badly off	穷的
+teens	十几岁
+ordinary	平常的
+bored	厌烦的
+subtle	微妙的
+entertain	款待
+entertaining	愉快的
+charming	迷人的
+tramp	流浪汉
+throughout	遍及
+homeless	无家的
+moustache	小胡子
+worn	用旧的
+worn-out	磨破的
+stiffly	僵硬地
+failure	失败
+optimism	乐观
+overcome	战胜
+underdog	失败者
+snowstorm	暴风雪
+leather	皮革
+pick out	辨别出
+lace	花边
+cut off	切断
+chew	嚼碎
+mouthful	一口
+enjoyment	享受
+convince	使信服
+convincing	令人信服的
+direct	导演
+star in	担任主角
+Oscar	奥斯卡
+outstanding	杰出的
+Switzerland	瑞士
+confidence	信心
+costume	戏装
+gesture	手势
+particular	特殊的
+particularly	特别
+occasion	时刻
+budget	预算
+actress	女演员
+slide	滑动
+amuse	使发笑
+amusing	好笑的
+pancake	烙饼
+explanation	解释
+detective	侦探
+Sherlock Holmes	夏洛克•福尔摩斯
+mountainous	多山的
+whisper	耳语
+vast	巨大的
+rhythm	节奏
+mess	脏或乱的状态
+react	作出反应
+porridge	粥
+drunk	醉的
+statement	陈述
+greet	迎接
+represent	代表
+association	社团
+dormitory	宿舍
+canteen	食堂
+flight	航班
+curious	好奇的
+curiously	好奇地
+Garcia	加西亚
+Colombia	哥伦比亚
+approach	接近
+cheek	面颊
+defend	保护
+defend against	保卫…以免受
+defence	防御
+major	主要的
+misunderstand	误解
+misunderstanding	误解
+Akira Nagata	永田明
+Ahmed Aziz	艾哈迈德•阿齐兹
+Jordan	约旦
+Darlene Coulon	达琳•库隆
+dash	猛冲
+adult	成人
+simply	简单地
+Muslim	穆斯林
+spoken	口语的
+unspoken	未说出口的
+posture	姿态
+Spain	西班牙
+Italy	意大利
+likely	可能的
+be likely to	很可能…
+in general	总的来说
+crossroads	十字路口
+employee	雇员
+frown	皱眉
+misread	误解
+facial	面部的
+function	作用
+ease	安逸
+at ease	舒适
+truly	真实地
+false	假的
+anger	怒气
+lose face	丢脸
+turn one’s back to	背对
+fist	拳头
+yawn	打呵欠
+respectful	恭敬的
+subjective	主观的
+hug	拥抱
+rank	等级
+cassette	磁带
+theme	题目
+Camelot Park	卡默洛特公园
+central	中心的
+Central Park	中央公园
+Dollywood	多莱坞
+various	不同的
+cartoon	动画片
+be famous for	以…而闻名
+roller coaster	过山车
+whichever	无论哪一个
+pirate	海盗
+fairy tale	神话故事
+fantasy	幻想
+amusement	消遣
+swing	秋千
+attraction	有吸引力的事物
+no wonder	难怪
+tourism	旅游业
+wherever	无论在什么地方
+unique	独一无二的
+carpenter	木匠
+craftsman	匠人
+engine	引擎
+bald	秃头的
+preserve	保存
+length	长度
+deed	行动
+knight	骑士
+be modeled after	根据…模仿
+Merlin the Wizard	魔术师梅林
+sword	剑
+joust	骑着马用长予打斗
+tournament	锦标赛
+settler	移民
+athletic	运动的
+translator	译员
+minority	少数
+cloth	布
+Futuroscope	观测未来
+jungle	丛林
+diver	潜水员
+creature	生物
+sunlight	阳光
+T-Rex	霸王龙
+advance	前进
+in advance	提前
+advanced	高级的
+brand	商标
+get close to	接近
+come to life	活跃起来
+outing	外出
+admission	承认
+shuttle	往返汽车
+freeway	高速公路
+souvenir	纪念品
+sneaker	运动鞋
+brochure	小册子

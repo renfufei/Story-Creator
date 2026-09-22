@@ -1,0 +1,311 @@
+survey	调查
+add up	合计
+upset	心烦意乱的
+ignore	不理睬
+calm	平静
+calm down	平静下来
+have got to	不得不
+concern	担忧
+be concerned about	关心
+walk the dog	遛狗
+loose	松的
+vet	兽医
+go through	经历
+Amsterdam	阿姆斯特丹
+Netherlands	荷兰
+Jewish	犹太人的
+German	德国的
+Nazi	纳粹党人
+set down	记下
+series	连续
+a series of	一连串的
+Kitty	基蒂
+outdoors	在户外
+spellbind	迷住
+on purpose	故意
+in order to	为了…
+dusk	黄昏
+at dusk	在黄昏时刻
+thunder	打雷
+entire	整个的
+entirely	完全地
+power	能力
+face to face	面对面地
+curtain	窗帘
+dusty	积满灰尘的
+no longer	不再…
+not ... any longer	不再…
+partner	合作者
+settle	安家
+suffer	遭受
+suffer from	遭受
+loneliness	孤单
+highway	公路
+recover	痊愈
+get tired of	对…厌烦
+be tired of	对…厌烦
+pack	捆扎
+pack up	将装箱打包
+suitcase	手提箱
+Margot	玛戈
+Overcoat	大衣
+teenager	十几岁的青少年
+get along with	与…相处
+gossip	闲话
+fall in love	相爱
+exactly	确实如此
+disagree	不同意
+grateful	感激的
+dislike	不喜欢
+join in	参加
+tip	尖
+secondly	第二
+swap	交换
+item	项目
+subway	<美>地铁
+elevator	电梯
+petrol	<英>汽油
+gas	气体
+official	官方的
+voyage	航行
+conquer	征服
+because of	因为
+native	本国的
+Amy	艾米
+come up	走近
+apartment	<美>公寓住宅
+actually	实际上
+AD	公元
+base	以…为根据
+at present	现在
+gradual	逐渐的
+gradually	逐渐地
+Danish	丹麦语
+enrich	充实
+vocabulary	词汇
+Shakespeare	莎士比亚
+make use of	利用
+spelling	拼写
+Samuel Johnson	塞缪尔•约翰逊
+Noah Webster	诺厄•韦伯斯特
+latter	较后的
+identity	本身
+fluent	流利的
+fluently	流利地
+Singapore	新加坡
+Malaysia	马来西亚
+such as	例如…
+frequent	频繁的
+frequently	常常
+usage	词语惯用法
+command	命令
+request	请求
+dialect	方言
+expression	表示
+midwestern	中西部的
+African	非洲的
+Spanish	西班牙的
+play a part	扮演一个角色
+eastern	东方的
+southeastern	东南方的
+northwestern	西北方的
+recognize	辨认出
+lorry	<英>卡车
+Lori	罗丽
+Houston	休斯顿
+Texas	德克萨斯州
+accent	口音
+Buford	布福德
+Lester	莱斯特
+catfish	鲶鱼
+lightning	闪电
+straight	挺直
+block	块
+cab	出租车
+journal	杂志
+transport	运送
+prefer	更喜欢
+disadvantage	不利条件
+fare	费用
+route	路线
+Mekong	湄公河
+flow	流动
+ever since	从那以后
+persuade	说服
+cycle	骑自行车
+graduate	毕业
+finally	最后
+schedule	进度表
+fond	喜爱的
+be fond of	喜爱
+shortcoming	缺点
+stubborn	顽固的
+organize	组织
+care about	关心
+detail	细节
+source	来源
+determine	确定
+determined	坚决的
+change one’s mind	改变主意
+journey	旅行
+altitude	海拔高度
+make up one’s mind	下决心
+give in	投降
+atlas	地图
+glacier	冰河
+Tibetan	西藏的
+rapids	急流
+valley	谷
+waterfall	瀑布
+pace	缓慢而行
+bend	弯
+meander	蜿蜒缓慢流动
+delta	三角洲
+attitude	态度
+Qomolangma	珠穆朗玛峰
+boil	沸腾
+forecast	预测
+parcel	小包
+insurance	保险
+wool	羊毛
+as usual	照常
+reliable	可信赖的
+view	观点
+yak	牦牛
+pillow	枕头
+midnight	午夜
+at midnight	在午夜
+flame	火焰
+beneath	在…下面
+Laos	老挝
+Laotian	老挝人
+temple	庙宇
+cave	洞穴
+earthquake	地震
+quake	地震
+right away	立刻
+well	井
+crack	裂缝
+smelly	发臭的
+farmyard	农场
+pipe	管
+burst	爆裂
+million	百万
+event	事件
+as if	仿佛
+at an end	结束
+nation	民族
+canal	运河
+steam	蒸汽
+dirt	污垢
+ruin	废墟
+in ruins	严重受损
+suffering	苦难
+extreme	极度的
+injure	损害
+survivor	幸存者
+destroy	破坏
+brick	砖
+dam	水坝
+track	足迹
+useless	无用的
+shock	震惊
+rescue	援救
+trap	使陷入困境
+electricity	电
+disaster	灾难
+dig out	掘出
+bury	埋葬
+mine	矿
+miner	矿工
+shelter	掩蔽
+a number of	许多
+title	标题
+reporter	记者
+bar	条
+damage	损失
+frighten	使惊吓
+frightened	受惊的
+frightening	令人恐惧的
+congratulation	祝贺
+judge	裁判员
+sincerely	真诚地
+express	表示
+outline	要点
+headline	报刊的大字标题
+cyclist	骑自行车的人
+Nelson Mandela	纳尔逊•曼德拉
+quality	质量
+warm-hearted	热心肠的
+mean	吝啬的
+active	活跃的
+generous	慷慨的
+easy-going	随和的
+self	自我
+selfish	自私的
+selfless	无私的
+selflessly	无私地
+devote	献身
+devoted	深爱的
+William Tyndale	威廉•廷代尔
+Bible	《圣经》
+Norman Bethune	诺曼•白求恩
+invader	侵略者
+found	建立
+republic	共和国
+principle	法则
+nationalism	民族主义
+livelihood	生计
+Mohandas Gandhi	莫罕达斯•甘地
+peaceful	平静的
+giant	巨大的
+leap	飞跃
+mankind	人类
+Elias	伊莱亚斯
+lawyer	律师
+guidance	指导
+legal	法律的
+fee	费
+passbook	银行存折
+Johannesburg	约翰内斯堡
+out of work	失业
+hopeful	怀有希望的
+ANC	非国大
+youth	青年时期
+league	同盟
+Youth League	青年团
+stage	阶段
+vote	投票
+attack	进攻
+violence	暴力
+as a matter of fact	事实上
+blow up	爆炸
+equal	相等的
+in trouble	在危险
+willing	乐意的
+unfair	不公正的
+turn to	求助于
+quote	引用语
+release	释放
+lose heart	丧失勇气或信心
+Robben Island	罗本岛
+escape	逃脱
+blanket	毛毯
+educate	教育
+educated	有教养的
+come to power	当权
+beg	请求
+relative	亲戚
+terror	恐怖
+cruelty	残忍
+reward	报酬
+Transkei	特兰斯凯
+set up	设立
+sentence	判决
+be sentenced to	被判处…
+anti-	[前缀]反
+anti-black	反黑人的
+Cape Town	开普敦
+president	总统
+Nobel Peace Prize	诺贝尔和平奖
+opinion	意见

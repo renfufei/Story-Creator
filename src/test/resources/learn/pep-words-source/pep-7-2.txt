@@ -1,0 +1,492 @@
+guitar	吉他
+sing	唱
+swim	游泳
+dance	跳舞
+draw	画
+chess	国际象棋
+play chess	下国际象棋
+speak	说
+speak English	说英语
+join	参加
+club	俱乐部
+be good at ...	擅长于…
+tell	讲述
+story	故事
+write	写作
+show	演出
+or	或者
+talk	说话
+talk to ...	跟…说
+kungfu	功夫
+drum	鼓
+play the drums	敲鼓
+piano	钢琴
+play the piano	弹钢琴
+violin	小提琴
+play the violin	拉小提琴
+also	而且
+people	人
+home	家
+be good with ...	善于应付…的
+make	制造
+make friends	结交朋友
+today	在今天
+help with sth	在某方面帮助
+center	中心
+weekend	周末
+on the weekend	周末
+teach	教
+musician	音乐家
+up	向上
+get up	站起
+dress	穿衣服
+get dressed	穿上衣服
+brush	刷
+tooth	牙齿
+shower	淋浴器
+take a shower	洗淋浴
+usually	通常地
+forty	四十
+Wow	哇
+never	从不
+early	早
+fifty	五十
+job	工作
+work	工作
+station	车站
+radio station	广播电台
+o'clock	点钟
+night	晚上
+funny	滑稽好笑的
+exercise	锻炼
+on weekends	周末
+best	最好的
+half	一半
+past	晚于
+quarter	四分之一
+homework	家庭作业
+do homework	做作业
+run	跑
+clean	打扫
+walk	行走
+take a walk	散步
+quickly	很快地
+either	也
+Either ... or ... ...	要么…要么…
+lot	大量
+lots of	大量
+sometimes	有时
+taste	有…的味道
+Life	生命
+train	火车
+bus	公交车
+subway	地铁
+take the subway	乘地铁
+ride	骑
+bike	自行车
+ride a bike	骑自行车
+sixty	六十
+seventy	七十
+eighty	八十
+ninety	九十
+hundred	一百
+minute	分钟
+far	远
+kilometer	公里
+new	新的
+every	每一
+every day	每天
+by	乘（交通工具）
+by bike	骑自行车
+drive	开车
+car	小汽车
+live	居住
+stop	车站
+think of	认为
+cross	横过
+river	河
+many	许多
+village	村庄
+between	介于…之间
+between ... and ...	在…和…之间
+bridge	桥
+boat	小船
+ropeway	索道
+year	年
+afraid	害怕
+like	像
+leave	离开
+dream	睡梦
+true	真的
+come true	实现
+rule	规则
+arrive	到达
+on time	准时
+hallway	走廊
+hall	大厅
+dining hall	餐厅
+listen	听
+listen to ...	听…
+fight	打
+sorry	抱歉的
+outside	在外面
+wear	穿
+important	重要的
+bring	带来
+uniform	校服
+quiet	安静的
+out	外出
+go out	外出
+practice	练习
+dish	碟
+do the dishes	清洗餐具
+before	在…以前
+make bed	铺床
+dirty	脏的
+kitchen	厨房
+more	更多的
+noisy	吵闹的
+relax	放松
+read	读
+terrible	非常讨厌的
+feel	感受
+strict	严格的
+be strict	要求严格
+remember	记住
+follow	跟随
+follow the rules	遵守规则
+luck	幸运
+keep	保持
+hair	头发
+learn	学习
+panda	熊猫
+zoo	动物园
+tiger	老虎
+elephant	大象
+koala	树袋熊
+lion	狮子
+giraffe	长颈鹿
+animal	动物
+cute	可爱的
+lazy	懒散的
+smart	聪明的
+beautiful	美丽的
+scary	吓人的
+kind	种类
+kind of	稍微
+Australia	澳大利亚
+south	南方的
+Africa	非洲
+South Africa	南非
+pet	宠物
+leg	腿
+cat	猫
+sleep	睡觉
+friendly	友好的
+shy	羞怯的
+save	救
+symbol	象征
+flag	旗
+forget	忘记
+get lost	迷路
+place	地点
+water	水
+danger	危险
+be in danger	处于危险之中
+cut	砍
+down	下
+cut down	砍倒
+tree	树
+kill	杀死
+ivory	象牙
+over	超过
+made of	由…制成的
+Julie	朱莉
+Becky	贝姬
+Thailand	泰国
+Thai	泰国
+newspaper	报纸
+read a newspaper	看报纸
+use	使用
+Soup	汤
+make soup	做汤
+wash	洗
+movie	电影
+go to movies	看电影
+just	只是
+eat out	出去吃饭
+house	房子
+drink	一杯饮料
+tea	茶
+drink tea	喝茶
+tomorrow	在明天
+pool	游泳池
+shop	购物
+supermarket	超市
+man	男人
+race	竞赛
+host	主人
+study	研究
+state	洲
+the United States	美国
+American	美国的
+dragon	龙
+Dragon Boat Festival	端午节
+any	任何的
+other	另外的
+young	幼小的
+children	儿童
+miss	怀念
+wish	希望
+delicious	可口的
+still	还
+living room	客厅
+rain	下雨
+windy	多风的
+cloudy	多云的
+sunny	晴朗的
+snow	下雪
+weather	天气
+cook	做饭
+bad	坏的
+park	公园
+message	信息
+take a message	捎个口信
+him	他
+could	能
+back	回来
+call back	回电话
+problem	困难
+again	再一次
+dry	干燥的
+cold	寒冷的
+hot	热的
+warm	温暖的
+visit	拜访
+Canada	加拿大
+summer	夏天
+sit	坐
+juice	果汁
+soon	不久
+vacation	假期
+on vacation	度假
+hard	努力地
+Europe	欧洲
+mountain	高山
+country	国
+skate	滑冰
+snowy	下雪的
+winter	冬天
+Russian	俄罗斯的
+snowman	雪人
+rainy	阴雨的
+Moscow	莫斯科
+Toronto	多伦多
+Boston	波士顿
+post	邮政
+office	办公室
+post office	邮局
+police	警察
+police station	警察局
+hotel	旅店
+restaurant	餐馆
+bank	银行
+hospital	医院
+street	大街
+pay	付费
+pay phone	付费电话
+near	在…附近
+across	过
+across from	在…对面
+front	前面
+in front of	在…前面
+behind	在…后面
+town	镇
+around	到处
+north	北
+along	沿着
+go along	沿着走
+turn	转向
+right	向右边
+left	向左边
+turn right/left	向右
+crossing	十字路口
+neighborhood	街区
+spend	花
+spend time	花时间
+climb	爬
+road	路
+often	时常
+air	空气
+sunshine	阳光
+free	免费的
+enjoy	享受
+enjoy reading	喜欢阅读
+easily	容易地
+money	钱
+curly	卷曲的
+straight	直的
+tall	高的
+medium	中等的
+height	身高
+of medium height	中等身高
+thin	瘦的
+heavy	重的
+build	身材
+of medium build	中等身材
+tonight	今夜
+little	小的
+a little	一点
+cinema	电影院
+glasses	眼镜
+later	以后
+handsome	英俊的
+actor	演员
+actress	女演员
+person	人
+nose	鼻子
+blonde	金黄色的
+mouth	嘴
+round	圆形的
+face	脸
+eye	眼睛
+singer	歌手
+artist	艺术家
+crime	犯罪活动
+criminal	罪犯
+put	放
+each	每个
+way	方式
+describe	描述
+differently	不同地
+another	另一
+end	结尾
+in the end	最后
+real	真正的
+jeans	牛仔裤
+noodle	面条
+mutton	羊肉
+beef	牛肉
+cabbage	卷心菜
+potato	土豆
+special	特别的
+would	用于礼貌地请求
+would like	愿意
+yet	还
+large	大号的
+order	命令
+take one's order	点菜
+size	大小
+bowl	碗
+one bowl of	一碗
+tofu	豆腐
+meat	肉
+dumpling	饺子
+porridge	粥
+onion	洋葱
+fish	鱼
+pancake	烙饼
+world	世界
+around the world	世界各地
+answer	回答，答复
+different	不同的
+cake	蛋糕
+candle	蜡烛
+age	年龄
+make a wish	许愿
+blow	吹
+blow out	吹灭
+if	如果
+will	将
+the UK	英国
+candy	糖果
+lucky	幸运的
+popular	受欢迎的
+get popular	受欢迎
+cut up	切碎
+idea	想法
+bring good luck to ...	给…带来好运
+milk	挤奶
+cow	奶牛
+milk a cow	给奶牛挤奶
+horse	马
+ride a horse	骑马
+feed	喂养
+feed chickens	喂鸡
+farmer	农民
+quite	相当
+quite a lot	许多
+anything	任何东西
+grow	生长
+farm	务农
+pick	采
+excellent	极好的
+countryside	乡村
+in the countryside	在乡下
+yesterday	昨天
+flower	花
+worry	担心
+luckily	幸运地
+sun	太阳
+museum	博物馆
+fire	火
+fire station	消防站
+painting	油画
+exciting	使人兴奋的
+lovely	可爱的
+expensive	昂贵的
+cheap	廉价的
+slow	缓慢的
+fast	快地
+robot	机器人
+guide	导游
+gift	礼物
+all in all	总的说来
+everything	一切
+interested	感兴趣的
+be interested in	对…感兴趣
+dark	黑暗的
+hear	听到
+camp	扎营
+lake	湖
+beach	海滩
+badminton	羽毛球运动
+sheep	羊
+as	作为
+natural	自然的
+butterfly	蝴蝶
+visitor	游客
+tired	疲倦的
+stay	停留
+stay up late	熬夜
+away	离开
+run away	跑开
+mouse	老鼠
+baby	婴儿
+shout	呼叫
+shout at ...	冲…大声叫嚷
+woof	汪汪
+language	语言
+fly	乘飞机旅行
+kite	风筝
+fly a kite	放风筝
+high	高的
+high school	中学
+ago	以前
+India	印度
+tent	帐篷
+put up	搭起
+moon	月亮
+surprise	惊奇
+get a surprise	吃惊
+snake	蛇
+scared	惊慌的
+move	移动
+shout to ...	对…大声喊叫
+start	开始
+jump	跳跃
+up and down	上上下下
+wake	弄醒
+into	到…里面
+forest	森林
+ear	耳朵
