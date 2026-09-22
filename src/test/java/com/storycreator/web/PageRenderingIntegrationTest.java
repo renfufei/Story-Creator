@@ -1739,6 +1739,13 @@ class PageRenderingIntegrationTest {
                 .contains("下一册")
                 .contains("最后一册");
         assertThat(response.getBody())
+                .as("移动端浮动胶囊按钮必须是白底，且**连 hover/active/focus 的文字色一起钉死**："
+                        + "真机点完会留下粘滞 :hover，Bootstrap 的 btn-outline-secondary:hover "
+                        + "会把文字切成 #fff，只改 background 就会出现「白字压白底 = 文字消失」")
+                .contains("--bs-btn-hover-color")
+                .contains("--bs-btn-active-color")
+                .contains("--bs-btn-disabled-color");
+        assertThat(response.getBody())
                 .as("设置弹层应提供「导出为单页 HTML」：册次多选 + 全选 + 默认勾当前册，"
                         + "产物零外链（样式/脚本/图标字体/词库全内联），双击即可玩")
                 .contains("wm-set-item is-export")
@@ -1753,7 +1760,8 @@ class PageRenderingIntegrationTest {
                 .contains("exportToggleAll")
                 .contains("data-standalone")
                 .contains("downloadHtml")
-                .contains("word-match-");
+                .contains("word-match-")
+                .contains("stampDateTime");
     }
 
     @Test

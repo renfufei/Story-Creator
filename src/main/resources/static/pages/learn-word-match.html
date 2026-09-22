@@ -996,8 +996,27 @@
                 backdrop-filter: blur(6px);
             }
             /* 磨砂白底只给次要按钮；「下一册」是本册收尾的主按钮，
-               保留 btn-primary 的蓝色填充才有「这里可以往前走」的指向性 */
-            .wm-nav > .btn:not(.btn-primary) { background: rgba(255, 255, 255, .94); }
+               保留 btn-primary 的蓝色填充才有「这里可以往前走」的指向性。
+               ⚠️ 光改 background 不够：btn-outline-secondary 的 :hover/:active 会把文字色切成
+               --bs-btn-hover-color(#fff，它本来是配深色底的)，而移动端**点完会留下粘滞 :hover**，
+               于是白字压白底 —— 表现就是「点完这一下，按钮文字变空白」。
+               所以这里把状态色一起钉死（改 CSS 变量，比堆 :hover 选择器更稳）。 */
+            .wm-nav > .btn:not(.btn-primary) {
+                --bs-btn-color: #6c757d;
+                --bs-btn-hover-color: #6c757d;
+                --bs-btn-hover-bg: rgba(255, 255, 255, .94);
+                --bs-btn-hover-border-color: #93a1b0;
+                --bs-btn-active-color: #495057;
+                --bs-btn-active-bg: rgba(236, 241, 247, .96);
+                --bs-btn-active-border-color: #93a1b0;
+                --bs-btn-disabled-color: #adb5bd;
+                --bs-btn-disabled-bg: rgba(255, 255, 255, .8);
+                --bs-btn-disabled-border-color: #dee2e6;
+                background: rgba(255, 255, 255, .94);
+                min-width: 96px;                    /* 触控更从容，也保证文案不会换行 */
+                padding-inline: 14px;
+                white-space: nowrap;
+            }
             .wm-nav-mid { display: none; }           /* 与顶部「第 N/M 关」重复 */
 
             .wm-board { padding: 8px 10px 46px; }    /* 底部给浮动胶囊留位 */
@@ -2578,9 +2597,12 @@ function pickIconCss(iconCss, sourceText, fontB64) {
     return faceTxt + (base ? base[0] : '') + keep.join('');
 }
 
-function stampDate(d) {
+/* 导出文件名的时间戳：YYYYMMDDHHmm（带时分，避免同一天多次导出互相覆盖）。
+   同一分钟内连点两次导出会得到同名文件，浏览器自动改名成 (1)，不必特殊处理。 */
+function stampDateTime(d) {
     var p = function (x) { return (x < 10 ? '0' : '') + x; };
-    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+    return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate())
+        + p(d.getHours()) + p(d.getMinutes());
 }
 
 /* 用 a[download] + Blob 落盘，返回字节数（可用于提示体积） */
@@ -2677,7 +2699,7 @@ function buildStandaloneWordMatch(ids) {
 
             return {
                 html: '<!DOCTYPE html>\n' + doc.documentElement.outerHTML,
-                filename: 'word-match-' + stampDate(new Date())
+                filename: 'word-match-' + stampDateTime(new Date())
                     + (ids.length > 1 ? '-' + ids.length + '\u518c' : '') + '.html'
             };
         });

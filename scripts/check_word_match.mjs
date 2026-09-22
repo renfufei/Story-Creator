@@ -18,7 +18,9 @@
  *     暂停/继续/退出 + 学习进度与练习进度互不共享 + 点英文即朗读）
  *  另：朗读时机（点英文那一下）与过关提示「贴单词区上方、不遮挡卡片」单独断言
  *  S9d 同义关：同一个中文对应多个词，选哪个都算对（按释义判定而非配对 key）
- *  S10 移动端布局（含新按钮/底部导航不溢出、重排后仍可点）
+ *  S10 移动端布局（含新按钮/底部导航不溢出、重排后仍可点；
+ *      另含「上一关/下一关按钮在 hover/active/focus 下文字仍可见」的防回归 ——
+ *      真机点完会留下粘滞 :hover，白底胶囊若只改 background 就会白字压白底）
  *  S10b 短屏 + 满员关（7 对，如三上第 13 关）：顶部信息压缩后不再溢出
  *       （375x667 与 320x568 两档；浮动胶囊不压单词、说明文字横向滑动）
  *  S12 导出为单页 HTML（设置 → 导出：册次多选 / 全选与本学段全选、默认勾当前册；
@@ -1570,6 +1572,50 @@ async function main() {
         'min=' + Math.min(...mobile.cards.map(c => c.h)));
     check('移动端上一关/下一关按钮可点（>=36px）', mobile.navBtns.every(n => n.h >= 36),
         mobile.navBtns.map(n => n.h).join(','));
+
+    /* 防回归：「点完之后按钮文字变空白」。
+       真机点完会留下**粘滞 :hover**，而 btn-outline-secondary:hover 会把文字色切成
+       --bs-btn-hover-color(#fff)（它本来是配深色底的）；白底胶囊若只改 background，
+       就成了白字压白底 —— 文字看起来「消失」。这里用 CDP 强制各状态，断言对比度仍在。 */
+    await send('DOM.enable');
+    await send('CSS.enable');
+    const docRoot = await send('DOM.getDocument', { depth: -1 });
+    const navNodeIds = [];
+    for (const sel of ['.wm-nav > button:first-child', '.wm-nav > button:last-child']) {
+        const q = await send('DOM.querySelector', { nodeId: docRoot.root.nodeId, selector: sel });
+        navNodeIds.push(q.nodeId);
+    }
+    const contrastOf = async (idx, pseudo) => {
+        await send('CSS.forcePseudoState',
+            { nodeId: navNodeIds[idx], forcedPseudoClasses: pseudo ? [pseudo] : [] });
+        return evalJs(`(() => {
+            const b = document.querySelectorAll('.wm-nav > button')[${idx}];
+            const s = getComputedStyle(b);
+            const toRgb = c => (c.match(/\\d+/g) || []).map(Number).slice(0, 3);
+            return { color: s.color, bg: s.backgroundColor,
+                     colorRgb: toRgb(s.color), bgRgb: toRgb(s.backgroundColor),
+                     text: b.innerText.trim(), w: Math.round(b.getBoundingClientRect().width) };
+        })()`);
+    };
+    const navStates = [];
+    for (const [name, idx] of [['上一关', 0], ['下一关', 1]]) {
+        for (const pseudo of [null, 'hover', 'active', 'focus']) {
+            const st = await contrastOf(idx, pseudo);
+            const delta = st.colorRgb.reduce((a, v, i) => a + Math.abs(v - st.bgRgb[i]), 0);
+            navStates.push({ name, pseudo: pseudo || '默认', delta, ...st });
+        }
+        const wide = await evalJs(`(() => {
+            const b = document.querySelectorAll('.wm-nav > button')[${idx}];
+            return Math.round(b.getBoundingClientRect().width);
+        })()`);
+        check(`移动端「${name}」按钮在 hover/active/focus 下文字都看得见`,
+            navStates.filter(s => s.name === name).every(s => s.delta > 60),
+            navStates.filter(s => s.name === name).map(s => `${s.pseudo}:${s.delta}`).join(' '));
+        check(`移动端「${name}」按钮够宽（>=88px，不换行）`, wide >= 88, wide + 'px');
+    }
+    await send('CSS.forcePseudoState', { nodeId: navNodeIds[0], forcedPseudoClasses: [] });
+    await send('CSS.forcePseudoState', { nodeId: navNodeIds[1], forcedPseudoClasses: [] });
+
     check('移动端整页无需滚动即可玩', mobile.cards.every(c => c.bottom <= mobile.vh), 'vh=' + mobile.vh);
     console.log('  移动端：导航栏可见=' + mobile.navVisible + ' stageTop=' + mobile.stageTop
         + ' stageVar=' + mobile.stageVar);
@@ -1815,8 +1861,16 @@ async function main() {
     console.log('  产物 ' + outName + '（' + Math.round(Buffer.byteLength(html, 'utf8') / 1024) + ' KB）');
     await shot('25-export-toast');
 
-    check('S12 文件名形如 word-match-日期[-N册].html',
-        /^word-match-\d{4}-\d{2}-\d{2}(-\d+册)?\.html$/.test(outName), outName);
+    /* 时间戳精确到分钟：word-match-YYYYMMDDHHmm[-N册].html */
+    const stampMatch = outName.match(/^word-match-(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(-\d+册)?\.html$/);
+    check('S12 文件名形如 word-match-YYYYMMDDHHmm[-N册].html', !!stampMatch, outName);
+    if (stampMatch) {
+        const d = new Date(+stampMatch[1], +stampMatch[2] - 1, +stampMatch[3],
+            +stampMatch[4], +stampMatch[5]);
+        const diffMin = Math.abs(Date.now() - d.getTime()) / 60000;
+        check('S12 文件名里的时间就是导出时刻（分钟级，误差 < 2 分钟）',
+            diffMin < 2, '与当前相差 ' + diffMin.toFixed(1) + ' 分钟');
+    }
 
     const extRefs = [...html.matchAll(/(?:src|href)="([^"]*)"/g)]
         .map(m => m[1]).filter(u => !/^data:/.test(u));
