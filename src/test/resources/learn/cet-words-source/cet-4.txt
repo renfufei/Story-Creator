@@ -2954,7 +2954,7 @@ friend	 n. 朋友，友人
 any	 adj. 什么，一些；任何的
 expand	 v. 扩大；使膨胀
 nurse	 n. 护士；保姆 v. 看护
-toilet	 n. 厕所，盥洗室，浴室
+toilet	 n. 马桶
 creep	 v. 爬行；缓慢地行进
 prompt	 adj. 及时的 v. 敦促
 goods	 n. 货物；商品

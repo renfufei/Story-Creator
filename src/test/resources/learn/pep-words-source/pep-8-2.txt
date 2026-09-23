@@ -385,7 +385,7 @@ unbelievable	难以置信的
 progress	进步
 rapid	迅速的
 unusual	特别的
-toilet	坐便器
+toilet	马桶
 encourage	鼓励
 social	社会的
 peaceful	平静的

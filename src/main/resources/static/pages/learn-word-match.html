@@ -1344,7 +1344,7 @@ window.__WORD_MATCH_DATA__ = (function () {
                         <button type="button" class="wm-card" :class="cardClass(card)" @click="pick(card)"
                                 :aria-label="'英文 ' + card.text">
                             <span class="wm-card-text" x-text="card.text"></span>
-                            <i class="bi bi-volume-up-fill wm-speak" x-show="!card.done" @click.stop="speak(card.text)"
+                            <i class="bi bi-volume-up-fill wm-speak" x-show="!card.done" @click.stop="speakCard(card)"
                                title="朗读"></i>
                         </button>
                     </template>
@@ -2584,6 +2584,28 @@ function wordMatchApp() {
         tapFeedback: function () {
             if (!this.ensureCtx()) return;
             this.tone(520, 0, 0.06, 'sine', 0.05);
+        },
+
+        /* 点卡片右侧的朗读图标。
+           硬要求：**不能比点卡片少做事** —— 手滑点到图标时，单词必须照样被选中。
+           原先绑的是 speak(card.text)，配合 @click.stop 就变成「只朗读、不选中」，
+           而这恰恰是它独有、且用户不需要的能力（点英文卡片本来就会朗读）。
+           现在：未选中/改选 -> 直接走 pick()，与点卡片完全一致（选中 + 音效 + 朗读）；
+                 已选中     -> 退化成单纯重听，而不是像 pick() 那样把选中取消掉。 */
+        speakCard: function (card) {
+            if (!card || card.done) return;
+            /* 自动学习模式：pick() 会直接返回（卡片不接受手动点击），
+               这里保持原有的「只朗读」语义，顺带解决手动插话重听的需求 */
+            if (this.autoMode) {
+                this.speak(card.text);
+                return;
+            }
+            if (this.locked) return;
+            if (this.sel && this.sel.uid === card.uid) {
+                this.speak(card.text);
+                return;
+            }
+            this.pick(card);
         },
 
         /* 选中英文卡片时的朗读：自动学习模式交给 autoLoop 的 speakThenWait 控制节奏 */
