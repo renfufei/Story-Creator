@@ -8,7 +8,10 @@
  *      开关状态胶囊、点条目自动收起、点外部收起、朗读状态落盘）
  *  S2 选中 / 取消选中
  *  S3 不匹配标红（保留先选中）+ 错题本自动记录与次数累计
- *  S4 匹配成功置灰
+ *  S4 匹配成功：两张卡一起闪绿（浅绿底 + 变绿文字/边框，wm-ok-blink 动画 .5s），
+ *      约 .5s 后自动收回「已完成」的灰；配对逻辑（done/不可再选）不受动画影响
+ *  S4b 闪绿的精确配色（用 ?wmOkFlash= 把「亮多久」拉长到 2.4s 再取样：
+ *      常驻浅绿 = --wm-ok-bg，闪烁时压到 --wm-ok-hi，期望值从页面 CSS 变量取）
  *  S5 全部配对后自动进下一关 + 练习进度落盘
  *  S6 册次弹出框（选择册次、旧下拉已移除）
  *  S7 上一关 / 下一关 + 边界禁用
@@ -24,7 +27,8 @@
  *  S10b 短屏 + 满员关（7 对，如三上第 13 关）：顶部信息压缩后不再溢出
  *       （375x667 与 320x568 两档；浮动胶囊不压单词、说明文字横向滑动）
  *  S12 导出为单页 HTML（设置 → 导出：册次多选 / 全选与本学段全选、默认勾当前册；
- *      真实落盘后校验产物零外链、只含被勾的册，再用 file:// 打开跑一遍配对）
+ *      真实落盘后校验产物零资源外链（只放行「源码」那条导航链接）、只含被勾的册，
+ *      再用 file:// 打开跑一遍配对）
  *  S11 运行时错误采集
  *
  * 静音约定：脚本开头把 word_match_sound_v1 写成 0，整轮默认不发声；
@@ -227,9 +231,13 @@ async function board() {
                 text: el.innerText.trim(),
                 sel: el.classList.contains('is-sel'),
                 done: el.classList.contains('is-done'),
+                ok: el.classList.contains('is-ok'),
                 wrong: el.classList.contains('is-wrong'),
                 bg: cs.backgroundColor,
+                line: cs.borderTopColor,
                 color: cs.color,
+                anim: cs.animationName,
+                animDur: cs.animationDuration,
                 x: Math.round(r.x + r.width / 2),
                 y: Math.round(r.y + r.height / 2),
                 w: Math.round(r.width),
@@ -278,7 +286,11 @@ async function state() {
             autoProgressBar: !!document.querySelector('.wm-progress.is-auto'),
             segDone: document.querySelectorAll('.wm-seg.is-done').length,
             segCurrent: document.querySelectorAll('.wm-seg.is-current').length,
-            flash: vis(flash) ? flash.innerText.trim() : '',
+            /* 文案要取「文案那个 span 自己的 textContent」，不能用容器的 innerText：
+               提示条到期时 Alpine 的 x-text（文案）会比 x-show（容器）先刷新，存在一帧
+               「display:flex、getClientRects() 仍非空，但文案已空」——innerText 就只剩 emoji，
+               于是 /即将进入/ 之类的断言偶发失败。实测复现过（页面内 rAF 逐帧采样抓到）。 */
+            flash: vis(flash) ? (flash.lastElementChild ? flash.lastElementChild.textContent : '').trim() : '',
             practice: read('word_match_progress_v2'),
             autoProg: read('word_match_auto_progress_v2'),
             wrongStore: read('word_match_wrong_v1'),
@@ -443,7 +455,11 @@ async function autoSnapshot() {
             tip: bar && vis(bar) ? bar.querySelector('.wm-auto-tip').innerText.replace(/\s+/g, ' ').trim() : '',
             count: bar && vis(bar.querySelector('.wm-auto-count'))
                 ? bar.querySelector('.wm-auto-count').innerText.trim() : '',
-            flash: vis(flash) ? flash.innerText.trim() : '',
+            /* 文案要取「文案那个 span 自己的 textContent」，不能用容器的 innerText：
+               提示条到期时 Alpine 的 x-text（文案）会比 x-show（容器）先刷新，存在一帧
+               「display:flex、getClientRects() 仍非空，但文案已空」——innerText 就只剩 emoji，
+               于是 /即将进入/ 之类的断言偶发失败。实测复现过（页面内 rAF 逐帧采样抓到）。 */
+            flash: vis(flash) ? (flash.lastElementChild ? flash.lastElementChild.textContent : '').trim() : '',
             barH: bar && vis(bar) ? Math.round(bx.height) : 0,
             flashLines: fx ? Math.round(fx.height / lh) : 0,
             flashClipped: ft ? ft.scrollWidth > ft.clientWidth + 1 : false,
@@ -640,18 +656,36 @@ async function main() {
                 hasIcon: !!it.querySelector('i.wm-set-icon'),
                 arrow: !!it.querySelector('.wm-set-arrow'),
                 sw: it.querySelector('.wm-set-switch')?.innerText.trim() || '',
+                tag: it.tagName,
+                href: it.getAttribute('href') || '',
+                target: it.getAttribute('target') || '',
+                rel: it.getAttribute('rel') || '',
+                deco: getComputedStyle(it).textDecorationLine,
+                color: getComputedStyle(it).color,
                 h: Math.round(r.height)
             };
         });
         const r = el.getBoundingClientRect();
         return { items, left: Math.round(r.left), right: Math.round(r.right), vw: window.innerWidth };
     })()`);
-    check('弹层里正好 5 个条目', !!pop && pop.items.length === 5,
+    check('弹层里正好 6 个条目', !!pop && pop.items.length === 6,
         pop ? pop.items.map(i => i.title).join(' / ') : 'null');
-    check('条目名与功能一一对应（错题本/重做本关/音效与朗读/导出/重置进度）',
-        !!pop && ['错题本', '重做本关', '音效与朗读', '导出', '重置进度']
+    check('条目名与功能一一对应（错题本/重做本关/音效与朗读/导出/源码/重置进度）',
+        !!pop && ['错题本', '重做本关', '音效与朗读', '导出', '源码', '重置进度']
             .every((t, i) => pop.items[i] && pop.items[i].title.indexOf(t) >= 0),
         pop ? pop.items.map(i => i.title).join(' / ') : 'null');
+    /* 「源码」是唯一的外链条目：必须是真 <a>（中键/右键新标签页才照常可用），
+       且指向仓库、带 target=_blank + rel=noopener */
+    const srcItem = pop && pop.items[4];
+    check('「源码」是外链 <a>：指向 GitHub 仓库、新标签页打开',
+        !!srcItem && srcItem.tag === 'A'
+            && srcItem.href === 'https://github.com/renfufei/Story-Creator'
+            && srcItem.target === '_blank' && /noopener/.test(srcItem.rel),
+        srcItem ? `${srcItem.tag} ${srcItem.href} target=${srcItem.target} rel=${srcItem.rel}` : 'null');
+    /* 条目外观必须和 <button> 版一致：不能被浏览器渲染成带下划线的蓝链接 */
+    check('「源码」看起来仍是设置条目（无下划线、颜色与其它条目一致）',
+        !!srcItem && srcItem.deco === 'none' && srcItem.color === pop.items[0].color,
+        srcItem ? `deco=${srcItem.deco} color=${srcItem.color} vs ${pop.items[0].color}` : 'null');
     check('每个条目都带图标', !!pop && pop.items.every(i => i.hasIcon));
     check('每个条目都有文字说明（不是只有标题）', !!pop && pop.items.every(i => i.desc.length >= 4),
         pop ? pop.items.map(i => i.desc).join(' | ') : 'null');
@@ -804,7 +838,7 @@ async function main() {
         !canSpeak || (spRev.length === 1 && spRev[0] === en2b),
         canSpeak ? `spoken=${JSON.stringify(spRev)}` : '本机无 speechSynthesis，跳过');
 
-    /* ---------- S4. 匹配成功置灰 ---------- */
+    /* ---------- S4. 匹配成功：先闪绿（约 .5s），再置灰 ---------- */
     console.log('\n— S4 匹配成功 —');
     b = await board();
     await clearSpoken();
@@ -814,19 +848,103 @@ async function main() {
     b = await board();
     const correctCard = byText(b.zh, correctZh);
     await clickAt(correctCard.x, correctCard.y);
-    await sleep(200);
+    await sleep(160);                                 // 落在 .5s 闪绿窗口里取样
     const spZh = await spokenTexts();
     b = await board();
-    check('匹配成功后英文与中文都置灰', byText(b.en, first.text).done && byText(b.zh, correctZh).done);
+    const okEn = byText(b.en, first.text);
+    const okZh = byText(b.zh, correctZh);
+    /* 配对成功的反馈：两张卡一起变浅绿并闪两下（.wm-card.is-ok + wm-ok-blink），
+       约 .5s 后摘掉 is-ok，交给 .is-done 的灰。这里在闪的中途取样。
+       注意：动画期间底色一直在两个绿之间插值，所以这里只断「绿系」，
+       精确色号与「深一档」的验证放在 S4b（把闪绿拉长后取样，不受时机影响）。 */
+    const chan = (s) => (String(s).match(/\d+/g) || []).map(Number);
+    const greenish = (s) => { const c = chan(s); return c.length >= 3 && c[1] > c[0] + 10 && c[1] > c[2] + 10; };
+    check('配对成功瞬间两张卡都进入 is-ok（英文 + 中文都闪）', okEn.ok && okZh.ok,
+        `en.ok=${okEn.ok} zh.ok=${okZh.ok}`);
+    check('闪绿期间两张卡底色都是绿系（不是灰、也不是选中蓝）',
+        greenish(okEn.bg) && greenish(okZh.bg), `en=${okEn.bg} zh=${okZh.bg}`);
+    check('闪绿期间边框与文字也切成绿系',
+        greenish(okEn.line) && greenish(okEn.color), `line=${okEn.line} color=${okEn.color}`);
+    check('用的是 wm-ok-blink 动画、时长 .5s（≈ 多邻国的闪烁时长）',
+        okEn.anim === 'wm-ok-blink' && okEn.animDur === '0.5s', `anim=${okEn.anim} dur=${okEn.animDur}`);
+    check('闪绿不影响配对逻辑：两张卡同时是 done', okEn.done && okZh.done);
+    check('闪绿期间卡片不可再选中', !okEn.sel);
+    check('闪绿时长的默认值是 500ms（?wmOkFlash= 只在自动化里覆盖）',
+        (await evalJs(`Alpine.$data(document.querySelector('.wm-root')).okFlashMs`)) === 500,
+        `okFlashMs=${await evalJs(`Alpine.$data(document.querySelector('.wm-root')).okFlashMs`)}`);
+    await shot('04b-desktop-ok-flash');
+
+    await sleep(700);                                 // 跨过 .5s
+    b = await board();
+    const afterEn = byText(b.en, first.text);
+    check('闪绿约 .5s 后自动摘掉 is-ok',
+        !afterEn.ok && !byText(b.zh, correctZh).ok,
+        `en.ok=${afterEn.ok} zh.ok=${byText(b.zh, correctZh).ok}`);
+    check('闪绿结束后收回「已完成」的中性灰（不再是绿）',
+        afterEn.bg === 'rgb(241, 243, 245)' && afterEn.done, `bg=${afterEn.bg} done=${afterEn.done}`);
     check('英文先选中：朗读发生在点英文时',
         !canSpeak || (spEn.length === 1 && spEn[0] === first.text), `spoken=${JSON.stringify(spEn)}`);
     check('点中文完成配对时不重复朗读同一个词',
         !canSpeak || spZh.length === spEn.length, `spoken=${JSON.stringify(spZh)}`);
-    check('置灰卡片不可再选中', !byText(b.en, first.text).sel);
-    check('置灰后背景为中性灰', byText(b.en, first.text).bg !== 'rgb(216, 237, 253)',
-        `bg=${byText(b.en, first.text).bg}`);
     await shot('04-desktop-matched');
     await speakProbeTeardown();          // 朗读用例验完，后面的批量点击不再发声
+
+    /* ---------- S4b. 闪绿的精确配色 ----------
+       默认 500ms 太短，取样时刻落在动画的哪一帧不可控（闪的过程里底色一直在插值）。
+       ?wmOkFlash= 只拉长「亮多久」，CSS 的 wm-ok-blink 仍是 .5s ——
+       于是 .5s 之后动画已结束、is-ok 还在，这时读到的就是稳定的常驻浅绿；
+       再把动画冻在 20% 关键帧上读一次，验证「闪」的那一档深色确实存在。 */
+    console.log('\n— S4b 闪绿配色（拉长时长取样） —');
+    await send('Page.navigate', { url: PAGE + '?wmOkFlash=2400' });
+    await sleep(2600);
+    b = await board();
+    {
+        const en1 = b.en.find(c => !c.done);
+        const pr1 = lv.pairs.find(p => p.en === en1.text) || {};
+        const zh1 = b.zh.find(c => !c.done && c.text === pr1.zh);
+        await clickAt(en1.x, en1.y);
+        await sleep(100);
+        await clickAt(zh1.x, zh1.y);
+        await sleep(150);                     // 动画还在跑（.5s），必须趁早冻帧
+        const fl = await evalJs(`(() => {
+            const root = getComputedStyle(document.querySelector('.wm-root'));
+            const hex = (h) => { const n = parseInt(String(h).trim().replace('#', ''), 16);
+                return 'rgb(' + ((n >> 16) & 255) + ', ' + ((n >> 8) & 255) + ', ' + (n & 255) + ')'; };
+            const want = { bg: hex(root.getPropertyValue('--wm-ok-bg')), hi: hex(root.getPropertyValue('--wm-ok-hi')),
+                           line: hex(root.getPropertyValue('--wm-ok')), ink: hex(root.getPropertyValue('--wm-ok-ink')) };
+            const cards = Array.from(document.querySelectorAll('.wm-card.is-ok'));
+            /* getAnimations() 里还混着 CSS 过渡（background-color 等），它们没有 animationName，
+               所以要滤掉——顺带也别去暂停它们，免得把过渡冻在半途影响后续用例。 */
+            const cssAnims = (el) => el.getAnimations().filter(a => a.animationName);
+            const names = cards.map(el => cssAnims(el).map(a => a.animationName).join(','));
+            const read = (el) => { const s = getComputedStyle(el);
+                return { bg: s.backgroundColor, line: s.borderTopColor, color: s.color }; };
+            /* 先暂停、再 seek 到目标帧，然后才取色 —— 顺序不能反：
+               ① 不暂停的话取到的是插值中的颜色（浅绿↔深绿之间）；
+               ② .5s 一过 CSS 动画就进入 finished，会从 getAnimations() 里消失，
+                  那时既冻不住也读不到 animationName，所以必须趁动画还在时一次性读完。 */
+            const seek = (t) => {
+                cards.forEach(el => cssAnims(el).forEach(a => { a.pause(); a.currentTime = t; }));
+                return cards.map(read);
+            };
+            const deep = seek(100);          // 20% 关键帧：闪的那一下（深一档）
+            const base = seek(600);          // 过末帧：动画不再参与，读到 .is-ok 的常驻浅绿
+            return { want, base, deep, names };
+        })()`);
+        check('S4b 拉长闪绿时长后，两张卡同时亮着（is-ok 命中左右各一张）',
+            fl.base.length === 2, `cards=${fl.base.length}`);
+        check('S4b 常驻浅绿 = --wm-ok-bg，文字 = --wm-ok-ink，边框 = --wm-ok（期望值取自页面变量，不硬编码色号）',
+            fl.base.length === 2 && fl.base.every(c =>
+                c.bg === fl.want.bg && c.line === fl.want.line && c.color === fl.want.ink),
+            fl.base.map(c => `${c.bg} / ${c.line} / ${c.color}`).join(' | ') + '  want=' + JSON.stringify(fl.want));
+        check('S4b 闪烁中途会压到更深的 --wm-ok-hi（证明是「闪」而不是静态绿）',
+            fl.deep.length === 2 && fl.deep.every(c => c.bg === fl.want.hi)
+            && chan(fl.want.hi)[1] < chan(fl.want.bg)[1],
+            fl.deep.map(c => c.bg).join(' | ') + `  hi=${fl.want.hi} bg=${fl.want.bg}`);
+        check('S4b 两张卡都在跑 wm-ok-blink',
+            fl.names.length === 2 && fl.names.every(n => n === 'wm-ok-blink'), fl.names.join(' | '));
+        await shot('04b2-desktop-ok-flash-steady');
+    }
 
     /* ---------- S5. 全部配对 -> 自动进下一关 ---------- */
     console.log('\n— S5 全部配对 / 练习进度 —');
@@ -879,6 +997,31 @@ async function main() {
         picker && picker.groups.length === 3 && /小学/.test(picker.groups[0]) && /初中/.test(picker.groups[1])
         && /高中/.test(picker.groups[2]),
         picker ? picker.groups.join(' | ') : '');
+    /* 学段标题展示的是「N 册 · M 词」而不是关卡数：词汇量是用户关心的量级。
+       期望值从页面数据算出来比硬编码稳（词库扩容后不会烂）。 */
+    const pickerWords = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const heads = Array.from(document.querySelectorAll('.wm-book-group-head'))
+            .map(e => e.querySelector('.wm-book-group-sub').innerText.replace(/\\s+/g, ' ').trim());
+        const stages = {};
+        d.books.forEach(b => {
+            const s = b.stage || '小学';
+            stages[s] = stages[s] || { books: 0, words: 0 };
+            stages[s].books++; stages[s].words += b.wordCount;
+        });
+        return { heads, stages, total: d.books.reduce((a, b) => a + b.wordCount, 0) };
+    })()`);
+    check('学段标题是「N 册 · M 词」（词汇量优先），不再显示关卡数',
+        pickerWords.heads.length === 3
+        && pickerWords.heads.every(h => /(\d+) 册 · (\d+) 词$/.test(h) && !/关/.test(h)),
+        pickerWords.heads.join(' | '));
+    check('每个学段的册数与词汇量 = 该学段各册之和（小学 8 / 初中 5 / 高中 11，总计与词库一致）',
+        ['小学', '初中', '高中'].every((s, i) => {
+            const m = (pickerWords.heads[i] || '').match(/(\d+) 册 · (\d+) 词$/);
+            const e = pickerWords.stages[s];
+            return !!m && !!e && +m[1] === e.books && +m[2] === e.words;
+        }) && pickerWords.total >= 7000,
+        JSON.stringify(pickerWords));
     check('每个学段标题都是可折叠按钮（带箭头图标）', picker && picker.carets === 3,
         picker ? `carets=${picker.carets}` : '');
     check('默认只展开当前册所在学段（小学），初中 / 高中折叠',
@@ -1872,10 +2015,22 @@ async function main() {
             diffMin < 2, '与当前相差 ' + diffMin.toFixed(1) + ' 分钟');
     }
 
+    const SOURCE_URL = 'https://github.com/renfufei/Story-Creator';
     const extRefs = [...html.matchAll(/(?:src|href)="([^"]*)"/g)]
         .map(m => m[1]).filter(u => !/^data:/.test(u));
-    check('S12 产物零外链：不存在任何非 data: 的 src / href',
-        extRefs.length === 0, extRefs.slice(0, 3).join(' | '));
+    /* 「源码」那条要放行：它是**导航**链接，不加载任何东西，离线点了也只是没反应，
+       与「零资源外链」并不冲突。除它之外，script / link / img / 字体 url() 仍必须全为零。 */
+    const resRefs = extRefs.filter(u => u !== SOURCE_URL);
+    check('S12 产物零资源外链：除「源码」那条跳转外，不存在任何非 data: 的 src / href',
+        resRefs.length === 0, resRefs.slice(0, 3).join(' | '));
+    check('S12 「源码」条目在产物里保留，且是唯一的绝对 URL（指向本仓库）',
+        extRefs.length === 1 && extRefs[0] === SOURCE_URL, extRefs.join(' | '));
+    const aSource = /<a[^>]*class="wm-set-item is-source"[^>]*>/;
+    check('S12 产物里的「源码」仍是真 <a target=_blank rel=noopener>（不是 JS 跳转）',
+        aSource.test(html)
+        && /<a[^>]*class="wm-set-item is-source"[^>]*\btarget="_blank"[^>]*>/.test(html)
+        && /<a[^>]*class="wm-set-item is-source"[^>]*\brel="noopener noreferrer"[^>]*>/.test(html),
+        '需同时带 target=_blank 与 rel=noopener noreferrer');
     const cssRefs = [...html.matchAll(/url\(([^)]+)\)/g)]
         .map(m => m[1].trim().replace(/^['"]|['"]$/g, '')).filter(u => !/^data:/.test(u));
     check('S12 产物 CSS 里也没有外链（字体是 data URI）',
@@ -1897,6 +2052,20 @@ async function main() {
     check('S12 单机标记已写入',
         /window\.__WM_STANDALONE__ = true/.test(html) && /data-standalone="1"/.test(html));
 
+    /* 起始册：写的是「导出时正在学的那一册」（当时是三上），不是勾选列表的第一册
+       （本段两次恰好相同，所以另有一段专门验「当前册不在最前」的情形）。
+       存储键：产物自带一个带时间戳的专属键 —— file:// 下所有本地文件同源，共用 BOOK_KEY
+       会让几个导出件互相串册，也会被线上页面的记录影响。 */
+    const dftM = html.match(/window\.__WM_DEFAULT_BOOK__ = "([^"]*)"/);
+    check('S12 产物里锁定了起始册 = 导出时正在学的那一册（三上）',
+        !!dftM && dftM[1] === 'pep-3-1', dftM ? dftM[1] : '没写 __WM_DEFAULT_BOOK__');
+    const keyM = html.match(/window\.__WM_BOOK_KEY__ = "([^"]*)"/);
+    check('S12 产物用的是本文件专属的册记忆键（文件名同款时间戳 + 随机后缀）',
+        !!keyM && !!stampMatch
+        && new RegExp('^word_match_book_solo_' + stampMatch.slice(1, 6).join('') + '-[a-z0-9]{4,10}$')
+            .test(keyM[1]),
+        keyM ? keyM[1] : '没写 __WM_BOOK_KEY__');
+
     /* --- 用 file:// 打开产物，真跑一遍（这一步才证明「单个 HTML 即可使用」） --- */
     const errBefore = runtimeErrors.length;
     await send('Page.navigate', { url: 'file://' + outFile });
@@ -1908,6 +2077,7 @@ async function main() {
         return { title: document.title, alpine: typeof window.Alpine,
                  cards: document.querySelectorAll('.wm-card').length,
                  books: d ? d.books.length : 0, levels: d ? d.levelCount : 0,
+                 bookId: d ? d.bookId : '', bookKey: d ? d.bookKey : '',
                  label: d ? d.bookLabel : '',
                  navHeader: !!document.getElementById('site-nav'),
                  closeShown: closeBtn ? getComputedStyle(closeBtn).display !== 'none' : null,
@@ -1916,8 +2086,11 @@ async function main() {
     check('S12 双击打开就能玩：Alpine 已就绪、卡片已渲染',
         solo.alpine === 'object' && solo.cards >= 6 && solo.levels > 0,
         `alpine=${solo.alpine} cards=${solo.cards} levels=${solo.levels}`);
-    check('S12 产物里就只有被勾的 2 册（当前册仍是三上）',
-        solo.books === 2 && solo.label === '三年级上册', `books=${solo.books} label=${solo.label}`);
+    check('S12 产物里就只有被勾的 2 册，且默认就落在锁定的起始册（三上）',
+        solo.books === 2 && solo.bookId === 'pep-3-1' && solo.label === '三年级上册',
+        `books=${solo.books} bookId=${solo.bookId} label=${solo.label}`);
+    check('S12 单机件里读的是本文件专属的册记忆键（不碰线上的 word_match_book_v1）',
+        /^word_match_book_solo_\d{12}-[a-z0-9]{4,10}$/.test(solo.bookKey), solo.bookKey);
     check('S12 站点导航与「退出」按钮都不在（单机件没有站内可退）',
         solo.navHeader === false && solo.closeShown === false,
         `nav=${solo.navHeader} close=${solo.closeShown}`);
@@ -1946,12 +2119,88 @@ async function main() {
     await openSettings();
     const soloSet = await evalJs(`(() => {
         const ex = document.querySelector('.wm-set-item.is-export');
+        const src = document.querySelector('.wm-set-item.is-source');
         return { exportDisplay: ex ? getComputedStyle(ex).display : 'missing',
-                 items: document.querySelectorAll('.wm-set-item').length };
+                 sourceVisible: !!src && getComputedStyle(src).display !== 'none',
+                 sourceHref: src ? src.getAttribute('href') : '',
+                 sourceTag: src ? src.tagName : '',
+                 items: document.querySelectorAll('.wm-set-item').length,
+                 titles: Array.from(document.querySelectorAll('.wm-set-item'))
+                     .filter(it => getComputedStyle(it).display !== 'none')
+                     .map(it => it.querySelector('.wm-set-title').innerText.trim()).join(' / ') };
     })()`);
-    check('S12 单机件里「导出」入口已隐藏、其余设置项保留',
-        soloSet.exportDisplay === 'none' && soloSet.items === 5, JSON.stringify(soloSet));
+    check('S12 单机件里「导出」隐藏、「源码」保留可见（能跳仓库），其余设置项保留',
+        soloSet.exportDisplay === 'none' && soloSet.sourceVisible === true
+        && soloSet.sourceTag === 'A' && soloSet.sourceHref === 'https://github.com/renfufei/Story-Creator'
+        && soloSet.items === 6, JSON.stringify(soloSet));
+    check('S12 单机件里可见的设置项顺序（错题本/重做本关/音效与朗读/源码/重置进度，无「导出」）',
+        soloSet.titles === '错题本 / 重做本关 / 音效与朗读 / 源码 / 重置进度', soloSet.titles);
     await shot('27-standalone-settings');
+
+    /* --- 回到线上页面，验「起始册」的两种情形 ---
+           ① 当前册在勾选里、但**不在最前** ⇒ 必须用当前册（旧实现只会取第一个册，这条能抓住回退）
+           ② 当前册根本没被勾 ⇒ 退到勾选册里最靠前的一册（函数级验，不必再落盘） --- */
+    await send('Page.navigate', { url: PAGE });
+    await sleep(2400);
+
+    const fb = await evalJs(`(async () => {
+        const r = await buildStandaloneWordMatch(['pep-3-1'], 'pep-6-1');
+        const t1 = 'window.__WM_DEFAULT_BOOK__ = "';
+        const a1 = r.html.indexOf(t1);
+        const t2 = 'window.__WORD_MATCH_DATA__ = ';
+        const a2 = r.html.indexOf(t2);
+        return {
+            dft: a1 < 0 ? '' : r.html.slice(a1 + t1.length).split('"')[0],
+            books: a2 < 0 ? '' : JSON.parse(r.html.slice(a2 + t2.length).split(';\\n')[0])
+                .books.map(function (b) { return b.id; }).join(','),
+            name: r.filename
+        };
+    })()`);
+    check('S12 没勾当前册（当前册=pep-6-1）时，起始册退到勾选册里最靠前的那一册',
+        fb.dft === 'pep-3-1' && fb.books === 'pep-3-1'
+        && /^word-match-\d{12}\.html$/.test(fb.name || ''),
+        JSON.stringify(fb));
+
+    const devSel = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        d.applyBook('pep-3-2', true);                         // 当前册切到「三年级下册」
+        d.openExport();                                       // 打开导出弹窗（默认勾上当前册）
+        d.exportSel = { 'pep-3-1': true, 'pep-3-2': true };   // 手动勾成「三上 + 三下」
+        return { book: d.bookId, n: d.exportSelCount };
+    })()`);
+    check('S12 起始册分支准备：当前册 = 三下、勾选 = 三上 + 三下（当前册不在最前）',
+        devSel.book === 'pep-3-2' && devSel.n === 2, JSON.stringify(devSel));
+    await sleep(320);
+    /* 第二次导出与第一次往往落在同一分钟 ⇒ 文件名完全相同。headless 下 Chrome 对同名下载是
+       **直接覆盖**（桌面端会另存成 "xxx (1).html"），所以「目录里多了个文件」这条判据不成立，
+       先清空下载目录再等新文件。 */
+    for (const f of fs.readdirSync(downloadDir)) {
+        try { fs.rmSync(path.join(downloadDir, f), { force: true }); } catch (e) { /* ignore */ }
+    }
+    await clickSel('#wm-export-go');
+    let outFile2 = null;
+    for (let i = 0; i < 70 && !outFile2; i++) {
+        await sleep(400);
+        const fresh = fs.readdirSync(downloadDir).filter(n => !n.endsWith('.crdownload'));
+        if (fresh.length) outFile2 = path.join(downloadDir, fresh[0]);
+    }
+    check('S12 第二次导出也真的落盘了文件', !!outFile2, outFile2 || '没有新文件');
+
+    if (outFile2) {
+        const html2 = fs.readFileSync(outFile2, 'utf8');
+        const d2 = html2.match(/window\.__WM_DEFAULT_BOOK__ = "([^"]*)"/);
+        check('S12 起始册取「导出时正在学的那一册」（三下），而不是勾选列表的第一册（三上）',
+            !!d2 && d2[1] === 'pep-3-2', d2 ? d2[1] : '没写 __WM_DEFAULT_BOOK__');
+        await send('Page.navigate', { url: 'file://' + outFile2 });
+        await sleep(2200);
+        const solo2 = await evalJs(`(() => {
+            const d = Alpine.$data(document.querySelector('.wm-root'));
+            return { bookId: d.bookId, label: d.bookLabel, books: d.books.length };
+        })()`);
+        check('S12 打开第二份产物默认就落在三下（专属键各记各的，没被第一份带跑）',
+            solo2.bookId === 'pep-3-2' && solo2.label === '三年级下册' && solo2.books === 2,
+            JSON.stringify(solo2));
+    }
 
     check('S12 打开产物没有新增未捕获错误',
         runtimeErrors.length === errBefore, runtimeErrors.slice(errBefore).join(' | '));

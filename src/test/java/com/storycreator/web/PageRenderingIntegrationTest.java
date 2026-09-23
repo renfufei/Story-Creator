@@ -1746,8 +1746,17 @@ class PageRenderingIntegrationTest {
                 .contains("--bs-btn-active-color")
                 .contains("--bs-btn-disabled-color");
         assertThat(response.getBody())
+                .as("设置弹层应提供「源码」条目：用真 <a>（中键/右键新标签页才照常可用）+ "
+                        + "target=_blank + rel=noopener 指向仓库；导出件里**保留**这一条 —— "
+                        + "它是导航链接、不加载资源，离线打开只是点了没反应，"
+                        + "不破坏「零资源外链」自检（早期版本曾整条 remove，已回退）")
+                .contains("wm-set-item is-source")
+                .contains("https://github.com/renfufei/Story-Creator")
+                .contains("rel=\"noopener noreferrer\"")
+                .doesNotContain("srcLink.remove()");
+        assertThat(response.getBody())
                 .as("设置弹层应提供「导出为单页 HTML」：册次多选 + 全选 + 默认勾当前册，"
-                        + "产物零外链（样式/脚本/图标字体/词库全内联），双击即可玩")
+                        + "产物零资源外链（样式/脚本/图标字体/词库全内联，只留「源码」一条导航链接），双击即可玩")
                 .contains("wm-set-item is-export")
                 .contains("openExport()")
                 .contains("wm-export-modal")
@@ -1762,6 +1771,37 @@ class PageRenderingIntegrationTest {
                 .contains("downloadHtml")
                 .contains("word-match-")
                 .contains("stampDateTime");
+        assertThat(response.getBody())
+                .as("导出的单页件要能自己定位起始册：写死 __WM_DEFAULT_BOOK__（导出时正在学的那一册，"
+                        + "那册没被勾选则退到勾选册里最靠前的一册），并配一个带时间戳的专属存储键 "
+                        + "__WM_BOOK_KEY__ —— file:// 下所有本地文件同源，共用 word_match_book_v1 "
+                        + "会让几个导出件互相串册、也会被线上页面的选择影响")
+                .contains("window.__WM_DEFAULT_BOOK__")
+                .contains("window.__WM_BOOK_KEY__")
+                .contains("word_match_book_solo_")
+                .contains("startBookId")
+                .contains("this.bookKey || BOOK_KEY");
+        assertThat(response.getBody())
+                .as("册次选择器的学段标题应显示「N 册 · M 词」而不是关卡数"
+                        + "（词汇量是用户关心的量级，关卡数只在进度里出现）")
+                .contains("g.books.length + ' 册 · ' + g.wordCount + ' 词'")
+                .doesNotContain("g.levelCount + ' 关'");
+        assertThat(response.getBody())
+                .as("配对成功要有反馈动画：两张卡一起闪浅绿约 .5s，然后收回「已完成」的灰。"
+                        + "is-ok 与 is-done 同时存在，靠 CSS 源码顺序（.is-ok 必须排在 .is-done 之后）胜出 —— "
+                        + "两条选择器同为 (0,2,0)，顺序一挪就会被灰底吃掉")
+                .contains("'is-ok': card.ok")
+                .contains("ok: false")
+                .contains("flashOk(first, second)")
+                .contains("flashOk: function")
+                .contains("--wm-ok-bg")
+                .contains("--wm-ok-hi")
+                .contains(".wm-card.is-ok {")
+                .contains("@keyframes wm-ok-blink")
+                .contains("animation: wm-ok-blink .5s")
+                .contains("okFlashMs")
+                .contains("var OK_FLASH = pace('wmOkFlash', 500)")
+                .contains("prefers-reduced-motion");
     }
 
     @Test

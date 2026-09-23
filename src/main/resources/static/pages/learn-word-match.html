@@ -28,7 +28,10 @@
             --wm-wrong-line: #f96868;
             --wm-wrong-ink: #d92d20;
             --wm-accent: #35a3f3;
-            --wm-ok: #34c77b;
+            --wm-ok: #34c77b;        /* 进度条 / 已完成关卡用的绿，配对动画也沿用同一个绿 */
+            --wm-ok-bg: #ddf7e6;     /* 配对成功：两张卡一起变浅绿 */
+            --wm-ok-hi: #bdeecf;     /* 闪烁时压深一档（在浅绿与它之间来回） */
+            --wm-ok-ink: #12784a;    /* 浅绿底上的文字绿，保证对比度 */
             --wm-auto: #f0a020;
         }
 
@@ -131,6 +134,10 @@
 
         .wm-set-item + .wm-set-item { margin-top: 2px; }
         .wm-set-item:hover { background: #f4f7fa; }
+        /* 「源码」那一条是 <a>（要用新标签页打开），把链接的默认下划线与链接色
+           拉回和 <button> 条目一致的外观 */
+        a.wm-set-item { text-decoration: none; }
+        a.wm-set-item:hover, a.wm-set-item:focus { color: var(--wm-ink); text-decoration: none; }
 
         /* 图标做成小圆角方块：比裸图标更像「条目」，也更容易扫读 */
         .wm-set-icon {
@@ -445,8 +452,9 @@
         }
 
         .wm-board.is-auto .wm-card { cursor: default; }
-        .wm-board.is-auto .wm-card:hover { border-color: var(--wm-line); }
-        .wm-board.is-auto .wm-card:active { transform: none; }
+        /* :not(.is-ok)：这两条的权重比 .wm-card.is-ok 高，会把正在闪绿的那张卡的边框/缩放抢回去 */
+        .wm-board.is-auto .wm-card:hover:not(.is-ok) { border-color: var(--wm-line); }
+        .wm-board.is-auto .wm-card:active:not(.is-ok) { transform: none; }
 
         /* 选中 */
         .wm-card.is-sel {
@@ -462,6 +470,34 @@
             color: var(--wm-done-ink);
             cursor: default;
             box-shadow: none;
+        }
+
+        /* 配对成功：两张卡同时闪绿（约 .5s）。judge() 里 done 是立刻置上的，
+           所以这一条既命中「已配对」也命中「正在闪绿」——两条选择器同为 (0,2,0)，
+           靠**源码顺序**由本规则胜出（必须排在 .is-done 之后，别往上挪）。
+           闪完由 judge() 的定时器摘掉 is-ok，灰底那条的 transition: background-color .16s
+           自然把绿收回到「已完成」的灰，不需要额外写过渡。 */
+        .wm-card.is-ok {
+            background: var(--wm-ok-bg);
+            border-color: var(--wm-ok);
+            color: var(--wm-ok-ink);
+            animation: wm-ok-blink .5s ease-out;
+        }
+
+        /* 闪两下：0/45/100 停在浅绿，20/70 压到深一档，同时轻微放大做出「弹一下」的手感。
+           中间帧只动 background-color（不动 border/color）—— 边框与文字保持在浅绿配深绿的稳定态，
+           闪烁的只有底色，视觉上更像多邻国那种「底色一亮」。 */
+        @keyframes wm-ok-blink {
+            0%   { background-color: var(--wm-ok-bg); transform: scale(1); }
+            20%  { background-color: var(--wm-ok-hi); transform: scale(1.04); }
+            45%  { background-color: var(--wm-ok-bg); transform: scale(1); }
+            70%  { background-color: var(--wm-ok-hi); transform: scale(1.022); }
+            100% { background-color: var(--wm-ok-bg); transform: scale(1); }
+        }
+
+        /* 系统开了「减少动态效果」时保留「变绿」这个结果，只去掉闪烁与缩放 */
+        @media (prefers-reduced-motion: reduce) {
+            .wm-card.is-ok { animation: none; }
         }
 
         /* 不匹配：后选中的那张标红 */
@@ -593,7 +629,9 @@
             to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
         }
 
-        /* 单页导出件里「退出」（退到站内 /learn）与「导出」入口都不成立，隐藏掉 */
+        /* 单页导出件里「退出」（退到站内 /learn）与「导出」入口都不成立，隐藏掉。
+           「源码」**不隐藏**：它是导航链接、不加载资源，产物里保留这条才有出处，
+           也不影响「零资源外链」自检（早先版本曾整条 remove，已回退）。 */
         body[data-standalone] .wm-close,
         body[data-standalone] .wm-set-item.is-export { display: none; }
 
@@ -1092,12 +1130,12 @@ window.__WORD_MATCH_DATA__ = (function () {
                 <i class="bi" :class="autoPaused ? 'bi-play-fill' : 'bi-pause-fill'"></i>
                 <span class="d-none d-sm-inline" x-text="autoPaused ? '继续' : '暂停'"></span>
             </button>
-            <!-- 错题本 / 重做本关 / 朗读开关 / 重置进度 统一收进「设置」弹层 -->
+            <!-- 错题本 / 重做本关 / 朗读开关 / 导出 / 源码 / 重置进度 统一收进「设置」弹层 -->
             <div class="wm-set-wrap" @click.outside="settingsOpen = false"
                  @keydown.escape.window="settingsOpen = false">
                 <button type="button" class="btn btn-sm btn-outline-secondary wm-set-btn"
                         @click="settingsOpen = !settingsOpen" :class="{ 'is-open': settingsOpen }"
-                        title="设置：错题本 / 重做本关 / 朗读 / 重置进度"
+                        title="设置：错题本 / 重做本关 / 朗读 / 导出 / 源码 / 重置进度"
                         aria-haspopup="true" :aria-expanded="settingsOpen ? 'true' : 'false'">
                     <i class="bi bi-gear"></i>
                     <span class="d-none d-sm-inline ms-1">设置</span>
@@ -1158,6 +1196,19 @@ window.__WORD_MATCH_DATA__ = (function () {
                         </span>
                         <i class="bi bi-chevron-right wm-set-arrow"></i>
                     </button>
+
+                    <!-- 外链条目用 <a>（不是 button）：能直接在新标签页打开，
+                         也让「中键/右键新标签页」这类原生行为照常可用 -->
+                    <a class="wm-set-item is-source" href="https://github.com/renfufei/Story-Creator"
+                       target="_blank" rel="noopener noreferrer" @click="settingsOpen = false"
+                       title="在新标签页打开项目源码仓库（GitHub）">
+                        <i class="bi bi-github wm-set-icon"></i>
+                        <span class="wm-set-main">
+                            <span class="wm-set-title">源码</span>
+                            <span class="wm-set-desc">在 GitHub 上查看这个项目</span>
+                        </span>
+                        <i class="bi bi-box-arrow-up-right wm-set-arrow"></i>
+                    </a>
 
                     <button type="button" class="wm-set-item is-danger"
                             @click="settingsOpen = false; resetProgress()" title="重置进度">
@@ -1305,7 +1356,7 @@ window.__WORD_MATCH_DATA__ = (function () {
                                     <span class="wm-book-group-cur"><i class="bi bi-check-circle-fill"></i>
                                         <span x-text="bookLabel"></span> · </span>
                                 </template>
-                                <span x-text="g.books.length + ' 册 · ' + g.levelCount + ' 关'"></span>
+                                <span x-text="g.books.length + ' 册 · ' + g.wordCount + ' 词'"></span>
                             </span>
                         </button>
                         <div class="wm-book-group-body" x-show="isStageOpen(g.stage)" x-cloak>
@@ -1496,6 +1547,9 @@ function wordMatchApp() {
     var AUTO_THINK = pace('wmThink', 2000);
     var AUTO_GAP = pace('wmGap', 4000);
     var AUTO_BOOK_GAP = pace('wmBookGap', 5000);      // 一册学完 -> 下一册的间隔
+    /* 配对成功后两张卡保持「闪绿」的时长；到点摘掉 is-ok，自动过渡回「已完成」的灰。
+       CSS 里的闪烁动画固定 .5s，这里默认也是 500ms；测试用 ?wmOkFlash= 拉长以便截图/断言。 */
+    var OK_FLASH = pace('wmOkFlash', 500);
     var AUTO_SPEAK_MAX = AUTO_STEP >= 1000 ? 2200 : 300;
     /* 跨册提示里的秒数按实际节奏算，改节奏时文案不会说谎 */
     var BOOK_GAP_SEC = Math.max(1, Math.round(AUTO_BOOK_GAP / 1000));
@@ -1506,6 +1560,7 @@ function wordMatchApp() {
 
         /* 当前册 */
         bookId: '',
+        bookKey: '',          // 「上次看哪一册」存到哪个键（单页导出件里是本文件专用键）
         levels: [],
         levelIndex: 0,
 
@@ -1517,6 +1572,7 @@ function wordMatchApp() {
         locked: false,
         matchedCount: 0,
         levelWrong: 0,
+        okFlashMs: OK_FLASH,  // 配对成功「闪绿」亮多久（默认 500ms，?wmOkFlash= 可覆盖）
         buildSeq: 0,          // 每次生成卡片自增，保证 x-for 的 :key 唯一
 
         /* 练习进度：{ bookId: [已通关的关卡下标] } */
@@ -1569,9 +1625,19 @@ function wordMatchApp() {
             this.wrongBook = this.loadWrong();
             this.soundOn = localStorage.getItem(SOUND_KEY) !== '0';
 
-            var saved = localStorage.getItem(BOOK_KEY);
-            var valid = this.books.some(function (b) { return b.id === saved; });
-            this.bookId = valid ? saved : (this.books.length ? this.books[0].id : '');
+            /* 单页导出件会给这两个变量（线上页面没有 ⇒ 下面全部退回原行为）：
+               __WM_BOOK_KEY__     本文件专用的「上次看哪一册」存储键（带文件时间戳），
+                                   免得同一台机器上多个导出件（都是 file:// 同源）互相串册、
+                                   也免得被线上页面的选择影响；
+               __WM_DEFAULT_BOOK__ 导出时锁定的起始册。
+               优先级：本文件自己的记录（且该册确实在文件里）→ 锁定的起始册 → 最前面的册。
+               第二条就是「导出时没勾当前册」的兜底：导出侧已把默认册算成勾选册里最靠前的一册。 */
+            this.bookKey = window.__WM_BOOK_KEY__ || BOOK_KEY;
+            var saved = localStorage.getItem(this.bookKey);
+            var books = this.books;
+            var has = function (id) { return !!id && books.some(function (b) { return b.id === id; }); };
+            if (!has(saved)) saved = window.__WM_DEFAULT_BOOK__ || '';
+            this.bookId = has(saved) ? saved : (books.length ? books[0].id : '');
             this.applyBook(this.bookId, true);
 
             var self = this;
@@ -1617,7 +1683,7 @@ function wordMatchApp() {
         applyBook: function (bookId, restore) {
             if (this.autoMode) this.stopAuto(true);
             this.bookId = bookId;
-            localStorage.setItem(BOOK_KEY, bookId);
+            localStorage.setItem(this.bookKey || BOOK_KEY, bookId);
             this.levels = this.allLevels[bookId] || [];
             this.finishedAll = false;
 
@@ -1705,8 +1771,8 @@ function wordMatchApp() {
                 var p = lv.pairs[i];
                 /* mean = 对面的释义：判定只看释义，同一关里若两个词释义相同（同义表达关），
                    选哪个中文都算对——两张中文卡本来就长得一模一样，用户无从区分也不该被为难 */
-                enBase.push({ uid: 'L' + i + '#' + seq, side: 'L', key: p.key, text: p.en, mean: p.zh, done: false, wrong: false });
-                zhBase.push({ uid: 'R' + i + '#' + seq, side: 'R', key: p.key, text: p.zh, mean: p.en, done: false, wrong: false });
+                enBase.push({ uid: 'L' + i + '#' + seq, side: 'L', key: p.key, text: p.en, mean: p.zh, done: false, wrong: false, ok: false });
+                zhBase.push({ uid: 'R' + i + '#' + seq, side: 'R', key: p.key, text: p.zh, mean: p.en, done: false, wrong: false, ok: false });
             }
             var sig = this.bookId + '#' + this.levelIndex;
             var lastSig = this.lastLayout[sig] || '';
@@ -1799,6 +1865,18 @@ function wordMatchApp() {
             return l.mean === r.text;
         },
 
+        /* 配对成功的「闪绿」：CSS 负责闪（.wm-card.is-ok 的动画），这里只负责亮多久。
+           到点把标记摘掉，卡片回到 .is-done 的灰；因为卡片是每关重建的新对象，
+           晚到的定时器即使命中旧对象也无害（那个对象已经不在视图里了）。 */
+        flashOk: function (first, second) {
+            first.ok = true;
+            second.ok = true;
+            setTimeout(function () {
+                first.ok = false;
+                second.ok = false;
+            }, OK_FLASH);
+        },
+
         judge: function (first, second) {
             if (this.sameMeaning(first, second)) {
                 first.done = true;
@@ -1806,6 +1884,11 @@ function wordMatchApp() {
                 this.sel = null;
                 this.matchedCount++;
                 this.chime(true);
+                /* 配对成功的反馈：两张卡一起变浅绿并闪两下（约 .5s），到点摘掉 is-ok，
+                   由 .is-done 的灰接管（background-color 的 .16s 过渡会让绿收回灰，不突兀）。
+                   done 仍然是「立刻」置上的 —— 进度/计数/能否再点 这些逻辑完全不受动画影响，
+                   动画只是叠在灰底之上的一层临时观感。 */
+                this.flashOk(first, second);
                 /* 朗读时机 = 点英文那一下：英文先选中时 pick() 已读过，
                    这里只补「中文先选、英文后选」的情况，避免同一个词念两遍 */
                 if (!this.autoMode && second.side === 'L') {
@@ -1910,7 +1993,7 @@ function wordMatchApp() {
             var ids = this.exportSelList;
             if (!ids.length) { SC.toast.warn('请先勾选要导出的册次'); return; }
             this.exporting = true;
-            buildStandaloneWordMatch(ids).then(function (res) {
+            buildStandaloneWordMatch(ids, this.bookId).then(function (res) {
                 var bytes = downloadHtml(res.html, res.filename);
                 self.exporting = false;
                 self.exportOpen = false;
@@ -1951,7 +2034,7 @@ function wordMatchApp() {
         enterBookInAuto: function (bookId) {
             if (this.advanceTimer) { clearTimeout(this.advanceTimer); this.advanceTimer = null; }
             this.bookId = bookId;
-            localStorage.setItem(BOOK_KEY, bookId);
+            localStorage.setItem(this.bookKey || BOOK_KEY, bookId);
             this.levels = this.allLevels[bookId] || [];
             this.levelIndex = 0;
             this.finishedAll = false;
@@ -2304,6 +2387,7 @@ function wordMatchApp() {
             return {
                 'is-sel': !!this.sel && this.sel.uid === card.uid,
                 'is-done': card.done,
+                'is-ok': card.ok,          // 配对成功瞬间的闪绿（与 is-done 同时存在，靠 CSS 源码顺序胜出）
                 'is-wrong': card.wrong
             };
         },
@@ -2410,9 +2494,10 @@ function wordMatchApp() {
                 for (var j = 0; j < out.length; j++) {
                     if (out[j].stage === stage) { g = out[j]; break; }
                 }
-                if (!g) { g = { stage: stage, books: [], levelCount: 0 }; out.push(g); }
+                if (!g) { g = { stage: stage, books: [], levelCount: 0, wordCount: 0 }; out.push(g); }
                 g.books.push(b);
                 g.levelCount += b.levelCount;
+                g.wordCount += b.wordCount;
             }
             return out;
         },
@@ -2536,12 +2621,16 @@ function wordMatchApp() {
    做法：把「服务端渲染出来的这份页面」原样取回来做改造，而不是另写一套页面 ——
    导出的东西永远跟线上页一致，不会出现两套实现各自漂移。改造清单：
 
-     ① 去掉站点导航（#site-nav）与 nav.js；
+     ① 去掉站点导航（#site-nav，以及随之无用的 nav.js）；
      ② 外链 CSS 全删，改成一份内联 <style>（Bootstrap + style.css + app.css + 图标字体 data URI），
         摆在页面自带 <style> 之前，保证层叠顺序和线上一致；
      ③ 外链 JS 就地换成内联脚本（位置不变 ⇒ 执行顺序不变），丢掉没用到的 bootstrap.bundle；
      ④ 词库脚本换成字面量，只含被勾选的册次，不再请求 /learn/word-match/data；
+        同时在同一个引导脚本里写死起始册 __WM_DEFAULT_BOOK__（导出时正在学的那一册；
+        那册没被勾选则取勾选册里最靠前的一册）与专属存储键 __WM_BOOK_KEY__（带时间戳 +
+        随机后缀，避免 file:// 同源下多个导出件互相串册）。
      ⑤ body 打 data-standalone，隐藏「退出」「导出」这两个只在站内才成立的入口。
+        （设置里的「源码」<a> 保留：它是导航链接、不加载资源，离线点了没反应而已。）
 
    结果：单个 .html，双击即玩，**零网络请求**（图标字体也内联成 data URI）。
    为什么不是 .mhtml：MHTML 是 multipart/related 容器，靠 Blob 拼出来跨浏览器不通用，
@@ -2619,7 +2708,7 @@ function downloadHtml(html, filename) {
     return blob.size;
 }
 
-function buildStandaloneWordMatch(ids) {
+function buildStandaloneWordMatch(ids, startBookId) {
     var want = {};
     (ids || []).forEach(function (id) { want[id] = true; });
 
@@ -2636,7 +2725,10 @@ function buildStandaloneWordMatch(ids) {
             var doc = new DOMParser().parseFromString(pageHtml, 'text/html');
             var head = doc.head, body = doc.body;
 
-            /* ① 站点导航 */
+            /* ① 只摘站点导航：#site-nav 是站内导航壳，单机件里没有任何站内页可去。
+                  「源码」那条 <a> 则**保留** —— 它是全页唯一的绝对 URL，但属于**导航**链接、
+                  不加载任何资源（不像 src/href 引资源），离线打开只是点了没反应，
+                  所以不影响「零资源外链」这条自检，也让产物能指向项目出处。 */
             var nav = doc.getElementById('site-nav');
             if (nav) nav.remove();
 
@@ -2673,12 +2765,29 @@ function buildStandaloneWordMatch(ids) {
                 payload.books.push(b);
                 payload.levels[b.id] = (src.levels || {})[b.id] || [];
             });
+
+            /* 起始册：用得上的就用「导出时正在学的那一册」；它没被勾选则退到**勾选册里最靠前的一册**
+               （payload.books 保持词库顺序，故第 0 个就是最前面的册，即「小学第一册」那侧的开头）。
+               写进产物由页面 init() 读取，决定单机件默认打开哪一册。
+               同时给产物一个**本文件专用**的册记忆键（带时间戳）：file:// 下所有本地文件同源，
+               共用 BOOK_KEY 会让几个导出件互相串册，也会被线上页面的记录影响。 */
+            var dftBook = payload.books.some(function (b) { return b.id === startBookId; })
+                ? startBookId
+                : (payload.books.length ? payload.books[0].id : '');
+            var stamp = stampDateTime(new Date());      // 文件名用（到分钟）
+            /* 册记忆键要**比分钟更细**：同一分钟内连导两次时文件名会完全撞车
+               （桌面 Chrome 自动补 " (1)"、headless 直接覆盖），只精确到分钟的话
+               两份文件会共用一套记录、互相把对方带跑。故再加一小段随机后缀。 */
+            var soloTag = stamp + '-' + Math.random().toString(36).slice(2, 8);
+
             var inlined = false;
             var own = doc.querySelectorAll('script:not([src])');
             for (var k = 0; k < own.length; k++) {
                 if (own[k].textContent.indexOf('__WORD_MATCH_DATA__') < 0) continue;
                 own[k].textContent = '\n/* 词库随文件一起带走：只含本次导出的册次 */\n'
                     + 'window.__WM_STANDALONE__ = true;\n'
+                    + 'window.__WM_DEFAULT_BOOK__ = ' + JSON.stringify(dftBook) + ';\n'
+                    + 'window.__WM_BOOK_KEY__ = ' + JSON.stringify('word_match_book_solo_' + soloTag) + ';\n'
                     + 'window.__WORD_MATCH_DATA__ = ' + JSON.stringify(payload) + ';\n';
                 inlined = true;
                 break;
@@ -2699,7 +2808,7 @@ function buildStandaloneWordMatch(ids) {
 
             return {
                 html: '<!DOCTYPE html>\n' + doc.documentElement.outerHTML,
-                filename: 'word-match-' + stampDateTime(new Date())
+                filename: 'word-match-' + stamp
                     + (ids.length > 1 ? '-' + ids.length + '\u518c' : '') + '.html'
             };
         });
