@@ -23,7 +23,7 @@ candy	糖果
 notebook	笔记本
 toy	玩具
 key	钥匙
-wow	呀
+wow	哇
 lost	丢失
 so much	非常地
 cute	可爱的
@@ -40,7 +40,7 @@ hat	帽子
 her	她的
 bedroom	卧室
 living room	客厅
-study	书房
+study	书房；学习
 kitchen	厨房
 bathroom	浴室
 bed	床
@@ -60,18 +60,18 @@ bowl	碗
 fork	餐叉
 knife	刀
 spoon	匙
-dinner	正餐
+dinner	晚餐
 ready	准备好
-help yourself	为取用
+help yourself	请随便吃
 pass	给
-try	试
+try	尝试
 parents	父母
 cousin	同辈表亲
 uncle	叔叔
 aunt	阿姨
 baby brother	小弟弟
 doctor	医生
-cook	厨师
+cook	做饭/厨师
 driver	司机
 farmer	农民
 nurse	护士

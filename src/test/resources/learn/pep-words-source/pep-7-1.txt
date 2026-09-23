@@ -27,7 +27,7 @@ cup	杯子
 ruler	尺
 pen	笔
 orange	橙子
-jacket	夹克衫
+jacket	夹克
 key	钥匙
 quilt	被子
 it	它
@@ -89,14 +89,14 @@ China	中国
 middle	中间的
 school	学校
 middle school	中学
-sister	姐
+sister	姐/妹
 mother	母亲
 father	父亲
 parent	父亲
-brother	兄
+brother	哥/弟
 grandmother	祖母
 grandfather	祖父
-grandparent	祖父
+grandparent	祖父母
 family	家
 those	那些
 who	谁
@@ -109,7 +109,7 @@ Have a good day	过得愉快！
 bye	再见
 son	儿子
 cousin	堂兄
-grandpa	祖父
+grandpa	爷爷
 mom	妈妈
 aunt	姑母
 grandma	祖母
@@ -283,8 +283,8 @@ shorts	短裤
 sweater	毛衣
 trousers	裤子
 shoe	鞋
-skirt	裙子
-dollar	元
+skirt	短裙
+dollar	美元
 big	大的
 small	小的
 short	短的
@@ -308,7 +308,7 @@ Mr.	先生
 clothes	衣服
 store	商店
 buy	购买
-sale	特价销售
+sale	打折；促销
 sell	出售
 all	所有的
 very	很

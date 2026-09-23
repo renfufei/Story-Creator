@@ -14,6 +14,8 @@
  *      常驻浅绿 = --wm-ok-bg，闪烁时压到 --wm-ok-hi，期望值从页面 CSS 变量取）
  *  S5 全部配对后自动进下一关 + 练习进度落盘
  *  S6 册次弹出框（选择册次、旧下拉已移除）
+ *  S6c 大学独立词源（首屏只带册元信息、关卡按需拉 /learn/word-match/cet；
+ *      点「四级」真进一关，逐条核对 2193 关 / 13159 条 / 关内英文不重复 / 词性主题）
  *  S7 上一关 / 下一关 + 边界禁用
  *  S7b 本册最后一关：「下一关」变「下一册」+ 打完弹通关窗、点「继续看看」后仍能继续
  *  S8 错题本弹窗（列表 / 朗读 / 去练 / 删除 / 清空）
@@ -905,7 +907,13 @@ async function main() {
         await clickAt(en1.x, en1.y);
         await sleep(100);
         await clickAt(zh1.x, zh1.y);
-        await sleep(150);                     // 动画还在跑（.5s），必须趁早冻帧
+        await sleep(150);                     // 动画还在跑（.5s），先把它冻住，保住 animationName
+        await evalJs(`(() => { document.querySelectorAll('.wm-card.is-ok').forEach(el =>
+            el.getAnimations().filter(a => a.animationName).forEach(a => a.pause())); return true; })()`);
+        /* 冻住动画后再等一会儿：.wm-card 上 border-color/color 还有 .16s 过渡，
+           不等它走完就取色会读到插值（实测差 ±2 个通道，而且两张卡的起点不同、读数还不一致）。
+           动画已暂停，所以等多久都不会丢失要观察的状态。 */
+        await sleep(420);
         const fl = await evalJs(`(() => {
             const root = getComputedStyle(document.querySelector('.wm-root'));
             const hex = (h) => { const n = parseInt(String(h).trim().replace('#', ''), 16);
@@ -972,7 +980,9 @@ async function main() {
     console.log('\n— S6 册次弹出框 —');
     check('旧的下拉选择器已移除', (await evalJs(`document.querySelectorAll('select.wm-select').length`)) === 0);
     await clickSel('.wm-book-btn');
-    await sleep(250);
+    /* openBookPicker 会顺手预取大学词库（约 225KB gzip）：先等它到货，
+       免得下面几条字面量断言跟「正在载入」抢跑 */
+    await sleep(1400);
     const picker = await evalJs(`(() => {
         const back = Array.from(document.querySelectorAll('.wm-modal-backdrop'))
             .find(e => e.getClientRects().length > 0);
@@ -990,13 +1000,16 @@ async function main() {
                  active: items.findIndex(e => e.classList.contains('is-active')) };
     })()`);
     check('点册次按钮弹出选择框', !!picker && /选择年级册次/.test(picker.title), picker ? picker.title : 'null');
-    check('弹出框列出全部 24 册（小学 8 + 初中 5 + 高中 11）', picker && picker.items.length === 24,
-        picker ? `items=${picker.items.length}` : '');
+    check('弹出框列出全部 26 册（小学 8 + 初中 5 + 高中 11 + 大学 2）',
+        picker && picker.items.length === 26, picker ? `items=${picker.items.length}` : '');
     check('弹出框标记了当前册', picker && picker.active === 0, picker ? `active=${picker.active}` : '');
-    check('册次按学段分组显示（小学 / 初中 / 高中 三个分组）',
-        picker && picker.groups.length === 3 && /小学/.test(picker.groups[0]) && /初中/.test(picker.groups[1])
-        && /高中/.test(picker.groups[2]),
+    check('册次按学段分组显示（小学 / 初中 / 高中 / 大学 四个分组）',
+        picker && picker.groups.length === 4 && /小学/.test(picker.groups[0]) && /初中/.test(picker.groups[1])
+        && /高中/.test(picker.groups[2]) && /大学/.test(picker.groups[3]),
         picker ? picker.groups.join(' | ') : '');
+    check('大学分组标题是「大学 · 2 册 · 13159 词」',
+        picker && /大学/.test(picker.groups[3] || '') && /2 册 · 13159 词/.test(picker.groups[3] || ''),
+        picker ? picker.groups[3] : '');
     /* 学段标题展示的是「N 册 · M 词」而不是关卡数：词汇量是用户关心的量级。
        期望值从页面数据算出来比硬编码稳（词库扩容后不会烂）。 */
     const pickerWords = await evalJs(`(() => {
@@ -1012,30 +1025,31 @@ async function main() {
         return { heads, stages, total: d.books.reduce((a, b) => a + b.wordCount, 0) };
     })()`);
     check('学段标题是「N 册 · M 词」（词汇量优先），不再显示关卡数',
-        pickerWords.heads.length === 3
+        pickerWords.heads.length === 4
         && pickerWords.heads.every(h => /(\d+) 册 · (\d+) 词$/.test(h) && !/关/.test(h)),
         pickerWords.heads.join(' | '));
-    check('每个学段的册数与词汇量 = 该学段各册之和（小学 8 / 初中 5 / 高中 11，总计与词库一致）',
-        ['小学', '初中', '高中'].every((s, i) => {
+    check('每个学段的册数与词汇量 = 该学段各册之和（小学 8 / 初中 5 / 高中 11 / 大学 2）',
+        ['小学', '初中', '高中', '大学'].every((s, i) => {
             const m = (pickerWords.heads[i] || '').match(/(\d+) 册 · (\d+) 词$/);
             const e = pickerWords.stages[s];
             return !!m && !!e && +m[1] === e.books && +m[2] === e.words;
-        }) && pickerWords.total >= 7000,
+        }) && pickerWords.total >= 20000,
         JSON.stringify(pickerWords));
-    check('每个学段标题都是可折叠按钮（带箭头图标）', picker && picker.carets === 3,
+    check('每个学段标题都是可折叠按钮（带箭头图标）', picker && picker.carets === 4,
         picker ? `carets=${picker.carets}` : '');
-    check('默认只展开当前册所在学段（小学），初中 / 高中折叠',
-        picker && JSON.stringify(picker.open) === JSON.stringify([true, false, false]),
+    check('默认只展开当前册所在学段（小学），其余三个学段折叠',
+        picker && JSON.stringify(picker.open) === JSON.stringify([true, false, false, false]),
         picker ? JSON.stringify(picker.open) : '');
     const g0 = await pickerGroups();
-    check('折叠生效：初中 / 高中两个组的册次一个都不可见',
-        picker && picker.shown === g0[0].shown && g0[1].shown === 0 && g0[2].shown === 0,
+    check('折叠生效：初中 / 高中 / 大学三个组的册次一个都不可见',
+        picker && picker.shown === g0[0].shown && g0[1].shown === 0 && g0[2].shown === 0
+        && g0[3].shown === 0,
         JSON.stringify(g0.map(x => x.shown)));
     check('三个学段标题始终都在可视区内（不会被展开的册次顶出滚动区）',
         g0.every(x => x.headTop >= x.listTop - 1 && x.headBottom <= x.listBottom + 1),
         JSON.stringify(g0.map(x => `${x.headTop}~${x.headBottom}/${x.listTop}~${x.listBottom}`)));
-    check('展开组的页码数正确（小学 8 / 初中 5 / 高中 11）',
-        g0[0].total === 8 && g0[1].total === 5 && g0[2].total === 11,
+    check('展开组的页码数正确（小学 8 / 初中 5 / 高中 11 / 大学 2）',
+        g0[0].total === 8 && g0[1].total === 5 && g0[2].total === 11 && g0[3].total === 2,
         JSON.stringify(g0.map(x => x.total)));
     check('折叠状态箭头未旋转（transform=none）', g0[1].caret === 'none', `caret=${g0[1].caret}`);
     check('初中 5 册在列（七年级上册 ~ 九年级全一册）',
@@ -1055,7 +1069,7 @@ async function main() {
         g1[1].open && g1[1].shown > 0 && g1[2].shown === 0,
         JSON.stringify(g1.map(x => `${x.open ? 'open' : 'close'}:${x.shown}`)));
     check('手风琴：同时只展开一个学段（展开初中后小学自动收起）',
-        JSON.stringify(g1.map(x => x.open)) === JSON.stringify([false, true, false]),
+        JSON.stringify(g1.map(x => x.open)) === JSON.stringify([false, true, false, false]),
         JSON.stringify(g1.map(x => x.open)));
     check('展开后箭头旋转 90°（matrix 第二行 -1）',
         /matrix\(0,\s*1,\s*-1,\s*0/.test(g1[1].caret), `caret=${g1[1].caret}`);
@@ -1128,6 +1142,86 @@ async function main() {
             const d = Alpine.$data(document.querySelector('.wm-root'));
             return d.stageOpen['高中'] === true;
         })()`)) === true);
+
+    /* ---------- S6c. 大学独立词源（服务端契约 + 按需加载） ---------- */
+    console.log('\n— S6c 大学独立词源 —');
+    const boot = JSON.parse(await (await fetch(BASE + '/learn/word-match/data')).text());
+    check('S6c 首屏引导数据只带大学**册元信息**（extraBooks），一个关卡都不带',
+        boot.books.length === 24 && (boot.extraBooks || []).length === 2
+        && !boot.levels['cet-4'] && !boot.levels['cet-6']
+        && boot.extraBooks.every(x => x.stage === '大学'),
+        `books=${boot.books.length} extra=${(boot.extraBooks || []).length}`
+        + ` hasCetLevels=${!!boot.levels['cet-4']}`);
+    check('S6c 大学元信息：四级 7508 词 / 1251 关、六级 5651 词 / 942 关',
+        boot.extraBooks[0].id === 'cet-4' && boot.extraBooks[0].wordCount === 7508
+        && boot.extraBooks[0].levelCount === 1251 && boot.extraBooks[1].id === 'cet-6'
+        && boot.extraBooks[1].wordCount === 5651 && boot.extraBooks[1].levelCount === 942,
+        boot.extraBooks.map(x => `${x.id}:${x.wordCount}词/${x.levelCount}关`).join(' | '));
+
+    const cet = JSON.parse(await (await fetch(BASE + '/learn/word-match/cet')).text());
+    check('S6c /learn/word-match/cet 结构与首屏一致（books + levels），前端无差别合并',
+        cet.books.length === 2 && cet.levels['cet-4'].length === 1251
+        && cet.levels['cet-6'].length === 942 && cet.books.every(x => x.stage === '大学'),
+        cet.books.map(x => x.id).join(','));
+    const cetLevels = (cet.levels['cet-4'] || []).concat(cet.levels['cet-6'] || []);
+    const cetWords = cetLevels.reduce((a, l) => a + l.pairs.length, 0);
+    let cetDupLevels = 0;                          // 关内英文重复 -> 棋盘上会出现两张同样的卡
+    cetLevels.forEach(l => {
+        const s = new Set(l.pairs.map(p => p.en.toLowerCase()));
+        if (s.size !== l.pairs.length) cetDupLevels++;
+    });
+    check('S6c 大学合计 2193 关 / 13159 条（不去重：原表每条都在，同一个词的多条也都在）',
+        cetWords === 13159 && cetLevels.length === 2193, `words=${cetWords} levels=${cetLevels.length}`);
+    check('S6c 每关 3~7 对、且关内英文不重复',
+        cetLevels.every(l => l.pairs.length >= 3 && l.pairs.length <= 7) && cetDupLevels === 0,
+        `dupLevels=${cetDupLevels}`);
+    check('S6c 主题只由词性归并而来（名词 / 动词 / 形容词 / 副词 / 其他）',
+        cetLevels.every(l => ['名词', '动词', '形容词', '副词', '其他'].indexOf(l.theme) >= 0),
+        Array.from(new Set(cetLevels.map(l => l.theme))).join('/'));
+
+    // 界面上真进一次：展开「大学」学段 -> 点「四级」
+    await clickSel('.wm-book-btn');
+    await sleep(260);
+    await openStage('大学');
+    const cetGroup = await evalJs(`(() => {
+        const gs = Array.from(document.querySelectorAll('.wm-book-group'));
+        const g = gs.find(e => /大学/.test(e.querySelector('.wm-book-group-name').innerText));
+        if (!g) return null;
+        const items = Array.from(g.querySelectorAll('.wm-book-item'));
+        return { head: g.querySelector('.wm-book-group-name').innerText.trim(),
+                 labels: items.map(e => e.querySelector('.wm-book-label').innerText.trim()),
+                 metas: items.map(e => e.querySelector('.wm-book-meta').innerText.replace(/\\s+/g, ' ').trim()) };
+    })()`);
+    check('S6c 册次弹层新增「大学」分组，含四级 / 六级两册',
+        !!cetGroup && cetGroup.head === '大学' && cetGroup.labels.join(',') === '四级,六级',
+        cetGroup ? cetGroup.labels.join(',') : 'null');
+    check('S6c 大学册卡片显示词数与关数（四级 7508 词 · 1251 关 / 六级 5651 词 · 942 关）',
+        !!cetGroup && /7508 词 · 1251 关/.test(cetGroup.metas[0])
+        && /5651 词 · 942 关/.test(cetGroup.metas[1]),
+        cetGroup ? cetGroup.metas.join(' | ') : 'null');
+    await shot('08c-desktop-book-picker-cet');
+
+    await clickBookItem('四级');
+    await sleep(650);
+    b = await board();
+    bookLabel = await evalJs(`document.querySelector('.wm-book-btn').innerText.trim()`);
+    check('S6c 可以切到四级册（词库按需拉取后沿用同一套渲染，无分支）',
+        /四级/.test(bookLabel), `btn=${bookLabel}`);
+    const cetState = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        return { loaded: d.cetLoaded, id: d.bookId, levels: d.levels.length,
+                 theme: d.currentLevel ? d.currentLevel.theme : '',
+                 pairs: d.currentLevel ? d.currentLevel.pairs.length : 0 };
+    })()`);
+    check('S6c 四级册：1251 关、本关主题是词性、棋盘按关卡渲染',
+        cetState.loaded === true && cetState.id === 'cet-4' && cetState.levels === 1251
+        && ['名词', '动词', '形容词', '副词', '其他'].indexOf(cetState.theme) >= 0
+        && cetState.pairs >= 3 && cetState.pairs <= 7 && b.en.length === cetState.pairs,
+        JSON.stringify(cetState));
+    check('S6c 四级关卡的释义是「词性 + 中文」形式（来自考试词表，不是课本词汇表）',
+        b.zh.length > 0 && b.zh.every(c => /^[a-z]+[.&]/.test(c.text)),
+        b.zh.slice(0, 2).map(c => c.text).join(' | '));
+    await shot('08d-desktop-cet4-level1');
 
     // 切回六年级下册第 1 关：后续用例（上下关、自动学习）沿用这个基准状态
     await clickSel('.wm-book-btn');
@@ -1230,11 +1324,11 @@ async function main() {
         /本册全部通关/.test(finishTxt) && /下一册/.test(finishTxt), finishTxt.slice(0, 60));
     await shot('21-desktop-book-finished');
 
-    // 点「继续看看」关掉通关窗 —— 旧版就是这一步之后没有出路
-    await clickSel('.wm-modal-backdrop button', 0, '继续看看');
+    // 点右上角的**关闭叉**关掉通关窗（「继续看看」按钮已移除，关闭只走叉/遮罩）
+    await clickSel('.wm-modal.is-finish .wm-modal-close');
     await sleep(350);
     b = await board();
-    check('点「继续看看」后通关窗关闭', b.finishedModal === false, `modal=${b.finishedModal}`);
+    check('点关闭叉后通关窗关闭', b.finishedModal === false, `modal=${b.finishedModal}`);
     nb = await navBtnTxt();
     check('关掉通关窗后「下一册」仍可点（旧版此处被卡死）',
         /下一册/.test(nb.next) && nb.nextDisabled === false,
@@ -1946,8 +2040,8 @@ async function main() {
                  sum: document.querySelector('.wm-export-sum').textContent.trim(),
                  head: document.querySelector('#wm-export-modal .wm-wrong-total').textContent.trim() };
     })()`);
-    check('S12 弹窗打开：24 册全列出、分三个学段',
-        dlg.open && dlg.flag && dlg.items === 24 && dlg.stages === 3,
+    check('S12 弹窗打开：26 册全列出、分四个学段',
+        dlg.open && dlg.flag && dlg.items === 26 && dlg.stages === 4,
         `items=${dlg.items} stages=${dlg.stages}`);
     check('S12 默认只勾当前册（三上），呈「部分选中」态',
         dlg.count === 1 && dlg.first === 'pep-3-1' && dlg.part === true && dlg.all === false,
@@ -1961,11 +2055,11 @@ async function main() {
                  label: document.querySelector('.wm-export-all span').textContent.trim(),
                  sum: document.querySelector('.wm-export-sum').textContent.trim(),
                  goOn: !document.querySelector('#wm-export-go').disabled }; })()`);
-    check('S12 全选：24 册全勾上、文案翻成「取消全选」',
-        allSel.n === 24 && allSel.all === true && allSel.label === '取消全选',
+    check('S12 全选：26 册全勾上、文案翻成「取消全选」',
+        allSel.n === 26 && allSel.all === true && allSel.label === '取消全选',
         `n=${allSel.n} label=${allSel.label}`);
-    check('S12 全选后汇总 = 24 册 / 1249 关 / 7032 词',
-        /已选 24 册/.test(allSel.sum) && /1249 关/.test(allSel.sum) && /7032 词/.test(allSel.sum),
+    check('S12 全选后汇总 = 26 册 / 3442 关 / 20191 词（含大学 2 册 / 2193 关 / 13159 词）',
+        /已选 26 册/.test(allSel.sum) && /3442 关/.test(allSel.sum) && /20191 词/.test(allSel.sum),
         allSel.sum);
     await shot('24-export-dialog-all');
 

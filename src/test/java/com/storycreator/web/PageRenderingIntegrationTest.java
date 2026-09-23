@@ -1802,6 +1802,55 @@ class PageRenderingIntegrationTest {
                 .contains("okFlashMs")
                 .contains("var OK_FLASH = pace('wmOkFlash', 500)")
                 .contains("prefers-reduced-motion");
+        assertThat(response.getBody())
+                .as("大学是**独立词源**（2 册 / 2193 关 / 13159 条）：首屏只带它的册元信息（extraBooks），"
+                        + "关卡按需拉 /learn/word-match/cet。选册、导出、自动连播跨册这三条路径都必须"
+                        + "先把词库载完再进关，否则用户看到的是一块空棋盘")
+                .contains("extraBooks")
+                .contains("/learn/word-match/cet")
+                .contains("isCetBook")
+                .contains("ensureCet")
+                .contains("applyBookWhenReady")
+                .contains("cetLoaded")
+                .contains("cetPromise")
+                .contains("await this.enterBookInAuto(nextBook.id)")
+                .contains("正在载入大学词库");
+    }
+
+    @Test
+    void learnWordMatchCet_isSeparateSourceFromPep() {
+        ResponseEntity<String> data = restTemplate.getForEntity(
+                url("/learn/word-match/data"), String.class);
+        assertThat(data.getBody())
+                .as("首屏引导数据里只放大学的**册元信息**：全部关卡另有 gzip 约 225KB，"
+                        + "而首屏数据是同步 XHR 取的，塞进来会让白屏时间翻两倍")
+                .contains("\"extraBooks\"")
+                .contains("cet-4")
+                .contains("cet-6")
+                .contains("大学")
+                .doesNotContain("n. 通道，入口");     // 四级词条绝不能混进首屏数据
+
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/learn/word-match/cet"), String.class);
+        assertThat(response.getStatusCode()).as("大学词库端点应 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("大学词库：结构与首屏数据完全一致（books + levels），前端合并后无差别使用；"
+                        + "主题只由词性归并而来")
+                .contains("\"books\"")
+                .contains("\"levels\"")
+                .contains("\"pairs\"")
+                .contains("\"theme\"")
+                .contains("cet-4")
+                .contains("cet-6")
+                .contains("四级")
+                .contains("六级")
+                .contains("大学")
+                .contains("名词")
+                .contains("动词")
+                .contains("形容词")
+                .contains("副词")
+                .contains("access")
+                .contains("n. 通道，入口");
     }
 
     @Test

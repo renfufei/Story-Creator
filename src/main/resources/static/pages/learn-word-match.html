@@ -673,6 +673,33 @@
 
         .wm-modal-emoji { font-size: 2.6rem; line-height: 1; }
 
+        /* 通关弹窗右上角的关闭叉：替代原来的「继续看看」按钮（少一个按钮、层级也更清爽）。
+           .wm-modal 本身没设 position，这里单开一个类把定位上下文圈出来，
+           免得影响选册 / 错题本 / 导出那三个弹窗。
+           非 .btn 元素，不吃 Bootstrap 的 btn-outline 状态色，所以不存在「白字压白底」那类撞色。 */
+        .wm-modal.is-finish { position: relative; }
+        .wm-modal-close {
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            width: 28px;
+            height: 28px;
+            min-height: 0;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: #86909c;
+            font-size: .95rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+        .wm-modal-close:hover { background: #f1f3f6; color: #4e5969; }
+        .wm-modal-close:active { background: #e7ebf0; color: #4e5969; }
+
         /* ---------- 导出弹窗（册次多选：整列滚动 + 学段头吸顶） ---------- */
         .wm-export-bar {
             display: flex;
@@ -1111,7 +1138,7 @@ window.__WORD_MATCH_DATA__ = (function () {
     <div class="wm-toolbar">
         <div>
             <h2 class="sc-page-title mb-0"><i class="bi bi-translate"></i> 英语单词匹配</h2>
-            <div class="wm-toolbar-sub">人教版小学 / 初中 / 高中英语 · 同一主题的单词在同一关</div>
+            <div class="wm-toolbar-sub">人教版小学 / 初中 / 高中 + 大学 · 同一主题的单词在同一关</div>
         </div>
         <div class="wm-toolbar-actions">
             <button type="button" class="btn btn-sm btn-outline-primary wm-book-btn" @click="openBookPicker()"
@@ -1492,20 +1519,25 @@ window.__WORD_MATCH_DATA__ = (function () {
 
     <!-- 本册通关弹窗 -->
     <div class="wm-modal-backdrop" x-show="finishedAll" x-cloak @click.self="finishedAll = false">
-        <div class="wm-modal">
+        <div class="wm-modal is-finish">
+            <button type="button" class="wm-modal-close" @click="finishedAll = false" aria-label="关闭">
+                <i class="bi bi-x-lg"></i>
+            </button>
             <div class="wm-modal-emoji">🏆</div>
             <h5>本册全部通关！</h5>
             <p x-text="bookLabel + ' 的 ' + levelCount + ' 关已经全部完成，太厉害了。'"></p>
             <div class="d-flex gap-2 justify-content-center flex-wrap">
-                <button type="button" class="btn btn-primary btn-sm" @click="replayBook()">
+                <!-- 主按钮 = 「能往前走」的那个：有下一册就给「下一册」，
+                     已是最后一册才退回「重做本册」，保证弹窗里始终只有一个蓝色主按钮。
+                     class 与 :class 在 Alpine 里是合并的，所以这里只写 btn btn-sm。 -->
+                <button type="button" class="btn btn-sm" @click="replayBook()"
+                        :class="hasNextBook ? 'btn-outline-secondary' : 'btn-primary'">
                     <i class="bi bi-arrow-counterclockwise"></i> 重做本册
                 </button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" @click="gotoNextBook()"
-                        x-show="hasNextBook">
+                <button type="button" class="btn btn-sm" @click="gotoNextBook()"
+                        x-show="hasNextBook"
+                        :class="hasNextBook ? 'btn-primary' : 'btn-outline-secondary'">
                     <i class="bi bi-arrow-right-circle"></i> 下一册
-                </button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" @click="finishedAll = false">
-                    继续看看
                 </button>
             </div>
         </div>
@@ -1555,8 +1587,12 @@ function wordMatchApp() {
     var BOOK_GAP_SEC = Math.max(1, Math.round(AUTO_BOOK_GAP / 1000));
 
     return {
-        books: DATA.books || [],
+        /* 人教版 24 册 + 大学 2 册：后者首屏只带册元信息（extraBooks），
+           关卡等真正选到大学时再拉，见 ensureCet */
+        books: (DATA.books || []).concat(DATA.extraBooks || []),
         allLevels: DATA.levels || {},
+        cetLoaded: !!window.__WM_STANDALONE__,
+        cetPromise: null,
 
         /* 当前册 */
         bookId: '',
@@ -1639,6 +1675,10 @@ function wordMatchApp() {
             if (!has(saved)) saved = window.__WM_DEFAULT_BOOK__ || '';
             this.bookId = has(saved) ? saved : (books.length ? books[0].id : '');
             this.applyBook(this.bookId, true);
+            /* 上次停在大学、而这次还没拉过词库：补一次，否则进去是空棋盘 */
+            if (this.isCetBook(this.bookId) && !this.cetLoaded) {
+                this.applyBookWhenReady(this.bookId, true);
+            }
 
             var self = this;
             window.addEventListener('resize', function () { self.measureTop(); });
@@ -1709,6 +1749,9 @@ function wordMatchApp() {
                 this.stageInit = true;
             }
             this.bookPickerOpen = true;
+            /* 顺手把大学词库热起来：弹层先开、册次后选，真点下去时通常已经好了。
+               失败不提示 —— 等用户真选了再报错，免得一开弹层就弹 toast。 */
+            if (!this.cetLoaded) this.ensureCet().catch(function () { });
         },
 
         /* 弹层里各学段分组的展开状态。
@@ -1739,12 +1782,76 @@ function wordMatchApp() {
 
         pickBook: function (bookId) {
             this.bookPickerOpen = false;
-            if (bookId !== this.bookId) this.applyBook(bookId, true);
+            if (bookId !== this.bookId) this.applyBookWhenReady(bookId, true);
             // 换册后，下次打开弹层时新册所在学段必须是展开的
             this.openStageOnly(this.stageOf(bookId));
         },
 
         switchBook: function (bookId) { this.pickBook(bookId); },
+
+        /* ==================== 大学词源（独立词源 · 按需加载） ====================
+           大学是另一套词表（2 册 / 2193 关 / 13159 条，gzip 约 225KB），不放进首屏那份
+           同步 XHR 里 —— 塞进去白屏时间要翻两倍。首屏只带它的册元信息（extraBooks），
+           关卡等真正选到大学时才拉 /learn/word-match/cet；拉完并进 allLevels 之后，
+           它跟人教版那 24 册在数据上完全同构，后面所有逻辑都不用分叉。 */
+        isCetBook: function (bookId) {
+            return this.stageOf(bookId) === '大学';
+        },
+
+        ensureCet: function () {
+            if (this.cetLoaded) return Promise.resolve();
+            if (this.cetPromise) return this.cetPromise;
+            var self = this;
+            this.cetPromise = new Promise(function (resolve, reject) {
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', '/learn/word-match/cet', true);
+                xhr.onload = function () {
+                    try {
+                        if (xhr.status !== 200) throw new Error('HTTP ' + xhr.status);
+                        var d = JSON.parse(xhr.responseText || '{}');
+                        var lv = d.levels || {};
+                        Object.keys(lv).forEach(function (id) { self.allLevels[id] = lv[id]; });
+                        /* 同时把它并回引导数据：导出用的 buildStandaloneWordMatch 读的就是
+                           window 上那一份，这样导出路径一行都不用改 */
+                        var src = window.__WORD_MATCH_DATA__;
+                        if (src) {
+                            if (!src.levels) src.levels = {};
+                            Object.keys(lv).forEach(function (id) { src.levels[id] = lv[id]; });
+                            if (src.extraBooks && src.extraBooks.length) {
+                                src.books = (src.books || []).concat(src.extraBooks);
+                                src.extraBooks = [];
+                            }
+                        }
+                        self.cetLoaded = true;
+                        resolve();
+                    } catch (e) {
+                        self.cetPromise = null;
+                        reject(e);
+                    }
+                };
+                xhr.onerror = function () { self.cetPromise = null; reject(new Error('网络错误')); };
+                xhr.send();
+            });
+            return this.cetPromise;
+        },
+
+        /* 切册：目标是大学且词库还没到，就先载完再进关，否则会看到空棋盘 */
+        applyBookWhenReady: function (bookId, restore) {
+            var self = this;
+            if (!this.isCetBook(bookId) || this.cetLoaded) {
+                this.applyBook(bookId, restore);
+                return Promise.resolve();
+            }
+            if (typeof SC !== 'undefined' && SC.toast) SC.toast.info('正在载入大学词库…');
+            return this.ensureCet().then(function () {
+                self.applyBook(bookId, restore);
+            }).catch(function (e) {
+                console.error('[cet] load failed', e);
+                if (typeof SC !== 'undefined' && SC.toast) {
+                    SC.toast.error('大学词库载入失败：' + ((e && e.message) || e));
+                }
+            });
+        },
 
         loadLevel: function () {
             if (this.advanceTimer) { clearTimeout(this.advanceTimer); this.advanceTimer = null; }
@@ -1993,7 +2100,12 @@ function wordMatchApp() {
             var ids = this.exportSelList;
             if (!ids.length) { SC.toast.warn('请先勾选要导出的册次'); return; }
             this.exporting = true;
-            buildStandaloneWordMatch(ids, this.bookId).then(function (res) {
+            /* 勾了大学、但词库还没拉过：先载完，否则产物里那两册是空的 */
+            var ready = ids.some(function (id) { return self.isCetBook(id); })
+                ? this.ensureCet() : Promise.resolve();
+            ready.then(function () {
+                return buildStandaloneWordMatch(ids, self.bookId);
+            }).then(function (res) {
                 var bytes = downloadHtml(res.html, res.filename);
                 self.exporting = false;
                 self.exportOpen = false;
@@ -2027,12 +2139,19 @@ function wordMatchApp() {
 
         gotoNextBook: function () {
             var nb = this.nextBookRef();
-            if (nb) this.applyBook(nb.id, false);
+            if (nb) this.applyBookWhenReady(nb.id, false);
         },
 
-        /* 自动学习里跨册：只换册并重建关卡，不动 autoMode / autoSeq */
-        enterBookInAuto: function (bookId) {
+        /* 自动学习里跨册：只换册并重建关卡，不动 autoMode / autoSeq。
+           跨到大学时词库可能还没拉过，必须先载完 —— 否则 levels 是空的，
+           下一轮 autoLoop 取不到关卡会静默停住（autoMode 还开着，界面却不动）。 */
+        enterBookInAuto: async function (bookId) {
             if (this.advanceTimer) { clearTimeout(this.advanceTimer); this.advanceTimer = null; }
+            if (this.isCetBook(bookId) && !this.cetLoaded) {
+                this.autoStage = 'cet-load';
+                this.setAutoTip('载入词库', '正在载入大学词库…');
+                await this.ensureCet();
+            }
             this.bookId = bookId;
             localStorage.setItem(this.bookKey || BOOK_KEY, bookId);
             this.levels = this.allLevels[bookId] || [];
@@ -2122,7 +2241,7 @@ function wordMatchApp() {
                         this.showFlash('📚', '本册学完！即将进入「' + nextLabel + '」', AUTO_BOOK_GAP);
                         if (!(await this.autoSleep(AUTO_BOOK_GAP, token))) return;
 
-                        this.enterBookInAuto(nextBook.id);
+                        await this.enterBookInAuto(nextBook.id);
                         this.autoStage = 'book-start';
                         this.setAutoTip('开始学习', '「' + nextLabel + '」第 1 关');
                         if (!(await this.autoSleep(AUTO_STEP, token))) return;
@@ -2573,8 +2692,9 @@ function wordMatchApp() {
 
         /* ==================== 本册收尾：最后一关 -> 下一册 ====================
            站到本册最后一关时「下一关」这个说法就不成立了，而 canNext 在那里恒为 false：
-           用户点掉通关弹窗的「继续看看」之后会彻底卡住 —— 既不能前进，也没有换册的入口。
-           所以最后一关起按钮改叫「下一册」，本关打完即可一键进入下一册第一关。 */
+           用户关掉通关弹窗（右上角的叉 / 点遮罩）之后会彻底卡住 —— 既不能前进，也没有换册的入口。
+           所以最后一关起按钮改叫「下一册」，本关打完即可一键进入下一册第一关。
+           （弹窗里原来的「继续看看」已去掉，关闭只走叉叉或点遮罩；主按钮默认给「下一册」。） */
         get atBookEnd() {
             return !this.autoMode && this.levels.length > 0 && this.levelIndex >= this.levels.length - 1;
         },

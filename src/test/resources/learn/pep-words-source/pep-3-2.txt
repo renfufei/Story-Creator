@@ -18,12 +18,12 @@ dad	爸爸
 man	男人
 woman	女人
 mother	母亲
-sister	姐
-brother	兄
+sister	姐/妹
+brother	哥/弟
 grandmother	祖母
-grandma	祖母
+grandma	奶奶
 grandfather	祖父
-grandpa	祖父
+grandpa	爷爷
 family	家
 thin	瘦的
 fat	胖的
@@ -34,7 +34,7 @@ small	小的
 big	大的
 giraffe	长颈鹿
 so	这么
-children	儿童
+children	孩子们
 child	儿童
 tail	尾巴
 on	在…上

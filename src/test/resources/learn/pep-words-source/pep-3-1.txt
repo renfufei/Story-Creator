@@ -60,5 +60,5 @@ seven	七
 eight	八
 nine	九
 ten	十
-brother	兄
+brother	哥/弟
 plate	盘子

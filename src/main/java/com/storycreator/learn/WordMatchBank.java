@@ -67,43 +67,11 @@ public class WordMatchBank {
         load();
     }
 
-    /** 前端引导数据：册列表 + 每册的关卡（含全部单词）。 */
+    /** 前端引导数据：册列表 + 每册的关卡（含全部单词）。形状与大学词库共用（见 {@link WordBankJson}）。 */
     public Map<String, Object> bootstrapData() {
         Map<String, Object> result = new LinkedHashMap<>();
-        List<Map<String, Object>> bookNodes = new ArrayList<>();
-        for (BookInfo b : books) {
-            Map<String, Object> node = new LinkedHashMap<>();
-            node.put("id", b.id());
-            node.put("label", b.label());
-            node.put("grade", b.grade());
-            node.put("semester", b.semester());
-            node.put("stage", b.stage());
-            node.put("levelCount", b.levelCount());
-            node.put("wordCount", b.wordCount());
-            bookNodes.add(node);
-        }
-        Map<String, Object> levelNodes = new LinkedHashMap<>();
-        levelsByBook.forEach((bookId, levels) -> {
-            List<Map<String, Object>> list = new ArrayList<>();
-            for (Level lv : levels) {
-                Map<String, Object> lvNode = new LinkedHashMap<>();
-                lvNode.put("index", lv.index());
-                lvNode.put("theme", lv.theme());
-                List<Map<String, Object>> pairNodes = new ArrayList<>();
-                for (WordPair p : lv.pairs()) {
-                    Map<String, Object> pNode = new LinkedHashMap<>();
-                    pNode.put("key", p.key());
-                    pNode.put("en", p.en());
-                    pNode.put("zh", p.zh());
-                    pairNodes.add(pNode);
-                }
-                lvNode.put("pairs", pairNodes);
-                list.add(lvNode);
-            }
-            levelNodes.put(bookId, list);
-        });
-        result.put("books", bookNodes);
-        result.put("levels", levelNodes);
+        result.put("books", WordBankJson.booksNode(books));
+        result.put("levels", WordBankJson.levelsNode(levelsByBook));
         return result;
     }
 
