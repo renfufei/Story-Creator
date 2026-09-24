@@ -27,6 +27,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       所以中文释义允许跨关重复，硬性质只剩「每关 3~7 对」+「关内英文不重复」+「零丢失」。</li>
  * </ul>
  *
+ * <p><b>主题 = 语义域</b>：不再按词性（名词/动词/…）粗分，而是按 68 个语义域归类
+ * （见 {@code scripts/learn/build_cet_words.py} 的 {@code DOMAIN_ORDER} 与源清单同目录的
+ * {@code cet-themes.tsv}），使<b>同一关的词语义相关</b>。域内仍按源顺序切关。
+ *
  * <p>源清单 {@code learn/cet-words-source/cet-4.txt / cet-6.txt} 是唯一真相，
  * 由 {@code scripts/learn/build_cet_words.py} 从上游词表逐行照抄（不排序、不去重）。
  */
@@ -34,8 +38,37 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CetWordBankTest {
 
     private static final String SOURCE_DIR = "learn/cet-words-source/";
-    /** 词性归出的主题名，与生成脚本 POS_THEME 一致。 */
-    private static final Set<String> THEMES = Set.of("名词", "动词", "形容词", "副词", "其他");
+
+    /**
+     * 68 个语义域，与生成脚本 {@code DOMAIN_ORDER}、{@code cet-themes.tsv} 逐字一致。
+     * 顺序：具体生活 → 自然与物质 → 社会 → 心智与抽象 → 功能与特殊。
+     */
+    private static final Set<String> DOMAINS = Set.of(
+            // 具体生活（10）
+            "人物与身份", "家庭与亲属", "身体与健康", "饮食与食物", "服饰与打扮",
+            "居住与建筑", "交通与出行", "购物与消费", "娱乐与休闲", "日常用品与工具",
+            // 自然与物质（5）
+            "动物与植物", "自然与天气", "物质与材料", "空间与方位", "事物与部件",
+            // 社会（19）
+            "组织与机构", "政治与政府", "法律与司法", "军事与战争", "经济与金融",
+            "商业与贸易", "工作与职业", "教育与学习", "科学技术", "计算机与信息",
+            "媒体与传播", "文学与写作", "艺术与绘画", "音乐与表演", "影视与娱乐",
+            "体育与运动", "宗教与信仰", "节日与习俗", "历史与考古",
+            // 心智与抽象（30）
+            "情绪与感受", "性格与品质", "态度与意愿", "思考与观点", "认知与理解", "记忆与注意",
+            "语言与交流", "数量与度量", "时间与频率", "性质与特征", "状态与情况",
+            "变化与发展", "增长与减少", "因果与逻辑", "方法与手段", "计划与安排",
+            "重要性", "优劣评价", "正确与错误", "关系与异同", "程度与强度",
+            "移动与位移", "操作与处理", "获取与给予", "建立与破坏", "保护与维持",
+            "帮助与合作", "竞争与冲突", "控制与影响", "交往与联系",
+            // 功能与特殊（4）
+            "功能词", "专有名词", "短语与搭配", "特殊类别");
+
+    /** 主题名同名域多关时带「 · 序号」后缀，取基名比对。 */
+    private static String baseTheme(String theme) {
+        int i = theme.indexOf(" · ");
+        return i < 0 ? theme : theme.substring(0, i);
+    }
 
     private final CetWordBank bank = new CetWordBank();
 
@@ -50,8 +83,8 @@ class CetWordBankTest {
                 .as("学段用于册次选择器分组，大学要单独成组")
                 .containsOnly("大学");
         assertThat(bank.getBooks()).extracting(WordMatchBank.BookInfo::levelCount)
-                .as("四级 7508 条 / 六级 5651 条，按每关 6 条切")
-                .containsExactly(1251, 942);
+                .as("四级 7508 条 / 六级 5651 条，按语义域归类后每关 6 条切")
+                .containsExactly(1255, 944);
         assertThat(bank.getBooks()).extracting(WordMatchBank.BookInfo::wordCount)
                 .containsExactly(7508, 5651);
     }
@@ -80,18 +113,46 @@ class CetWordBankTest {
     }
 
     @Test
-    @DisplayName("主题只来自词性归并：名词 / 动词 / 形容词 / 副词 / 其他")
-    void levels_areGroupedByPartOfSpeech() {
+    @DisplayName("主题只来自 68 个语义域；两册都应覆盖除「短语与搭配」外的全部域")
+    void levels_areGroupedBySemanticDomain() {
+        // 「短语与搭配」在两册里各只有 1 条，不足 MIN_PAIRS 对，按生成脚本约定并入「特殊类别」，故不成关
+        Set<String> expectedUsed = new HashSet<>(DOMAINS);
+        expectedUsed.remove("短语与搭配");
+
         for (WordMatchBank.BookInfo book : bank.getBooks()) {
             Set<String> used = new HashSet<>();
             for (WordMatchBank.Level level : bank.getLevels(book.id())) {
-                assertThat(THEMES).as("%s 出现未登记的主题：%s", book.label(), level.theme())
-                        .contains(level.theme());
-                used.add(level.theme());
+                String base = baseTheme(level.theme());
+                assertThat(DOMAINS).as("%s 出现未登记的语义域：%s", book.label(), level.theme())
+                        .contains(base);
+                used.add(base);
             }
-            assertThat(used).as("%s 应覆盖全部五种词性主题", book.label())
-                    .containsExactlyInAnyOrderElementsOf(THEMES);
+            assertThat(used).as("%s 应覆盖全部语义域（短语与搭配已并入特殊类别）", book.label())
+                    .containsExactlyInAnyOrderElementsOf(expectedUsed);
         }
+    }
+
+    @Test
+    @DisplayName("同一语义域内的词条语义相关：抽检若干关，主题名与词条不出现明显串味")
+    void levels_areSemanticallyCoherent() {
+        // 「特殊类别」是兜底域，语义本就发散；只抽检非兜底域
+        Map<String, List<String>> sample = new LinkedHashMap<>();
+        for (WordMatchBank.BookInfo book : bank.getBooks()) {
+            for (WordMatchBank.Level level : bank.getLevels(book.id())) {
+                String base = baseTheme(level.theme());
+                if (!"特殊类别".equals(base)) {
+                    sample.computeIfAbsent(base, k -> new ArrayList<>())
+                            .add(level.pairs().stream().map(WordMatchBank.WordPair::en)
+                                    .reduce((a, b) -> a + "," + b).orElse(""));
+                }
+            }
+        }
+        // 每个语义域都至少有一关可抽检（短语与搭配已并入特殊类别；特殊类别是兜底域，语义本就发散，不参与抽检）
+        Set<String> expected = new HashSet<>(DOMAINS);
+        expected.remove("短语与搭配");
+        expected.remove("特殊类别");
+        assertThat(sample.keySet()).as("每个非兜底语义域都应有关卡").containsExactlyInAnyOrderElementsOf(expected);
+        assertThat(sample.values()).as("每关都应有单词").allSatisfy(v -> assertThat(v).isNotEmpty());
     }
 
     @Test
@@ -152,7 +213,7 @@ class CetWordBankTest {
     }
 
     @Test
-    @DisplayName("重复的词被分散到相隔很远的关卡（顺序切关带来的复习节奏）")
+    @DisplayName("重复的词被分散到不同关卡（域内顺序切关带来的复习节奏）")
     void repeatedWords_areSpreadAcrossLevels() {
         for (WordMatchBank.BookInfo book : bank.getBooks()) {
             Map<String, List<Integer>> levelOf = new HashMap<>();
@@ -170,9 +231,11 @@ class CetWordBankTest {
             assertThat(gaps).as("%s 应存在大量重复词", book.label()).isNotEmpty();
             gaps.sort(Integer::compareTo);
             int median = gaps.get(gaps.size() / 2);
-            // 若有人改回「把重复尽量摊在相邻关」的贪心分配，这个中位数会掉到个位数
-            assertThat(median).as("%s 同词两次出现的关卡间距中位数（应相隔很远）", book.label())
-                    .isGreaterThanOrEqualTo(20);
+            /* 阈值说明：按语义域归类后，一册被拆成 68 个子序列，重复词的间距随「域规模」缩小
+               （实测中位数 四级 10 / 六级 8 关），不再是从前按词性粗分时的上百关。
+               这里要防的是「把重复词摊到相邻关」那种贪心分配 —— 那样中位数会掉到 1~2。 */
+            assertThat(median).as("%s 同词两次出现的关卡间距中位数（不应挤在相邻关）", book.label())
+                    .isGreaterThanOrEqualTo(5);
         }
     }
 

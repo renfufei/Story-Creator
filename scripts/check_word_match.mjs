@@ -15,7 +15,7 @@
  *  S5 全部配对后自动进下一关 + 练习进度落盘
  *  S6 册次弹出框（选择册次、旧下拉已移除）
  *  S6c 大学独立词源（首屏只带册元信息、关卡按需拉 /learn/word-match/cet；
- *      点「四级」真进一关，逐条核对 2193 关 / 13159 条 / 关内英文不重复 / 词性主题）
+ *      点「四级」真进一关，逐条核对 2199 关 / 13159 条 / 关内英文不重复 / 语义域主题）
  *  S7 上一关 / 下一关 + 边界禁用
  *  S7b 本册最后一关：「下一关」变「下一册」+ 打完弹通关窗、点「继续看看」后仍能继续
  *  S8 错题本弹窗（列表 / 朗读 / 去练 / 删除 / 清空）
@@ -1152,16 +1152,19 @@ async function main() {
         && boot.extraBooks.every(x => x.stage === '大学'),
         `books=${boot.books.length} extra=${(boot.extraBooks || []).length}`
         + ` hasCetLevels=${!!boot.levels['cet-4']}`);
-    check('S6c 大学元信息：四级 7508 词 / 1251 关、六级 5651 词 / 942 关',
+    const CET_DOMAINS = ['人物与身份','家庭与亲属','身体与健康','饮食与食物','服饰与打扮','居住与建筑','交通与出行','购物与消费','娱乐与休闲','日常用品与工具','动物与植物','自然与天气','物质与材料','空间与方位','事物与部件','组织与机构','政治与政府','法律与司法','军事与战争','经济与金融','商业与贸易','工作与职业','教育与学习','科学技术','计算机与信息','媒体与传播','文学与写作','艺术与绘画','音乐与表演','影视与娱乐','体育与运动','宗教与信仰','节日与习俗','历史与考古','情绪与感受','性格与品质','态度与意愿','思考与观点','认知与理解','记忆与注意','语言与交流','数量与度量','时间与频率','性质与特征','状态与情况','变化与发展','增长与减少','因果与逻辑','方法与手段','计划与安排','重要性','优劣评价','正确与错误','关系与异同','程度与强度','移动与位移','操作与处理','获取与给予','建立与破坏','保护与维持','帮助与合作','竞争与冲突','控制与影响','交往与联系','功能词','专有名词','短语与搭配','特殊类别'];
+    const cetBaseTheme = (t) => String(t || '').split(' · ')[0];
+
+    check('S6c 大学元信息：四级 7508 词 / 1255 关、六级 5651 词 / 944 关',
         boot.extraBooks[0].id === 'cet-4' && boot.extraBooks[0].wordCount === 7508
-        && boot.extraBooks[0].levelCount === 1251 && boot.extraBooks[1].id === 'cet-6'
-        && boot.extraBooks[1].wordCount === 5651 && boot.extraBooks[1].levelCount === 942,
+        && boot.extraBooks[0].levelCount === 1255 && boot.extraBooks[1].id === 'cet-6'
+        && boot.extraBooks[1].wordCount === 5651 && boot.extraBooks[1].levelCount === 944,
         boot.extraBooks.map(x => `${x.id}:${x.wordCount}词/${x.levelCount}关`).join(' | '));
 
     const cet = JSON.parse(await (await fetch(BASE + '/learn/word-match/cet')).text());
     check('S6c /learn/word-match/cet 结构与首屏一致（books + levels），前端无差别合并',
-        cet.books.length === 2 && cet.levels['cet-4'].length === 1251
-        && cet.levels['cet-6'].length === 942 && cet.books.every(x => x.stage === '大学'),
+        cet.books.length === 2 && cet.levels['cet-4'].length === 1255
+        && cet.levels['cet-6'].length === 944 && cet.books.every(x => x.stage === '大学'),
         cet.books.map(x => x.id).join(','));
     const cetLevels = (cet.levels['cet-4'] || []).concat(cet.levels['cet-6'] || []);
     const cetWords = cetLevels.reduce((a, l) => a + l.pairs.length, 0);
@@ -1170,14 +1173,14 @@ async function main() {
         const s = new Set(l.pairs.map(p => p.en.toLowerCase()));
         if (s.size !== l.pairs.length) cetDupLevels++;
     });
-    check('S6c 大学合计 2193 关 / 13159 条（不去重：原表每条都在，同一个词的多条也都在）',
-        cetWords === 13159 && cetLevels.length === 2193, `words=${cetWords} levels=${cetLevels.length}`);
+    check('S6c 大学合计 2199 关 / 13159 条（不去重：原表每条都在，同一个词的多条也都在）',
+        cetWords === 13159 && cetLevels.length === 2199, `words=${cetWords} levels=${cetLevels.length}`);
     check('S6c 每关 3~7 对、且关内英文不重复',
         cetLevels.every(l => l.pairs.length >= 3 && l.pairs.length <= 7) && cetDupLevels === 0,
         `dupLevels=${cetDupLevels}`);
-    check('S6c 主题只由词性归并而来（名词 / 动词 / 形容词 / 副词 / 其他）',
-        cetLevels.every(l => ['名词', '动词', '形容词', '副词', '其他'].indexOf(l.theme) >= 0),
-        Array.from(new Set(cetLevels.map(l => l.theme))).join('/'));
+    check('S6c 主题只由 68 个语义域而来（同一域多关时带「 · N」后缀）',
+        cetLevels.every(l => CET_DOMAINS.indexOf(cetBaseTheme(l.theme)) >= 0),
+        Array.from(new Set(cetLevels.map(l => cetBaseTheme(l.theme)))).join('/'));
 
     // 界面上真进一次：展开「大学」学段 -> 点「四级」
     await clickSel('.wm-book-btn');
@@ -1195,9 +1198,9 @@ async function main() {
     check('S6c 册次弹层新增「大学」分组，含四级 / 六级两册',
         !!cetGroup && cetGroup.head === '大学' && cetGroup.labels.join(',') === '四级,六级',
         cetGroup ? cetGroup.labels.join(',') : 'null');
-    check('S6c 大学册卡片显示词数与关数（四级 7508 词 · 1251 关 / 六级 5651 词 · 942 关）',
-        !!cetGroup && /7508 词 · 1251 关/.test(cetGroup.metas[0])
-        && /5651 词 · 942 关/.test(cetGroup.metas[1]),
+    check('S6c 大学册卡片显示词数与关数（四级 7508 词 · 1255 关 / 六级 5651 词 · 944 关）',
+        !!cetGroup && /7508 词 · 1255 关/.test(cetGroup.metas[0])
+        && /5651 词 · 944 关/.test(cetGroup.metas[1]),
         cetGroup ? cetGroup.metas.join(' | ') : 'null');
     await shot('08c-desktop-book-picker-cet');
 
@@ -1213,9 +1216,9 @@ async function main() {
                  theme: d.currentLevel ? d.currentLevel.theme : '',
                  pairs: d.currentLevel ? d.currentLevel.pairs.length : 0 };
     })()`);
-    check('S6c 四级册：1251 关、本关主题是词性、棋盘按关卡渲染',
-        cetState.loaded === true && cetState.id === 'cet-4' && cetState.levels === 1251
-        && ['名词', '动词', '形容词', '副词', '其他'].indexOf(cetState.theme) >= 0
+    check('S6c 四级册：1255 关、本关主题是语义域、棋盘按关卡渲染',
+        cetState.loaded === true && cetState.id === 'cet-4' && cetState.levels === 1255
+        && CET_DOMAINS.indexOf(cetBaseTheme(cetState.theme)) >= 0
         && cetState.pairs >= 3 && cetState.pairs <= 7 && b.en.length === cetState.pairs,
         JSON.stringify(cetState));
     check('S6c 四级关卡的释义是「词性 + 中文」形式（来自考试词表，不是课本词汇表）',
@@ -2058,8 +2061,8 @@ async function main() {
     check('S12 全选：26 册全勾上、文案翻成「取消全选」',
         allSel.n === 26 && allSel.all === true && allSel.label === '取消全选',
         `n=${allSel.n} label=${allSel.label}`);
-    check('S12 全选后汇总 = 26 册 / 3442 关 / 20191 词（含大学 2 册 / 2193 关 / 13159 词）',
-        /已选 26 册/.test(allSel.sum) && /3442 关/.test(allSel.sum) && /20191 词/.test(allSel.sum),
+    check('S12 全选后汇总 = 26 册 / 3448 关 / 20191 词（含大学 2 册 / 2199 关 / 13159 词）',
+        /已选 26 册/.test(allSel.sum) && /3448 关/.test(allSel.sum) && /20191 词/.test(allSel.sum),
         allSel.sum);
     await shot('24-export-dialog-all');
 

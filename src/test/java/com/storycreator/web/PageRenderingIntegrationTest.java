@@ -1803,7 +1803,7 @@ class PageRenderingIntegrationTest {
                 .contains("var OK_FLASH = pace('wmOkFlash', 500)")
                 .contains("prefers-reduced-motion");
         assertThat(response.getBody())
-                .as("大学是**独立词源**（2 册 / 2193 关 / 13159 条）：首屏只带它的册元信息（extraBooks），"
+                .as("大学是**独立词源**（2 册 / 2199 关 / 13159 条）：首屏只带它的册元信息（extraBooks），"
                         + "关卡按需拉 /learn/word-match/cet。选册、导出、自动连播跨册这三条路径都必须"
                         + "先把词库载完再进关，否则用户看到的是一块空棋盘")
                 .contains("extraBooks")

@@ -175,9 +175,9 @@ async function main() {
                  sum: document.querySelector('.wm-export-sum').textContent.trim(),
                  goOff: document.querySelector('#wm-export-go').disabled };
     })()`);
-    check('P1 只勾「四级」后，汇总显示 1 册 / 1251 关 / 7508 词',
+    check('P1 只勾「四级」后，汇总显示 1 册 / 1255 关 / 7508 词',
         sel.n === 1 && sel.ids === 'cet-4' && /已选 1 册/.test(sel.sum)
-        && /1251 关/.test(sel.sum) && /7508 词/.test(sel.sum) && sel.goOff === false,
+        && /1255 关/.test(sel.sum) && /7508 词/.test(sel.sum) && sel.goOff === false,
         sel.sum);
 
     /* 真点「导出 HTML」：runExport 必须先把词库载完再打包 */
@@ -196,7 +196,7 @@ async function main() {
         const d = Alpine.$data(document.querySelector('.wm-root'));
         return { loaded: d.cetLoaded, levels: (d.allLevels['cet-4'] || []).length };
     })()`);
-    check('P1 导出后词库已就绪（cet-4 1251 关）', after.loaded === true && after.levels === 1251,
+    check('P1 导出后词库已就绪（cet-4 1255 关）', after.loaded === true && after.levels === 1255,
         JSON.stringify(after));
 
     const html = fs.readFileSync(outFile, 'utf8');
@@ -224,10 +224,10 @@ async function main() {
                  counter: (document.querySelector('.wm-counter') || {}).innerText || '',
                  cards: b.length, standalone: !!window.__WM_STANDALONE__ };
     })()`);
-    check('P1 单机件默认就落在四级、1251 关、每关按词性主题成关',
+    check('P1 单机件默认就落在四级、1255 关、每关按语义域主题成关',
         solo.standalone === true && solo.id === 'cet-4' && solo.label === '四级'
-        && solo.levels === 1251 && solo.books === 1 && solo.cards >= 3
-        && solo.counter.replace(/\s+/g, '').startsWith('1/1251'),
+        && solo.levels === 1255 && solo.books === 1 && solo.cards >= 3
+        && solo.counter.replace(/\s+/g, '').startsWith('1/1255'),
         JSON.stringify(solo));
     await shot('cet-02-standalone-cet4');
 

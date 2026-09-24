@@ -1554,14 +1554,31 @@ function wordMatchApp() {
     var DATA = window.__WORD_MATCH_DATA__ || { books: [], levels: {} };
     var PROGRESS_KEY = 'word_match_progress_v2';        // 练习模式进度
     var AUTO_KEY = 'word_match_auto_progress_v2';       // 自动学习模式进度（与练习进度不共享）
-    // 词库扩容后关卡会重新切分，v1 记录的关卡下标已不对应新关卡，作废一次即可
-    // （错题本存的是单词本身，仍然有效，故不在此清理）
-    try {
-        if (!localStorage.getItem('word_match_v2_migrated')) {
-            localStorage.removeItem('word_match_progress_v1');
-            localStorage.removeItem('word_match_auto_progress_v1');
-            localStorage.setItem('word_match_v2_migrated', '1');
+    var DATA_SIG_KEY = 'word_match_data_sig_v1';        // 词库指纹（关卡重切后作废旧进度）
+
+    /* 词库指纹：册数-关数-词数。关卡被重新切分过 ⇒ 旧的「第 N 关已通关」不再对应新关卡，作废一次。
+       首屏的 extraBooks（大学 2 册）只带元信息、不带关卡，但元信息里已含 levelCount，足够参与指纹。
+       与小程序端 utils/store.js 的 ensureDataVersion 是同一套机制，以后词库再扩容不必手工加迁移。
+       错题本存的是单词本身，不受关卡切分影响，故不清理。 */
+    function dataSignature() {
+        var books = (DATA.books || []).concat(DATA.extraBooks || []);
+        var b = books.length, lv = 0, wd = 0;
+        for (var i = 0; i < books.length; i++) {
+            lv += books[i].levelCount || 0;
+            wd += books[i].wordCount || 0;
         }
+        return 'v1-' + b + '-' + lv + '-' + wd;
+    }
+
+    try {
+        var dataSig = dataSignature();
+        if (localStorage.getItem(DATA_SIG_KEY) !== dataSig) {
+            localStorage.removeItem(PROGRESS_KEY);
+            localStorage.removeItem(AUTO_KEY);
+            localStorage.setItem(DATA_SIG_KEY, dataSig);
+        }
+        /* 指纹机制上线前的一次性 v1→v2 迁移标记，已无用，顺手清掉 */
+        localStorage.removeItem('word_match_v2_migrated');
     } catch (e) { /* 隐私模式等场景忽略 */ }
     var WRONG_KEY = 'word_match_wrong_v1';              // 错题本（本机浏览器）
     var BOOK_KEY = 'word_match_book_v1';
@@ -1790,7 +1807,7 @@ function wordMatchApp() {
         switchBook: function (bookId) { this.pickBook(bookId); },
 
         /* ==================== 大学词源（独立词源 · 按需加载） ====================
-           大学是另一套词表（2 册 / 2193 关 / 13159 条，gzip 约 225KB），不放进首屏那份
+           大学是另一套词表（2 册 / 2199 关 / 13159 条，gzip 约 225KB），不放进首屏那份
            同步 XHR 里 —— 塞进去白屏时间要翻两倍。首屏只带它的册元信息（extraBooks），
            关卡等真正选到大学时才拉 /learn/word-match/cet；拉完并进 allLevels 之后，
            它跟人教版那 24 册在数据上完全同构，后面所有逻辑都不用分叉。 */

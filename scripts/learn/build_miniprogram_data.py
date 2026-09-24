@@ -148,7 +148,7 @@ def main():
     print(f'  books.js 元信息: {os.path.getsize(os.path.join(out_dir, "books.js")) / 1024:.1f} KB')
     print(f'  → 全部内置主包合计 ≈ {(grand + os.path.getsize(os.path.join(out_dir, "books.js"))) / 1024:.1f} KB'
           f'（小程序主包上限 2048 KB）')
-    print(f'  校验：关卡 {total_levels} 应等于 3442；词条 {total_pairs} 应等于 20191')
+    print(f'  校验：关卡 {total_levels} 应等于 3448；词条 {total_pairs} 应等于 20191')
     return 0
 
 

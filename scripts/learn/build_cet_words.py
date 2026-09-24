@@ -14,14 +14,15 @@
   也不拿 PEP 已有的词去过滤——上游给什么就收什么。
 * **不去重**：上游「乱序」词表其实是三段词表拼接，同一个词可能出现 2~3 次且释义略有差异
   （例：access 出现 3 次）。这些重复**全部保留**：它们会被分散到不同关卡，形成自然的复习节奏。
-* **按词性切主题**：词表本身是扁平的，没有主题。释义以词性标记开头（n. / v. / adj. …），
-  按它归并成「名词 / 动词 / 形容词 / 副词 / 其他」五个主题，满足游戏「同一关的词同类型」的设计。
-* **按源顺序切关**：上游文件是「三段乱序词表拼接」，同一个词的三次出现天然相隔上千行，
-  顺着源顺序每 6 个切一关，重复就自动落在相隔上百关的位置 —— 相当于内置了复习节奏
-  （实测四级 1251 关里没有一关出现重复英文，重复间距中位数 147 关）。
+* **按语义域切主题**：词表本身是扁平的，没有主题。由 `cet-themes.tsv`（人工/模型逐条判定的
+  `英文\\t释义\\t语义域` 映射）给出每个词条的语义域，归并成 68 个语义域主题，
+  满足游戏「同一关的词同类型」的设计。映射里查不到的条目回退到「特殊类别」。
+* **域内按源顺序切关**：同一语义域内顺着源顺序每 6 个切一关。上游是「三段乱序词表拼接」，
+  同一个词的三次出现天然相隔上千行，重复就自动落在相隔很远的关卡 —— 相当于内置了复习节奏。
   若改用「把重复尽量摊开」的贪心分配，重复反而会挤在相邻几关里，体验更差。
 * **关内英文不重复**：顺序切完后逐关扫一遍，撞名的记录顺延到下一关（carry），
   最后再在不破坏「关内英文唯一」的前提下把各关大小拉回 3~7 对（正常数据几乎不触发）。
+* **不足 3 对的碎域**：并入「特殊类别」，绝不丢词。
 
 用法：python3 scripts/learn/build_cet_words.py [--raw-dir DIR]
   默认从上游仓库直接下载；给了 --raw-dir 就从本地读 `cet4.txt` / `cet6.txt`。
@@ -39,6 +40,8 @@ import urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SRC_DIR = os.path.join(ROOT, 'src', 'test', 'resources', 'learn', 'cet-words-source')
 OUT_JSON = os.path.join(ROOT, 'src', 'main', 'resources', 'learn', 'cet-words.json')
+# 语义域映射（唯一真相）：`英文\t释义\t语义域`
+THEME_SOURCE = os.path.join(SRC_DIR, 'cet-themes.tsv')
 
 REPO = 'https://raw.githubusercontent.com/KyleBing/english-vocabulary/master/'
 UPSTREAM = {
@@ -55,24 +58,52 @@ BOOKS = {
 }
 STAGE = '大学'
 
-# 词性标记 → 主题名。顺序即主题在册内的排列顺序。
-POS_THEME = [
-    (('n.',), '名词'),
-    (('v.', 'vt.', 'vi.'), '动词'),
-    (('adj.',), '形容词'),
-    (('adv.',), '副词'),
+# 68 个语义域。顺序即主题在册内的排列顺序（具体 → 抽象 → 功能兜底）。
+DOMAIN_ORDER = [
+    # 具体生活（10）
+    '人物与身份', '家庭与亲属', '身体与健康', '饮食与食物', '服饰与打扮',
+    '居住与建筑', '交通与出行', '购物与消费', '娱乐与休闲', '日常用品与工具',
+    # 自然与物质（5）
+    '动物与植物', '自然与天气', '物质与材料', '空间与方位', '事物与部件',
+    # 社会（19）
+    '组织与机构', '政治与政府', '法律与司法', '军事与战争', '经济与金融',
+    '商业与贸易', '工作与职业', '教育与学习', '科学技术', '计算机与信息',
+    '媒体与传播', '文学与写作', '艺术与绘画', '音乐与表演', '影视与娱乐',
+    '体育与运动', '宗教与信仰', '节日与习俗', '历史与考古',
+    # 心智与抽象（30）
+    '情绪与感受', '性格与品质', '态度与意愿', '思考与观点', '认知与理解', '记忆与注意',
+    '语言与交流', '数量与度量', '时间与频率', '性质与特征', '状态与情况',
+    '变化与发展', '增长与减少', '因果与逻辑', '方法与手段', '计划与安排',
+    '重要性', '优劣评价', '正确与错误', '关系与异同', '程度与强度',
+    '移动与位移', '操作与处理', '获取与给予', '建立与破坏', '保护与维持',
+    '帮助与合作', '竞争与冲突', '控制与影响', '交往与联系',
+    # 功能与特殊（4）
+    '功能词', '专有名词', '短语与搭配', '特殊类别',
 ]
-OTHER_THEME = '其他'
+
+# 兜底域：映射里查不到、或词数不足以成关的，都并到这里。
+FALLBACK_THEME = '特殊类别'
 
 
-def theme_of(zh):
-    """按释义开头的词性标记归主题；没有标记的（多为短语/专名）进「其他」。"""
-    m = re.match(r'^([a-z]+\.)', zh)
-    tag = m.group(1) if m else ''
-    for tags, name in POS_THEME:
-        if tag in tags:
-            return name
-    return OTHER_THEME
+def read_themes(path=THEME_SOURCE):
+    """读语义域映射：`英文\\t释义\\t语义域` → {(英文, 释义): 语义域}。"""
+    allowed = set(DOMAIN_ORDER)
+    mapping = {}
+    with open(path, encoding='utf-8') as fh:
+        for lineno, line in enumerate(fh, 1):
+            line = line.rstrip('\n').rstrip('\r')
+            if not line.strip():
+                continue
+            parts = line.split('\t')
+            if len(parts) != 3:
+                raise SystemExit('语义域映射第 %d 行不是三段式：%r' % (lineno, line))
+            en, zh, domain = (p.strip() for p in parts)
+            if domain not in allowed:
+                raise SystemExit('语义域映射第 %d 行出现未登记的域：%r' % (lineno, domain))
+            mapping[(en, zh)] = domain
+    if not mapping:
+        raise SystemExit('语义域映射为空：%s' % path)
+    return mapping
 
 
 def read_source(path):
@@ -108,7 +139,7 @@ def level_sizes(n):
 
 
 def split_bucket(rows):
-    """把一个词性桶按源顺序切成若干关，保证每关 3~7 对、且关内英文不重复。
+    """把一个域桶按源顺序切成若干关，保证每关 3~7 对、且关内英文不重复。
 
     入参 rows 为 [(en, zh), ...]；返回 [[(en, zh), ...], ...]（关内仍按源顺序）。
     """
@@ -159,22 +190,25 @@ def split_bucket(rows):
     return [[(en, zh) for _, en, zh in sorted(chunk, key=lambda c: c[0])] for chunk in chunks]
 
 
-def build_book(book_id, rows):
-    order = [name for _, name in POS_THEME] + [OTHER_THEME]
-    buckets = collections.OrderedDict((name, []) for name in order)
+def build_book(book_id, rows, theme_map):
+    buckets = collections.OrderedDict((name, []) for name in DOMAIN_ORDER)
     for en, zh in rows:
-        buckets[theme_of(zh)].append((en, zh))
+        buckets[theme_map.get((en, zh), FALLBACK_THEME)].append((en, zh))
 
     themes = []
-    for name, items in buckets.items():
+    for name in DOMAIN_ORDER:
+        items = buckets[name]
         if not items:
             continue
         if len(items) < MIN_PAIRS:
-            # 不足以成关的碎主题并入「其他」，绝不丢词
-            buckets[OTHER_THEME].extend(items)
+            # 不足以成关的碎域并入「特殊类别」，绝不丢词
+            buckets[FALLBACK_THEME].extend(items)
             continue
-        for level in split_bucket(items):
-            themes.append({'name': name, 'words': [[e, z] for e, z in level]})
+        levels = split_bucket(items)
+        for i, level in enumerate(levels, 1):
+            # 同一域多关时加序号，便于玩家知道「看到第几关」
+            title = name if len(levels) == 1 else '%s · %d' % (name, i)
+            themes.append({'name': title, 'words': [[e, z] for e, z in level]})
 
     meta = BOOKS[book_id]
     words = sum(len(t['words']) for t in themes)
@@ -206,6 +240,9 @@ def main():
     raw_dir = args.raw_dir or os.path.join('/tmp', 'cet-raw')
     if args.raw_dir is None:
         os.makedirs(raw_dir, exist_ok=True)
+    if not os.path.exists(THEME_SOURCE):
+        raise SystemExit('缺少语义域映射文件：%s' % THEME_SOURCE)
+    theme_map = read_themes()
 
     books = []
     for book_id, url in UPSTREAM.items():
@@ -220,12 +257,12 @@ def main():
             fh.write(text)
 
         rows = read_source(os.path.join(SRC_DIR, book_id + '.txt'))
-        book, words = build_book(book_id, rows)
+        book, words = build_book(book_id, rows, theme_map)
         levels = len(book['themes'])
         pairs = sum(len(t['words']) for t in book['themes'])
-        print('  %s：源 %d 词 → %d 关 / 平均 %.2f 对，主题 %s'
-              % (book_id, words, levels, pairs / float(levels),
-                 '、'.join(sorted({t['name'] for t in book['themes']}))))
+        used = {t['name'].split(' · ')[0] for t in book['themes']}
+        print('  %s：源 %d 词 → %d 关 / 平均 %.2f 对，命中语义域 %d / %d'
+              % (book_id, words, levels, pairs / float(levels), len(used), len(DOMAIN_ORDER)))
         books.append(book)
 
     with open(OUT_JSON, 'w', encoding='utf-8') as fh:
