@@ -1,4 +1,4 @@
-venture	商业
+venture	冒险；企业
 web	网
 Scottish	苏格兰的
 suffering	苦处
@@ -103,7 +103,7 @@ bridegroom	新郎
 distribute	分发
 troop	军队
 contradict	同…矛盾或抵触
-hear out	听某人把话说完
+hear out	听人把话说完
 on behalf of	代表…
 flattery	奉承
 flatter	过分夸赞
@@ -121,7 +121,7 @@ deceitful	欺诈的
 corrupt	腐败的，贪污的
 greedy	贪婪的
 greed	贪婪
-innocent	天真的
+innocent	无辜的；天真的
 cunning	善于骗人的
 strorage	贮藏
 author	作家
@@ -131,7 +131,7 @@ Latin	拉丁文
 make a name	出名
 allergic	过敏的
 sneeze	喷嚏
-armchair	手扶椅
+armchair	扶手椅
 confirm	确定
 rewind	重绕
 cash	现金
@@ -218,7 +218,7 @@ Jew	犹太人
 Gentile	非犹太人
 Protestant	新教徒
 Catholic	天主教徒
-Negro	[过时的]黑人
+Negro	[过时]黑人
 almighty	全能的
 quotation	引语，引文，语录
 metaphor	隐喻
@@ -260,24 +260,24 @@ educator	教育家
 seminar	研讨会
 acquisition	获得
 ballet	芭蕾舞
-album	薄、册
+album	相册；专辑
 resemble	像
 cassette	盒式磁带
 tend	倾向
 tend to	易于
-tend to do sth	易于做某事
+tend to do sth	倾向于
 messy	脏乱的
 tiresome	令人厌烦的
 vague	含糊的
 bonus	奖金
-auditory	听的
+auditory	听觉的
 tactile	触觉的
 oral	口头的
 component	成分
 concrete	具体的
 literary	文学的
 genre	类型
-recount	重新计算选票
+recount	叙述；重新计票
 Agnes Grey	艾格妮斯.格雷
 Jane Austin	简.奥斯丁
 Charlotte Bronte	夏洛蒂.勃朗特
@@ -344,7 +344,7 @@ romance	恋情
 vain	虚荣的
 in vain	徒劳的
 signal	信号
-discount	不信任
+discount	折扣
 sensitive	敏感的
 decline	拒绝
 arrogant	傲慢的
@@ -352,10 +352,10 @@ at length	详细地
 enquire	询问
 against one’s will	违心地
 think ill of	对…评价不高
-do everything in one’s power to	竭尽全力去做某事
+do everything in one’s power to	竭尽全力
 rejoice	欣喜
 initial	最初的
 fault	错
 hasty	匆忙的
 hastily	匆忙地
-sensible	有感觉的
+sensible	明智的

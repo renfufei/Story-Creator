@@ -70,7 +70,7 @@ put off	推迟
 sign	标记，标牌
 notice	注意到
 hand out	分发
-call up	打电话给…某人，征召
+call up	打电话；征召
 used to	曾经…
 lonely	孤独的
 care for	照顾
@@ -118,9 +118,9 @@ take out the rubbish	倒垃圾
 fold	对折
 mess	脏乱
 throw	扔
-all the time	频繁
+all the time	一直；总是
 neither	二者都不
-shirt	运动衫
+shirt	衬衫
 as soon as	一…就…
 pass	经过
 borrow	借
@@ -136,7 +136,7 @@ in order to	目的是
 provide	提供
 anyway	尽管如此
 depend	依靠，依赖
-depend on	依靠于
+depend on	依靠；取决于
 develop	发展，壮大
 independent	独立自主的
 independence	独立
@@ -234,7 +234,7 @@ take down	取下
 terrorist	恐怖分子
 date	日期
 tower	塔
-at first	首先
+at first	起初；开始时
 truth	真相
 shoot	射击
 stone	石头
@@ -252,15 +252,15 @@ tail	尾巴
 magic	魔法
 stick	刺
 excite	使激动
-Western	在西部的
+Western	西方的；西部的
 once upon	从前
-stepsister	继姐
+stepsister	继姐妹
 prince	王子
 fall in love	爱上
 fit	适合
 couple	夫妻
 smile	微笑
-marry	与某人结婚
+marry	嫁；娶
 get married	结婚
 gold	黄金
 emperor	皇帝
@@ -313,9 +313,9 @@ ocean	海洋
 the Pacific Ocean	太平洋
 cm	厘米
 weigh	重量是…
-birth	生孩子
+birth	出生；诞生
 at birth	出生时
-up to	到达
+up to	多达；直到
 adult	成年人
 bamboo	竹子
 endangered	濒临灭绝的，濒危的
@@ -405,7 +405,7 @@ thousands of	数以千计的
 safe	安全的
 simply	仅仅
 fear	恐惧
-whether	或者…或者，是否
+whether	是否
 Indian	印度的
 Japanese	日本的
 fox	狐狸
@@ -449,9 +449,9 @@ hometown	家乡
 nowadays	现今
 search	搜索
 among	在其中
-crayon	彩色铅笔
+crayon	蜡笔
 shame	羞耻
-regard	致敬
+regard	认为；看待
 count	计算，计数
 century	世纪
 according	依照

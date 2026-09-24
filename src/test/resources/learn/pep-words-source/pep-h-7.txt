@@ -183,7 +183,7 @@ drag	拖
 depth	深
 meantime	其间
 in the meantime	在此期间
-lip	一片嘴唇
+lip	嘴唇
 overboard	越过船舷进入水中
 urge	催促
 abandon	遗弃
@@ -217,7 +217,7 @@ turtle	海龟
 eel	鳗
 sharp	锐利的
 tasty	好吃的
-giant	巨人的
+giant	巨大的；巨人
 clam	蛤
 grey	灰色
 scare	恐吓
@@ -288,7 +288,7 @@ sew	缝
 sewing machine	缝纫机
 supplement	增补的事物
 ox	公牛
-plough	地
+plough	犁；耕地
 trunk	树干
 trunk library	箱式图书馆
 tractor	拖拉机
@@ -339,7 +339,7 @@ autonomous	自治的
 occupy	占据
 be occupied with	忙着做…
 enterprise	事业
-apology	道谦
+apology	道歉
 seminar	研讨会
 videophone	可视电话
 Rugby	橄榄球

@@ -58,7 +58,7 @@ consideration	考虑
 deliver	递送
 carry on	继续
 modest	谦虚的
-statistic	[pl]统计数字
+statistic	统计数字
 sunburnt	晒黑的
 struggle	拼搏
 decade	十年
@@ -79,7 +79,7 @@ rid ... of	摆脱
 be satisfied with	对…感到满意
 freedom	自由
 would rather	宁愿
-therefore	因为
+therefore	因此
 equip	配备
 sorghum	高粱
 grain	谷物
@@ -114,7 +114,7 @@ skim	浏览
 underline	画底线标出
 summary	总结
 comment	评论
-producer	制片人
+producer	生产者；制片人
 industrial	工业的
 humour	幽默
 punchline	故事、笑话等中的妙语
@@ -259,7 +259,7 @@ be famous for	以…而闻名
 roller coaster	过山车
 whichever	无论哪一个
 pirate	海盗
-fairy tale	神话故事
+fairy tale	童话故事
 fantasy	幻想
 amusement	消遣
 swing	秋千
@@ -279,7 +279,7 @@ knight	骑士
 be modeled after	根据…模仿
 Merlin the Wizard	魔术师梅林
 sword	剑
-joust	骑着马用长予打斗
+joust	骑着马用长矛打斗
 tournament	锦标赛
 settler	移民
 athletic	运动的

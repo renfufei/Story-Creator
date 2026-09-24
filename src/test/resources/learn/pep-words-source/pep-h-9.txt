@@ -102,13 +102,13 @@ awkward	难使用的
 reference	参考
 quadrant	象限
 precise	精确的
-simplify	单一化
+simplify	简化
 portable	轻便的
 shortcoming	缺点
 sextant	六分仪
 update	更新
 tendency	趋向
-reliable	可靠地
+reliable	可靠的
 Samuel	塞缪尔
 swoop	突降
 parcel	包裹
@@ -137,7 +137,7 @@ gradual	逐渐的
 foresee	预知
 thirst	渴
 Timor	帝汶岛
-set loose	出发
+set loose	释放
 tear	扯破
 hardship	困苦
 jaw	颚，颌
@@ -207,7 +207,7 @@ authority	权力，权威
 desperate	不顾一切的
 shrink	收缩
 barbecue	烧烤野餐
-talk ... into ...	说服某人做某事
+talk ... into ...	说服
 wind	绕
 limb	肢，翼
 venom	恶意，怨恨
@@ -223,11 +223,11 @@ amongst	在…中间
 vinegar	醋
 unconscious	不省人事的，未发觉的
 pollinate	对…授粉
-pollinator	虫媒
+pollinator	传粉者
 courtyard	庭院
 balcony	阳台
 exotic	异国情调的
-date back to	追述到
+date back to	追溯到
 distant	远的
 Egypt	埃及
 goods	货物
@@ -312,7 +312,7 @@ expense	费用
 broadcast	广播
 rely	依赖
 rely on	依赖
-visual	看的
+visual	视觉的
 generate	发生
 response	反应，响应
 stereo	立体声
@@ -328,7 +328,7 @@ spokesman	发言人
 fluent	流利的
 hostess	女主人
 invitation	邀请
-appoint	约定，约定
+appoint	约定
 chairman	主席
 raise	提高
 dial	拨号

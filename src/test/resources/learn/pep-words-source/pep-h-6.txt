@@ -66,7 +66,7 @@ Guggenheim Museum	古根海姆博物馆
 display	展示
 appeal	呼吁
 appeal to	有吸引力
-fragile	精细的
+fragile	易碎的；脆弱的
 circular	圆的,环形的
 metropolitan	主要都市的
 reputation	名声
@@ -129,7 +129,7 @@ revolve	旋转
 utter	说
 sorrow	悲伤
 bare	赤裸的
-librarian	图书馆馆长
+librarian	图书管理员
 forever	永远
 stem	茎
 cement	水泥
@@ -320,7 +320,7 @@ volcano	火山
 volcanic	火山的
 volcanology	火山学
 volcanologist	火山学家
-erupt	突然发生
+erupt	喷发；爆发
 eruption	火山爆发
 ash	灰
 crater	坑
@@ -345,7 +345,7 @@ suit	一套衣服
 helmet	头盔
 boot	靴子
 make one’s way	前往
-potential	潜在性
+potential	潜力；潜在的
 actual	实际的
 geology	地质学
 Mount Etna	埃特纳火山
@@ -387,5 +387,5 @@ bathe	洗澡
 arouse	激发
 appreciation	感激
 peak	高峰，顶点
-persuasion	信服
+persuasion	说服；劝说
 guarantee	担保

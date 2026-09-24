@@ -22,3 +22,4 @@ data/
 error_words.log
 word-match-miniprogram
 *.genie
+docs/translation-review/

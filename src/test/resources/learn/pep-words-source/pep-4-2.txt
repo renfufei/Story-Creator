@@ -47,10 +47,10 @@ degree	度
 world	世界
 London	伦敦
 Moscow	莫斯科
-Singapore	新加坡城
+Singapore	新加坡
 Sydney	悉尼
 fly	飞翔；放
-love	爱你的
+love	爱
 tomato	西红柿
 potato	土豆
 green beans	豆角

@@ -62,9 +62,9 @@ tip	尖
 secondly	第二
 swap	交换
 item	项目
-subway	<美>地铁
+subway	地铁
 elevator	电梯
-petrol	<英>汽油
+petrol	汽油
 gas	气体
 official	官方的
 voyage	航行
@@ -73,7 +73,7 @@ because of	因为
 native	本国的
 Amy	艾米
 come up	走近
-apartment	<美>公寓住宅
+apartment	公寓
 actually	实际上
 AD	公元
 base	以…为根据
@@ -89,7 +89,7 @@ spelling	拼写
 Samuel Johnson	塞缪尔•约翰逊
 Noah Webster	诺厄•韦伯斯特
 latter	较后的
-identity	本身
+identity	身份；特性
 fluent	流利的
 fluently	流利地
 Singapore	新加坡
@@ -110,7 +110,7 @@ eastern	东方的
 southeastern	东南方的
 northwestern	西北方的
 recognize	辨认出
-lorry	<英>卡车
+lorry	卡车
 Lori	罗丽
 Houston	休斯顿
 Texas	德克萨斯州
@@ -303,7 +303,7 @@ Transkei	特兰斯凯
 set up	设立
 sentence	判决
 be sentenced to	被判处…
-anti-	[前缀]反
+anti-	反
 anti-black	反黑人的
 Cape Town	开普敦
 president	总统

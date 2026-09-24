@@ -51,7 +51,7 @@ statistics	统计数据
 eco-friendly	对生态环境友好的
 subtropical	亚热带的
 fiord	峡湾
-not to mention	不必提及
+not to mention	更不用说
 recreation	娱乐
 raft	木筏
 abseil	绕绳下降
@@ -69,7 +69,7 @@ consultant	顾问
 guidance	指导
 database	数据库
 cater	备办酒菜
-cater for sb	为某人提供
+cater for sb	提供
 cater for sth	迎合
 enquiry	询问
 extension	分机
@@ -111,7 +111,7 @@ trend	趋势
 unemployment	失业
 taxpayer	纳税人
 import	输入
-aluminium	Al铝
+aluminium	铝
 surplus	过剩的
 Arthur Conan Doyle	亚瑟.柯南道尔
 Jaez Wilson	杰贝兹.威尔逊
@@ -143,7 +143,7 @@ fulfil	满足
 effective	有效的
 agenda	议程
 interval	间隔，间歇
-session	一段事件
+session	一段时间
 contradictory	矛盾的
 revise	复习
 curriculum	课程
@@ -154,7 +154,7 @@ subscribe	同意
 post-graduate	研究生
 academy	研究院，学术团体
 stead	代替
-stand sb in good stead	对某人很有用
+stand sb in good stead	很有用
 employer	雇主
 diploma	文凭
 format	设计
@@ -171,7 +171,7 @@ pursuit	寻求
 pursue	追求
 pedicab	三轮车
 sleep rough	露宿
-feed on	从…中得到滋养或者满足
+feed on	以…为食
 philosophical	哲学上的
 socialism	社会主义
 receipt	收据
@@ -258,7 +258,7 @@ now and again	不时地
 expectantly	预期地
 suck	吸
 co-operate	合作
-hand out	拿出
+hand out	分发
 preference	偏爱
 pleasureable	愉快的
 anticipation	预期
@@ -276,7 +276,7 @@ composer	作曲家
 mathematician	数学家
 stewardess	女乘务员
 diplomat	外交家
-embassy	使馆人员
+embassy	大使馆
 referee	介绍人
 brake	制动装置
 swerve	突然转向
@@ -293,7 +293,7 @@ curriculum vitae	履历
 nickname	绰号
 presentational	表达的
 fabulous	巨大的
-IELTS	的缩写
+IELTS	雅思
 accountancy	会计工作
 function	功能
 bureaucratic	官僚的
@@ -302,7 +302,7 @@ minefield	布雷区
 unwary	无警惕的
 autobiography	自传
 build on	建立于
-prosperous	成功的
+prosperous	繁荣的
 to tell you the truth	老实说
 tempt	诱惑
 appendix	附录

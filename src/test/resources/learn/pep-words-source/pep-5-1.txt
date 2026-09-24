@@ -83,12 +83,12 @@ next	下一个的
 wonderful	极好的
 learn	学习
 any	任何的
-problem	没问题
+problem	问题
 no problem	没问题
 want	要
 send	邮寄
 email	电子邮件
-at	接邮件地址
+at	在
 clock	时钟
 plant	植物
 bottle	瓶子

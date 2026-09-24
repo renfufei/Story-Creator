@@ -61,14 +61,14 @@ full	满的
 swing	摇摆
 swing dance	摇摆舞
 maybe	或许
-least	最小的
+least	最少的
 at least	至少
 junk	垃圾
 junk food	垃圾食品
 coffee	咖啡
 health	健康
 result	结果
-percent	百分之百的
+percent	百分之…
 online	在线的
 television	电视机
 although	虽然
@@ -210,7 +210,7 @@ unlucky	倒霉的
 lose	丢失
 girlfriend	女朋友
 ready	准备好的
-be ready to	愿意做某事
+be ready to	愿意
 character	个性
 simple	简单的
 dress up	装扮
@@ -218,7 +218,7 @@ take sb.’s place	代替
 army	军队
 do a good job	工作干得好
 grow up	长大
-computer programmer	计算机管理员
+computer programmer	计算机程序员
 cook	烹调
 doctor	医生
 engineer	工程师
@@ -239,8 +239,8 @@ send	邮寄
 resolution	决定
 team	队
 foreign	外国的
-able	聪明能干的
-be able to	能够做某事
+able	能够的；有能力的
+be able to	能够
 question	问题
 meaning	意义
 discuss	讨论
@@ -320,7 +320,7 @@ salt	盐
 sugar	糖
 cheese	干酪
 popcorn	爆米花
-corn	谷物
+corn	玉米
 machine	机器
 dig	挖，掘
 hole	洞，孔
@@ -335,7 +335,7 @@ autumn	秋天
 traveler	旅行者
 England	英格兰
 celebrate	庆祝
-mix	混淆
+mix	混合
 pepper	胡椒粉
 fill	装满，使充满
 oven	烤箱
@@ -352,7 +352,7 @@ available	可得到的
 another time	其他时间
 until	在…之前
 hang	悬挂
-hang out	常去某处
+hang out	闲逛
 catch	抓住
 invite	邀请
 accept	接受
@@ -362,11 +362,11 @@ the day after tomorrow	后天
 weekday	工作日
 look after	照顾
 invitation	邀请
-turn down	减小
+turn down	拒绝；调低
 reply	回答
 forward	向前
 delete	删除
-print	印刷的文字
+print	打印；印刷
 sad	难过的
 goodbye	再见
 take a trip	去旅行
@@ -380,7 +380,7 @@ hear from	收到…来信
 housewarming	乔迁庆宴
 opening	开幕式
 concert	音乐会
-headmaster	男校长
+headmaster	校长
 event	大事
 guest	客人
 calendar	日历
@@ -390,7 +390,7 @@ video	录像
 potato chips	马铃薯片
 chocolate	巧克力
 upset	难过的
-taxi	滑行
+taxi	出租车
 advice	劝告
 travel	旅行
 agent	代理人

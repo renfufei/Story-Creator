@@ -216,7 +216,7 @@ go to movies	看电影
 just	只是
 eat out	出去吃饭
 house	房子
-drink	一杯饮料
+drink	饮料
 tea	茶
 drink tea	喝茶
 tomorrow	在明天
@@ -227,7 +227,7 @@ man	男人
 race	竞赛
 host	主人
 study	研究
-state	洲
+state	州
 the United States	美国
 American	美国的
 dragon	龙

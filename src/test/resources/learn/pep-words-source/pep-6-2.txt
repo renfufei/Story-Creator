@@ -16,7 +16,7 @@ than	比
 both	两个都
 kilogram	千克
 countryside	乡村
-lower	更低地
+lower	更低的
 shadow	影子
 smarter	更聪明的
 become	变成
@@ -100,7 +100,7 @@ restaurant	餐馆
 pizza	比萨饼
 street	大街
 get	到达
-GPS	全球
+GPS	全球定位系统
 gave	提供
 feature	特点
 follow	跟着

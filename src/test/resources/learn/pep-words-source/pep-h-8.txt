@@ -1,7 +1,7 @@
 California	加利福尼亚
 Californian	加利福尼亚人
 illustrate	说明
-distinct	明显不同的，截然不同的，不同种类的
+distinct	明显不同的
 distinction	差别
 immigrant	移民
 live on	靠过活
@@ -21,7 +21,7 @@ adventurer	冒险家
 make a life	习惯于新的生活方式
 despite	尽管
 hardship	苦难
-elect	选举某人
+elect	选举
 federal	联邦制的
 rail	铁路
 percentage	百分比
@@ -43,7 +43,7 @@ immigration	移民人数
 racial	人种的
 crossing	横渡
 vice	代理的
-nephew	侄子
+nephew	侄子/外甥
 pole	地极
 applicant	申请人
 customs	海关
@@ -69,7 +69,7 @@ wharf	码头
 bakery	面包房
 ferry	渡船
 Angel Island	天使岛
-team up with	与…合作或一起工作
+team up with	合作
 hire	租用
 fascinating	迷人的
 mark out	划线
@@ -107,7 +107,7 @@ nucleus	原子核
 somatic	躯体的
 embryo	胚
 carrier	携带者
-cast	投射〔光或影〕
+cast	投射
 cast down	沮丧
 altogether	总共
 arbitrary	任意的
@@ -271,7 +271,7 @@ garment	衣服
 woollen	毛纺的
 hesitate	犹豫
 uncomfortable	不舒服的
-uncomfortably	不舒服的
+uncomfortably	不舒服地
 troublesome	带来麻烦的
 wallet	皮夹
 outcome	结果
@@ -281,7 +281,7 @@ disguise	伪装
 in disguise	伪装
 mistaken	错误的
 brilliant	才华横溢的
-classify	编排
+classify	分类
 remark	谈论
 betray	显露出
 upper	较高的

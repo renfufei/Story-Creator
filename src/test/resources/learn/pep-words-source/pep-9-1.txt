@@ -25,7 +25,7 @@ active	活跃的
 attention	注意
 pay attention to	注意
 connect	连接
-connect ... with	把…和…连接或联系起来
+connect ... with	连接；联系
 overnight	一夜之间
 review	回顾
 knowledge	知识
@@ -138,7 +138,7 @@ in person	亲身
 exactly	确切地
 pride	自豪
 take pride in	为…感到自豪
-grandson	孙子
+grandson	孙子；外孙
 general	普遍的
 introduction	介绍
 Paula	葆拉
@@ -157,7 +157,7 @@ glass	玻璃
 cotton	棉
 steel	钢
 grass	草
-produce	引起
+produce	生产；制造
 widely	广泛地
 process	加工
 France	法国
@@ -278,10 +278,10 @@ attend	出席
 valuable	宝贵的
 pink	粉红色的
 picnic	野餐
-somebody	某人，有人
+somebody	某人
 anybody	任何人
 noise	声音
-policeman	男警察
+policeman	警察
 wolf	狼
 laboratory	实验室
 coat	外套
@@ -293,7 +293,7 @@ express	表示
 not only ... but also	不但…而且
 circle	圆圈
 Britain	大不列颠
-receive	接受
+receive	收到；接到
 leader	领导
 midsummer	仲夏
 medical	医疗的
@@ -331,7 +331,7 @@ plenty	大量
 plenty of	大量
 shut	关闭
 superhero	超级英雄
-horror	震惊
+horror	恐怖；恐惧
 thriller	惊险电影
 intelligent	有才智的
 sense	感觉
@@ -364,7 +364,7 @@ mad	很生气
 get mad	大动肝火
 make an effort	作出努力
 traffic	交通
-somewhere	在某处
+somewhere	某处
 passport	护照
 chalk	粉笔
 blackboard	黑板
@@ -380,7 +380,7 @@ basic	基本的
 exchange	交换
 go out of one’s way	特地
 make ... feel at home	使感到宾至如归
-granddaughter	孙女
+granddaughter	孙女；外孙女
 behave	表现
 except	除…之外
 elbow	肘
@@ -412,7 +412,7 @@ examine	检查
 nor	也不
 neither ... nor	既不…也不
 palace	王宫
-power	权利
+power	权力；力量
 wealth	富裕
 grey	灰色的
 lemon	柠檬

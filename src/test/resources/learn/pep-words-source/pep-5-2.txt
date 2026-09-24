@@ -7,7 +7,7 @@ eat dinner	吃晚饭
 clean my room	打扫我的房间
 go for a walk	散步
 go shopping	购物
-take	上
+take	拿；带
 dancing	跳舞
 take a dancing class	上舞蹈课
 when	什么时候
@@ -127,7 +127,7 @@ sleeping	睡觉
 each	每个
 other	其他
 each other	相互
-excited	兴奋地
+excited	兴奋的
 like	像…那样
 doing morning exercises	做早操
 having ... class	上…课

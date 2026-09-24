@@ -5,13 +5,13 @@ put forward	提出
 scientific	科学的
 conclude	推断出
 conclusion	结论
-draw a conclusion	提出结论
+draw a conclusion	得出结论
 analyse	分析
 infect	传染
 infectious	传染的
 cholera	霍乱
 defeat	打败
-expert	内行的
+expert	专家；内行的
 attend	参加;出席
 physician	医生
 expose	暴露
@@ -34,10 +34,10 @@ investigate	调查
 investigation	调查
 blame	责备
 pollute	污染
-handle	柄
+handle	柄；处理
 germ	微生物
 link	连接
-link ... to ...	将…和…联系或连接起来
+link ... to ...	连接；联系
 announce	宣布
 certainty	确实
 instruct	命令
@@ -190,7 +190,7 @@ desert	沙漠
 enormous	巨大的
 imitate	模仿
 moveable	可移动的
-citizen	市民，城镇居民
+citizen	公民；市民
 typist	打字员
 typewriter	打字机
 postage	邮资
@@ -205,7 +205,7 @@ dustbin	垃圾箱
 dispose	布置
 disposal	清除
 ecology	生态
-greedy	贪吃的
+greedy	贪婪的
 swallow	吞下
 material	原料
 recycle	回收利用
@@ -246,7 +246,7 @@ meanwhile	其间
 depend on	依靠
 case	情况
 accuse	指责
-accuse ... of	因…指责或控告…
+accuse ... of	控告；指责
 accusation	指责
 deliberately	故意地
 so as to	为了…
@@ -277,7 +277,7 @@ polish	擦亮
 chief	首领
 approve	批准
 process	过程，进程
-negative	底片
+negative	消极的；底片
 appointment	约会
 aid	帮助
 first aid	急救
@@ -299,7 +299,7 @@ barrier	屏障
 poison	毒药
 ray	光线
 complex	复杂的
-variety	变化
+variety	种类；多样化
 liquid	液体
 radiation	辐射
 mild	轻微的
@@ -321,10 +321,10 @@ basin	盆
 squeeze	榨
 squeeze out	榨出
 over and over again	反复
-bandage	绷
+bandage	绷带
 in place	在适当的位置
 ointment	药膏
-infection	传染病
+infection	感染；传染
 vital	至关重要的
 symptom	症状
 label	加标签或标记
@@ -353,5 +353,5 @@ pressure	压力
 ambulance	救护车
 scheme	方案
 Southerton	萨瑟顿
-make a difference	区别对待
+make a difference	有影响；起作用
 bruise	瘀伤

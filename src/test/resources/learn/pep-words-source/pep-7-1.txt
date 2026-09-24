@@ -112,7 +112,7 @@ cousin	堂兄
 grandpa	爷爷
 mom	妈妈
 aunt	姑母
-grandma	祖母
+grandma	奶奶
 dad	爸爸
 uncle	舅父
 daughter	女儿
@@ -189,7 +189,7 @@ radio	收音机
 clock	时钟
 tape	磁带
 player	播放机
-tape player	激光唱机
+tape player	磁带播放机
 model	模型
 plane	飞机
 model plane	飞机模型
@@ -221,7 +221,7 @@ play	玩耍
 sound	听起来好像
 interesting	有趣的
 boring	没趣的
-fun	使人快乐的乐趣
+fun	乐趣
 difficult	困难的
 relaxing	轻松的
 TV	电视
@@ -332,7 +332,7 @@ December	十二月
 happy	愉快的
 Happy birthday	生日快乐！
 old	旧的
-How old ...	多大年纪？…几岁了？
+How old ...	多大年纪
 party	聚会
 See you	再见！
 second	第二

@@ -14,13 +14,13 @@ incense	熏香
 in memory of	纪念
 Mexico	墨西哥
 feast	节日
-skull	头脑
+skull	头骨
 bone	骨
 Halloween	万圣节前夕
 belief	信心
 dress up	盛装打扮
 trick	诡计
-play a trick on	搞恶作剧;开玩笑
+play a trick on	搞恶作剧；开玩笑
 poet	诗人
 Columbus Day	哥伦布日
 arrival	到来
@@ -100,7 +100,7 @@ barbecue	烧烤
 mutton	羊肉
 kebab	烤腌羊肉串
 roast	烤制的
-stir	摇动
+stir	搅拌
 fry	油煎
 stir-fry	用旺火炒
 ought	应当
@@ -154,7 +154,7 @@ ingredient	材料
 flavour	味道与气味
 Mark Twain	马克•吐温
 birthplace	出生地
-Florida	佛罗里达镇佛罗里达州
+Florida	佛罗里达州
 bring up	抚养
 Hannibal	汉尼拔
 Missouri	密苏里州
@@ -188,10 +188,10 @@ stare at	盯着看
 nightfall	黄昏
 fault	过错
 spot	发现
-passage	〔乘船旅行的〕航程
+passage	航程
 unpaid	未付款的
 account	认为
-account for	导致
+account for	解释；说明
 embassy	大使馆
 seek	寻找
 patience	耐性
@@ -227,15 +227,15 @@ religion	宗教信仰
 theory	学说
 Big Bang	宇宙大爆炸
 atom	原子
-billion	亿万
+billion	十亿
 globe	地球仪
 global	全球性的
-violent	强暴的
+violent	暴力的；猛烈的
 in time	及时
 carbon	碳
 nitrogen	氮
 vapour	蒸气
-atmosphere	气氛
+atmosphere	大气；气氛
 unlike	不同
 fundamental	基本的
 presence	出席
@@ -255,7 +255,7 @@ exist	存在
 mammal	哺乳动物
 give birth to	产生
 thus	因此
-in one’s turn	轮到某人
+in one’s turn	轮到
 dioxide	二氧化物
 carbon dioxide	二氧化碳
 prevent ... from	阻止
@@ -270,7 +270,7 @@ physicist	物理学家
 block out	挡住
 extinct	灭绝的
 climate	气候
-comet	慧星
+comet	彗星
 crash	碰撞
 Isaac Newton	艾萨克•牛顿
 Albert Einstein	阿尔伯特•爱因斯坦
@@ -282,7 +282,7 @@ cheer up	感到高兴
 float	浮动
 weightlessly	失重地
 cabin	小屋
-mass	<复>群众
+mass	群众
 now that	既然
 get the hang of	熟悉
 break out	突发
@@ -315,7 +315,7 @@ surround	围绕
 the Rocky Mountains	落基山脉
 Harbour	海港
 measure	测量
-aboard	在船
+aboard	在船/车/飞机上
 settle down	定居
 manage to do	设法做
 catch sight of	看见
@@ -350,7 +350,7 @@ schoolmate	同学
 booth	公用电话间
 downtown	市区的
 pearl	珍珠
-Cantonese	广东人
+Cantonese	广东话；广东人
 approximately	接近
 dawn	黎明
 workplace	工作场所

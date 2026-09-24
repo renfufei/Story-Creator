@@ -17,7 +17,7 @@ amazing	惊人的
 select	挑选
 honey	蜜
 design	设计
-fancy	〔酒店、餐厅、汽车等〕昂贵的
+fancy	昂贵的
 style	风格
 decorate	装修
 jewel	珠宝
@@ -51,7 +51,7 @@ castle	城堡
 Windsor Castle	温莎城堡
 trial	审判
 eyewitness	目击者
-evidence	根据
+evidence	证据
 Jan Hasek	简•哈兹克
 Czech Republic	捷克共和国
 explode	爆炸
@@ -187,7 +187,7 @@ mop	拖把
 deal with	处理
 watch over	看守
 naughty	顽皮的
-niece	侄女
+niece	侄女；外甥女
 spoil	宠坏
 wildlife	野生动植物
 protection	保护
@@ -266,11 +266,11 @@ choral	唱诗班的
 the Monkees	门基乐队
 musician	音乐家
 dream of	梦见
-karaoke	卡拉OK录音
+karaoke	卡拉OK
 pretend	假装
 to be honest	说实在地
 attach	系上
-attach ... to	认为有
+attach ... to	把…附在…上
 form	组成
 fame	名声
 passer-by	过路人
