@@ -1556,10 +1556,14 @@ function wordMatchApp() {
     var AUTO_KEY = 'word_match_auto_progress_v2';       // 自动学习模式进度（与练习进度不共享）
     var DATA_SIG_KEY = 'word_match_data_sig_v1';        // 词库指纹（关卡重切后作废旧进度）
 
-    /* 词库指纹：册数-关数-词数。关卡被重新切分过 ⇒ 旧的「第 N 关已通关」不再对应新关卡，作废一次。
+    /* 词库指纹：版本-册数-关数-词数。关卡被重新切分过 ⇒ 旧的「第 N 关已通关」不再对应新关卡，作废一次。
        首屏的 extraBooks（大学 2 册）只带元信息、不带关卡，但元信息里已含 levelCount，足够参与指纹。
        与小程序端 utils/store.js 的 ensureDataVersion 是同一套机制，以后词库再扩容不必手工加迁移。
-       错题本存的是单词本身，不受关卡切分影响，故不清理。 */
+       错题本存的是单词本身，不受关卡切分影响，故不清理。
+
+       版本从 v1 升到 v2 的原因：2026-09-27 把四六级**关卡顺序**做了交错重排（同类最多连排 5 关）。
+       那一改动**关数、词数都没变**，光看「册数-关数-词数」指纹不会变，但「第 N 关」指向的内容
+       已经全变了 —— 旧进度若保留，玩家会看到一堆自己没打过的关标着「已通关」，故必须升版本作废。 */
     function dataSignature() {
         var books = (DATA.books || []).concat(DATA.extraBooks || []);
         var b = books.length, lv = 0, wd = 0;
@@ -1567,7 +1571,7 @@ function wordMatchApp() {
             lv += books[i].levelCount || 0;
             wd += books[i].wordCount || 0;
         }
-        return 'v1-' + b + '-' + lv + '-' + wd;
+        return 'v2-' + b + '-' + lv + '-' + wd;
     }
 
     try {

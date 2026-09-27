@@ -380,6 +380,21 @@ node scripts/learn/validate_miniprogram.js
 
 词库是**唯一真相**：小程序数据由 `scripts/learn/build_miniprogram_data.py` 从线上服务搬运（**不重写切关算法**，避免两份实现漂移）。Web 版改了词库后重跑该脚本即可，小程序侧的进度会因**词库指纹变化而自动作废**（对应 Web 版当年手工做的 v1→v2 迁移，这里改成按指纹自动判定）。错题本存的是单词本身，不受切关影响，**不清除**。
 
+> 注（2026-09-27）：四六级关卡顺序改为「同一语义域最多连排 5 关」的交错排法（关数、词数都不变，
+> 详见 `cet-semantic-themes-plan.md` 第八节）。**关数没变 ⇒ 光看数字指纹识别不出顺序已变**，
+> 所以把指纹版本从 `v1-` 升到 `v2-`（Web 页 `dataSignature()` 与小程序 `utils/bank.js#signature` 同步），
+> 让旧进度作废 —— 否则「第 N 关」会指向完全不同的词。
+>
+> 同日起，「改词库 → 同步小程序」不再依赖本机服务是否跑着：
+> `scripts/learn/dump_word_match_payload.py` 用 Python 复刻了 `LearnController` 的读路径
+> （人教版 `splitBalanced` 切关 + 大学「主题即关卡」），直接产出与线上等价的两份载荷，
+> 交给 `build_miniprogram_data.py --from-files` 即可。等价性有实测背书：复刻载荷与线上返回
+> **逐字段完全一致**（`/data` 与 `/cet` 两份都比过），且未被本次改动波及的
+> `levels-primary/junior/senior.js`、`books.js` 重跑后**逐字节不变**。
+> 复刻时踩到的坑：`splitBalanced` 里的 `Math.round` 是**四舍五入**，而 Python 的 `round()`
+> 是**银行家舍入** —— n=27 时 `27/6=4.5`，一个得 5 关、一个得 4 关，害得
+> pep-9-1 / pep-h-7 / pep-h-8 三册少算 4 关。跨语言复刻算术规则时别想当然。
+
 ---
 
 ## 附：本次调研的原始数据

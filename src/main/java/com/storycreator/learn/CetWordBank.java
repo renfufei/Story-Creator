@@ -36,6 +36,12 @@ import java.util.Map;
  * （见 {@code scripts/learn/build_cet_words.py}：按 {@code cet-themes.tsv} 的 68 个<b>语义域</b>归类，
  * 域内再按源顺序每 6 条切一关），所以这里一个主题就是前端眼里的一关，<b>不再二次切分</b> ——
  * 否则会破坏「关内英文不重复」这条已生成好的性质。
+ *
+ * <p><b>关卡顺序在生成期就交错好了</b>：2026-09-27 起，册内不再是「域 1 的所有关 → 域 2 的所有关」，
+ * 而是同一语义域<b>最多连排 5 关</b>、块间按各域块数加权轮转（避免一次做几十关同类词）。
+ * {@code themes} 数组的顺序就是关卡的最终顺序，这里原样加载、不再重排。
+ * 该顺序变化不涉及词条，但改了「第 N 关」的语义 ⇒ 前端进度指纹已同步升版（见页面
+ * {@code dataSignature()} 与小程序的 {@code utils/bank.js#signature}）。
  */
 @Service
 public class CetWordBank {

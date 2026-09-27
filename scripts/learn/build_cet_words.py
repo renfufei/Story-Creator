@@ -23,6 +23,12 @@
 * **关内英文不重复**：顺序切完后逐关扫一遍，撞名的记录顺延到下一关（carry），
   最后再在不破坏「关内英文唯一」的前提下把各关大小拉回 3~7 对（正常数据几乎不触发）。
 * **不足 3 对的碎域**：并入「特殊类别」，绝不丢词。
+* **域间交错（册内关卡顺序）**：语义域内切好的关卡**不按域整段连着排**，否则一册开头连着做
+  51 关「人物与身份」、接着 84 关「性质与特征」，做久了很疲劳。改为把每域切成**最多 5 关一块**
+  （`MAX_SAME_DOMAIN_RUN`），再 `interleave_blocks` 交错：**首轮**每个域先各出一块（按
+  DOMAIN_ORDER，具体 → 抽象 → 兜底），**其余块**按各域剩余块数做**平滑加权轮转**（SWRR）公平铺开。
+  同一域最长连排 5 关；块数多的域出现更频繁；各域几乎同时收尾，不会把大域剩到最后堆成一长串。
+  **只改关卡顺序，不动任何词条与释义**；域内顺序、每域关头序号（`域 · N`）全部保持。
 
 用法：python3 scripts/learn/build_cet_words.py [--raw-dir DIR]
   默认从上游仓库直接下载；给了 --raw-dir 就从本地读 `cet4.txt` / `cet6.txt`。
@@ -83,6 +89,9 @@ DOMAIN_ORDER = [
 
 # 兜底域：映射里查不到、或词数不足以成关的，都并到这里。
 FALLBACK_THEME = '特殊类别'
+
+# 同一语义域在册内**最多连排几关**。超过就换一类，避免连续做同类词产生的疲劳。
+MAX_SAME_DOMAIN_RUN = 5
 
 
 def read_themes(path=THEME_SOURCE):
@@ -190,12 +199,103 @@ def split_bucket(rows):
     return [[(en, zh) for _, en, zh in sorted(chunk, key=lambda c: c[0])] for chunk in chunks]
 
 
+def swrr_block_order(block_counts, order_index, last=None):
+    """平滑加权轮转（nginx 的 smooth weighted round-robin）排「块」的顺序。
+
+    权重 = 该域**剩余的块数**（≈ 剩余词条数 / cap）。产出序列满足：每个域恰好出现
+    `block_counts[域]` 次，且出现位置尽量均匀 —— 块数多的域更频繁地插进来，各域几乎同时收尾
+    （不会把大域的剩余关卡全堆到册尾）。权重相同时按 `order_index`（即 DOMAIN_ORDER）兜底，
+    保证结果可复现。
+
+    `last` 是上一块的域：同一个域的两块**不允许相邻**，否则连排会变成 2×cap 关（守卫一）。
+    """
+    current = {name: 0 for name in block_counts}
+    total = sum(block_counts.values())
+    seq = []
+    for _ in range(total):
+        for name in block_counts:
+            current[name] += block_counts[name]
+        ranked = sorted(block_counts, key=lambda n: (-current[n], order_index[n]))
+        pick = ranked[0]
+        if len(ranked) > 1 and pick == last:
+            pick = ranked[1]
+        current[pick] -= total
+        seq.append(pick)
+        last = pick
+    return seq
+
+
+def interleave_blocks(groups, cap=MAX_SAME_DOMAIN_RUN):
+    """把一个域的关卡打散到全册：每域最多连排 cap 关，块间交错。
+
+    入参 groups：`[(域基名, [(关头序号, 关卡), ...]), ...]`，顺序即 DOMAIN_ORDER，域内保持源顺序。
+    返回：`[(域基名, 关头序号, 关卡), ...]`，即册内最终关卡顺序。
+
+    **为什么不能整段连着排**：一册开头会是 51 连排「人物与身份」、接着 84 连排「性质与特征」，
+    做久了疲劳。
+
+    **为什么不是简单的「每域取 cap 关轮流」**：域大小差别很大（84 关 vs 2 关），轮流会让小域
+    早早做完、大域的剩余关卡全堆在册尾（实测尾部连排 34~38 关，反而更糟）。
+
+    所以分两步：
+      ① **首轮**：按 DOMAIN_ORDER（具体 → 抽象 → 兜底）让每个域先各出一块，玩家早点见到每一类；
+      ② **其余**：按各域**剩余块数**加权做 SWRR 公平铺开，大域出现更频繁，各域几乎同时收尾。
+    两步都守着「最长连排 ≤ cap」，最后还有硬断言兜底。
+    """
+    blocks = collections.OrderedDict()
+    for name, entries in groups:
+        if entries:
+            blocks[name] = [entries[i:i + cap] for i in range(0, len(entries), cap)]
+    if not blocks:
+        return []
+
+    order_index = {name: i for i, (name, _) in enumerate(groups)}
+    cursor = {name: 0 for name in blocks}
+
+    # ① 首轮：每域各一块（域序 = DOMAIN_ORDER）
+    order = list(blocks)
+    # ② 其余块：只在还有剩余块的域之间加权轮转
+    rest = collections.OrderedDict((n, len(c) - 1) for n, c in blocks.items())
+    rest = collections.OrderedDict((n, c) for n, c in rest.items() if c > 0)
+    if rest:
+        order += swrr_block_order(rest, order_index, last=order[-1] if order else None)
+
+    result, prev, run = [], None, 0
+    for name in order:
+        for ordinal, level in blocks[name][cursor[name]]:
+            result.append((name, ordinal, level))
+            run = run + 1 if name == prev else 1
+            if run > cap:
+                # 超限要分清「可避免」和「躲不开」：
+                # 若此刻还有别的域剩着关卡，说明是块序排坏了 —— 宁可构建失败也不出成品；
+                # 若整册只剩这一个域，那就是数据本身太偏（一个域比其余全部加起来还多），只能连排。
+                others = [n for n in blocks if n != name and cursor[n] < len(blocks[n])]
+                if others:
+                    raise SystemExit('交错失败：%s 连着排了 %d 关（上限 %d），且仍有 %d 个域有待排关卡'
+                                     % (name, run, cap, len(others)))
+            prev = name
+        cursor[name] += 1
+    return result
+
+
+def max_same_domain_run(themes):
+    """册内同一语义域的最长连排关数（构建后自检用）。"""
+    best, run, prev = 0, 0, None
+    for theme in themes:
+        name = theme['name'].split(' · ')[0]
+        run = run + 1 if name == prev else 1
+        prev = name
+        best = max(best, run)
+    return best
+
+
 def build_book(book_id, rows, theme_map):
     buckets = collections.OrderedDict((name, []) for name in DOMAIN_ORDER)
     for en, zh in rows:
         buckets[theme_map.get((en, zh), FALLBACK_THEME)].append((en, zh))
 
-    themes = []
+    # 先按域切好关（域内保持源顺序），再整体交错 —— 两步分开，互不干扰
+    groups = []
     for name in DOMAIN_ORDER:
         items = buckets[name]
         if not items:
@@ -205,10 +305,14 @@ def build_book(book_id, rows, theme_map):
             buckets[FALLBACK_THEME].extend(items)
             continue
         levels = split_bucket(items)
-        for i, level in enumerate(levels, 1):
-            # 同一域多关时加序号，便于玩家知道「看到第几关」
-            title = name if len(levels) == 1 else '%s · %d' % (name, i)
-            themes.append({'name': title, 'words': [[e, z] for e, z in level]})
+        # 同一域多关时加序号，便于玩家知道「看到第几关」；序号是**域内**序号，交错后依然连续
+        groups.append((name, [(i, level) for i, level in enumerate(levels, 1)]))
+
+    themes = []
+    levels_per_domain = {name: len(entries) for name, entries in groups}
+    for name, ordinal, level in interleave_blocks(groups):
+        title = name if levels_per_domain[name] == 1 else '%s · %d' % (name, ordinal)
+        themes.append({'name': title, 'words': [[e, z] for e, z in level]})
 
     meta = BOOKS[book_id]
     words = sum(len(t['words']) for t in themes)
@@ -261,8 +365,14 @@ def main():
         levels = len(book['themes'])
         pairs = sum(len(t['words']) for t in book['themes'])
         used = {t['name'].split(' · ')[0] for t in book['themes']}
-        print('  %s：源 %d 词 → %d 关 / 平均 %.2f 对，命中语义域 %d / %d'
-              % (book_id, words, levels, pairs / float(levels), len(used), len(DOMAIN_ORDER)))
+        run = max_same_domain_run(book['themes'])
+        if run > MAX_SAME_DOMAIN_RUN:
+            # 能走到这里只可能是「一个域比其余全部加起来还多」的数据偏斜（可避免的超限
+            # 已在 interleave_blocks 里直接失败了），告警但不阻断构建
+            print('  ⚠️ %s 同类最长连排 %d 关（超过 %d）：该域关卡数远超其余域，躲不开'
+                  % (book_id, run, MAX_SAME_DOMAIN_RUN))
+        print('  %s：源 %d 词 → %d 关 / 平均 %.2f 对，命中语义域 %d / %d，同类最长连排 %d 关'
+              % (book_id, words, levels, pairs / float(levels), len(used), len(DOMAIN_ORDER), run))
         books.append(book)
 
     with open(OUT_JSON, 'w', encoding='utf-8') as fh:

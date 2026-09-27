@@ -31,6 +31,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * （见 {@code scripts/learn/build_cet_words.py} 的 {@code DOMAIN_ORDER} 与源清单同目录的
  * {@code cet-themes.tsv}），使<b>同一关的词语义相关</b>。域内仍按源顺序切关。
  *
+ * <p><b>册内关卡顺序是交错过的</b>：同一语义域最多连排 5 关（{@code MAX_SAME_DOMAIN_RUN}），
+ * 其余互相穿插 —— 不这么排，一册开头会连着做 51 关「人物与身份」、接着 84 关「性质与特征」，
+ * 做久了很疲劳。见 {@link #sameDomainNeverRunsLongerThanFiveLevels()}。
+ *
  * <p>源清单 {@code learn/cet-words-source/cet-4.txt / cet-6.txt} 是唯一真相，
  * 由 {@code scripts/learn/build_cet_words.py} 从上游词表逐行照抄（不排序、不去重）。
  */
@@ -63,6 +67,9 @@ class CetWordBankTest {
             "帮助与合作", "竞争与冲突", "控制与影响", "交往与联系",
             // 功能与特殊（4）
             "功能词", "专有名词", "短语与搭配", "特殊类别");
+
+    /** 同一语义域在册内最多能连排几关（与 {@code build_cet_words.py} 的 MAX_SAME_DOMAIN_RUN 一致）。 */
+    private static final int MAX_SAME_DOMAIN_RUN = 5;
 
     /** 主题名同名域多关时带「 · 序号」后缀，取基名比对。 */
     private static String baseTheme(String theme) {
@@ -153,6 +160,39 @@ class CetWordBankTest {
         expected.remove("特殊类别");
         assertThat(sample.keySet()).as("每个非兜底语义域都应有关卡").containsExactlyInAnyOrderElementsOf(expected);
         assertThat(sample.values()).as("每关都应有单词").allSatisfy(v -> assertThat(v).isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("关卡交错：同一语义域在册内最多连排 5 关（不然一册开头要连着做几十关同类词）")
+    void sameDomainNeverRunsLongerThanFiveLevels() {
+        for (WordMatchBank.BookInfo book : bank.getBooks()) {
+            String prev = null;
+            int run = 0;
+            for (WordMatchBank.Level level : bank.getLevels(book.id())) {
+                String base = baseTheme(level.theme());
+                run = base.equals(prev) ? run + 1 : 1;
+                assertThat(run)
+                        .as("%s 第 %d 关（%s）同类连排了 %d 关，超过 5 关上限",
+                                book.label(), level.index() + 1, level.theme(), run)
+                        .isLessThanOrEqualTo(MAX_SAME_DOMAIN_RUN);
+                prev = base;
+            }
+            /* 光有「不超过 5」还不够：整段按域排也是一堆 5 连排。真正的交错要求中途多次换类，
+               故再断言「域的出现段数」远多于域数（纯按域排时两者相等）。 */
+            int segments = 0;
+            prev = null;
+            for (WordMatchBank.Level level : bank.getLevels(book.id())) {
+                String base = baseTheme(level.theme());
+                if (!base.equals(prev)) {
+                    segments++;
+                }
+                prev = base;
+            }
+            int domains = (int) bank.getLevels(book.id()).stream()
+                    .map(l -> baseTheme(l.theme())).distinct().count();
+            assertThat(segments).as("%s 的语义域出现段数（应远多于域数 %d，说明真的交错开了）", book.label(), domains)
+                    .isGreaterThan(domains * 3);
+        }
     }
 
     @Test
