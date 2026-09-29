@@ -4361,7 +4361,7 @@ peak	n. 山顶；顶峰
 practically	adv. 实际上；几乎
 exclusively	adv. 专门地
 noble	adj. 贵族的；高尚的
-liberty	n. 自由
+liberty	n. 自由权；自由
 graceful	adj. 优美的，优雅的
 joint	n. 关节；接头，接缝
 sweep	v. 打扫；扫过
@@ -5222,7 +5222,7 @@ absorb	vt. 吸收；使全神贯注
 supply	vt. 供应，供给
 concern	n. 关心 vt. 涉及
 circulate	v. 循环；传播
-liberty	n. 自由
+liberty	n. 自由权；自由
 liable	adj. 有责任的；易于…的
 cargo	n. 船货，货物
 confidential	adj. 机密的；秘密的

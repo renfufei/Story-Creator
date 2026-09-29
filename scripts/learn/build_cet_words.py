@@ -15,14 +15,27 @@
 * **不去重**：上游「乱序」词表其实是三段词表拼接，同一个词可能出现 2~3 次且释义略有差异
   （例：access 出现 3 次）。这些重复**全部保留**：它们会被分散到不同关卡，形成自然的复习节奏。
 * **按语义域切主题**：词表本身是扁平的，没有主题。由 `cet-themes.tsv`（人工/模型逐条判定的
-  `英文\\t释义\\t语义域` 映射）给出每个词条的语义域，归并成 68 个语义域主题，
-  满足游戏「同一关的词同类型」的设计。映射里查不到的条目回退到「特殊类别」。
+  `英文\\t释义\\t语义域` 映射）给出每个词条的语义域，满足游戏「同一关的词同类型」的设计。
+  映射里查不到的条目回退到「特殊类别」。
+* **域分两级，粒度以「同一关的词彼此相干」为准**：`cet-domain-tree.tsv`（`父域\\t细域\\t说明`）
+  定义全部细域与展示顺序。68 个粗域里有 35 个装得太多（最大的「性质与特征」818 条，
+  从 able 到 awkward 什么形容词都有，6 条随手抽出来毫无关系），已按语义细分成
+  **98 个小分类**，加 33 个没超阈值、保持原样的域，共 131 个细域，规模 30~149 条。
+  细分只换标签、**不动任何词条与释义**，也不跨父域。
 * **域内按源顺序切关**：同一语义域内顺着源顺序每 6 个切一关。上游是「三段乱序词表拼接」，
   同一个词的三次出现天然相隔上千行，重复就自动落在相隔很远的关卡 —— 相当于内置了复习节奏。
   若改用「把重复尽量摊开」的贪心分配，重复反而会挤在相邻几关里，体验更差。
 * **关内英文不重复**：顺序切完后逐关扫一遍，撞名的记录顺延到下一关（carry），
   最后再在不破坏「关内英文唯一」的前提下把各关大小拉回 3~7 对（正常数据几乎不触发）。
-* **不足 3 对的碎域**：并入「特殊类别」，绝不丢词。
+* **不足 3 对的碎域先并「兄弟」**：同一个父域下的细域语义最近，所以碎域先并到**该父域下最大
+  的兄弟细域**里；父域只有一个细域（没细分过的原域）时才落到兜底细域（`特殊类别` 下最大的那个）。
+  绝不丢词。当前只有「短语与搭配」（2 条）会触发。
+* **域间交错（册内关卡顺序）**：语义域内切好的关卡**不按域整段连着排**，否则一册开头连着做
+  51 关「人物与身份」、接着 84 关「性质与特征」，做久了很疲劳。改为把每域切成**最多 5 关一块**
+  （`MAX_SAME_DOMAIN_RUN`），再 `interleave_blocks` 交错：**首轮**每个域先各出一块（按
+  DOMAIN_ORDER，具体 → 抽象 → 兜底），**其余块**按各域剩余块数做**平滑加权轮转**（SWRR）公平铺开。
+  同一域最长连排 5 关；块数多的域出现更频繁；各域几乎同时收尾，不会把大域剩到最后堆成一长串。
+  **只改关卡顺序，不动任何词条与释义**；域内顺序、每域关头序号（`域 · N`）全部保持。
 * **域间交错（册内关卡顺序）**：语义域内切好的关卡**不按域整段连着排**，否则一册开头连着做
   51 关「人物与身份」、接着 84 关「性质与特征」，做久了很疲劳。改为把每域切成**最多 5 关一块**
   （`MAX_SAME_DOMAIN_RUN`），再 `interleave_blocks` 交错：**首轮**每个域先各出一块（按
@@ -64,31 +77,49 @@ BOOKS = {
 }
 STAGE = '大学'
 
-# 68 个语义域。顺序即主题在册内的排列顺序（具体 → 抽象 → 功能兜底）。
-DOMAIN_ORDER = [
-    # 具体生活（10）
-    '人物与身份', '家庭与亲属', '身体与健康', '饮食与食物', '服饰与打扮',
-    '居住与建筑', '交通与出行', '购物与消费', '娱乐与休闲', '日常用品与工具',
-    # 自然与物质（5）
-    '动物与植物', '自然与天气', '物质与材料', '空间与方位', '事物与部件',
-    # 社会（19）
-    '组织与机构', '政治与政府', '法律与司法', '军事与战争', '经济与金融',
-    '商业与贸易', '工作与职业', '教育与学习', '科学技术', '计算机与信息',
-    '媒体与传播', '文学与写作', '艺术与绘画', '音乐与表演', '影视与娱乐',
-    '体育与运动', '宗教与信仰', '节日与习俗', '历史与考古',
-    # 心智与抽象（30）
-    '情绪与感受', '性格与品质', '态度与意愿', '思考与观点', '认知与理解', '记忆与注意',
-    '语言与交流', '数量与度量', '时间与频率', '性质与特征', '状态与情况',
-    '变化与发展', '增长与减少', '因果与逻辑', '方法与手段', '计划与安排',
-    '重要性', '优劣评价', '正确与错误', '关系与异同', '程度与强度',
-    '移动与位移', '操作与处理', '获取与给予', '建立与破坏', '保护与维持',
-    '帮助与合作', '竞争与冲突', '控制与影响', '交往与联系',
-    # 功能与特殊（4）
-    '功能词', '专有名词', '短语与搭配', '特殊类别',
-]
+# 细域树（第二个唯一真相）：`父域\t细域\t说明`。行序即主题在册内的排列顺序
+# （父域按「具体生活 → 自然与物质 → 社会 → 心智与抽象 → 功能与特殊」，父域内按人工定的顺序）。
+# 没细分过的原域在树里也有一行（父域 == 细域），这样「域清单」只有一个来源。
+DOMAIN_TREE_SOURCE = os.path.join(SRC_DIR, 'cet-domain-tree.tsv')
 
-# 兜底域：映射里查不到、或词数不足以成关的，都并到这里。
-FALLBACK_THEME = '特殊类别'
+# 兜底**父域**：映射里查不到的词落这里；不足 MIN_PAIRS 的碎域在父域内没有兄弟可并时，也落这里。
+FALLBACK_PARENT = '特殊类别'
+
+
+def read_domain_tree(path=DOMAIN_TREE_SOURCE):
+    """读细域树 → (DOMAIN_ORDER, DOMAIN_PARENT, DOMAIN_NOTE)。
+
+    DOMAIN_ORDER 是细域的展示顺序，DOMAIN_PARENT 把细域映射回它的父域
+    （碎域合并要靠它找「兄弟」，也是分类体系的文档线索）。
+    """
+    order, parent, note = [], {}, {}
+    with open(path, encoding='utf-8') as fh:
+        for lineno, line in enumerate(fh, 1):
+            line = line.rstrip('\n').rstrip('\r')
+            if not line.strip():
+                continue
+            parts = line.split('\t')
+            if len(parts) != 3:
+                raise SystemExit('细域树第 %d 行不是三段式：%r' % (lineno, line))
+            par, sub, desc = (p.strip() for p in parts)
+            if not par or not sub:
+                raise SystemExit('细域树第 %d 行有空字段：%r' % (lineno, line))
+            if sub in parent:
+                raise SystemExit('细域树第 %d 行细域重复定义：%r' % (lineno, sub))
+            order.append(sub)
+            parent[sub] = par
+            note[sub] = desc
+    if not order:
+        raise SystemExit('细域树为空：%s' % path)
+    if FALLBACK_PARENT not in {parent[n] for n in order}:
+        raise SystemExit('细域树里找不到兜底父域 %r' % FALLBACK_PARENT)
+    return order, parent, note
+
+
+DOMAIN_ORDER, DOMAIN_PARENT, DOMAIN_NOTE = read_domain_tree()
+# 兜底**细域**：兜底父域下的**第一个**细域，碎域在本父域内找不到兄弟时的最后一站。
+# 取「第一个」而不是「数据上最大的那个」，是为了让这条规则只依赖树、不依赖数据 —— 好解释、可复现。
+FALLBACK_THEME = next(n for n in DOMAIN_ORDER if DOMAIN_PARENT[n] == FALLBACK_PARENT)
 
 # 同一语义域在册内**最多连排几关**。超过就换一类，避免连续做同类词产生的疲劳。
 MAX_SAME_DOMAIN_RUN = 5
@@ -294,15 +325,29 @@ def build_book(book_id, rows, theme_map):
     for en, zh in rows:
         buckets[theme_map.get((en, zh), FALLBACK_THEME)].append((en, zh))
 
+    # 碎域要并进哪个桶，必须在**开始消费桶之前**算完（否则先被消费掉的桶拿不到后来并进来的词）。
+    # 并「兄弟」优先，落兜底其次 —— 同父域的细域语义最近，语义损失最小。
+    siblings = collections.defaultdict(list)
+    for name in DOMAIN_ORDER:
+        siblings[DOMAIN_PARENT[name]].append(name)
+    incoming = collections.defaultdict(list)
+    merged = []
+    for name in DOMAIN_ORDER:
+        if not buckets[name] or len(buckets[name]) >= MIN_PAIRS:
+            continue
+        peers = [n for n in siblings[DOMAIN_PARENT[name]] if n != name and buckets[n]]
+        target = max(peers, key=lambda n: len(buckets[n])) if peers else FALLBACK_THEME
+        incoming[target].extend(buckets[name])
+        merged.append((name, len(buckets[name]), target))
+        buckets[name] = []
+    for name, n, target in merged:
+        print('    · 碎域「%s」只有 %d 条（不足 %d），并入「%s」' % (name, n, MIN_PAIRS, target))
+
     # 先按域切好关（域内保持源顺序），再整体交错 —— 两步分开，互不干扰
     groups = []
     for name in DOMAIN_ORDER:
-        items = buckets[name]
+        items = buckets[name] + incoming[name]
         if not items:
-            continue
-        if len(items) < MIN_PAIRS:
-            # 不足以成关的碎域并入「特殊类别」，绝不丢词
-            buckets[FALLBACK_THEME].extend(items)
             continue
         levels = split_bucket(items)
         # 同一域多关时加序号，便于玩家知道「看到第几关」；序号是**域内**序号，交错后依然连续

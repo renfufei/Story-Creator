@@ -194,7 +194,7 @@ constitutional	宪法的
 fundamental	基础的
 battle	战争
 happiness	幸福
-liberty	自由
+liberty	自由权；自由
 skim	浏览
 evident	明显的
 self-evident	不证自明的

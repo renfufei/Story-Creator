@@ -24,9 +24,46 @@
             --wm-done-bg: #f1f3f5;
             --wm-done-line: #e8ebee;
             --wm-done-ink: #b4bbc4;
+            /* 已配对卡片的「一组一色」调色板 —— 7 组，因为一关最多 7 对（WordMatchBank.MAX_PAIRS）。
+               底色 / 边框 / 文字三层同色相（绿→青→蓝→紫），压深一档一档往下走：
+               ① 色相只取 138~280，完全避开红与黄；
+               ② **底色是极浅的雾色**（每通道 ≥ 240），离白的深度只留原来的 1/3。
+                  取法就一条公式，改深浅只动这个除数：
+                      浅版 = 255 - (255 - 深版) / 3
+                  想要再深一点就把 3 改成 2（÷2 = 深度减半）；
+               ③ 底色浅到这个程度，7 组之间已经谈不上「两两可辨」（相邻 ΔE 只有 1.8~2.6）——
+                  **认组靠的是 1.5px 的同色相边框**：两两 ΔE(CIE76) ≥ 8.6，肉眼分得出；
+                  所以边框色别再往浅里调，否则唯一的线索就没了；
+               ④ 文字用同色相深色，文字/底色对比度 5.8~7.8 : 1
+                  （旧的中性灰只有 1.74:1，回顾时几乎看不清；既然要「回顾」，先把字认清）。
+               别把这里的雾蓝（--wm-tint-3-*）跟「选中」的 --wm-sel-bg 看混：
+               选中态的边框是饱和蓝 #35a3f3、文字 #0f6cbd，且两者不会同时出现。 */
+            --wm-tint-0-bg: #f2fff6;   /* 绿 */
+            --wm-tint-1-bg: #f2fffb;   /* 青绿 */
+            --wm-tint-2-bg: #f4fefe;   /* 青 */
+            --wm-tint-3-bg: #f1f7fd;   /* 雾蓝 */
+            --wm-tint-4-bg: #f2f4fe;   /* 靛蓝 */
+            --wm-tint-5-bg: #f4f0fe;   /* 紫罗兰 */
+            --wm-tint-6-bg: #f9f1fd;   /* 藕紫 */
+            --wm-tint-0-line: #a1dbb2;
+            --wm-tint-1-line: #a1dbc9;
+            --wm-tint-2-line: #a1d7db;
+            --wm-tint-3-line: #a1bcdb;
+            --wm-tint-4-line: #a1a9db;
+            --wm-tint-5-line: #b0a1db;
+            --wm-tint-6-line: #c8a1db;
+            --wm-tint-0-ink: #456b50;
+            --wm-tint-1-ink: #456b5f;
+            --wm-tint-2-ink: #45696b;
+            --wm-tint-3-ink: #45576b;
+            --wm-tint-4-ink: #454a6b;
+            --wm-tint-5-ink: #4f456b;
+            --wm-tint-6-ink: #5e456b;
             --wm-wrong-bg: #ffe6e6;
             --wm-wrong-line: #f96868;
             --wm-wrong-ink: #d92d20;
+            --wm-count-bg: #e6f5ed;  /* 「共 26 册」这类纯数量徽标的底：柔和淡绿（红=报错，别拿来做册数） */
+            --wm-count-ink: #12784a; /* 数量徽标字：浅绿底上压深一档，保证小字对比度 */
             --wm-accent: #35a3f3;
             --wm-ok: #34c77b;        /* 进度条 / 已完成关卡用的绿，配对动画也沿用同一个绿 */
             --wm-ok-bg: #ddf7e6;     /* 配对成功：两张卡一起变浅绿 */
@@ -452,8 +489,10 @@
         }
 
         .wm-board.is-auto .wm-card { cursor: default; }
-        /* :not(.is-ok)：这两条的权重比 .wm-card.is-ok 高，会把正在闪绿的那张卡的边框/缩放抢回去 */
-        .wm-board.is-auto .wm-card:hover:not(.is-ok) { border-color: var(--wm-line); }
+        /* :not(.is-ok)：这两条的权重比 .wm-card.is-ok 高，会把正在闪绿的那张卡的边框/缩放抢回去
+           :not(.is-done)：已配对卡片有自己的 tint-N 边框，别被 hover 抹回中性线色
+           （特异性 5 比 .wm-card.tint-N:not(.is-ok) 的 3 高，不加这一条就会把颜色抢走） */
+        .wm-board.is-auto .wm-card:hover:not(.is-ok):not(.is-done) { border-color: var(--wm-line); }
         .wm-board.is-auto .wm-card:active:not(.is-ok) { transform: none; }
 
         /* 选中 */
@@ -470,6 +509,56 @@
             color: var(--wm-done-ink);
             cursor: default;
             box-shadow: none;
+        }
+
+        /* 已完成 + 一组一色：同一对英文/中文拿到同一个 tint-N，不同对拿到不同 tint-N
+           （N 由卡片所属 pair 的下标决定，见 buildCards / cardClass）。
+           底色、边框、文字都取自上面那张调色板 —— 回顾整关时凭颜色就能把「哪句英文配哪句中文」认出来。
+           选择器带 :not(.is-ok) 有两层用意：
+             ① 特异性升到 (0,3,0)，稳稳压过 .is-done / .is-ok 的 (0,2,0)；
+             ② 正在闪绿的那 .5s 让位给 .is-ok，闪完再落到本组自己的浅色
+                （靠 .wm-card 上 background-color .16s 的过渡收过去）。
+           ⚠️ 卡片还没配对时不加 tint-N（cardClass 里判 done），否则颜色等于提前泄题。 */
+        .wm-card.tint-0:not(.is-ok) {
+            background: var(--wm-tint-0-bg);
+            border-color: var(--wm-tint-0-line);
+            color: var(--wm-tint-0-ink);
+        }
+
+        .wm-card.tint-1:not(.is-ok) {
+            background: var(--wm-tint-1-bg);
+            border-color: var(--wm-tint-1-line);
+            color: var(--wm-tint-1-ink);
+        }
+
+        .wm-card.tint-2:not(.is-ok) {
+            background: var(--wm-tint-2-bg);
+            border-color: var(--wm-tint-2-line);
+            color: var(--wm-tint-2-ink);
+        }
+
+        .wm-card.tint-3:not(.is-ok) {
+            background: var(--wm-tint-3-bg);
+            border-color: var(--wm-tint-3-line);
+            color: var(--wm-tint-3-ink);
+        }
+
+        .wm-card.tint-4:not(.is-ok) {
+            background: var(--wm-tint-4-bg);
+            border-color: var(--wm-tint-4-line);
+            color: var(--wm-tint-4-ink);
+        }
+
+        .wm-card.tint-5:not(.is-ok) {
+            background: var(--wm-tint-5-bg);
+            border-color: var(--wm-tint-5-line);
+            color: var(--wm-tint-5-ink);
+        }
+
+        .wm-card.tint-6:not(.is-ok) {
+            background: var(--wm-tint-6-bg);
+            border-color: var(--wm-tint-6-line);
+            color: var(--wm-tint-6-ink);
         }
 
         /* 配对成功：两张卡同时闪绿（约 .5s）。judge() 里 done 是立刻置上的，
@@ -870,25 +959,67 @@
         .wm-book-prog.is-auto b { color: #d99000; }
         .wm-book-check { flex: 0 0 auto; color: var(--wm-sel-line); }
 
-        /* ---------- 错题本 ---------- */
-        .wm-wrong-head {
+        /* ---------- 已学词汇：顶部总览条 + 括号里的「已学 N」 ----------
+           口径见 learnedWords()：已完成关卡里的单词条目数，与 wordCount 同口径。
+           数字用绿（--wm-count-ink）表示"已掌握的量"，没用红 —— 红在页面里专管报错。 */
+        .wm-learn-total { margin: .6rem 0 .15rem; }
+
+        .wm-learn-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: .5rem;
+            font-size: .78rem;
+            color: var(--wm-muted);
+        }
+
+        .wm-learn-row b { color: var(--wm-count-ink); font-variant-numeric: tabular-nums; }
+        .wm-learn-row .wm-learn-num { font-variant-numeric: tabular-nums; }
+        .wm-learn-row .wm-learn-pct { color: var(--wm-muted); }
+
+        .wm-learn-track {
+            margin-top: .32rem;
+            height: 5px;
+            border-radius: 999px;
+            background: var(--wm-line);
+            overflow: hidden;
+        }
+
+        .wm-learn-track > i {
+            display: block;
+            height: 100%;
+            border-radius: 999px;
+            background: var(--wm-ok);
+            transition: width .25s ease;
+        }
+
+        /* 括号里的「已学 N」：学过给绿、没学过给灰，避免整列都是高亮数字 */
+        .wm-learned { color: var(--wm-count-ink); font-weight: 700; }
+        .wm-learned.is-zero { color: var(--wm-done-ink); font-weight: 400; }
+
+        /* ---------- 弹层标题行（册次 / 错题本 / 导出三处共用，原先误挂在「错题本」名下） ---------- */
+        .wm-modal-head {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: .5rem;
         }
 
-        .wm-wrong-head h5 { margin: 0; }
+        .wm-modal-head h5 { margin: 0; }
 
-        .wm-wrong-total {
+        /* 右上角数量徽标：只报数的用柔和色，报错的才用红。两者尺寸/圆角一致 */
+        .wm-wrong-total,
+        .wm-count-total {
             font-size: .78rem;
-            color: var(--wm-wrong-ink);
-            background: var(--wm-wrong-bg);
             border-radius: 999px;
             padding: 2px 10px;
             font-weight: 700;
         }
 
+        .wm-wrong-total { color: var(--wm-wrong-ink); background: var(--wm-wrong-bg); }
+        .wm-count-total { color: var(--wm-count-ink); background: var(--wm-count-bg); }
+
+        /* ---------- 错题本 ---------- */
         .wm-wrong-list {
             display: flex;
             flex-direction: column;
@@ -926,6 +1057,100 @@
         }
 
         .wm-wrong-empty i { display: block; font-size: 1.8rem; margin-bottom: .4rem; color: var(--wm-ok); }
+
+        /* ---------- 搜索单词（工具栏按钮 + 弹窗） ----------
+           弹窗挂在 .wm-modal is-wide 上再加 .is-search 放宽到 560px：
+           .wm-modal.is-wide.is-search 是 (0,3,0)，压得住 .wm-modal.is-wide 的 (0,2,0)，
+           所以不必用 !important；移动端也不需要另写覆盖 —— 560 > 视口宽，width:100% 说了算。 */
+        .wm-search-btn.is-open {
+            border-color: var(--wm-sel-line);
+            color: var(--wm-sel-ink);
+            background: #eef7fe;
+        }
+
+        /* ⚠️ position:relative 必须自己开 —— .wm-modal 没设 position（通关弹窗是靠 .is-finish
+           单独开的，就是不想动到选册 / 错题本 / 导出那三个）。漏了的话 .wm-modal-close 会以
+           .wm-modal-backdrop（fixed）为参照，飞到弹窗左上角外面去（实测 top=-299 / right=-350）。 */
+        .wm-modal.is-wide.is-search { max-width: 560px; position: relative; }
+
+        /* 标题行给右上角的关闭叉让位：窄屏（390）上角标会贴到最右，和关闭叉叠在一起（实测重叠）。
+           桌面端宽度富裕，留这 26px 也看不出来。 */
+        .wm-modal.is-wide.is-search .wm-modal-head { padding-right: 26px; }
+
+        .wm-search-bar {
+            display: flex;
+            gap: .4rem;
+            margin: .7rem 0 .3rem;
+        }
+
+        /* min-width:0 是 flex 子项能真正收窄的前提，否则输入框按内容撑住、把按钮挤出去 */
+        .wm-search-bar input { flex: 1 1 auto; min-width: 0; }
+
+        /* 按钮不许被输入框挤窄，否则「搜索」两个字会被压成竖排两行（实测踩过） */
+        .wm-search-bar .btn { flex: 0 0 auto; white-space: nowrap; }
+
+        /* 匹配模式说明：一直占位（min-height），免得搜出结果时列表整体往下跳一下 */
+        .wm-search-hint {
+            font-size: .74rem;
+            color: var(--wm-muted);
+            margin: 0;
+            min-height: 1.15em;
+        }
+
+        .wm-search-list {
+            display: flex;
+            flex-direction: column;
+            gap: .45rem;
+            margin: .55rem 0 0;
+            max-height: min(52vh, 26rem);
+            overflow: auto;
+        }
+
+        .wm-search-item {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            border: 1px solid var(--wm-line);
+            border-left: 3px solid var(--wm-line);
+            border-radius: 10px;
+            padding: 8px 10px;
+            background: #fff;
+        }
+
+        /* 完全匹配的那些在前、且单独上色：一眼能分出「就是这个词」和「只是长得像」 */
+        .wm-search-item.is-exact { border-left-color: var(--wm-ok); background: #fbfefc; }
+
+        .wm-search-main { flex: 1 1 auto; min-width: 0; }
+        .wm-search-en {
+            font-weight: 700;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: .3rem;
+            flex-wrap: wrap;
+        }
+        .wm-search-en .wm-speak { position: static; transform: none; font-size: .85rem; }
+        .wm-search-zh { font-size: .82rem; color: #5a6472; }
+        .wm-search-src { font-size: .72rem; color: var(--wm-muted); margin-top: 2px; }
+        .wm-search-acts { flex: 0 0 auto; }
+
+        .wm-search-badge {
+            font-size: .66rem;
+            font-weight: 700;
+            border-radius: 999px;
+            padding: 1px 7px;
+            color: var(--wm-count-ink);
+            background: var(--wm-count-bg);
+        }
+        .wm-search-badge.is-prefix { color: var(--wm-muted); background: #eef1f4; }
+
+        .wm-search-empty {
+            text-align: center;
+            color: var(--wm-muted);
+            font-size: .88rem;
+            padding: 1.5rem 0;
+        }
+        .wm-search-empty i { display: block; font-size: 1.8rem; margin-bottom: .4rem; color: var(--wm-done-ink); }
 
         /* ---------- 移动端：沉浸式全屏 ---------- */
         @media (max-width: 767.98px) {
@@ -1157,6 +1382,14 @@ window.__WORD_MATCH_DATA__ = (function () {
                 <i class="bi" :class="autoPaused ? 'bi-play-fill' : 'bi-pause-fill'"></i>
                 <span class="d-none d-sm-inline" x-text="autoPaused ? '继续' : '暂停'"></span>
             </button>
+            <!-- 搜索：放在「设置」左边（越常用的越靠左）。窄屏只留图标，与相邻按钮一致 -->
+            <button type="button" class="btn btn-sm btn-outline-secondary wm-search-btn"
+                    @click="openSearch()" :class="{ 'is-open': searchOpen }"
+                    title="搜索单词：按英文或中文查，可直接跳到它所在的册次与关卡"
+                    aria-haspopup="true" :aria-expanded="searchOpen ? 'true' : 'false'">
+                <i class="bi bi-search"></i>
+                <span class="d-none d-sm-inline ms-1">搜索</span>
+            </button>
             <!-- 错题本 / 重做本关 / 朗读开关 / 导出 / 源码 / 重置进度 统一收进「设置」弹层 -->
             <div class="wm-set-wrap" @click.outside="settingsOpen = false"
                  @keydown.escape.window="settingsOpen = false">
@@ -1364,11 +1597,25 @@ window.__WORD_MATCH_DATA__ = (function () {
     <!-- 册次选择（弹出框） -->
     <div class="wm-modal-backdrop" x-show="bookPickerOpen" x-cloak @click.self="bookPickerOpen = false">
         <div class="wm-modal is-wide">
-            <div class="wm-wrong-head">
+            <div class="wm-modal-head">
                 <h5><i class="bi bi-book"></i> 选择年级册次</h5>
-                <span class="wm-wrong-total" x-text="books.length + ' 册'"></span>
+                <span class="wm-count-total" x-text="books.length + ' 册'"></span>
             </div>
             <p class="mb-0 mt-1">共 <span x-text="totalLevels"></span> 关 · 每关 3~7 对单词（多为 6 对）</p>
+            <!-- 所有学段合计的已学词汇：独立小区块 + 细进度条，给玩家一个总体的掌握量 -->
+            <div class="wm-learn-total">
+                <div class="wm-learn-row">
+                    <span>已学词汇</span>
+                    <span class="wm-learn-num">
+                        <b x-text="learnedSummary.total.toLocaleString('en-US')"></b> /
+                        <span x-text="learnedSummary.totalWords.toLocaleString('en-US')"></span> 词
+                        <span class="wm-learn-pct" x-text="'· ' + learnedSummary.pct + '%'"></span>
+                    </span>
+                </div>
+                <div class="wm-learn-track">
+                    <i :style="'width:' + Math.min(100, learnedSummary.pct) + '%'"></i>
+                </div>
+            </div>
             <div class="wm-book-list">
                 <template x-for="g in bookGroups" :key="g.stage">
                     <div class="wm-book-group">
@@ -1383,7 +1630,7 @@ window.__WORD_MATCH_DATA__ = (function () {
                                     <span class="wm-book-group-cur"><i class="bi bi-check-circle-fill"></i>
                                         <span x-text="bookLabel"></span> · </span>
                                 </template>
-                                <span x-text="g.books.length + ' 册 · ' + g.wordCount + ' 词'"></span>
+                                <span x-text="g.books.length + ' 册 · ' + g.wordCount + ' 词'"></span><span class="wm-learned" :class="{ 'is-zero': !learnedSummary.stages[g.stage] }" x-text="'（已学 ' + (learnedSummary.stages[g.stage] || 0) + '）'"></span>
                             </span>
                         </button>
                         <div class="wm-book-group-body" x-show="isStageOpen(g.stage)" x-cloak>
@@ -1392,7 +1639,8 @@ window.__WORD_MATCH_DATA__ = (function () {
                                         @click="pickBook(b.id)">
                                     <span class="wm-book-label" x-text="b.label"></span>
                                     <span class="wm-book-meta">
-                                        <span x-text="b.wordCount + ' 词 · ' + b.levelCount + ' 关'"></span><br>
+                                        <!-- 三个 span 必须紧挨着写：换行会在中文括号前后多渲染出一个空格（「64 词 （已学 N）·」） -->
+                                        <span x-text="b.wordCount + ' 词'"></span><span class="wm-learned" :class="{ 'is-zero': !learnedWords(b.id) }" x-text="'（已学 ' + learnedWords(b.id) + '）'"></span><span x-text="' · ' + b.levelCount + ' 关'"></span><br>
                                         <span class="wm-book-prog">练习 <b x-text="bookDone(b.id, false)"></b>/<span
                                                 x-text="b.levelCount"></span> 关</span>
                                         <template x-if="bookDone(b.id, true) > 0">
@@ -1417,7 +1665,7 @@ window.__WORD_MATCH_DATA__ = (function () {
     <!-- 错题本 -->
     <div class="wm-modal-backdrop" x-show="wrongOpen" x-cloak @click.self="wrongOpen = false">
         <div class="wm-modal is-wide">
-            <div class="wm-wrong-head">
+            <div class="wm-modal-head">
                 <h5><i class="bi bi-journal-bookmark"></i> 错题本</h5>
                 <span class="wm-wrong-total" x-text="wrongTotal + ' 个单词'"></span>
             </div>
@@ -1434,7 +1682,7 @@ window.__WORD_MATCH_DATA__ = (function () {
                             <div class="wm-wrong-zh">正确：<b x-text="w.zh"></b> · 误选：<span class="wm-wrong-miss"
                                     x-text="w.miss"></span></div>
                             <div class="wm-wrong-src"><span
-                                    x-text="w.bookLabel + ' · 第 ' + (w.level + 1) + ' 关 · ' + w.theme"></span> ·
+                                    x-text="srcText(w.bookId, w.bookLabel, w.level) + ' · ' + w.theme"></span> ·
                                 错 <b x-text="w.count"></b> 次
                             </div>
                         </div>
@@ -1463,12 +1711,66 @@ window.__WORD_MATCH_DATA__ = (function () {
         </div>
     </div>
 
+    <!-- 搜索单词：一次遍历全部词库（人教版 24 册 + 大学 2 册），可按英文或中文查 -->
+    <div class="wm-modal-backdrop" x-show="searchOpen" x-cloak @click.self="closeSearch()">
+        <div class="wm-modal is-wide is-search" id="wm-search-modal">
+            <button type="button" class="wm-modal-close" @click="closeSearch()" aria-label="关闭">
+                <i class="bi bi-x-lg"></i>
+            </button>
+            <div class="wm-modal-head">
+                <h5><i class="bi bi-search"></i> 搜索单词</h5>
+                <span class="wm-count-total" x-text="searchCountText"></span>
+            </div>
+            <div class="wm-search-bar">
+                <input type="search" id="wm-search-input" class="form-control form-control-sm"
+                       x-model="searchQ"
+                       @keydown.enter.prevent="runSearch()" @keydown.escape="closeSearch()"
+                       placeholder="英文或中文，如 liberty / 自由 / 秩序">
+                <button type="button" class="btn btn-primary btn-sm" id="wm-search-go"
+                        @click="runSearch()" :disabled="searchPending">
+                    <i class="bi" :class="searchPending ? 'bi-hourglass-split' : 'bi-search'"></i>
+                    <span class="ms-1" x-text="searchPending ? '载入中' : '搜索'"></span>
+                </button>
+            </div>
+            <p class="wm-search-hint" x-text="searchHintText"></p>
+            <div class="wm-search-list" x-show="searchHits.length">
+                <template x-for="h in searchHits" :key="h.uid">
+                    <div class="wm-search-item" :class="{ 'is-exact': h.rank === 0 }">
+                        <div class="wm-search-main">
+                            <div class="wm-search-en">
+                                <span x-text="h.en"></span>
+                                <button type="button" class="wm-speak" @click="speak(h.en)" title="朗读"><i
+                                        class="bi bi-volume-up-fill"></i></button>
+                                <span class="wm-search-badge" x-show="h.rank === 0">完全匹配</span>
+                                <span class="wm-search-badge is-prefix" x-show="h.rank === 1">前缀</span>
+                                <span class="wm-search-badge is-prefix" x-show="h.rank === 2">包含</span>
+                            </div>
+                            <div class="wm-search-zh" x-text="h.zh"></div>
+                            <div class="wm-search-src">
+                                <span x-text="srcText(h.bookId, h.bookLabel, h.level)"></span>
+                                <template x-if="h.theme"><span x-text="' · ' + h.theme"></span></template>
+                            </div>
+                        </div>
+                        <div class="wm-search-acts">
+                            <button type="button" class="btn btn-sm btn-outline-primary" @click="gotoHit(h)"
+                                    :title="'跳到「' + srcText(h.bookId, h.bookLabel, h.level) + '」'">查看</button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            <div class="wm-search-empty" x-show="!searchHits.length">
+                <i class="bi bi-search"></i>
+                <span x-text="searchEmptyText"></span>
+            </div>
+        </div>
+    </div>
+
     <!-- 导出为单页 HTML -->
     <div class="wm-modal-backdrop" x-show="exportOpen" x-cloak @click.self="closeExport()">
         <div class="wm-modal is-wide" id="wm-export-modal">
-            <div class="wm-wrong-head">
+            <div class="wm-modal-head">
                 <h5><i class="bi bi-download"></i> 导出为单页 HTML</h5>
-                <span class="wm-wrong-total" x-text="exportSelCount + ' / ' + books.length + ' 册'"></span>
+                <span class="wm-count-total" x-text="exportSelCount + ' / ' + books.length + ' 册'"></span>
             </div>
             <p class="mb-0 mt-1">导出成一个自包含文件：样式、脚本、词库全在里面，双击就能玩，不依赖本站。</p>
 
@@ -1550,6 +1852,138 @@ window.__WORD_MATCH_DATA__ = (function () {
 <script src="/js/common.js"></script>
 <script src="/js/nav.js"></script>
 <script>
+/* ==========================================================================
+   搜索：全部词库的离线检索（纯函数；整体只挂一个全局名 WM_SEARCH）
+   --------------------------------------------------------------------------
+   词库约 2 万条（人教版 7032 词 + 大学 13159 条）。索引在第一次搜索时建一次，
+   缓存在 wordMatchApp 的闭包里。**刻意不放进 Alpine 的响应式 state**：
+   Alpine 会把 state 里的对象逐层包成 Proxy，2 万条过一遍明显拖慢搜索；
+   索引只读，没有理由让框架盯着它。挂到 window 上只是为了让无头测试能直接调用。
+
+   匹配优先级（按需求口径）：
+     ① 完全匹配 —— 英文全等，或**某个中文义项**全等；全部列出、排在最前；
+     ② 前缀匹配 —— 英文开头，或某个中文义项开头；最多取前 5 个**单词**；
+     ③ 部分匹配 —— 只有前两类都空时才做（英文/中文含关键词即可）；同样最多 5 个单词。
+   「5 个单词」按**去重后的单词数**算：同一个词可能出现在多册多关（四六级词表不去重），
+   把它所有出处一起列出来，否则用户看到 liberty 只出现一处，会以为是唯一出处。
+   ========================================================================== */
+var WM_SEARCH = (function () {
+
+    /* 中文释义 → 可比对的义项数组。第一步必须去掉词性前缀：四级 99% 的条目长这样
+       「n. 自由权；自由」，不剥掉的话用户查「自由」永远凑不出前缀命中。
+       再按中英文标点拆成多个义项，「完全匹配」才能落在单个义项上而不是整串上。 */
+    var POS_RE = /^\s*(?:n|v|vt|vi|adj|adv|prep|pron|conj|num|art|int|interj|aux|abbr|pl)\.\s*/i;
+
+    function zhParts(zh) {
+        var t = String(zh == null ? '' : zh).replace(POS_RE, '');
+        var out = [];
+        var segs = t.split(/[；;，,、/（）()]/);
+        for (var i = 0; i < segs.length; i++) {
+            var s = segs[i].trim();
+            if (s) out.push(s.toLowerCase());
+        }
+        if (!out.length && t.trim()) out.push(t.trim().toLowerCase());
+        return out;
+    }
+
+    /* 义项比对：kind 0 = 全等，1 = 前缀（只认义项开头，中文没有「词中」的概念） */
+    function zhHit(parts, q, kind) {
+        for (var i = 0; i < parts.length; i++) {
+            if (kind === 0 ? parts[i] === q : parts[i].indexOf(q) === 0) return true;
+        }
+        return false;
+    }
+
+    /* 一次性摊平：册 → 关 → 词对。level 存的是**下标**（界面上按「第 N 关」显示时要 +1） */
+    function build(books, allLevels) {
+        var items = [];
+        books = books || [];
+        allLevels = allLevels || {};
+        for (var bi = 0; bi < books.length; bi++) {
+            var b = books[bi];
+            var lvs = allLevels[b.id] || [];
+            for (var li = 0; li < lvs.length; li++) {
+                var lv = lvs[li] || {};
+                var pairs = lv.pairs || [];
+                for (var pi = 0; pi < pairs.length; pi++) {
+                    var en = String(pairs[pi].en == null ? '' : pairs[pi].en);
+                    if (!en) continue;
+                    var zh = String(pairs[pi].zh == null ? '' : pairs[pi].zh);
+                    items.push({
+                        en: en,
+                        enL: en.toLowerCase(),
+                        zh: zh,
+                        zhL: zh.toLowerCase(),
+                        zhParts: zhParts(zh),
+                        bookId: b.id,
+                        bookLabel: b.label || b.id,
+                        level: li,
+                        theme: lv.theme || ''
+                    });
+                }
+            }
+        }
+        return items;
+    }
+
+    /* 截断到「最多 maxWords 个不同单词」—— 同一个词的所有出处要么都留、要么都不留 */
+    function capWords(list, maxWords) {
+        var seen = {}, out = [], words = 0;
+        for (var i = 0; i < list.length; i++) {
+            var w = list[i].enL;
+            if (!seen[w]) {
+                if (words >= maxWords) break;
+                seen[w] = true;
+                words++;
+            }
+            out.push(list[i]);
+        }
+        return out;
+    }
+
+    /* 一条命中的等级：0 完全 / 1 前缀 / 2 包含。按条目自身性质判定（与它在哪一段无关） */
+    function rankOf(it, q) {
+        if (it.enL === q || zhHit(it.zhParts, q, 0)) return 0;
+        if (it.enL.indexOf(q) === 0 || zhHit(it.zhParts, q, 1)) return 1;
+        return 2;
+    }
+
+    /* 返回 { hits, mode }；mode ∈ empty | exact | exact+prefix | prefix | part | none */
+    function run(items, rawQ) {
+        var q = String(rawQ == null ? '' : rawQ).trim().toLowerCase();
+        if (!q) return { hits: [], mode: 'empty', q: '' };
+        var exact = [], prefix = [], part = [];
+        for (var i = 0; i < items.length; i++) {
+            var it = items[i];
+            var r = rankOf(it, q);
+            if (r === 0) exact.push(it);
+            else if (r === 1) prefix.push(it);
+            else if (it.enL.indexOf(q) >= 0 || it.zhL.indexOf(q) >= 0) part.push(it);
+        }
+        var hits, mode;
+        if (exact.length) {
+            hits = exact.concat(capWords(prefix, 5));
+            mode = prefix.length ? 'exact+prefix' : 'exact';
+        } else if (prefix.length) {
+            hits = capWords(prefix, 5);
+            mode = 'prefix';
+        } else if (part.length) {
+            hits = capWords(part, 5);
+            mode = 'part';
+        } else {
+            return { hits: [], mode: 'none', q: q };
+        }
+        for (var k = 0; k < hits.length; k++) {
+            hits[k].rank = rankOf(hits[k], q);
+            /* :key 要唯一：同一个词在同一关不会重复，但可能在不同关/不同册出现 */
+            hits[k].uid = hits[k].en + '#' + hits[k].bookId + '#' + hits[k].level;
+        }
+        return { hits: hits, mode: mode, q: q };
+    }
+
+    return { build: build, run: run, zhParts: zhParts };
+})();
+
 function wordMatchApp() {
     var DATA = window.__WORD_MATCH_DATA__ || { books: [], levels: {} };
     var PROGRESS_KEY = 'word_match_progress_v2';        // 练习模式进度
@@ -1563,7 +1997,11 @@ function wordMatchApp() {
 
        版本从 v1 升到 v2 的原因：2026-09-27 把四六级**关卡顺序**做了交错重排（同类最多连排 5 关）。
        那一改动**关数、词数都没变**，光看「册数-关数-词数」指纹不会变，但「第 N 关」指向的内容
-       已经全变了 —— 旧进度若保留，玩家会看到一堆自己没打过的关标着「已通关」，故必须升版本作废。 */
+       已经全变了 —— 旧进度若保留，玩家会看到一堆自己没打过的关标着「已通关」，故必须升版本作废。
+
+       版本从 v2 升到 v3 的原因：同日又把 35 个过粗的语义域细分成 98 个小分类（68 → 131 个域），
+       关数随之从 2199 变成 2203。这次数字指纹本来就会变，但仍显式升版本，一是与小程序端口径一致，
+       二是把「域体系换代」这件事在版本号上标出来。 */
     function dataSignature() {
         var books = (DATA.books || []).concat(DATA.extraBooks || []);
         var b = books.length, lv = 0, wd = 0;
@@ -1571,7 +2009,7 @@ function wordMatchApp() {
             lv += books[i].levelCount || 0;
             wd += books[i].wordCount || 0;
         }
-        return 'v2-' + b + '-' + lv + '-' + wd;
+        return 'v3-' + b + '-' + lv + '-' + wd;
     }
 
     try {
@@ -1588,6 +2026,15 @@ function wordMatchApp() {
     var BOOK_KEY = 'word_match_book_v1';
     var SOUND_KEY = 'word_match_sound_v1';
     var MAX_WRONG = 300;
+
+    /* 搜索索引缓存：键 = 「大学词库是否已载入 + 册清单」。换册或载完大学后键会变，
+       下次搜索自然重建（索引本身只读，不进 Alpine 响应式 —— 理由见 WM_SEARCH 上方说明）。 */
+    var searchIdx = { key: '', items: [] };
+    function searchIndexKey(books, cetLoaded) {
+        var k = cetLoaded ? 'c' : 'n';
+        for (var i = 0; i < books.length; i++) k += ':' + books[i].id;
+        return k;
+    }
 
     /* 自动学习节奏：每个小步骤间隔 1s，配对朗读后 2s 思考，过关节奏 4s，跨册跳转 5s。
        支持 ?wmStep=&wmThink=&wmGap=&wmBookGap= 覆盖（自动化测试用，可把整册压到几十秒跑完）。 */
@@ -1662,6 +2109,15 @@ function wordMatchApp() {
         /* 设置弹层（错题本 / 重做本关 / 朗读开关 / 重置进度 都收在这里） */
         settingsOpen: false,
 
+        /* 搜索单词：弹窗内的临时状态。词库索引本身在闭包里（见 searchIdx），不进响应式。
+           searchRan 用来区分「还没搜」与「搜了但没结果」—— 两者的空态文案不一样。 */
+        searchOpen: false,
+        searchQ: '',
+        searchHits: [],
+        searchHintText: '',
+        searchPending: false,
+        searchRan: false,
+
         /* 导出为单页 HTML：exportSel 是 { bookId: true } 的勾选表 */
         exportOpen: false,
         exportSel: {},
@@ -1708,6 +2164,9 @@ function wordMatchApp() {
                 if (e.key === 'Escape') {
                     if (self.bookPickerOpen) { self.bookPickerOpen = false; return; }
                     if (self.wrongOpen) { self.wrongOpen = false; return; }
+                    /* 搜索弹窗：焦点在输入框里时上面的 INPUT 判断会先 return，
+                       那一支由输入框自己的 @keydown.escape 兜住 */
+                    if (self.searchOpen) { self.searchOpen = false; return; }
                     if (self.autoMode) self.stopAuto();
                     return;
                 }
@@ -1811,7 +2270,7 @@ function wordMatchApp() {
         switchBook: function (bookId) { this.pickBook(bookId); },
 
         /* ==================== 大学词源（独立词源 · 按需加载） ====================
-           大学是另一套词表（2 册 / 2199 关 / 13159 条，gzip 约 225KB），不放进首屏那份
+           大学是另一套词表（2 册 / 2203 关 / 13159 条，gzip 约 225KB），不放进首屏那份
            同步 XHR 里 —— 塞进去白屏时间要翻两倍。首屏只带它的册元信息（extraBooks），
            关卡等真正选到大学时才拉 /learn/word-match/cet；拉完并进 allLevels 之后，
            它跟人教版那 24 册在数据上完全同构，后面所有逻辑都不用分叉。 */
@@ -1895,12 +2354,17 @@ function wordMatchApp() {
             this.buildSeq++;
             var seq = this.buildSeq;
             var enBase = [], zhBase = [];
+            /* 一组一色：pair 下标 → tint-N（N = 0..6，对应 CSS 里那 7 组调色板）。
+               一关最多 7 对（WordMatchBank.MAX_PAIRS），所以下标天然不重复，取模只是防御。
+               同一对的两张卡共用同一个 tint，配对后凭颜色就能认出「哪句英文配哪句中文」。 */
+            var TINT_COUNT = 7;
             for (var i = 0; i < n; i++) {
                 var p = lv.pairs[i];
+                var tint = i % TINT_COUNT;
                 /* mean = 对面的释义：判定只看释义，同一关里若两个词释义相同（同义表达关），
                    选哪个中文都算对——两张中文卡本来就长得一模一样，用户无从区分也不该被为难 */
-                enBase.push({ uid: 'L' + i + '#' + seq, side: 'L', key: p.key, text: p.en, mean: p.zh, done: false, wrong: false, ok: false });
-                zhBase.push({ uid: 'R' + i + '#' + seq, side: 'R', key: p.key, text: p.zh, mean: p.en, done: false, wrong: false, ok: false });
+                enBase.push({ uid: 'L' + i + '#' + seq, side: 'L', key: p.key, text: p.en, mean: p.zh, done: false, wrong: false, ok: false, tint: tint });
+                zhBase.push({ uid: 'R' + i + '#' + seq, side: 'R', key: p.key, text: p.zh, mean: p.en, done: false, wrong: false, ok: false, tint: tint });
             }
             var sig = this.bookId + '#' + this.levelIndex;
             var lastSig = this.lastLayout[sig] || '';
@@ -2423,6 +2887,117 @@ function wordMatchApp() {
             return out;
         },
 
+        /* ==================== 搜索单词 ==================== */
+        openSearch: function () {
+            this.searchOpen = true;
+            /* 大学 2 册（13159 条）占全库三分之二，要搜就得先把它热起来。
+               这里不 await：用户还在打字，真正等的地方在 runSearch。 */
+            if (!this.cetLoaded) this.ensureCet().catch(function () { /* 静默：搜的时候再报 */ });
+            /* 聚焦用 setTimeout 而不是 Alpine 的 $nextTick/$refs：本页此前没在方法里用过这两个
+               magic，不想让新功能多押一个没验证过的依赖。setTimeout 是宏任务，
+               一定排在 Alpine 刷新 DOM（微任务）之后，弹窗那时已经 display 出来了。 */
+            setTimeout(function () {
+                var el = document.getElementById('wm-search-input');
+                if (el) { try { el.focus(); el.select(); } catch (e) { /* 忽略 */ } }
+            }, 0);
+        },
+
+        closeSearch: function () { this.searchOpen = false; },
+
+        runSearch: function () {
+            var q = (this.searchQ || '').trim();
+            this.searchRan = true;
+            if (!q) {
+                this.searchHits = [];
+                this.searchHintText = '';
+                return;
+            }
+            var self = this;
+            /* 词库没载完就先等：否则搜不到大学那 13159 条，而那是全库的大头 */
+            if (!this.cetLoaded) {
+                this.searchPending = true;
+                this.searchHintText = '正在载入全部词库（含大学 2 册），稍等一下…';
+                this.ensureCet()
+                    .catch(function () { /* 载不到就按已经有的部分搜，不拦着用户 */ })
+                    .then(function () {
+                        self.searchPending = false;
+                        if (self.searchOpen) self.computeHits(q);
+                    });
+                return;
+            }
+            this.computeHits(q);
+        },
+
+        computeHits: function (q) {
+            var key = searchIndexKey(this.books, this.cetLoaded);
+            if (searchIdx.key !== key) {
+                searchIdx.key = key;
+                searchIdx.items = WM_SEARCH.build(this.books, this.allLevels);
+            }
+            var res = WM_SEARCH.run(searchIdx.items, q);
+            this.searchHits = res.hits;
+            /* 正常路径下 cetLoaded 一定是 true（runSearch 会等它）；只有大学词库载入失败
+               才会走到这里，那就把「本次没包含大学 2 册」说出来，免得用户以为词库里没有。 */
+            var missCet = this.cetLoaded ? '' : '（大学 2 册未载入，本次未包含）';
+            this.searchHintText = res.mode === 'empty' ? '' : (this.hintForMode(res.mode, res.hits) + missCet);
+        },
+
+        /* 匹配模式的说明文案。有个小坑：结果里一个**单词**可能对应多条（多册多关），
+           所以「N 条」和「N 个单词」不是一个数，两个都报出来，免得看起来像对不上。 */
+        hintForMode: function (mode, hits) {
+            if (mode === 'empty') return '';
+            var seen = {}, words = 0, exact = 0, other = 0;
+            for (var i = 0; i < hits.length; i++) {
+                if (hits[i].rank === 0) exact++; else other++;
+                if (!seen[hits[i].enL]) { seen[hits[i].enL] = 1; words++; }
+            }
+            var tail = '，共 ' + words + ' 个单词 / ' + hits.length + ' 条出处';
+            if (mode === 'exact') return '完全匹配 ' + exact + ' 条' + tail;
+            if (mode === 'exact+prefix') return '完全匹配 ' + exact + ' 条，其后是前缀匹配的 ' + other + ' 条' + tail;
+            if (mode === 'prefix') return '没有完全匹配；下面是前缀匹配的前 5 个单词（' + other + ' 条）' + tail;
+            if (mode === 'part') return '没有完全匹配、也没有前缀匹配；下面是含关键词的前 5 个单词（' + other + ' 条）' + tail;
+            return '';
+        },
+
+        /* 「查看」：跳到命中的那一册那一关。大学册的关卡是按需拉的，切过去前必须先载完，
+           否则定位到的是空棋盘。 */
+        gotoHit: function (h) {
+            var self = this;
+            this.searchOpen = false;
+            if (this.autoMode) this.stopAuto(true);
+            var go = function () {
+                if (h.level >= 0 && h.level < self.levels.length) {
+                    self.levelIndex = h.level;
+                    self.loadLevel();
+                }
+                if (typeof SC !== 'undefined' && SC.toast) {
+                    SC.toast.success('已定位到「' + self.srcText(h.bookId, h.bookLabel, h.level) + '」');
+                }
+            };
+            if (h.bookId !== this.bookId) {
+                this.applyBookWhenReady(h.bookId, false).then(go);
+            } else {
+                go();
+            }
+        },
+
+        get searchCountText() {
+            if (this.searchPending) return '载入词库…';
+            if (!this.searchRan) return this.books.length + ' 册词库';
+            var seen = {}, n = 0;
+            for (var i = 0; i < this.searchHits.length; i++) {
+                if (!seen[this.searchHits[i].enL]) { seen[this.searchHits[i].enL] = 1; n++; }
+            }
+            return n ? (n + ' 个单词 · ' + this.searchHits.length + ' 处') : '0 条';
+        },
+
+        get searchEmptyText() {
+            if (this.searchPending) return '正在载入全部词库…';
+            var q = (this.searchQ || '').trim();
+            if (!this.searchRan || !q) return '输入英文或中文，回车即可在全部词库里搜索';
+            return '没有找到「' + q + '」，换个拼写试试（也可以直接输入中文）';
+        },
+
         openWrongBook: function () { this.wrongOpen = true; },
 
         removeWrong: function (w) {
@@ -2528,7 +3103,10 @@ function wordMatchApp() {
                 'is-sel': !!this.sel && this.sel.uid === card.uid,
                 'is-done': card.done,
                 'is-ok': card.ok,          // 配对成功瞬间的闪绿（与 is-done 同时存在，靠 CSS 源码顺序胜出）
-                'is-wrong': card.wrong
+                'is-wrong': card.wrong,
+                /* 一组一色只在**配对之后**才上色（tint-N）。
+                   提前上色等于把答案写在脸上——未配对的卡片保持白底。 */
+                ['tint-' + card.tint]: card.done
             };
         },
 
@@ -2544,11 +3122,62 @@ function wordMatchApp() {
             return (src[bookId] || []).length;
         },
 
+        /* 练习 ∪ 自动学习 的已完成关卡下标（去重，保持练习在前）。
+           「学过」是两套进度的并集：只做过练习的关也算学过。 */
+        doneLevelIndexes: function (bookId) {
+            var out = [], seen = {};
+            var add = function (arr) {
+                for (var i = 0; i < arr.length; i++) {
+                    var idx = arr[i];
+                    if (idx == null || seen[idx]) continue;
+                    seen[idx] = 1;
+                    out.push(idx);
+                }
+            };
+            add(this.progress[bookId] || []);
+            add(this.autoProgress[bookId] || []);
+            return out;
+        },
+
+        /* 已学词汇数（该册）：已完成关卡里的单词**条目**数之和。
+           口径与 b.wordCount 一致 —— CET 词表不去重（同词在不同关重复出现），
+           按条目算才能和分母对得上；PEP 那 24 册册内本就不重复，两种口径等价。
+           成本：遍历该册已完成关卡，最坏 1257 关，getter 每次渲染重算也不到 1ms，
+           所以不做缓存 —— 缓存键要考虑进度集合变化，反而容易陈旧。 */
+        learnedWords: function (bookId) {
+            var lv = this.allLevels[bookId] || [];
+            var done = this.doneLevelIndexes(bookId);
+            if (!lv.length || !done.length) return 0;
+            var n = 0;
+            for (var i = 0; i < done.length; i++) {
+                var level = lv[done[i]];
+                if (level && level.pairs) n += level.pairs.length;
+            }
+            return n;
+        },
+
         findBookIndex: function (bookId) {
             for (var i = 0; i < this.books.length; i++) {
                 if (this.books[i].id === bookId) return i;
             }
             return -1;
+        },
+
+        /* ==================== 平铺列表里的「学段 · 册次」 ====================
+           高中那一档的册次名（必修1~5 / 选修6~11）跟小学初中的「X年级」不是一个编号体系，
+           单独一个「必修4」看不出学段，会被当成「4 年级」。所以**搜索结果 / 错题本 / 跳转提示**
+           这三处平铺列表统一带上学段前缀。册次弹层与导出弹层有自己的「小学 / 初中 / 高中」分组头，
+           不用重复，那里仍只显示册次名。 */
+        stageOfBook: function (bookId) {
+            var idx = this.findBookIndex(bookId);
+            return idx >= 0 ? (this.books[idx].stage || '') : '';
+        },
+
+        /* 出处行：「高中 · 必修4 · 第 12 关」。level 传的是下标（显示 +1）。
+           弱化容错：老错题本记录里没有 bookStage 字段也没关系，按 bookId 现查。 */
+        srcText: function (bookId, bookLabel, level) {
+            var st = this.stageOfBook(bookId);
+            return (st ? st + ' · ' : '') + (bookLabel || '') + ' · 第 ' + (level + 1) + ' 关';
         },
 
         shuffle: function (arr) {
@@ -2676,6 +3305,32 @@ function wordMatchApp() {
             var n = 0;
             for (var i = 0; i < this.books.length; i++) n += this.books[i].levelCount;
             return n;
+        },
+
+        /* 全库词汇条目总数 —— 已学词汇的分母，口径必须与 learnedWords() 一致 */
+        get totalWords() {
+            var n = 0;
+            for (var i = 0; i < this.books.length; i++) n += this.books[i].wordCount || 0;
+            return n;
+        },
+
+        /* 已学词汇汇总：册级 / 学段级 / 全库 + 百分比。
+           弹层里三个层级都要用，一次算完各取所需（册项统一走 learnedWords(b.id) 不必重复扫描）。 */
+        get learnedSummary() {
+            var books = {}, stages = {}, total = 0;
+            for (var i = 0; i < this.books.length; i++) {
+                var b = this.books[i];
+                var n = this.learnedWords(b.id);
+                var st = b.stage || '小学';
+                books[b.id] = n;
+                stages[st] = (stages[st] || 0) + n;
+                total += n;
+            }
+            var all = this.totalWords;
+            return {
+                books: books, stages: stages, total: total, totalWords: all,
+                pct: all ? Math.round(total * 1000 / all) / 10 : 0
+            };
         },
 
         /* ---------- 导出：勾选状态（勾选表用对象存，Alpine 才能追踪到变化） ---------- */

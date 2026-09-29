@@ -9,13 +9,16 @@
  *  S2 选中 / 取消选中
  *  S3 不匹配标红（保留先选中）+ 错题本自动记录与次数累计
  *  S4 匹配成功：两张卡一起闪绿（浅绿底 + 变绿文字/边框，wm-ok-blink 动画 .5s），
- *      约 .5s 后自动收回「已完成」的灰；配对逻辑（done/不可再选）不受动画影响
+ *      约 .5s 后自动收回「已完成 + 本组浅色」（tint-N）；配对逻辑（done/不可再选）不受动画影响
  *  S4b 闪绿的精确配色（用 ?wmOkFlash= 把「亮多久」拉长到 2.4s 再取样：
  *      常驻浅绿 = --wm-ok-bg，闪烁时压到 --wm-ok-hi，期望值从页面 CSS 变量取）
  *  S5 全部配对后自动进下一关 + 练习进度落盘
+ *  S5b 已配对卡片「一组一色」（tint-N）：同一对的中英文同一个 N、不同对不同 N；
+ *      底色/边框/文字都取自本组 CSS 变量；底色非白、冷色相（无红无黄）、对比度 ≥ 4.5:1；
+ *      悬停不被 hover 抹回中性线色（含自动学习模式那条高特异性规则）
  *  S6 册次弹出框（选择册次、旧下拉已移除）
  *  S6c 大学独立词源（首屏只带册元信息、关卡按需拉 /learn/word-match/cet；
- *      点「四级」真进一关，逐条核对 2199 关 / 13159 条 / 关内英文不重复 / 语义域主题）
+ *      点「四级」真进一关，逐条核对 2203 关 / 13159 条 / 关内英文不重复 / 细域主题（粒度 ≤150 条））
  *  S7 上一关 / 下一关 + 边界禁用
  *  S7b 本册最后一关：「下一关」变「下一册」+ 打完弹通关窗、点「继续看看」后仍能继续
  *  S8 错题本弹窗（列表 / 朗读 / 去练 / 删除 / 清空）
@@ -31,6 +34,11 @@
  *  S12 导出为单页 HTML（设置 → 导出：册次多选 / 全选与本学段全选、默认勾当前册；
  *      真实落盘后校验产物零资源外链（只放行「源码」那条导航链接）、只含被勾的册，
  *      再用 file:// 打开跑一遍配对）
+ *  S13 搜索单词（工具栏「设置」左边的「搜索」→ 弹窗：输入框 + 搜索按钮 + 右上角关闭键；
+ *      完全匹配排最前 / 前缀匹配接后且最多 5 个单词 / 两者都空才做部分匹配；大小写不敏感；
+ *      中文可反查；一个词的多处出处一起列出；出处行带学段前缀（「高中 · 必修4 · 第 12 关」——
+ *      高中的必修/选修系列不带年级，只写册名会被误读成「4 年级」）；
+ *      点【查看】跳到对应册次与关卡；点遮罩、按 Esc 都能关）
  *  S11 运行时错误采集
  *
  * 静音约定：脚本开头把 word_match_sound_v1 写成 0，整轮默认不发声；
@@ -38,12 +46,14 @@
  *          并且探针只是记录、不调用原生 speak()（否则本机 TTS 会整轮不停地念）。
  *
  * 用法：node check_word_match.mjs
- * 可选环境变量：WM_BASE（默认 http://localhost:1888）、WM_OUT（截图目录）、STORY_BROWSER_PATH
+ * 可选环境变量：WM_BASE（默认 http://localhost:1888）、WM_OUT（截图目录）、STORY_BROWSER_PATH、
+ *              WM_LOCAL=1（导航文档换成本地 HTML，改完静态页不必先打包重启就能跑全套断言）
  */
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const BASE = process.env.WM_BASE || 'http://localhost:1888';
 const PAGE = BASE + '/learn/word-match';
@@ -51,6 +61,13 @@ const CHROME = process.env.STORY_BROWSER_PATH
     || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = 9333;
 const OUT = process.env.WM_OUT || '/tmp/wm-shots';
+/* WM_LOCAL=1：把导航文档的响应换成本地 src/main/resources/static/pages/learn-word-match.html，
+   接口数据仍走真实后端 —— 静态页打进 jar，改完 HTML 不重启服务也能跑完整套断言。
+   只拦**文档**请求（resourceType === 'Document'）且路径严格等于 /learn/word-match；
+   /learn/word-match/cet 那种接口即使被 pattern 命中也会 continueRequest 放行。 */
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const WM_LOCAL = process.env.WM_LOCAL === '1';
+const LOCAL_HTML = path.join(ROOT, 'src/main/resources/static/pages/learn-word-match.html');
 
 const results = [];
 const check = (name, ok, extra = '') => {
@@ -235,6 +252,9 @@ async function board() {
                 done: el.classList.contains('is-done'),
                 ok: el.classList.contains('is-ok'),
                 wrong: el.classList.contains('is-wrong'),
+                /* 已配对卡片会带 tint-N（同一对的中英文同一个 N），未配对时必须是 null。
+                   正则里的 \b 必须写成 \\b：本串是外层模板字面量，单个 \b 会被吃成退格符 */
+                tint: (el.className.match(/\\btint-(\\d)\\b/) || [])[1] ?? null,
                 bg: cs.backgroundColor,
                 line: cs.borderTopColor,
                 color: cs.color,
@@ -342,6 +362,58 @@ async function waitCards() {
     const ok = await waitFor('卡片', async () =>
         (await evalJs(`document.querySelectorAll('.wm-card').length`)) > 0, 15000, 150);
     if (!ok) throw new Error('卡片未渲染，后续断言无法进行');
+}
+
+/* 搜索弹窗是否可见（x-show 只切 display，元素一直在 DOM 里） */
+async function searchVisible() {
+    return await evalJs(`(() => {
+        const m = document.getElementById('wm-search-modal');
+        if (!m) return false;
+        const back = m.closest('.wm-modal-backdrop');
+        return !!back && getComputedStyle(back).display !== 'none';
+    })()`);
+}
+
+/* 搜索状态一次抓两层：Alpine 数据层（rank / bookId / level）+ 真实 DOM 行（用户看到的那份）。
+   ⚠️ 数据层必须显式 map 出新对象：Alpine 的响应式 Proxy 直接 returnByValue 会序列化不出内容。 */
+async function searchState() {
+    return await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const txt = (el, sel) => { const e = el.querySelector(sel); return e ? e.innerText.trim() : ''; };
+        const dom = Array.from(document.querySelectorAll('.wm-search-item')).map(el => ({
+            en: txt(el, '.wm-search-en span'),
+            zh: txt(el, '.wm-search-zh'),
+            src: txt(el, '.wm-search-src').replace(/\\s+/g, ' '),
+            badge: (el.querySelector('.wm-search-badge:not(.is-prefix)') || {}).innerText || '',
+            act: txt(el, '.wm-search-acts button'),
+            exact: el.classList.contains('is-exact')
+        }));
+        const emptyEl = document.querySelector('.wm-search-empty');
+        const countEl = document.querySelector('#wm-search-modal .wm-count-total');
+        return {
+            q: d.searchQ, ran: d.searchRan, hint: d.searchHintText, pending: d.searchPending,
+            hits: d.searchHits.map(h => ({ en: h.en, zh: h.zh, rank: h.rank,
+                bookId: h.bookId, bookLabel: h.bookLabel, level: h.level, theme: h.theme })),
+            dom: dom,
+            empty: emptyEl ? emptyEl.innerText.trim() : '',
+            count: countEl ? countEl.innerText.trim() : ''
+        };
+    })()`);
+}
+
+/* 清空输入框再敲入。走 CDP 输入法而不是直接改 value —— 和真人打字同一条路径，
+   Alpine 的 x-model 本来也就是靠 input 事件同步的。 */
+async function typeSearch(q) {
+    await clickSel('#wm-search-input');
+    await evalJs(`(() => {
+        const el = document.getElementById('wm-search-input');
+        el.value = '';
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        return 1;
+    })()`);
+    await sleep(60);
+    await send('Input.insertText', { text: q });
+    await sleep(140);
 }
 
 const byText = (arr, text) => arr.find(c => c.text === text);
@@ -526,6 +598,29 @@ async function main() {
             m.error ? p.rej(new Error(JSON.stringify(m.error))) : p.res(m.result);
             return;
         }
+        if (m.method === 'Fetch.requestPaused') {
+            const { requestId, request } = m.params;
+            let isDoc = false;
+            try {
+                /* ⚠️ 别只认 request.resourceType === 'Document'：实测这台 Chrome 在
+                   requestStage:'Request' 时**不给 resourceType**（undefined），
+                   这么写会让判定恒为假、静默回落到线上旧页（踩过一次）。
+                   路径严格等于 /learn/word-match 已经够精确：
+                   /learn/word-match/data、/learn/word-match/cet 都不等于它。 */
+                isDoc = new URL(request.url).pathname === '/learn/word-match'
+                    && (!request.resourceType || request.resourceType === 'Document');
+            } catch (e) { /* 非法 URL：照常放行 */ }
+            if (WM_LOCAL && isDoc) {
+                send('Fetch.fulfillRequest', {
+                    requestId, responseCode: 200,
+                    responseHeaders: [{ name: 'Content-Type', value: 'text/html; charset=utf-8' }],
+                    body: Buffer.from(fs.readFileSync(LOCAL_HTML, 'utf8'), 'utf8').toString('base64')
+                });
+            } else {
+                send('Fetch.continueRequest', { requestId });
+            }
+            return;
+        }
         if (m.method === 'Runtime.exceptionThrown') {
             runtimeErrors.push(m.params.exceptionDetails.exception?.description
                 || m.params.exceptionDetails.text);
@@ -541,6 +636,13 @@ async function main() {
     await send('Runtime.enable');
     await send('Network.enable');
     await send('Log.enable');
+    if (WM_LOCAL) {
+        /* 只在 WM_LOCAL=1 时挂拦截（否则多一层 requestPaused 往返，纯属拖慢正常跑） */
+        await send('Fetch.enable', {
+            patterns: [{ urlPattern: PAGE + '*', requestStage: 'Request' }]
+        });
+        console.log(`— WM_LOCAL=1：导航文档改用本地 ${path.relative(ROOT, LOCAL_HTML)}（接口仍走后端）—`);
+    }
     await send('Emulation.setDeviceMetricsOverride', {
         width: 1280, height: 940, deviceScaleFactor: 1, mobile: false
     });
@@ -856,7 +958,7 @@ async function main() {
     const okEn = byText(b.en, first.text);
     const okZh = byText(b.zh, correctZh);
     /* 配对成功的反馈：两张卡一起变浅绿并闪两下（.wm-card.is-ok + wm-ok-blink），
-       约 .5s 后摘掉 is-ok，交给 .is-done 的灰。这里在闪的中途取样。
+       约 .5s 后摘掉 is-ok，交给 .is-done 的「本组浅色」（tint-N）。这里在闪的中途取样。
        注意：动画期间底色一直在两个绿之间插值，所以这里只断「绿系」，
        精确色号与「深一档」的验证放在 S4b（把闪绿拉长后取样，不受时机影响）。 */
     const chan = (s) => (String(s).match(/\d+/g) || []).map(Number);
@@ -882,8 +984,25 @@ async function main() {
     check('闪绿约 .5s 后自动摘掉 is-ok',
         !afterEn.ok && !byText(b.zh, correctZh).ok,
         `en.ok=${afterEn.ok} zh.ok=${byText(b.zh, correctZh).ok}`);
-    check('闪绿结束后收回「已完成」的中性灰（不再是绿）',
-        afterEn.bg === 'rgb(241, 243, 245)' && afterEn.done, `bg=${afterEn.bg} done=${afterEn.done}`);
+    /* 闪完落到「已完成 + 本组自己的浅色」（tint-N）。期望色号现读页面变量，不硬编码。
+       ⚠️ 判断「不再是闪绿」要拿 --wm-ok-bg 比，不能用「绿系」这种模糊判据 ——
+       tint-0 本身就是淡绿（#f2fff6），一句 greenish() 会把它误杀。 */
+    const wantTint = await evalJs(`(() => {
+        const el = Array.from(document.querySelectorAll('.wm-card'))
+            .find(e => e.classList.contains('is-done'));
+        const n = Number((el.className.match(/\\btint-(\\d)\\b/) || [])[1]);
+        const root = getComputedStyle(document.querySelector('.wm-root'));
+        const hex = (h) => { const v = parseInt(String(h).trim().replace('#',''), 16);
+            return 'rgb(' + ((v >> 16) & 255) + ', ' + ((v >> 8) & 255) + ', ' + (v & 255) + ')'; };
+        const g = (k) => hex(root.getPropertyValue('--wm-tint-' + n + '-' + k));
+        return { n: n, bg: g('bg'), line: g('line'), ink: g('ink'),
+                 okBg: hex(root.getPropertyValue('--wm-ok-bg')) };
+    })()`);
+    check('闪绿结束后落到「已完成 + 本组浅色」（不再是闪绿、也不是旧的中性灰）',
+        afterEn.done && afterEn.tint !== null
+        && afterEn.bg !== wantTint.okBg && afterEn.bg !== 'rgb(241, 243, 245)'
+        && afterEn.bg === wantTint.bg && afterEn.line === wantTint.line && afterEn.color === wantTint.ink,
+        `tint=${afterEn.tint} bg=${afterEn.bg}/${wantTint.bg} okBg=${wantTint.okBg}`);
     check('英文先选中：朗读发生在点英文时',
         !canSpeak || (spEn.length === 1 && spEn[0] === first.text), `spoken=${JSON.stringify(spEn)}`);
     check('点中文完成配对时不重复朗读同一个词',
@@ -956,7 +1075,20 @@ async function main() {
 
     /* ---------- S5. 全部配对 -> 自动进下一关 ---------- */
     console.log('\n— S5 全部配对 / 练习进度 —');
+    /* ⚠️ S4b 那一页带着 ?wmOkFlash=2400（闪绿拉长到 2.4s），而 S5 要读「闪绿结束后」的稳定色。
+       这里按默认参数重新进一次页面（此时进度还没落盘，仍是第一关的干净状态）。 */
+    await send('Page.navigate', { url: PAGE });
+    await waitCards();
+    await sleep(300);
+    /* 刻意**留一对不配**，等 S5b 检查完再补上。原因：最后一对配完的那一刻，
+       .is-ok 闪绿会持续 .5s（把 tint 让位给绿），completeLevel() 又只等 950ms 就跳关 ——
+       留给取样 + 悬停检查的窗口只有 400ms 左右，机器一慢就抖。
+       留一对之后 S5b 的窗口是无限的（无闪绿、无定时器），最后再补配顺带覆盖「最后一对也成组」。 */
+    b = await board();
+    const deferredPair = lv.pairs.find(p => { const c = byText(b.en, p.en); return c && !c.done; })
+        || lv.pairs[lv.pairs.length - 1];
     for (const p of lv.pairs) {
+        if (p === deferredPair) continue;
         b = await board();
         if (byText(b.en, p.en).done) continue;
         await clickAt(byText(b.en, p.en).x, byText(b.en, p.en).y);
@@ -965,6 +1097,187 @@ async function main() {
         await clickAt(byText(b.zh, p.zh).x, byText(b.zh, p.zh).y);
         await sleep(220);
     }
+    await sleep(600);                 // 跨过最后一次闪绿（.5s），读稳定态
+
+    /* ---------- S5b. 已配对卡片「一组一色」 ----------
+       回顾整关时要能一眼认出「哪句英文配哪句中文」，所以同一对的两张卡（左英文 / 右中文）
+       必须带同一个 tint-N，不同对必须是不同的 N；底色一律是冷色浅底（不许白、不许红黄），
+       文字/底色对比度要达 WCAG AA。
+       ⚠️ 这一块必须赶在 completeLevel() 那个 950ms 定时器跳关之前读完（上面最后一步只睡了 220ms）。 */
+    console.log('\n— S5b 已配对「一组一色」 —');
+    {
+        const tint = await evalJs(`(() => {
+            const hex = (h) => { const v = parseInt(String(h).trim().replace('#',''), 16);
+                return 'rgb(' + ((v >> 16) & 255) + ', ' + ((v >> 8) & 255) + ', ' + (v & 255) + ')'; };
+            const root = getComputedStyle(document.querySelector('.wm-root'));
+            const pal = [];
+            for (let i = 0; i < 7; i++) {
+                const g = (k) => hex(root.getPropertyValue('--wm-tint-' + i + '-' + k));
+                pal.push({ bg: g('bg'), line: g('line'), ink: g('ink') });
+            }
+            const cards = Array.from(document.querySelectorAll('.wm-card')).map(el => {
+                const cs = getComputedStyle(el);
+                const m = (el.className.match(/\\btint-(\\d)\\b/) || [])[1];
+                return {
+                    text: el.innerText.trim(),
+                    side: el.closest('.wm-col').classList.contains('wm-col-en') ? 'en' : 'zh',
+                    done: el.classList.contains('is-done'),
+                    tint: m === undefined ? null : Number(m),
+                    bg: cs.backgroundColor, line: cs.borderTopColor, color: cs.color
+                };
+            });
+            return { pal, cards, boardBg: getComputedStyle(document.querySelector('.wm-board')).backgroundColor };
+        })()`);
+        const chan = (s) => (String(s).match(/\d+/g) || []).map(Number);
+        const relLum = (c) => { const f = (v) => { v /= 255;
+            return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+            return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+        const contrast = (a, b) => { const la = relLum(a), lb = relLum(b);
+            return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); };
+        const hueOf = (c) => { const r = c[0] / 255, g = c[1] / 255, b = c[2] / 255;
+            const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+            if (!d) return 0;
+            let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+            h *= 60; return h < 0 ? h + 360 : h; };
+        const maxDiff = (a, b) => Math.max(...[0, 1, 2].map(k => Math.abs(a[k] - b[k])));
+
+        const done = tint.cards.filter(c => c.done);
+        const undone = tint.cards.filter(c => !c.done);
+
+        check('S5b 调色板 7 组齐全（底色 / 边框 / 文字都能从页面变量读到）',
+            tint.pal.length === 7 && tint.pal.every(p =>
+                p.bg && p.line && p.ink && !p.bg.includes('NaN') && !p.bg.includes('undefined')),
+            tint.pal.map(p => p.bg).join(' '));
+        check('S5b 7 组调色板全是冷色相（115°~300°：没有红、没有黄）',
+            tint.pal.every(p => { const h = hueOf(chan(p.bg)); return h >= 115 && h <= 300; }),
+            tint.pal.map(p => hueOf(chan(p.bg)).toFixed(0)).join('/'));
+        check('S5b 每组「文字 / 底色」对比度都 ≥ 4.5:1（WCAG AA，回顾时看得清）',
+            tint.pal.every(p => contrast(chan(p.bg), chan(p.ink)) >= 4.5),
+            tint.pal.map(p => contrast(chan(p.bg), chan(p.ink)).toFixed(2)).join('/'));
+        let minBg = 999, minLine = 999;
+        for (let i = 0; i < 7; i++) for (let j = i + 1; j < 7; j++) {
+            minBg = Math.min(minBg, maxDiff(chan(tint.pal[i].bg), chan(tint.pal[j].bg)));
+            minLine = Math.min(minLine, maxDiff(chan(tint.pal[i].line), chan(tint.pal[j].line)));
+        }
+        /* 底色只留 1/3 深度（每通道 ≥ 240）之后，它在物理上做不到「7 组两两可辨」——
+           相邻 ΔE 只有 1.8~2.6。所以这里不再要求底色两两可辨，认组全部交给 1.5px 边框。 */
+        check('S5b 7 组边框两两可辨（最大通道差 ≥ 8）—— 底色变浅后全靠它',
+            minLine >= 8, `边框 MinDiff=${minLine}  底色（仅供参考，已不再要求）=${minBg}`);
+        check('S5b 已配对的每张卡都带 tint-N', done.length > 0 && done.every(c => c.tint !== null),
+            done.map(c => `${c.text}:${c.tint}`).join(' | '));
+        check('S5b 未配对的卡片不带 tint-N（颜色不能提前泄题）',
+            undone.every(c => c.tint === null), `未配对 ${undone.length} 张`);
+
+        /* 核心不变量：按 tint 分组，每组必须恰好「1 张英文 + 1 张中文」，且这两张互为一对。
+           用分组而不是按文案找卡，是为了兼容「同义关」——那里两张中文卡文案一模一样。 */
+        const byTint = new Map();
+        done.forEach(c => { if (!byTint.has(c.tint)) byTint.set(c.tint, []); byTint.get(c.tint).push(c); });
+        const pairsOfEn = new Map(lv.pairs.map(p => [p.en, p.zh]));
+        const groups = [...byTint.entries()].sort((a, b) => a[0] - b[0]);
+        check('S5b 已配对的卡全部成组（每组恰好 2 张），没配的那对是唯一没上色的',
+            done.length > 0 && byTint.size * 2 === done.length
+            && groups.every(([, g]) => g.length === 2) && undone.length <= 2,
+            `已配对 ${done.length} 张 / ${byTint.size} 组 / 未配对 ${undone.length} 张`);
+        check('S5b 每个 tint 组 = 左英文 + 右中文，且两者确实是同一对',
+            groups.every(([, g]) => {
+                const e = g.find(c => c.side === 'en'), z = g.find(c => c.side === 'zh');
+                return !!e && !!z && pairsOfEn.get(e.text) === z.text;
+            }),
+            groups.map(([t, g]) => t + ':' + g.map(c => c.side + '=' + c.text).join('+')).join(' | '));
+        check('S5b 本关内 tint 不重复（一个 tint 最多 2 张卡）',
+            byTint.size === done.length / 2, `去重后 ${byTint.size} 个 / ${done.length / 2} 对`);
+        check('S5b 底色 / 边框 / 文字都取自本组那套变量（不硬编码色号）',
+            done.every(c => c.bg === tint.pal[c.tint].bg && c.line === tint.pal[c.tint].line
+                && c.color === tint.pal[c.tint].ink),
+            done.slice(0, 2).map(c => `${c.tint}: ${c.bg} / ${c.line}`).join('  |  '));
+        check('S5b 底色既不是纯白、也不是棋盘底色',
+            done.every(c => c.bg !== 'rgb(255, 255, 255)' && c.bg !== tint.boardBg),
+            `棋盘=${tint.boardBg} 卡片=${done[0] && done[0].bg}`);
+        check('S5b 底色极浅（每通道 ≥ 240：只留 1/3 深度）但又确实不是纯白',
+            done.every(c => chan(c.bg).every(v => v >= 240) && chan(c.bg).some(v => v <= 248)),
+            done.map(c => c.bg).join(' '));
+
+        /* 悬停在已配对卡片上：边框与底色不能被 hover 的中性线色抢走。
+           （两条 hover 规则都要 :not(.is-done)：普通态那条 + 自动学习态那条，
+             后者特异性 5 比 .wm-card.tint-N:not(.is-ok) 的 3 高，漏了就会把颜色抹掉）
+           用 CSS.forcePseudoState 造 :hover —— 无头里 mouseMoved 不一定带出 :hover（踩过）。 */
+        await send('DOM.enable');
+        await send('CSS.enable');
+        const docRoot = await send('DOM.getDocument', { depth: -1 });
+        const hq = await send('DOM.querySelector',
+            { nodeId: docRoot.root.nodeId, selector: '.wm-card.is-done' });
+        await send('CSS.forcePseudoState', { nodeId: hq.nodeId, forcedPseudoClasses: ['hover'] });
+        await sleep(200);
+        const hovered = await evalJs(`(() => {
+            const el = document.querySelector('.wm-card.is-done');
+            if (!el) return null;
+            const cs = getComputedStyle(el);
+            return { line: cs.borderTopColor, bg: cs.backgroundColor,
+                     tint: Number((el.className.match(/\\btint-(\\d)\\b/) || [])[1]) };
+        })()`);
+        check('S5b 悬停已配对卡片：边框与底色仍是本组颜色（不被 hover 抹回中性灰）',
+            !!hovered && Number.isFinite(hovered.tint)
+            && hovered.line === tint.pal[hovered.tint].line
+            && hovered.bg === tint.pal[hovered.tint].bg,
+            JSON.stringify(hovered) + '  期望=' + JSON.stringify(hovered && tint.pal[hovered.tint]));
+        await send('CSS.forcePseudoState', { nodeId: hq.nodeId, forcedPseudoClasses: [] });
+        const leaky = await evalJs(`(() => {
+            for (const ss of document.styleSheets) {
+                let rules; try { rules = ss.cssRules; } catch (e) { continue; }
+                for (const r of rules) {
+                    if (r.selectorText && r.selectorText.indexOf('.wm-board.is-auto') === 0
+                        && r.selectorText.includes(':hover') && r.style.borderColor
+                        && !r.selectorText.includes(':not(.is-done)')) return r.selectorText;
+                }
+            }
+            return null;
+        })()`);
+        check('S5b 自动学习模式的 hover 规则排除了已配对卡片（否则 tint 边框会被抹掉）',
+            leaky === null, `漏网规则: ${leaky}`);
+
+        /* 补配留下的那一对：验证「最后配上的那对」也照同一套规则上色 */
+        b = await board();
+        const dEn = byText(b.en, deferredPair.en);
+        await clickAt(dEn.x, dEn.y);
+        await sleep(90);
+        b = await board();
+        const dZh = byText(b.zh, deferredPair.zh);
+        await clickAt(dZh.x, dZh.y);
+        await sleep(620);                     // 跨过 .5s 闪绿；跳关定时器 950ms 才到，来得及读
+        const last = await evalJs(`(() => {
+            /* ⚠️ 底色会「跳变」（上一个动画撤走时不算过渡），边框却老老实实走 .16s 过渡 ——
+               闪绿刚结束就来读，边框会读到插值色（实测 156,218,175 vs 目标 161,219,178）。
+               这里临时 transition:none + 强制重排，把边框一次落到目标值再取样，读完恢复。
+               （与 S4b「先暂停动画再 seek」同类的取样技巧，不改页面代码。） */
+            const cards = Array.from(document.querySelectorAll('.wm-card.is-done'));
+            const hold = cards.map(el => { const t = el.style.transition; el.style.transition = 'none'; return t; });
+            void document.body.offsetWidth;
+            const g = (el) => {
+                const cs = getComputedStyle(el);
+                const m = (el.className.match(/\\btint-(\\d)\\b/) || [])[1];
+                return { tint: m === undefined ? null : Number(m),
+                         bg: cs.backgroundColor, line: cs.borderTopColor };
+            };
+            const en = cards.find(c => c.innerText.trim() === ${JSON.stringify(deferredPair.en)});
+            const zh = cards.find(c => c.innerText.trim() === ${JSON.stringify(deferredPair.zh)});
+            const out = { en: en ? g(en) : null, zh: zh ? g(zh) : null,
+                          doneCount: cards.length,
+                          total: document.querySelectorAll('.wm-card').length };
+            cards.forEach((el, i) => { el.style.transition = hold[i]; });
+            return out;
+        })()`);
+        const usedTints = groups.map(([t]) => t);
+        check('S5b 最后配上的那一对同样成组（同一 tint、与前面各对不同、取自本组变量）',
+            !!last.en && !!last.zh && last.en.tint !== null && last.en.tint === last.zh.tint
+            && usedTints.indexOf(last.en.tint) < 0
+            && last.en.bg === tint.pal[last.en.tint].bg
+            && last.zh.line === tint.pal[last.zh.tint].line,
+            `${JSON.stringify(last)}  已用 tint=${usedTints.join(',')}`);
+        check('S5b 整关配完后每张卡都上了色（无遗漏）',
+            last.doneCount === last.total, `${last.doneCount} / ${last.total}`);
+        await shot('05b-desktop-tinted-review');
+    }
+
     await sleep(1500);
     b = await board();
     check('全部配对后自动进入下一关', b.counter.startsWith('2/'), `counter=${b.counter}`);
@@ -1010,7 +1323,9 @@ async function main() {
     check('大学分组标题是「大学 · 2 册 · 13159 词」',
         picker && /大学/.test(picker.groups[3] || '') && /2 册 · 13159 词/.test(picker.groups[3] || ''),
         picker ? picker.groups[3] : '');
-    /* 学段标题展示的是「N 册 · M 词」而不是关卡数：词汇量是用户关心的量级。
+    /* 学段标题展示的是「N 册 · M 词（已学 K）」而不是关卡数：词汇量是用户关心的量级。
+       注意两处前缀/后缀：① 含当前册的那个学段前面会挂一枚「当前册名 · 」标记；
+       ② 末尾追加「（已学 K）」。所以下面用 /(\d+) 册 · (\d+) 词/ 取数，
        期望值从页面数据算出来比硬编码稳（词库扩容后不会烂）。 */
     const pickerWords = await evalJs(`(() => {
         const d = Alpine.$data(document.querySelector('.wm-root'));
@@ -1024,13 +1339,13 @@ async function main() {
         });
         return { heads, stages, total: d.books.reduce((a, b) => a + b.wordCount, 0) };
     })()`);
-    check('学段标题是「N 册 · M 词」（词汇量优先），不再显示关卡数',
+    check('学段标题是「N 册 · M 词（已学 K）」（词汇量优先），不显示关卡数',
         pickerWords.heads.length === 4
-        && pickerWords.heads.every(h => /(\d+) 册 · (\d+) 词$/.test(h) && !/关/.test(h)),
+        && pickerWords.heads.every(h => /(\d+) 册 · (\d+) 词（已学 \d+）$/.test(h) && !/关/.test(h)),
         pickerWords.heads.join(' | '));
     check('每个学段的册数与词汇量 = 该学段各册之和（小学 8 / 初中 5 / 高中 11 / 大学 2）',
         ['小学', '初中', '高中', '大学'].every((s, i) => {
-            const m = (pickerWords.heads[i] || '').match(/(\d+) 册 · (\d+) 词$/);
+            const m = (pickerWords.heads[i] || '').match(/(\d+) 册 · (\d+) 词/);
             const e = pickerWords.stages[s];
             return !!m && !!e && +m[1] === e.books && +m[2] === e.words;
         }) && pickerWords.total >= 20000,
@@ -1152,19 +1467,26 @@ async function main() {
         && boot.extraBooks.every(x => x.stage === '大学'),
         `books=${boot.books.length} extra=${(boot.extraBooks || []).length}`
         + ` hasCetLevels=${!!boot.levels['cet-4']}`);
-    const CET_DOMAINS = ['人物与身份','家庭与亲属','身体与健康','饮食与食物','服饰与打扮','居住与建筑','交通与出行','购物与消费','娱乐与休闲','日常用品与工具','动物与植物','自然与天气','物质与材料','空间与方位','事物与部件','组织与机构','政治与政府','法律与司法','军事与战争','经济与金融','商业与贸易','工作与职业','教育与学习','科学技术','计算机与信息','媒体与传播','文学与写作','艺术与绘画','音乐与表演','影视与娱乐','体育与运动','宗教与信仰','节日与习俗','历史与考古','情绪与感受','性格与品质','态度与意愿','思考与观点','认知与理解','记忆与注意','语言与交流','数量与度量','时间与频率','性质与特征','状态与情况','变化与发展','增长与减少','因果与逻辑','方法与手段','计划与安排','重要性','优劣评价','正确与错误','关系与异同','程度与强度','移动与位移','操作与处理','获取与给予','建立与破坏','保护与维持','帮助与合作','竞争与冲突','控制与影响','交往与联系','功能词','专有名词','短语与搭配','特殊类别'];
+    /* 域清单不写死在脚本里：直接读源清单同目录的细域树，免得两处各抄一遍然后漂掉。
+       （68 个粗域里有 35 个已按语义细分成 98 个小分类，共 131 个细域。） */
+    const CET_TREE = fs.readFileSync(
+        new URL('../src/test/resources/learn/cet-words-source/cet-domain-tree.tsv', import.meta.url), 'utf8');
+    const CET_DOMAINS = CET_TREE.split('\n').filter(l => l.trim()).map(l => l.split('\t')[1]);
+    check('S6c 细域树可读、域数上百（大域已细分）',
+        CET_DOMAINS.length >= 120 && new Set(CET_DOMAINS).size === CET_DOMAINS.length,
+        `${CET_DOMAINS.length} 个细域`);
     const cetBaseTheme = (t) => String(t || '').split(' · ')[0];
 
-    check('S6c 大学元信息：四级 7508 词 / 1255 关、六级 5651 词 / 944 关',
+    check('S6c 大学元信息：四级 7508 词 / 1257 关、六级 5651 词 / 946 关',
         boot.extraBooks[0].id === 'cet-4' && boot.extraBooks[0].wordCount === 7508
-        && boot.extraBooks[0].levelCount === 1255 && boot.extraBooks[1].id === 'cet-6'
-        && boot.extraBooks[1].wordCount === 5651 && boot.extraBooks[1].levelCount === 944,
+        && boot.extraBooks[0].levelCount === 1257 && boot.extraBooks[1].id === 'cet-6'
+        && boot.extraBooks[1].wordCount === 5651 && boot.extraBooks[1].levelCount === 946,
         boot.extraBooks.map(x => `${x.id}:${x.wordCount}词/${x.levelCount}关`).join(' | '));
 
     const cet = JSON.parse(await (await fetch(BASE + '/learn/word-match/cet')).text());
     check('S6c /learn/word-match/cet 结构与首屏一致（books + levels），前端无差别合并',
-        cet.books.length === 2 && cet.levels['cet-4'].length === 1255
-        && cet.levels['cet-6'].length === 944 && cet.books.every(x => x.stage === '大学'),
+        cet.books.length === 2 && cet.levels['cet-4'].length === 1257
+        && cet.levels['cet-6'].length === 946 && cet.books.every(x => x.stage === '大学'),
         cet.books.map(x => x.id).join(','));
     const cetLevels = (cet.levels['cet-4'] || []).concat(cet.levels['cet-6'] || []);
     const cetWords = cetLevels.reduce((a, l) => a + l.pairs.length, 0);
@@ -1173,12 +1495,32 @@ async function main() {
         const s = new Set(l.pairs.map(p => p.en.toLowerCase()));
         if (s.size !== l.pairs.length) cetDupLevels++;
     });
-    check('S6c 大学合计 2199 关 / 13159 条（不去重：原表每条都在，同一个词的多条也都在）',
-        cetWords === 13159 && cetLevels.length === 2199, `words=${cetWords} levels=${cetLevels.length}`);
+    check('S6c 大学合计 2203 关 / 13159 条（不去重：原表每条都在，同一个词的多条也都在）',
+        cetWords === 13159 && cetLevels.length === 2203, `words=${cetWords} levels=${cetLevels.length}`);
     check('S6c 每关 3~7 对、且关内英文不重复',
         cetLevels.every(l => l.pairs.length >= 3 && l.pairs.length <= 7) && cetDupLevels === 0,
         `dupLevels=${cetDupLevels}`);
-    check('S6c 主题只由 68 个语义域而来（同一域多关时带「 · N」后缀）',
+    /* 粒度回归：细分前「性质与特征」一个域就装了 818 条（四级 84 关全是形容词），
+       同一关的词彼此无关。这里按主题聚合词条数，超过 150 就说明粒度又变粗了。
+       ⚠️ 必须**按册**聚合：四级和六级各自 ≤150，但同一个细域在两册里都有词，
+       合起来算会假报警（实测「职业与从业者」四级+六级 = 175，各自其实都没超）。 */
+    const cetDomainWords = new Map();          // 四级那一本（域数用它衡量）
+    const cetDomainByBook = { 'cet-4': cetDomainWords, 'cet-6': new Map() };
+    ['cet-4', 'cet-6'].forEach(id => {
+        const m = cetDomainByBook[id];
+        (cet.levels[id] || []).forEach(l => {
+            const base = cetBaseTheme(l.theme);
+            m.set(base, (m.get(base) || 0) + l.pairs.length);
+        });
+    });
+    const cetCoarse = [];
+    ['cet-4', 'cet-6'].forEach(id => cetDomainByBook[id].forEach((n, d) => {
+        if (n > 150) cetCoarse.push([id + ' ' + d, n]);
+    }));
+    check('S6c 每个细域在**单册内**不超过 150 条词（细分前最粗的域 818 条，现降到 149）',
+        cetCoarse.length === 0 && cetDomainWords.size >= 110 && cetDomainByBook['cet-6'].size >= 100,
+        `四级域数=${cetDomainWords.size} 六级域数=${cetDomainByBook['cet-6'].size} 超限=${JSON.stringify(cetCoarse.slice(0, 3))}`);
+    check('S6c 主题只由细域树里登记的域而来（同一域多关时带「 · N」后缀）',
         cetLevels.every(l => CET_DOMAINS.indexOf(cetBaseTheme(l.theme)) >= 0),
         Array.from(new Set(cetLevels.map(l => cetBaseTheme(l.theme)))).join('/'));
 
@@ -1198,9 +1540,11 @@ async function main() {
     check('S6c 册次弹层新增「大学」分组，含四级 / 六级两册',
         !!cetGroup && cetGroup.head === '大学' && cetGroup.labels.join(',') === '四级,六级',
         cetGroup ? cetGroup.labels.join(',') : 'null');
-    check('S6c 大学册卡片显示词数与关数（四级 7508 词 · 1255 关 / 六级 5651 词 · 944 关）',
-        !!cetGroup && /7508 词 · 1255 关/.test(cetGroup.metas[0])
-        && /5651 词 · 944 关/.test(cetGroup.metas[1]),
+    /* 卡片文案现在是「7508 词（已学 0） · 1257 关」——中间插了已学词汇的括号，
+       所以别写死成「7508 词 · 1257 关」（上一轮加「已学词汇」时这里漏改了）。 */
+    check('S6c 大学册卡片显示词数（含已学）与关数（四级 7508 词 · 1257 关 / 六级 5651 词 · 946 关）',
+        !!cetGroup && /7508 词（已学 \d+） · 1257 关/.test(cetGroup.metas[0])
+        && /5651 词（已学 \d+） · 946 关/.test(cetGroup.metas[1]),
         cetGroup ? cetGroup.metas.join(' | ') : 'null');
     await shot('08c-desktop-book-picker-cet');
 
@@ -1216,8 +1560,8 @@ async function main() {
                  theme: d.currentLevel ? d.currentLevel.theme : '',
                  pairs: d.currentLevel ? d.currentLevel.pairs.length : 0 };
     })()`);
-    check('S6c 四级册：1255 关、本关主题是语义域、棋盘按关卡渲染',
-        cetState.loaded === true && cetState.id === 'cet-4' && cetState.levels === 1255
+    check('S6c 四级册：1257 关、本关主题是细域、棋盘按关卡渲染',
+        cetState.loaded === true && cetState.id === 'cet-4' && cetState.levels === 1257
         && CET_DOMAINS.indexOf(cetBaseTheme(cetState.theme)) >= 0
         && cetState.pairs >= 3 && cetState.pairs <= 7 && b.en.length === cetState.pairs,
         JSON.stringify(cetState));
@@ -2041,7 +2385,7 @@ async function main() {
                  count: d.exportSelCount, first: d.exportSelList[0],
                  all: d.exportAllSelected, part: d.exportPartSelected,
                  sum: document.querySelector('.wm-export-sum').textContent.trim(),
-                 head: document.querySelector('#wm-export-modal .wm-wrong-total').textContent.trim() };
+                 head: document.querySelector('#wm-export-modal .wm-count-total').textContent.trim() };
     })()`);
     check('S12 弹窗打开：26 册全列出、分四个学段',
         dlg.open && dlg.flag && dlg.items === 26 && dlg.stages === 4,
@@ -2061,8 +2405,8 @@ async function main() {
     check('S12 全选：26 册全勾上、文案翻成「取消全选」',
         allSel.n === 26 && allSel.all === true && allSel.label === '取消全选',
         `n=${allSel.n} label=${allSel.label}`);
-    check('S12 全选后汇总 = 26 册 / 3448 关 / 20191 词（含大学 2 册 / 2199 关 / 13159 词）',
-        /已选 26 册/.test(allSel.sum) && /3448 关/.test(allSel.sum) && /20191 词/.test(allSel.sum),
+    check('S12 全选后汇总 = 26 册 / 3452 关 / 20191 词（含大学 2 册 / 2203 关 / 13159 词）',
+        /已选 26 册/.test(allSel.sum) && /3452 关/.test(allSel.sum) && /20191 词/.test(allSel.sum),
         allSel.sum);
     await shot('24-export-dialog-all');
 
@@ -2301,6 +2645,295 @@ async function main() {
 
     check('S12 打开产物没有新增未捕获错误',
         runtimeErrors.length === errBefore, runtimeErrors.slice(errBefore).join(' | '));
+
+    /* ---------- S13. 搜索单词（工具栏「搜索」→ 弹窗 → 查看跳转） ---------- */
+    console.log('\n— S13 搜索单词 —');
+    /* S12 最后停在 file:// 的导出件上，这里回线上页重新开始 */
+    await send('Page.navigate', { url: PAGE });
+    await waitCards();
+    await sleep(320);
+
+    const sBtn = await evalJs(`(() => {
+        const btn = document.querySelector('.wm-search-btn');
+        const set = document.querySelector('.wm-set-btn');
+        if (!btn || !set) return null;
+        const rb = btn.getBoundingClientRect(), rs = set.getBoundingClientRect();
+        return { left: Math.round(rb.left), setLeft: Math.round(rs.left),
+                 sameRow: Math.abs(rb.top - rs.top) <= 2,
+                 icon: !!btn.querySelector('i.bi-search'),
+                 text: btn.innerText.trim(),
+                 domFirst: !!(btn.compareDocumentPosition(set) & Node.DOCUMENT_POSITION_FOLLOWING),
+                 haspopup: btn.getAttribute('aria-haspopup'),
+                 expanded: btn.getAttribute('aria-expanded'),
+                 h: Math.round(rb.height) };
+    })()`);
+    check('S13 工具栏「搜索」按钮就在「设置」左边（同一行、DOM 顺序在前、left 更小）',
+        !!sBtn && sBtn.sameRow && sBtn.domFirst && sBtn.left < sBtn.setLeft,
+        sBtn ? `search.left=${sBtn.left} set.left=${sBtn.setLeft} sameRow=${sBtn.sameRow} domFirst=${sBtn.domFirst}` : 'null');
+    check('S13 搜索按钮带放大镜图标 + 文字「搜索」，高度够点',
+        !!sBtn && sBtn.icon && /搜索/.test(sBtn.text) && sBtn.h >= 28,
+        sBtn ? `text=${sBtn.text} h=${sBtn.h}` : 'null');
+    check('S13 搜索按钮带 aria 状态（可访问）',
+        !!sBtn && sBtn.haspopup === 'true' && sBtn.expanded === 'false',
+        sBtn ? `haspopup=${sBtn.haspopup} expanded=${sBtn.expanded}` : 'null');
+    check('S13 初始状态下搜索弹窗是收起的', !(await searchVisible()));
+
+    await clickSel('.wm-search-btn');
+    await sleep(300);
+    const sBox = await evalJs(`(() => {
+        const m = document.getElementById('wm-search-modal');
+        if (!m) return null;
+        const r = m.getBoundingClientRect();
+        const close = m.querySelector('.wm-modal-close');
+        const cr = close ? close.getBoundingClientRect() : null;
+        const inp = document.getElementById('wm-search-input');
+        const go = document.getElementById('wm-search-go');
+        const emptyEl = m.querySelector('.wm-search-empty');
+        return {
+            expanded: document.querySelector('.wm-search-btn').getAttribute('aria-expanded'),
+            focused: document.activeElement === inp,
+            hasInput: !!inp, hasGo: !!go,
+            goText: go ? go.innerText.trim() : '',
+            placeholder: inp ? (inp.getAttribute('placeholder') || '') : '',
+            closeIcon: !!close && !!close.querySelector('i.bi-x-lg'),
+            closeTop: cr ? Math.round(cr.top - r.top) : -1,
+            closeRight: cr ? Math.round(r.right - cr.right) : -1,
+            empty: emptyEl ? emptyEl.innerText.trim() : '',
+            left: Math.round(r.left), right: Math.round(r.right), vw: window.innerWidth,
+            inputAbove: (() => {
+                if (!inp || !go) return false;
+                const ri = inp.getBoundingClientRect(), rg = go.getBoundingClientRect();
+                return Math.abs(ri.top - rg.top) <= 2 && ri.left < rg.left;
+            })(),
+            /* 「搜索」两个字曾经被输入框挤成竖排两行 —— 按钮必须 nowrap 且不被压缩 */
+            goNoWrap: (() => {
+                if (!go) return false;
+                const cs = getComputedStyle(go);
+                return cs.whiteSpace === 'nowrap' && go.scrollWidth <= go.clientWidth + 1;
+            })()
+        };
+    })()`);
+    check('S13 点搜索按钮弹出对话框（aria-expanded 变 true、遮罩可见）',
+        !!sBox && (await searchVisible()) && sBox.expanded === 'true',
+        sBox ? `expanded=${sBox.expanded}` : 'null');
+    check('S13 对话框上方是「输入框 + 搜索按钮」（输入框在左、按钮在右同一行）',
+        !!sBox && sBox.hasInput && sBox.hasGo && /搜索/.test(sBox.goText) && sBox.inputAbove,
+        sBox ? `go=${sBox.goText} 同排=${sBox.inputAbove} ph=${sBox.placeholder}` : 'null');
+    check('S13 输入框自动获得焦点（打开就能打字）', !!sBox && sBox.focused, sBox ? `focus=${sBox.focused}` : 'null');
+    check('S13 搜索按钮不被输入框挤窄（「搜索」两字不竖排换行）',
+        !!sBox && sBox.goNoWrap, sBox ? `nowrap=${sBox.goNoWrap}` : 'null');
+    check('S13 右上角有关闭小图标（x-lg，落在弹窗右上角）',
+        !!sBox && sBox.closeIcon && sBox.closeTop >= 0 && sBox.closeTop <= 24
+        && sBox.closeRight >= 0 && sBox.closeRight <= 28,
+        sBox ? `top=${sBox.closeTop} right=${sBox.closeRight}` : 'null');
+    check('S13 弹窗不超出视口', !!sBox && sBox.left >= 0 && sBox.right <= sBox.vw + 1,
+        sBox ? `left=${sBox.left} right=${sBox.right} vw=${sBox.vw}` : 'null');
+    check('S13 还没搜时给的是引导文案（不是「没找到」）',
+        !!sBox && /输入英文或中文/.test(sBox.empty), sBox ? sBox.empty : 'null');
+    await shot('28-search-dialog');
+
+    await clickSel('#wm-search-modal .wm-modal-close');
+    await sleep(260);
+    check('S13 点右上角的关闭图标可关闭弹窗', !(await searchVisible()));
+    await clickSel('.wm-search-btn');
+    await sleep(280);
+
+    /* --- ① 完全匹配：排在最前面 --- */
+    await typeSearch('liberty');
+    await clickSel('#wm-search-go');
+    await sleep(360);
+    const sLib = await searchState();
+    check('S13 搜 liberty：完全匹配排第一行（整行高亮 + 「完全匹配」徽标）',
+        sLib.dom.length > 0 && sLib.dom[0].en.toLowerCase() === 'liberty'
+        && sLib.dom[0].badge === '完全匹配' && sLib.dom[0].exact,
+        JSON.stringify(sLib.dom[0] || null));
+    check('S13 每行都含 单词 / 翻译 / 册次 + 关卡号 / 【查看】按钮',
+        sLib.dom.length > 0
+        && sLib.dom.every(i => i.en && i.zh && /第 \d+ 关/.test(i.src) && i.act === '查看'),
+        JSON.stringify(sLib.dom.slice(0, 2)));
+    check('S13 出处行带学段前缀（「高中 · 必修4 · 第 12 关」这种，光写册名看不出学段）',
+        sLib.dom.length > 0
+        && sLib.dom.every(i => /^(小学|初中|高中|大学) · .+ · 第 \d+ 关/.test(i.src)),
+        sLib.dom.map(i => i.src).slice(0, 3).join(' | '));
+    check('S13 高中册明确标出「高中」（必修1~5 / 选修6~11 不带年级，只写「必修4」会被当成 4 年级）',
+        sLib.dom.some(i => /^高中 · (必修|选修)\d+ · 第 \d+ 关/.test(i.src)),
+        sLib.dom.map(i => i.src).join(' | '));
+    const srcLine = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const hi = d.books.filter(b => b.stage === '高中')[0];
+        const lo = d.books.filter(b => b.stage === '小学')[0];
+        const un = d.stageOfBook('__不存在的册__');
+        return { hs: d.srcText(hi.id, hi.label, 11), ps: d.srcText(lo.id, lo.label, 0), un: un };
+    })()`);
+    check('S13 共用的出处行生成器：高中「高中 · 必修1 · 第 12 关」、小学「小学 · 三年级上册 · 第 1 关」（错题本行与跳转提示同用）',
+        /^高中 · 必修1 · 第 12 关$/.test(srcLine.hs)
+        && /^小学 · 三年级上册 · 第 1 关$/.test(srcLine.ps),
+        JSON.stringify(srcLine));
+    check('S13 册次查不到时不编造学段（宁可只显示册名）', srcLine.un === '', `stageOfBook(未知册)=${JSON.stringify(srcLine.un)}`);
+    check('S13 完全匹配排在前缀匹配之前（rank 单调不减）',
+        sLib.hits.every((h, i) => i === 0 || sLib.hits[i - 1].rank <= h.rank),
+        sLib.hits.map(h => h.rank).join(','));
+    check('S13 同一个词的每处出处都列出来（liberty 在四级册里出现两次，两条都要在）',
+        sLib.hits.filter(h => h.en.toLowerCase() === 'liberty').length >= 2,
+        `liberty 命中 ${sLib.hits.filter(h => h.en.toLowerCase() === 'liberty').length} 条`);
+    check('S13 角标同时报「单词数」与「出处数」（一个词可能多出处，只报一个数会让人以为少列了）',
+        /\d+ 个单词/.test(sLib.count) && /\d+ 处/.test(sLib.count), sLib.count);
+    await shot('29-search-liberty');
+
+    const sUpper = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const lower = d.searchHits.map(h => h.en).join(',');
+        d.searchQ = 'LiBeRtY';
+        d.runSearch();
+        return { lower: lower, upper: d.searchHits.map(h => h.en).join(',') };
+    })()`);
+    check('S13 英文大小写不敏感（LiBeRtY 与 liberty 命中同一批词）',
+        !!sUpper.lower && sUpper.lower === sUpper.upper, `${sUpper.lower}  VS  ${sUpper.upper}`);
+
+    /* --- ② 前缀匹配：接在后面，最多 5 个单词 --- */
+    await typeSearch('lib');
+    await clickSel('#wm-search-go');
+    await sleep(360);
+    const sPre = await searchState();
+    const preWords = Array.from(new Set(sPre.hits.map(h => h.en.toLowerCase())));
+    check('S13 搜 lib：没有完全匹配时全部走前缀匹配（rank 只有 1）',
+        sPre.hits.length > 0 && sPre.hits.every(h => h.rank === 1),
+        sPre.hits.map(h => `${h.en}:${h.rank}`).join(','));
+    check('S13 前缀匹配的英文全部以关键词开头',
+        preWords.length > 0 && preWords.every(w => w.indexOf('lib') === 0), preWords.join(','));
+    check('S13 前缀匹配最多取前 5 个单词',
+        preWords.length > 0 && preWords.length <= 5, `${preWords.length} 个：${preWords.join(',')}`);
+    check('S13 文案说明了当前用的是哪种匹配（前缀）', /前缀匹配/.test(sPre.hint), sPre.hint);
+
+    /* --- ③ 部分匹配：只有前两类都空时才做 --- */
+    await typeSearch('berty');
+    await clickSel('#wm-search-go');
+    await sleep(360);
+    const sPart = await searchState();
+    const partWords = Array.from(new Set(sPart.hits.map(h => h.en.toLowerCase())));
+    check('S13 无完全匹配、也无前缀匹配时才退到部分匹配（berty 落在 rank=2，且命中 liberty）',
+        sPart.hits.length > 0 && sPart.hits.every(h => h.rank === 2)
+        && sPart.hits.some(h => h.en.toLowerCase() === 'liberty'),
+        sPart.hits.map(h => `${h.en}:${h.rank}`).join(','));
+    check('S13 部分匹配同样最多 5 个单词',
+        partWords.length > 0 && partWords.length <= 5, `${partWords.length} 个：${partWords.join(',')}`);
+    check('S13 文案说明了这是部分匹配（含关键词）', /关键词/.test(sPart.hint), sPart.hint);
+
+    await typeSearch('zzqqxx');
+    await clickSel('#wm-search-go');
+    await sleep(320);
+    const sNone = await searchState();
+    check('S13 搜不到时给「没找到」文案、且不渲染任何结果行',
+        sNone.hits.length === 0 && sNone.dom.length === 0 && /没有找到/.test(sNone.empty), sNone.empty);
+
+    /* --- 中文也能查：释义里出现该中文的条目都该被翻出来 --- */
+    await typeSearch('自由');
+    await clickSel('#wm-search-go');
+    await sleep(360);
+    const sZh = await searchState();
+    check('S13 支持按中文搜索（释义里含「自由」的条目都能查到）',
+        sZh.hits.length > 0 && sZh.hits.every(h => /自由/.test(h.zh)),
+        sZh.hits.slice(0, 4).map(h => `${h.en}=${h.zh}`).join(' | '));
+    check('S13 中文义项全等算完全匹配（「自由」精确命中 liberty / freedom，不是靠「包含」）',
+        sZh.hits.some(h => h.rank === 0 && /^(liberty|freedom)$/i.test(h.en)),
+        sZh.hits.filter(h => h.rank === 0).map(h => h.en).join(',') || '(无 rank0)');
+
+    /* --- 【查看】：跳到那一册那一关 --- */
+    await typeSearch('liberty');
+    await clickSel('#wm-search-go');
+    await sleep(360);
+    const sHit = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const h = d.searchHits[0];
+        return h ? { en: h.en, bookId: h.bookId, bookLabel: h.bookLabel, level: h.level } : null;
+    })()`);
+    check('S13 准备跳转：取到了第一行命中（含册次与关卡号）',
+        !!sHit && !!sHit.bookId && sHit.level >= 0,
+        sHit ? `${sHit.bookId} 第 ${sHit.level + 1} 关 ${sHit.en}` : 'null');
+    await clickSel('.wm-search-item .wm-search-acts button');
+    const jumpedOk = await waitFor('跳到目标关', async () => {
+        const j = await evalJs(`(() => { const d = Alpine.$data(document.querySelector('.wm-root'));
+            return { book: d.bookId, level: d.levelIndex }; })()`);
+        return j.book === sHit.bookId && j.level === sHit.level;
+    }, 12000, 150);
+    await sleep(220);
+    const jumped = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        return { bookId: d.bookId, label: d.bookLabel, levelIndex: d.levelIndex,
+                 cards: d.leftCards.length,
+                 pairs: d.currentLevel ? d.currentLevel.pairs.map(p => p.en) : [] };
+    })()`);
+    check('S13 点【查看】后弹窗自动关闭', !(await searchVisible()));
+    check('S13 点【查看】跳到命中那一条所在的册次与关卡',
+        jumpedOk && jumped.bookId === sHit.bookId && jumped.levelIndex === sHit.level,
+        `目标 ${sHit.bookId} 第 ${sHit.level + 1} 关 → 实际 ${jumped.bookId} 第 ${jumped.levelIndex + 1} 关`);
+    check('S13 跳过去后棋盘真的渲染了那一关，且该词就在本关里',
+        jumped.cards >= 3 && jumped.pairs.some(e => e.toLowerCase() === sHit.en.toLowerCase()),
+        `${jumped.cards} 张卡 · 本关英文 ${jumped.pairs.join(',')}`);
+    await shot('30-search-jumped');
+
+    /* --- 关闭方式：点遮罩 / Esc（含焦点在输入框里） --- */
+    await clickSel('.wm-search-btn');
+    await sleep(280);
+    await clickAt(8, 8);
+    await sleep(280);
+    check('S13 点弹窗外的遮罩可关闭', !(await searchVisible()));
+
+    await clickSel('.wm-search-btn');
+    await sleep(280);
+    await clickSel('#wm-search-input');
+    await sleep(140);
+    await send('Input.dispatchKeyEvent',
+        { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await send('Input.dispatchKeyEvent',
+        { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await sleep(300);
+    check('S13 按 Esc 可关闭（焦点在输入框里时同样有效）', !(await searchVisible()));
+
+    /* --- 窄屏：弹窗要完整落在视口内、结果行与【查看】按钮都不出界 --- */
+    await send('Emulation.setDeviceMetricsOverride',
+        { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    await sleep(280);
+    await clickSel('.wm-search-btn');
+    await sleep(320);
+    const sMob = await evalJs(`(() => {
+        const m = document.getElementById('wm-search-modal');
+        const go = document.getElementById('wm-search-go');
+        const r = m.getBoundingClientRect(), gr = go.getBoundingClientRect();
+        const items = Array.from(document.querySelectorAll('.wm-search-item')).map(el => {
+            const ri = el.getBoundingClientRect();
+            const act = el.querySelector('.wm-search-acts button');
+            return { right: Math.round(ri.right), h: Math.round(ri.height),
+                     actRight: act ? Math.round(act.getBoundingClientRect().right) : -1 };
+        });
+        /* 右上角的关闭叉必须和标题行的角标错开：窄屏上两者都贴右边，曾经叠在一起 */
+        const closeClear = (() => {
+            const c = m.querySelector('.wm-modal-close'), n = m.querySelector('.wm-count-total');
+            if (!c || !n) return false;
+            const a = c.getBoundingClientRect(), b = n.getBoundingClientRect();
+            return a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom;
+        })();
+        return { left: Math.round(r.left), right: Math.round(r.right), vw: window.innerWidth,
+                 goW: Math.round(gr.width), goH: Math.round(gr.height),
+                 goNoWrap: getComputedStyle(go).whiteSpace === 'nowrap' && go.scrollWidth <= go.clientWidth + 1,
+                 items: items, closeClear: closeClear,
+                 overflowX: document.documentElement.scrollWidth > window.innerWidth + 1 };
+    })()`);
+    check('S13 移动端弹窗完整落在视口内、无横向溢出',
+        !!sMob && sMob.left >= 0 && sMob.right <= sMob.vw + 1 && !sMob.overflowX,
+        sMob ? `left=${sMob.left} right=${sMob.right} vw=${sMob.vw} overflowX=${sMob.overflowX}` : 'null');
+    check('S13 移动端「搜索」按钮仍是一行（文字不竖排）',
+        !!sMob && sMob.goNoWrap, sMob ? `go=${sMob.goW}x${sMob.goH}` : 'null');
+    check('S13 移动端结果行与【查看】按钮都在视口内',
+        !!sMob && sMob.items.length > 0
+        && sMob.items.every(i => i.right <= sMob.vw + 1 && i.actRight <= sMob.vw + 1),
+        sMob ? sMob.items.map(i => `行${i.right}/钮${i.actRight}`).join(' ') : 'null');
+    check('S13 移动端右上角的关闭叉不与标题角标重叠',
+        !!sMob && sMob.closeClear, sMob ? `closeClear=${sMob.closeClear}` : 'null');
+    await shot('31-search-mobile');
+    await send('Emulation.setDeviceMetricsOverride',
+        { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+    await sleep(240);
 
     /* ---------- S11. 运行期错误 ---------- */
     console.log('\n— S11 运行期错误 —');

@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,9 +28,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       所以中文释义允许跨关重复，硬性质只剩「每关 3~7 对」+「关内英文不重复」+「零丢失」。</li>
  * </ul>
  *
- * <p><b>主题 = 语义域</b>：不再按词性（名词/动词/…）粗分，而是按 68 个语义域归类
- * （见 {@code scripts/learn/build_cet_words.py} 的 {@code DOMAIN_ORDER} 与源清单同目录的
- * {@code cet-themes.tsv}），使<b>同一关的词语义相关</b>。域内仍按源顺序切关。
+ * <p><b>主题 = 语义域，而且粒度必须够细</b>：不再按词性（名词/动词/…）粗分，而是按语义域归类
+ * （逐条归属见源清单同目录的 {@code cet-themes.tsv}，域清单与展示顺序见 {@code cet-domain-tree.tsv}），
+ * 使<b>同一关的词语义相关</b>。域分两级：68 个粗域里有 35 个装得太多 —— 最大的「性质与特征」有 818 条，
+ * 从 able 到 awkward 什么形容词都有，6 条随手抽出来彼此毫无关系，做起来记不住。这些大域已按语义
+ * 细分成 98 个小分类，加 33 个没超阈值的原域，共 <b>131 个细域、规模 30~149 条</b>。
+ * 域内仍按源顺序切关。粒度上限由 {@link #domainsAreFinelyGrained()} 把关。
  *
  * <p><b>册内关卡顺序是交错过的</b>：同一语义域最多连排 5 关（{@code MAX_SAME_DOMAIN_RUN}），
  * 其余互相穿插 —— 不这么排，一册开头会连着做 51 关「人物与身份」、接着 84 关「性质与特征」，
@@ -43,30 +47,23 @@ class CetWordBankTest {
 
     private static final String SOURCE_DIR = "learn/cet-words-source/";
 
-    /**
-     * 68 个语义域，与生成脚本 {@code DOMAIN_ORDER}、{@code cet-themes.tsv} 逐字一致。
-     * 顺序：具体生活 → 自然与物质 → 社会 → 心智与抽象 → 功能与特殊。
-     */
-    private static final Set<String> DOMAINS = Set.of(
-            // 具体生活（10）
-            "人物与身份", "家庭与亲属", "身体与健康", "饮食与食物", "服饰与打扮",
-            "居住与建筑", "交通与出行", "购物与消费", "娱乐与休闲", "日常用品与工具",
-            // 自然与物质（5）
-            "动物与植物", "自然与天气", "物质与材料", "空间与方位", "事物与部件",
-            // 社会（19）
-            "组织与机构", "政治与政府", "法律与司法", "军事与战争", "经济与金融",
-            "商业与贸易", "工作与职业", "教育与学习", "科学技术", "计算机与信息",
-            "媒体与传播", "文学与写作", "艺术与绘画", "音乐与表演", "影视与娱乐",
-            "体育与运动", "宗教与信仰", "节日与习俗", "历史与考古",
-            // 心智与抽象（30）
-            "情绪与感受", "性格与品质", "态度与意愿", "思考与观点", "认知与理解", "记忆与注意",
-            "语言与交流", "数量与度量", "时间与频率", "性质与特征", "状态与情况",
-            "变化与发展", "增长与减少", "因果与逻辑", "方法与手段", "计划与安排",
-            "重要性", "优劣评价", "正确与错误", "关系与异同", "程度与强度",
-            "移动与位移", "操作与处理", "获取与给予", "建立与破坏", "保护与维持",
-            "帮助与合作", "竞争与冲突", "控制与影响", "交往与联系",
-            // 功能与特殊（4）
-            "功能词", "专有名词", "短语与搭配", "特殊类别");
+    /** 细域树（源清单同目录）：`父域<TAB>细域<TAB>说明`，行序即域在册内的排列顺序。 */
+    private static final String DOMAIN_TREE = SOURCE_DIR + "cet-domain-tree.tsv";
+
+    /** 逐条语义域归属：`英文<TAB>释义<TAB>细域`。 */
+    private static final String THEME_SOURCE = SOURCE_DIR + "cet-themes.tsv";
+
+    /** 每个细域在册内最多允许多少条词 —— 超过就说明粒度不够，大域没拆开。 */
+    private static final int MAX_WORDS_PER_DOMAIN = 150;
+
+    /** 兜底父域：装的是没归好类的杂项，语义本就发散，单独放行。 */
+    private static final String FALLBACK_PARENT = "特殊类别";
+
+    /** 细域 → 父域。**从细域树读**，不在测试里再抄一遍 131 个名字（抄一遍就会漂）。 */
+    private static final Map<String, String> DOMAIN_PARENT = loadDomainTree();
+
+    /** 树里登记的全部细域。 */
+    private static final Set<String> DOMAINS = DOMAIN_PARENT.keySet();
 
     /** 同一语义域在册内最多能连排几关（与 {@code build_cet_words.py} 的 MAX_SAME_DOMAIN_RUN 一致）。 */
     private static final int MAX_SAME_DOMAIN_RUN = 5;
@@ -75,6 +72,69 @@ class CetWordBankTest {
     private static String baseTheme(String theme) {
         int i = theme.indexOf(" · ");
         return i < 0 ? theme : theme.substring(0, i);
+    }
+
+    private static Map<String, String> loadDomainTree() {
+        Map<String, String> parent = new LinkedHashMap<>();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                new ClassPathResource(DOMAIN_TREE).getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                String[] parts = line.split("\t");
+                assertThat(parts).as("细域树每行都是「父域<TAB>细域<TAB>说明」").hasSize(3);
+                assertThat(parent.put(parts[1], parts[0]))
+                        .as("细域树里细域重复定义：%s", parts[1]).isNull();
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("读不到细域树 " + DOMAIN_TREE, e);
+        }
+        assertThat(parent).as("细域树不能为空").isNotEmpty();
+        assertThat(parent.values()).as("兜底父域必须在树里").contains(FALLBACK_PARENT);
+        return parent;
+    }
+
+    /** 读逐条语义域映射 → {@code 英文\0释义} 到细域。 */
+    private static Map<String, String> loadThemes() {
+        Map<String, String> themeOf = new HashMap<>();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                new ClassPathResource(THEME_SOURCE).getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                String[] parts = line.split("\t");
+                assertThat(parts).as("语义域映射每行都是「英文<TAB>释义<TAB>细域」").hasSize(3);
+                String previous = themeOf.put(parts[0].strip() + "\u0000" + parts[1].strip(), parts[2].strip());
+                assertThat(previous).as("语义域映射里 (英文,释义) 重复：%s / %s", parts[0], parts[1]).isNull();
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("读不到语义域映射 " + THEME_SOURCE, e);
+        }
+        return themeOf;
+    }
+
+    /** 源清单逐行 → 二维数组 {@code [英文, 释义]}（首尾空白已去，与生成脚本一致）。 */
+    private static List<String[]> readSourceRows(String bookId) throws Exception {
+        List<String[]> rows = new ArrayList<>();
+        ClassPathResource res = new ClassPathResource(SOURCE_DIR + bookId + ".txt");
+        assertThat(res.exists()).as("源清单 %s 必须存在", SOURCE_DIR + bookId + ".txt").isTrue();
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(res.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                String[] parts = line.split("\t", 2);
+                assertThat(parts).as("源清单每行都是「英文<TAB>释义」").hasSize(2);
+                rows.add(new String[]{parts[0].strip(), parts[1].strip()});
+            }
+        }
+        return rows;
     }
 
     private final CetWordBank bank = new CetWordBank();
@@ -90,8 +150,8 @@ class CetWordBankTest {
                 .as("学段用于册次选择器分组，大学要单独成组")
                 .containsOnly("大学");
         assertThat(bank.getBooks()).extracting(WordMatchBank.BookInfo::levelCount)
-                .as("四级 7508 条 / 六级 5651 条，按语义域归类后每关 6 条切")
-                .containsExactly(1255, 944);
+                .as("四级 7508 条 / 六级 5651 条，按 131 个细域归类后每关 6 条切")
+                .containsExactly(1257, 946);
         assertThat(bank.getBooks()).extracting(WordMatchBank.BookInfo::wordCount)
                 .containsExactly(7508, 5651);
     }
@@ -120,46 +180,72 @@ class CetWordBankTest {
     }
 
     @Test
-    @DisplayName("主题只来自 68 个语义域；两册都应覆盖除「短语与搭配」外的全部域")
-    void levels_areGroupedBySemanticDomain() {
-        // 「短语与搭配」在两册里各只有 1 条，不足 MIN_PAIRS 对，按生成脚本约定并入「特殊类别」，故不成关
-        Set<String> expectedUsed = new HashSet<>(DOMAINS);
-        expectedUsed.remove("短语与搭配");
-
+    @DisplayName("主题只来自细域树里登记的域；用到的域恰好是「册内词条数 >= MIN_PAIRS」的那些")
+    void levels_areGroupedBySemanticDomain() throws Exception {
+        Map<String, String> themeOf = loadThemes();
         for (WordMatchBank.BookInfo book : bank.getBooks()) {
-            Set<String> used = new HashSet<>();
+            // 期望值不写死：从源清单 ∩ 语义域映射现算 —— 词库改了这里跟着走，不用再抄一遍域名
+            Map<String, Integer> expected = new LinkedHashMap<>();
+            for (String[] row : readSourceRows(book.id())) {
+                String domain = themeOf.get(row[0] + "\u0000" + row[1]);
+                assertThat(domain).as("源清单里的 (%s, %s) 必须有语义域归属", row[0], row[1]).isNotNull();
+                expected.merge(domain, 1, Integer::sum);
+            }
+            // 不足 MIN_PAIRS 条的碎域会被并进同父域的兄弟细域（找不到兄弟才落兜底），因此不成关
+            expected.values().removeIf(n -> n < WordMatchBank.MIN_PAIRS);
+
+            Set<String> used = new LinkedHashSet<>();
             for (WordMatchBank.Level level : bank.getLevels(book.id())) {
                 String base = baseTheme(level.theme());
                 assertThat(DOMAINS).as("%s 出现未登记的语义域：%s", book.label(), level.theme())
                         .contains(base);
                 used.add(base);
             }
-            assertThat(used).as("%s 应覆盖全部语义域（短语与搭配已并入特殊类别）", book.label())
-                    .containsExactlyInAnyOrderElementsOf(expectedUsed);
+            assertThat(used).as("%s 用到的语义域应与源清单现算的一致", book.label())
+                    .containsExactlyInAnyOrderElementsOf(expected.keySet());
         }
     }
 
     @Test
-    @DisplayName("同一语义域内的词条语义相关：抽检若干关，主题名与词条不出现明显串味")
-    void levels_areSemanticallyCoherent() {
-        // 「特殊类别」是兜底域，语义本就发散；只抽检非兜底域
-        Map<String, List<String>> sample = new LinkedHashMap<>();
+    @DisplayName("粒度：每个细域在册内不超过 150 条词（「性质与特征」818 条那种粗域必须拆开）")
+    void domainsAreFinelyGrained() {
+        Set<String> all = new LinkedHashSet<>();
         for (WordMatchBank.BookInfo book : bank.getBooks()) {
+            Map<String, Integer> wordsOf = new LinkedHashMap<>();
             for (WordMatchBank.Level level : bank.getLevels(book.id())) {
                 String base = baseTheme(level.theme());
-                if (!"特殊类别".equals(base)) {
-                    sample.computeIfAbsent(base, k -> new ArrayList<>())
-                            .add(level.pairs().stream().map(WordMatchBank.WordPair::en)
-                                    .reduce((a, b) -> a + "," + b).orElse(""));
+                all.add(base);
+                wordsOf.merge(base, level.pairs().size(), Integer::sum);
+            }
+            assertThat(wordsOf).as("%s 的语义域个数（拆细后应是上百个，而不是原来的 67 个）", book.label())
+                    .hasSizeGreaterThanOrEqualTo(120);
+            wordsOf.forEach((domain, words) -> assertThat(words)
+                    .as("%s 的细域「%s」有 %d 条词，粒度太粗（上限 %d 条）",
+                            book.label(), domain, words, MAX_WORDS_PER_DOMAIN)
+                    .isLessThanOrEqualTo(MAX_WORDS_PER_DOMAIN));
+        }
+        assertThat(all).as("两册合计用到的细域个数").hasSizeGreaterThanOrEqualTo(120);
+    }
+
+    @Test
+    @DisplayName("兜底域不能变成杂物堆：特殊类别系（父域）占比低于 3%")
+    void fallbackBucketStaysSmall() {
+        for (WordMatchBank.BookInfo book : bank.getBooks()) {
+            int total = 0;
+            int fallback = 0;
+            for (WordMatchBank.Level level : bank.getLevels(book.id())) {
+                int n = level.pairs().size();
+                total += n;
+                if (FALLBACK_PARENT.equals(DOMAIN_PARENT.get(baseTheme(level.theme())))) {
+                    fallback += n;
                 }
             }
+            /* 兜底域是「没归好类」的杂物桶。它一旦变大，说明前面的分类在失效（词丢进来没地方去），
+               细分成多少个小分类都没意义 —— 所以给它一个占比上限当告警。实测两册都在 1.6% 上下。 */
+            assertThat(fallback * 100.0 / total)
+                    .as("%s 落到兜底域「%s」的词条占比", book.label(), FALLBACK_PARENT)
+                    .isLessThan(3.0);
         }
-        // 每个语义域都至少有一关可抽检（短语与搭配已并入特殊类别；特殊类别是兜底域，语义本就发散，不参与抽检）
-        Set<String> expected = new HashSet<>(DOMAINS);
-        expected.remove("短语与搭配");
-        expected.remove("特殊类别");
-        assertThat(sample.keySet()).as("每个非兜底语义域都应有关卡").containsExactlyInAnyOrderElementsOf(expected);
-        assertThat(sample.values()).as("每关都应有单词").allSatisfy(v -> assertThat(v).isNotEmpty());
     }
 
     @Test
@@ -177,8 +263,11 @@ class CetWordBankTest {
                         .isLessThanOrEqualTo(MAX_SAME_DOMAIN_RUN);
                 prev = base;
             }
-            /* 光有「不超过 5」还不够：整段按域排也是一堆 5 连排。真正的交错要求中途多次换类，
-               故再断言「域的出现段数」远多于域数（纯按域排时两者相等）。 */
+            /* 光有「不超过 5」还不够：整段按域排也是一堆 5 连排，一样过。真正的交错标志是
+               「做一册的过程中反复回头做同一类」—— 即域的出现段数明显多于域数。实测：
+               整段排时两者相等；细分 + 交错后 四级 303 段 / 130 域、六级 243 段 / 130 域。
+               阈值取域数的 1.5 倍：整段排（=1.0）过不了，也不会因为「域变小、每域只切一两块」
+               这种数据形态误报。 */
             int segments = 0;
             prev = null;
             for (WordMatchBank.Level level : bank.getLevels(book.id())) {
@@ -190,8 +279,8 @@ class CetWordBankTest {
             }
             int domains = (int) bank.getLevels(book.id()).stream()
                     .map(l -> baseTheme(l.theme())).distinct().count();
-            assertThat(segments).as("%s 的语义域出现段数（应远多于域数 %d，说明真的交错开了）", book.label(), domains)
-                    .isGreaterThan(domains * 3);
+            assertThat(segments).as("%s 的语义域出现段数（应明显多于域数 %d，说明真的交错开了）", book.label(), domains)
+                    .isGreaterThan(domains * 3 / 2);
         }
     }
 
@@ -271,11 +360,11 @@ class CetWordBankTest {
             assertThat(gaps).as("%s 应存在大量重复词", book.label()).isNotEmpty();
             gaps.sort(Integer::compareTo);
             int median = gaps.get(gaps.size() / 2);
-            /* 阈值说明：按语义域归类后，一册被拆成 68 个子序列，重复词的间距随「域规模」缩小
-               （实测中位数 四级 10 / 六级 8 关），不再是从前按词性粗分时的上百关。
+            /* 阈值说明：按语义域归类后，一册被拆成 130 个子序列，重复词的间距随「域规模」缩小
+               （细分前实测中位数 四级 10 / 六级 8 关；域间交错 + 细分后摊得更开，实测 427 / 288）。
                这里要防的是「把重复词摊到相邻关」那种贪心分配 —— 那样中位数会掉到 1~2。 */
             assertThat(median).as("%s 同词两次出现的关卡间距中位数（不应挤在相邻关）", book.label())
-                    .isGreaterThanOrEqualTo(5);
+                    .isGreaterThanOrEqualTo(50);
         }
     }
 
