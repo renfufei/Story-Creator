@@ -5,11 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -60,6 +62,29 @@ import java.util.stream.Stream;
 public final class HeadlessChrome implements AutoCloseable {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /**
+     * 静音守门脚本体：单一真相在 {@code src/test/resources/silent-audio.js}，
+     * Node 探针（scripts/lib/silent-audio.mjs）也从同一个文件读。
+     *
+     * <p>为什么光有启动参数 {@code --mute-audio} 不够：它只掐浏览器音频管线里的输出
+     * （媒体元素与 Web Audio），而 {@code speechSynthesis} 走的是<b>操作系统的语音合成</b>
+     * （macOS 上是 AVSpeechSynthesizer）—— 无头浏览器照样会从音箱把单词念出来。
+     * 本项目单词页默认 {@code soundOn: true}，端到端测试点两下卡片就会让整台电脑念英文。
+     */
+    private static final String SILENT_AUDIO_INIT = loadSilentAudioInit();
+
+    private static String loadSilentAudioInit() {
+        try (InputStream in = HeadlessChrome.class.getResourceAsStream("/silent-audio.js")) {
+            if (in == null) {
+                throw new IllegalStateException(
+                        "找不到静音守门脚本 /silent-audio.js —— 应在 src/test/resources/ 下");
+            }
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException("读取静音守门脚本失败", e);
+        }
+    }
 
     private static final Duration START_TIMEOUT = Duration.ofSeconds(30);
     private static final Duration COMMAND_TIMEOUT = Duration.ofSeconds(20);
@@ -354,6 +379,11 @@ public final class HeadlessChrome implements AutoCloseable {
 
         private void enable() {
             send("Page.enable", null);
+            // 静音守门：注入到每个新文档，在页面脚本之前执行（对后续每次导航/刷新都生效，
+            // 装一次即可）。与启动参数里的 --mute-audio 配套，缺一不可 —— 见 SILENT_AUDIO_INIT。
+            ObjectNode audioGuard = MAPPER.createObjectNode();
+            audioGuard.put("source", SILENT_AUDIO_INIT);
+            send("Page.addScriptToEvaluateOnNewDocument", audioGuard);
             send("Runtime.enable", null);
             send("Log.enable", null);
             send("Network.enable", null);

@@ -168,7 +168,7 @@
                 <template x-for="col in 10" :key="'c'+row+'-'+col">
                     <div class="grid-cell"
                          :class="{ 'highlighted': isHighlighted(row, col), 'changed': isChanged(row, col) }"
-                         :style="'grid-row:' + (row + 1) + '; grid-column:' + (col + 1) + ';' + (isHighlighted(row, col) ? 'background-color:' + currentColor + '; border-color:' + currentColor : '')">
+                         :style="cellStyle(row, col)">
                         <span class="cell-number" x-text="cellLabel(row, col)"></span>
                     </div>
                 </template>
@@ -241,12 +241,15 @@ function multiplicationApp() {
             {itemKey:"8x9",a:8,b:9,chineseText:"八九七十二",mathExpression:"8×9=72"},
             {itemKey:"9x9",a:9,b:9,chineseText:"九九八十一",mathExpression:"9×9=81"}
         ],
-        colors: ['#98D8C8', '#96CEB4', '#4ECDC4', '#45B7D1'],
+        // 格子配色板：沿用乘法页原有的 4 个颜色，只把顺序改成「深浅交替」——
+        // 相邻两句的色带是紧贴在一起的，原顺序里 #98D8C8 与 #96CEB4 几乎是同色（ΔRGB≈22），
+        // 排在相邻位就白换色了；调成 浅-深-浅-深 后相邻两色的最小距离 ≈74，换色才一眼能看出来。
+        colors: ['#98D8C8', '#4ECDC4', '#96CEB4', '#45B7D1'],
         currentIndex: 0,
         mode: localStorage.getItem('multiplication_mode') || 'auto',
         gridLayout: localStorage.getItem('multiplication_grid_layout') || 'rect',
         playing: false,
-        audioCache: {},
+        audioCache: {},        // key → 服务端有没有生成过音频（false 表示已确认没有，别再问一次）
 
         init() {
             // 切换步骤/布局时，强制让所有变化格子的闪烁动画从同一帧 0% 同步起步
@@ -268,12 +271,25 @@ function multiplicationApp() {
         get currentFormula() {
             return this.formulas[this.currentIndex] || this.formulas[0];
         },
+        /**
+         * 第 index 句用哪一号色：**按「句」轮换**，在配色板里循环。
+         * 原来是按组（b）取色 ⇒ 同一组里每一句都共用一个颜色，整片格子一模一样，
+         * 看不出"一句一句往外长"的过程，这也是这个页面显得单调的原因。
+         */
+        colorOf(index) {
+            const n = this.colors.length;
+            return this.colors[((index % n) + n) % n];
+        },
+        /** 大字口诀取「当前句」的颜色：和最外圈新长出来的那批格子同色，一眼能对上。 */
         get currentColor() {
-            return this.colors[(this.currentFormula.b - 1) % this.colors.length];
+            return this.colorOf(this.currentIndex);
+        },
+        groupPrefixOf(b) {
+            const names = ['一','二','三','四','五','六','七','八','九'];
+            return (names[b - 1] || '') + '的乘法口诀';
         },
         get currentGroupPrefix() {
-            const names = ['一','二','三','四','五','六','七','八','九'];
-            return names[this.currentFormula.b - 1] + '的乘法口诀';
+            return this.groupPrefixOf(this.currentFormula.b);
         },
 
         isHighlightedAt(row, col, index) {
@@ -300,23 +316,97 @@ function multiplicationApp() {
             return !this.isHighlightedAt(row, col, prevIndex);
         },
 
+        /**
+         * 一格的背景色，由「最早把它点亮的那一句」决定 ⇒ 同一组里一句一条色带，不再是一片同色。
+         * 同组内高亮区域是层层嵌套、只增不减的（矩形布局＝往外扩一圈行列，累加布局＝行优先前缀），
+         * 所以「第一个包含这一格的 j」就是把它加进来的那一句，颜色天然等于"它是第几句长出来的"。
+         * 别退回成整片都用 currentColor 涂色：那样每推进一步整片都会重新染色，又变回一片同色。
+         */
+        cellColorAt(row, col) {
+            if (!this.isHighlighted(row, col)) return '';
+            const start = this.groupStartOf(this.currentIndex);
+            for (let j = start; j <= this.currentIndex; j++) {
+                if (this.isHighlightedAt(row, col, j)) return this.colorOf(j);
+            }
+            return this.colorOf(this.currentIndex);
+        },
+        cellStyle(row, col) {
+            const c = this.cellColorAt(row, col);
+            return 'grid-row:' + (row + 1) + '; grid-column:' + (col + 1) + ';'
+                + (c ? 'background-color:' + c + '; border-color:' + c + ';' : '');
+        },
+
+        /**
+         * 读一条口诀的声音。降级链：① 服务端已生成的音频 → ② 浏览器本地朗读（Web Speech API）。
+         * 两条都拿不到就返回 false，调用方按「没声音」的节奏继续；**全程不抛错、不弹提示**。
+         */
         async playAudioByKey(key) {
+            if (await this.playServerAudio(key)) return true;
+            return this.speakText(this.textByKey(key));
+        },
+
+        /** ① 服务端音频。404（这一条还没生成）或任何异常都只返回 false，不报错。 */
+        async playServerAudio(key) {
+            if (this.audioCache[key] === false) return false;   // 已知没生成，别再空跑一次网络
+            let url = null;
             try {
                 const resp = await fetch('/api/learn/multiplication/audio/' + key);
-                if (!resp.ok) return false;
+                if (!resp.ok) {
+                    this.audioCache[key] = false;
+                    return false;
+                }
+                this.audioCache[key] = true;
                 const blob = await resp.blob();
-                const url = URL.createObjectURL(blob);
+                url = URL.createObjectURL(blob);
                 const audio = new Audio(url);
                 await audio.play();
                 await new Promise(resolve => {
                     audio.onended = resolve;
-                    audio.onerror = resolve;
+                    audio.onerror = resolve;      // 音频损坏 / 解码失败也算「放完了」
                 });
-                URL.revokeObjectURL(url);
                 return true;
             } catch (e) {
                 return false;
+            } finally {
+                if (url) URL.revokeObjectURL(url);
             }
+        },
+
+        /** key → 该读的汉字：prefix_x 读组名（「三的乘法口诀」），其余读口诀本身（「三四十二」）。 */
+        textByKey(key) {
+            if (key.indexOf('prefix_') === 0) {
+                return this.groupPrefixOf(Number(key.slice('prefix_'.length)));
+            }
+            const f = this.formulas.find(item => item.itemKey === key);
+            return f ? f.chineseText : '';
+        },
+
+        /**
+         * ② 本地朗读降级：没有已生成音频时，用系统自带语音把汉字口诀读出来（和英语单词页一个路子）。
+         * 浏览器不支持 / 没装中文语音 / speak 直接抛错 —— 一律静默返回 false：读不出来只是「没声音」，
+         * 不该打断播放、更不该在界面上出现任何报错。
+         */
+        speakText(text) {
+            const synth = window.speechSynthesis;
+            const Utterance = window.SpeechSynthesisUtterance;
+            if (!text || !synth || !Utterance) return Promise.resolve(false);
+            return new Promise(resolve => {
+                let settled = false;
+                const finish = (ok) => { if (!settled) { settled = true; resolve(ok); } };
+                try {
+                    const u = new Utterance(text);
+                    u.lang = 'zh-CN';          // 交给系统挑中文语音；挑不到就用默认，不因此判失败
+                    u.rate = 0.9;              // 口诀比常速稍慢一点
+                    u.onend = () => finish(true);
+                    u.onerror = () => finish(false);
+                    synth.cancel();            // 连读时先掐掉上一条，避免排队积压
+                    synth.speak(u);
+                    // 兜底：个别环境 onend / onerror 都不触发，别把自动播放卡死
+                    setTimeout(() => finish(true), 4000);
+                } catch (e) {
+                    finish(false);
+                }
+            });
         },
 
         isFirstInGroup(index) {

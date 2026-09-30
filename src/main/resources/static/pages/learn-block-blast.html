@@ -1,0 +1,2475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>俄罗斯方块 - AI故事创作</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+<!-- ============================================================
+     俄罗斯方块（Block Blast 网页版）—— 由 ../BlockBlast/index.html 原样迁入。
+     迁入时只动 4 处，其余与源文件逐字节一致（便于日后从源仓库再同步）：
+       1. <title> + favicon（本站页面规范）；
+       2. 设置菜单里的「退出游戏」→「返回」，以及 3. 它对应的 JS 处理器
+          （原来是桌面端退出 / 移动端退后台 / 网页版 window.close() 兜底 + alert；
+           window.close() 在非脚本打开的页面会被浏览器拦掉，于是必然弹一个提示框）；
+       4. 上面这段说明注释。
+     本页属于「沉浸式全屏页」：body 自带 flex 布局 + overflow:hidden，
+     所以**不引 Bootstrap、不挂 #site-nav**（`* { margin:0; padding:0; touch-action:none }`
+     会把导航栏挤变形）。返回入口就设置菜单里那一个。
+     浏览器冒烟用例：BrowserSmokePagesTest 里 requireNav=false。
+     ============================================================ -->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; }
+
+  body {
+    background: #5b4fcf;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Arial Rounded MT Bold', Arial, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* TOP BAR */
+  #topbar {
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px 8px;
+  }
+
+  #highscore {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #ffd700;
+    font-size: 22px;
+    font-weight: bold;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+  }
+
+  .crown-icon {
+    font-size: 26px;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));
+  }
+
+  #settings-btn {
+    width: 48px;
+    height: 48px;
+    background: #7b6ed6;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+    position: relative;
+  }
+
+  #refresh-btn {
+    width: 48px;
+    height: 48px;
+    background: #7b6ed6;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+    position: relative;
+    color: white;
+    transition: transform 0.15s, filter 0.15s;
+  }
+  #refresh-btn:hover { filter: brightness(1.15); }
+  #refresh-btn:active { transform: rotate(180deg); }
+  #refresh-btn.disabled { opacity: 0.4; cursor: not-allowed; }
+  #refresh-btn svg { width: 22px; height: 22px; }
+  #refresh-topbar-badge {
+    font-size: 11px;
+    font-weight: bold;
+    color: #ffd700;
+    line-height: 1;
+  }
+
+  .new-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: #ffa500;
+    color: white;
+    font-size: 9px;
+    font-weight: bold;
+    padding: 2px 5px;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  }
+
+  /* SCORE */
+  #score-container {
+    text-align: center;
+    margin: 4px 0 12px;
+  }
+
+  #score {
+    font-size: 72px;
+    font-weight: 900;
+    color: white;
+    text-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    line-height: 1;
+  }
+
+  /* BOARD */
+  #board-wrapper {
+    background: #3d3580;
+    border-radius: 16px;
+    padding: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    max-width: 420px;
+    width: calc(100vw - 20px);
+  }
+
+  #board {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    gap: 2px;
+    width: 100%;
+    aspect-ratio: 1;
+  }
+
+  .cell {
+    aspect-ratio: 1;
+    border-radius: 4px;
+    background: #2e2a6a;
+    border: 1px solid #141228;
+    position: relative;
+    transition: background 0.1s;
+  }
+  /* 拖动期间禁用 cell 过渡，避免老设备每帧都触发动画 */
+  body.dragging .cell {
+    transition: none;
+  }
+
+  .cell.filled {
+    background: transparent;
+  }
+
+  .cell.highlight {
+    background: rgba(255, 100, 100, 0.35) !important;
+    border-color: rgba(255, 100, 100, 0.5) !important;
+  }
+
+  .cell.highlight-invalid {
+    background: rgba(255, 50, 50, 0.2) !important;
+    border-color: rgba(255, 50, 50, 0.4) !important;
+  }
+
+  @keyframes clearable-pulse {
+    0%   { opacity: 1; }
+    50%  { opacity: 0.55; }
+    100% { opacity: 1; }
+  }
+
+  .cell.highlight-clearable {
+    /* color set dynamically via JS */
+  }
+
+  .cell.highlight-clearable .gem {
+    animation: clearable-pulse 0.7s ease-in-out infinite;
+  }
+
+  .cell.highlight.highlight-clearable {
+    /* color set dynamically via JS */
+  }
+
+  .cell.highlight.highlight-clearable .gem {
+    animation: clearable-pulse 0.7s ease-in-out infinite;
+  }
+
+  /* GEM BLOCK */
+  .gem {
+    width: 100%;
+    height: 100%;
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Shared gem bevel frame — gold border top-left, dark bottom-right */
+  .gem::after {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border-radius: 4px;
+    border: 1.5px solid rgba(255,220,120,0.55);
+    border-bottom-color: rgba(0,0,0,0.35);
+    border-right-color: rgba(0,0,0,0.35);
+  }
+
+  /* Shared highlight blob */
+  .gem::before {
+    content: '';
+    position: absolute;
+    top: 10%;
+    left: 10%;
+    width: 42%;
+    height: 36%;
+    background: rgba(255,255,255,0.52);
+    border-radius: 50%;
+    transform: rotate(-20deg);
+  }
+
+  .gem-red {
+    background: linear-gradient(145deg, #ff7070 0%, #e83030 35%, #b81818 100%);
+    box-shadow: inset 0 2px 5px rgba(255,160,160,0.65), inset 0 -3px 5px rgba(0,0,0,0.45);
+  }
+
+  /* Colors for variety */
+  .gem-blue {
+    background: linear-gradient(145deg, #6fd4ff 0%, #1a88f0 35%, #0e5cc0 100%);
+    box-shadow: inset 0 2px 5px rgba(160,210,255,0.65), inset 0 -3px 5px rgba(0,0,0,0.45);
+  }
+
+  .gem-green {
+    background: linear-gradient(145deg, #70ff90 0%, #18d040 35%, #0e9830 100%);
+    box-shadow: inset 0 2px 5px rgba(160,255,190,0.65), inset 0 -3px 5px rgba(0,0,0,0.45);
+  }
+
+  .gem-yellow {
+    background: linear-gradient(145deg, #ffe870 0%, #f0c020 35%, #c89010 100%);
+    box-shadow: inset 0 2px 5px rgba(255,245,160,0.65), inset 0 -3px 5px rgba(0,0,0,0.45);
+  }
+
+  .gem-purple {
+    background: linear-gradient(145deg, #d870ff 0%, #9820f0 35%, #7010c8 100%);
+    box-shadow: inset 0 2px 5px rgba(225,160,255,0.65), inset 0 -3px 5px rgba(0,0,0,0.45);
+  }
+
+  .gem-wine {
+    background: linear-gradient(145deg, #ff9040 0%, #f06010 35%, #c04000 100%);
+    box-shadow: inset 0 2px 5px rgba(255,200,140,0.65), inset 0 -3px 5px rgba(0,0,0,0.45);
+  }
+
+  .gem-teal {
+    background: linear-gradient(145deg, #50e8e8 0%, #00c0c0 35%, #008080 100%);
+    box-shadow: inset 0 2px 5px rgba(120,245,245,0.65), inset 0 -3px 5px rgba(0,0,0,0.45);
+  }
+
+  .gem-orange {
+    background: linear-gradient(145deg, #ffb850 0%, #f07820 35%, #c05000 100%);
+    box-shadow: inset 0 2px 5px rgba(255,210,120,0.65), inset 0 -3px 5px rgba(0,0,0,0.45);
+  }
+
+  .gem-pink {
+    background: linear-gradient(145deg, #ff88b8 0%, #f02878 35%, #a00058 100%);
+    box-shadow: inset 0 2px 5px rgba(255,170,210,0.65), inset 0 -3px 5px rgba(0,0,0,0.45);
+  }
+
+  /* PIECES TRAY */
+  #pieces-tray {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: calc(100vw - 20px);
+    max-width: 420px;
+    min-height: 140px;
+    margin-top: 20px;
+    padding: 10px 4px;
+  }
+
+  .piece-slot {
+    width: 33.33%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 110px;
+  }
+
+  .piece-hitarea {
+    width: 90px;
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+  }
+
+  .piece-hitarea:active {
+    cursor: grabbing;
+  }
+
+  .piece-hitarea.used {
+    opacity: 0.25;
+    pointer-events: none;
+  }
+
+  .piece-hitarea.selected {
+    filter: drop-shadow(0 0 8px rgba(255, 220, 50, 0.9));
+  }
+  .piece-hitarea.selected .piece-preview {
+    transform: scale(1.1);
+  }
+
+  /* 棋盘上的虚影 ghost（点击模式） */
+  #click-ghost {
+    position: absolute;
+    display: none;
+    pointer-events: none;
+    z-index: 10;
+  }
+  #click-ghost .piece-cell {
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+    opacity: 0.55;
+  }
+
+  .piece-preview {
+    display: grid;
+    gap: 3px;
+    pointer-events: none;
+    position: relative;
+  }
+
+  .piece-cell {
+    width: 28px;
+    height: 28px;
+    border-radius: 5px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* DRAG GHOST */
+  #drag-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    display: none;
+    gap: 3px;
+    top: 0;
+    left: 0;
+    will-change: transform;
+  }
+
+  #drag-ghost .piece-cell {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* GAME OVER */
+  #gameover-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  #gameover-overlay.show {
+    display: flex;
+  }
+
+  .gameover-box {
+    background: #4a3fc0;
+    border-radius: 20px;
+    padding: 32px 28px;
+    width: min(320px, 88vw);
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    border: 2px solid #7b6ed6;
+  }
+
+  .gameover-box h2 {
+    color: white;
+    font-size: clamp(24px, 7vw, 36px);
+    margin-bottom: 10px;
+  }
+
+  .gameover-box .final-score {
+    color: #ffd700;
+    font-size: clamp(40px, 13vw, 56px);
+    font-weight: 900;
+    margin: 10px 0;
+  }
+
+  .gameover-box .best-label {
+    color: #aaa8e0;
+    font-size: clamp(13px, 3.5vw, 16px);
+    margin-bottom: 6px;
+  }
+
+  .gameover-box .best-score {
+    color: #ffd700;
+    font-size: clamp(20px, 6vw, 28px);
+    font-weight: bold;
+  }
+
+  #revive-btn {
+    background: linear-gradient(180deg, #4cd964, #28a745);
+    color: white;
+    border: none;
+    border-radius: 30px;
+    padding: 14px 24px;
+    font-size: clamp(15px, 4.5vw, 20px);
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    margin-top: 16px;
+    letter-spacing: 1px;
+    display: none;
+    width: 100%;
+  }
+  #revive-btn:hover { filter: brightness(1.1); }
+
+  #restart-btn {
+    background: linear-gradient(180deg, #ff7b2e, #e85500);
+    color: white;
+    border: none;
+    border-radius: 30px;
+    padding: 14px 28px;
+    font-size: clamp(16px, 5vw, 22px);
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    margin-top: 10px;
+    letter-spacing: 1px;
+  }
+
+  #restart-btn:hover { filter: brightness(1.1); }
+
+  #quiz-revive-btn {
+    background: linear-gradient(180deg, #a259f7, #7c2fd4);
+    color: white;
+    border: none;
+    border-radius: 30px;
+    padding: 14px 24px;
+    font-size: clamp(15px, 4.5vw, 20px);
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    margin-top: 10px;
+    letter-spacing: 1px;
+    display: none;
+    width: 100%;
+  }
+  #quiz-revive-btn:hover { filter: brightness(1.1); }
+
+  /* CONFIRM DIALOG */
+  #confirm-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 2000;
+    justify-content: center;
+    align-items: center;
+  }
+  #confirm-overlay.show { display: flex; }
+  #confirm-box {
+    background: #4a3fc0;
+    border-radius: 16px;
+    padding: 28px 32px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    border: 2px solid #7b6ed6;
+    min-width: 260px;
+  }
+  #confirm-msg {
+    color: white;
+    font-size: 17px;
+    margin-bottom: 24px;
+    line-height: 1.5;
+  }
+  #confirm-btns {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+  }
+  #confirm-cancel {
+    background: #666;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 10px 28px;
+    font-size: 16px;
+    cursor: pointer;
+    flex: 1;
+  }
+  #confirm-ok {
+    background: linear-gradient(180deg, #ff7b2e, #e85500);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 10px 28px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    flex: 1;
+  }
+  #confirm-cancel:hover { filter: brightness(1.15); }
+  #confirm-ok:hover { filter: brightness(1.15); }
+
+  /* SETTINGS MENU */
+  #settings-menu {
+    display: none;
+    position: fixed;
+    top: 70px;
+    right: 16px;
+    z-index: 800;
+    background: #3a2fa8;
+    border-radius: 16px;
+    padding: 10px 0;
+    min-width: 220px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    border: 1.5px solid #5a4fd0;
+  }
+  #settings-menu.open { display: block; }
+
+  .menu-section-title {
+    color: #9b91e0;
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 6px 18px 4px;
+  }
+
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .menu-item:hover { background: rgba(255,255,255,0.1); }
+  .menu-item.disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .menu-item-icon {
+    font-size: 20px;
+    width: 26px;
+    text-align: center;
+  }
+  .menu-item-label { flex: 1; }
+  .menu-item-badge {
+    background: #ffa500;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    border-radius: 10px;
+    padding: 2px 8px;
+    min-width: 28px;
+    text-align: center;
+  }
+  .menu-item-badge.empty { background: #555; }
+
+  .menu-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.1);
+    margin: 6px 0;
+  }
+
+  /* COLOR PICKER GRID */
+  .color-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    padding: 8px 18px 12px;
+  }
+  .color-swatch {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 3px solid transparent;
+    transition: transform 0.15s, border-color 0.15s;
+    position: relative;
+  }
+  .color-swatch:hover { transform: scale(1.15); }
+  .color-swatch.active {
+    border-color: white;
+    transform: scale(1.15);
+  }
+  .color-swatch.active::after {
+    content: '✓';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  }
+
+  /* CLEAR ANIMATION */
+  @keyframes clearRow {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.08); }
+    100% { opacity: 0; transform: scale(0); }
+  }
+
+  .cell.clearing .gem {
+    animation: clearRow 0.35s ease-out forwards;
+  }
+
+  /* SCORE POPUP */
+  .score-popup {
+    position: fixed;
+    color: #ffd700;
+    font-size: 28px;
+    font-weight: 900;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+    pointer-events: none;
+    z-index: 500;
+    animation: floatUp 0.9s ease-out forwards;
+  }
+
+  @keyframes floatUp {
+    0% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-60px) scale(1.3); }
+  }
+
+  /* BOARD CLEAR BANNER */
+  .clear-banner {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%) scale(0.6);
+    top: 38%;
+    background: linear-gradient(135deg, #ff6b35, #ffd700);
+    color: #fff;
+    font-size: clamp(18px, 5vw, 30px);
+    font-weight: 900;
+    padding: 12px 24px;
+    border-radius: 18px;
+    text-align: center;
+    pointer-events: none;
+    z-index: 600;
+    white-space: nowrap;
+    box-shadow: 0 6px 32px rgba(0,0,0,0.35);
+    text-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    animation: bannerPop 2s ease forwards;
+  }
+
+  @keyframes bannerPop {
+    0%   { opacity: 0; transform: translateX(-50%) scale(0.6); }
+    15%  { opacity: 1; transform: translateX(-50%) scale(1.08); }
+    25%  { transform: translateX(-50%) scale(1); }
+    70%  { opacity: 1; transform: translateX(-50%) scale(1); }
+    100% { opacity: 0; transform: translateX(-50%) scale(0.9); }
+  }
+
+  /* ── 答题对话框 ─────────────────────────────────────── */
+  #quiz-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 6, 40, 0.82);
+    z-index: 3000;
+    justify-content: center;
+    align-items: center;
+  }
+  #quiz-overlay.show { display: flex; }
+
+  #quiz-box {
+    background: linear-gradient(160deg, #1e1660 0%, #2d2090 60%, #1a1050 100%);
+    border-radius: 22px;
+    padding: 28px 24px 22px;
+    width: min(340px, 92vw);
+    box-shadow: 0 12px 48px rgba(0,0,0,0.6), 0 0 0 1.5px rgba(130,110,255,0.4);
+    text-align: center;
+  }
+
+  #quiz-title {
+    color: #a99fff;
+    font-size: 13px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+
+  #quiz-question {
+    color: #fff;
+    font-size: 34px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    margin-bottom: 24px;
+    line-height: 1.2;
+    min-height: 48px;
+  }
+
+  #quiz-feedback {
+    min-height: 22px;
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    padding: 4px 10px;
+    transition: opacity 0.2s;
+  }
+  #quiz-feedback.wrong {
+    color: #ff6b6b;
+    background: rgba(255,80,80,0.12);
+  }
+  #quiz-feedback.right {
+    color: #4cd964;
+    background: rgba(60,220,80,0.12);
+  }
+
+  #quiz-options {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .quiz-opt {
+    flex: 1;
+  }
+
+  .quiz-opt {
+    background: linear-gradient(160deg, #3a2fa8, #2a1f88);
+    color: #fff;
+    border: 1.5px solid rgba(140,120,255,0.35);
+    border-radius: 14px;
+    padding: 14px 8px;
+    font-size: 22px;
+    font-weight: 900;
+    cursor: pointer;
+    transition: transform 0.1s, filter 0.1s, border-color 0.15s;
+    letter-spacing: 1px;
+  }
+  .quiz-opt:hover { filter: brightness(1.25); transform: scale(1.04); }
+  .quiz-opt:active { transform: scale(0.97); }
+  .quiz-opt.shake {
+    animation: quizShake 0.35s ease;
+    border-color: #ff5555;
+    background: linear-gradient(160deg, #6a1f1f, #4a1010);
+  }
+  .quiz-opt.correct {
+    border-color: #4cd964;
+    background: linear-gradient(160deg, #1a6a2a, #0e4a1a);
+  }
+
+  #quiz-giveup {
+    width: 100%;
+    background: rgba(200, 60, 60, 0.18);
+    color: #ff8a8a;
+    border: 1.5px solid rgba(200,60,60,0.3);
+    border-radius: 14px;
+    padding: 11px 8px;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 2px;
+    transition: filter 0.15s;
+    letter-spacing: 1px;
+  }
+  #quiz-giveup:hover { filter: brightness(1.2); }
+
+  #quiz-giveup-msg {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(10,6,40,0.88);
+    z-index: 3100;
+    justify-content: center;
+    align-items: center;
+  }
+  #quiz-giveup-msg.show { display: flex; }
+  #quiz-giveup-inner {
+    background: linear-gradient(160deg, #1e1660, #2d2090);
+    border-radius: 20px;
+    padding: 36px 32px;
+    text-align: center;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    border: 1.5px solid rgba(130,110,255,0.35);
+  }
+  #quiz-giveup-inner p {
+    color: #fff;
+    font-size: 22px;
+    font-weight: bold;
+    margin-bottom: 20px;
+  }
+  #quiz-giveup-inner button {
+    background: linear-gradient(180deg, #ff7b2e, #e85500);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 12px 36px;
+    font-size: 17px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+
+  @keyframes quizShake {
+    0%,100% { transform: translateX(0); }
+    20%      { transform: translateX(-6px); }
+    40%      { transform: translateX(6px); }
+    60%      { transform: translateX(-4px); }
+    80%      { transform: translateX(4px); }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <div id="highscore">
+    <span class="crown-icon">👑</span>
+    <span id="highscore-val">0</span>
+  </div>
+  <button id="refresh-btn" title="刷新方块">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+      <path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+      <polyline points="21 3 21 8 16 8"/>
+      <polyline points="3 21 3 16 8 16"/>
+    </svg>
+    <span id="refresh-topbar-badge">10</span>
+  </button>
+  <button id="settings-btn">
+    ⚙️
+    <span class="new-badge">NEW</span>
+  </button>
+</div>
+
+<!-- SCORE -->
+<div id="score-container">
+  <div id="score">0</div>
+</div>
+
+<!-- BOARD -->
+<div id="board-wrapper" style="position:relative;">
+  <div id="board"></div>
+  <div id="click-ghost"></div>
+</div>
+
+<!-- PIECES TRAY -->
+<div id="pieces-tray">
+  <div class="piece-slot" id="slot-0"></div>
+  <div class="piece-slot" id="slot-1"></div>
+  <div class="piece-slot" id="slot-2"></div>
+</div>
+
+<!-- SETTINGS MENU -->
+<div id="settings-menu">
+  <div class="menu-section-title">工具</div>
+  <div class="menu-item" id="menu-refresh">
+    <span class="menu-item-icon">🔄</span>
+    <span class="menu-item-label">刷新方块</span>
+    <span class="menu-item-badge" id="refresh-badge">10</span>
+  </div>
+  <div class="menu-item" id="menu-fullscreen">
+    <span class="menu-item-icon" id="fullscreen-icon">⛶</span>
+    <span class="menu-item-label" id="fullscreen-label">全屏显示</span>
+  </div>
+  <div class="menu-item" id="menu-newgame">
+    <span class="menu-item-icon">🆕</span>
+    <span class="menu-item-label">重新开始</span>
+  </div>
+  <div class="menu-item" id="menu-quit">
+    <span class="menu-item-icon">🔙</span>
+    <span class="menu-item-label">返回</span>
+  </div>
+  <div class="menu-divider"></div>
+  <div class="menu-section-title">方块颜色</div>
+  <div class="color-grid" id="color-grid"></div>
+</div>
+
+<!-- CONFIRM DIALOG -->
+<div id="confirm-overlay">
+  <div id="confirm-box">
+    <div id="confirm-msg">确定要重新开始吗？当前进度将丢失。</div>
+    <div id="confirm-btns">
+      <button id="confirm-cancel">取消</button>
+      <button id="confirm-ok">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- DRAG GHOST -->
+<div id="drag-ghost"></div>
+
+<!-- QUIZ OVERLAY -->
+<div id="quiz-overlay">
+  <div id="quiz-box">
+    <div id="quiz-title">快呼叫支援 🆘</div>
+    <div id="quiz-question"></div>
+    <div id="quiz-feedback"></div>
+    <div id="quiz-options">
+      <button class="quiz-opt" data-idx="0"></button>
+      <button class="quiz-opt" data-idx="1"></button>
+      <button class="quiz-opt" data-idx="2"></button>
+    </div>
+    <button id="quiz-giveup">我不会 😓</button>
+  </div>
+</div>
+
+<!-- QUIZ GIVEUP MESSAGE -->
+<div id="quiz-giveup-msg">
+  <div id="quiz-giveup-inner">
+    <p>😅 你应该学习了</p>
+    <button id="quiz-giveup-ok">好的</button>
+  </div>
+</div>
+
+<!-- GAME OVER -->
+<div id="gameover-overlay">
+  <div class="gameover-box">
+    <h2>游戏结束</h2>
+    <div class="final-score" id="final-score">0</div>
+    <div class="best-label">最高分</div>
+    <div class="best-score" id="best-score-display">0</div>
+    <button id="revive-btn">🔄 复活 <span id="revive-count"></span></button>
+    <button id="quiz-revive-btn">🆘 答题支援</button>
+    <button id="restart-btn">再玩一次</button>
+  </div>
+</div>
+
+<script>
+const GRID = 8;
+
+// ── 颜色主题 ──────────────────────────────────────────────
+const COLOR_THEMES = [
+  { id: 'multi',    label: '多彩',   swatch: 'linear-gradient(135deg,#e81919,#1980e8,#19c840,#e8b819,#9019e8)', multi: true },
+  { id: 'wine',     label: '橙',     swatch: '#f06010',  css: 'gem-wine' },
+  { id: 'red',      label: '红',     swatch: '#e81919',  css: 'gem-red' },
+  { id: 'blue',     label: '蓝',     swatch: '#1980e8',  css: 'gem-blue' },
+  { id: 'green',    label: '绿',     swatch: '#19c840',  css: 'gem-green' },
+  { id: 'yellow',   label: '金',     swatch: '#e8b819',  css: 'gem-yellow' },
+  { id: 'purple',   label: '紫',     swatch: '#9019e8',  css: 'gem-purple' },
+  { id: 'teal',     label: '青',     swatch: '#00b4b4',  css: 'gem-teal' },
+  { id: 'orange',   label: '橙',     swatch: '#f07020',  css: 'gem-orange' },
+  { id: 'pink',     label: '粉',     swatch: '#e8196e',  css: 'gem-pink' },
+];
+
+let selectedTheme = COLOR_THEMES[0]; // default multi
+
+function getColors() {
+  if (selectedTheme.multi) return ['gem-red','gem-blue','gem-green','gem-yellow','gem-purple'];
+  return [selectedTheme.css];
+}
+
+// gem class → [r, g, b]
+const GEM_RGB = {
+  'gem-red':    [232, 25,  25],
+  'gem-blue':   [25,  128, 232],
+  'gem-green':  [25,  200, 64],
+  'gem-yellow': [232, 184, 25],
+  'gem-purple': [144, 25,  232],
+  'gem-wine':   [240, 96,  16],
+  'gem-teal':   [0,   180, 180],
+  'gem-orange': [240, 112, 32],
+  'gem-pink':   [232, 25,  110],
+};
+
+// 获取当前操作方块的主色（拖拽或选中）
+function getActivePieceColor() {
+  if (dragState) return dragState.piece.color;
+  if (selectedPieceIdx >= 0 && pieces[selectedPieceIdx]) return pieces[selectedPieceIdx].color;
+  return null;
+}
+
+// 用方块主色生成混色的 clearable highlight 样式
+function getClearableStyle(gemColor) {
+  const rgb = GEM_RGB[gemColor] || [255, 220, 50];
+  return {
+    bg:     `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.18)`,
+    border: `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 1.0)`,
+    bgOver: `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.35)`,
+    shadow: `0 0 8px 2px rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.8)`,
+  };
+}
+
+// All piece shapes [rows][cols], value 1 = filled
+// weight: 出现权重，越大越频繁
+const SHAPES = [
+  { shape: [[1]],                         name: '1x1',    w: 1, weight: 5 },
+  { shape: [[1,1]],                        name: '1x2h',   w: 2, weight: 2 },
+  { shape: [[1],[1]],                      name: '1x2v',   w: 1, weight: 2 },
+  { shape: [[1,1,1]],                      name: '1x3h',   w: 3, weight: 2 },
+  { shape: [[1],[1],[1]],                  name: '1x3v',   w: 1, weight: 2 },
+  { shape: [[1,1],[1,1]],                  name: '2x2',    w: 2, weight: 5 },
+  { shape: [[1,1,1],[1,0,0]],              name: 'L',      w: 3, weight: 4 },  // 4变体合计16
+  { shape: [[1,1,1],[0,0,1]],              name: 'J',      w: 3, weight: 4 },
+  { shape: [[1,0,0],[1,1,1]],             name: 'L2',     w: 3, weight: 4 },
+  { shape: [[0,0,1],[1,1,1]],              name: 'J2',     w: 3, weight: 4 },
+  { shape: [[1,1],[1,0]],                  name: 'l',      w: 2, weight: 1 },  // 4变体合计4
+  { shape: [[1,1],[0,1]],                  name: 'r',      w: 2, weight: 1 },
+  { shape: [[1,0],[1,1]],                  name: 'l2',     w: 2, weight: 1 },
+  { shape: [[0,1],[1,1]],                  name: 'r2',     w: 2, weight: 1 },
+  { shape: [[1,1,1,1]],                    name: '1x4h',   w: 4, weight: 9 },  // 直接填半行
+  { shape: [[1],[1],[1],[1]],              name: '1x4v',   w: 1, weight: 9 },  // 直接填半列
+  { shape: [[1,1,1],[1,0,0],[1,0,0]],      name: 'corner', w: 3, weight: 1 },  // 4变体合计4
+  { shape: [[1,1,1],[0,0,1],[0,0,1]],      name: 'corner2',w: 3, weight: 1 },
+  { shape: [[1,0,0],[1,0,0],[1,1,1]],      name: 'corner3',w: 3, weight: 1 },
+  { shape: [[0,0,1],[0,0,1],[1,1,1]],      name: 'corner4',w: 3, weight: 1 },
+  { shape: [[1,1,1],[1,1,1],[1,1,1]],      name: '3x3',    w: 3, weight: 9 },  // 一次填满3行×3列
+  { shape: [[1,1,1],[1,1,1]],              name: '3x2',    w: 3, weight: 9 },  // 6格大块
+  { shape: [[1,1],[1,1],[1,1]],            name: '2x3',    w: 2, weight: 9 },  // 6格大块
+  { shape: [[1,1,1,1,1]],                  name: '1x5h',   w: 5, weight: 4 },  // 填5/8行
+  { shape: [[1],[1],[1],[1],[1]],          name: '1x5v',   w: 1, weight: 4 },  // 填5/8列
+  { shape: [[1,1,0],[0,1,1]],              name: 'Z-h',    w: 3, weight: 1 },  // Z/S 4变体合计4
+  { shape: [[0,1,1],[1,1,0]],              name: 'S-h',    w: 3, weight: 1 },
+  { shape: [[0,1],[1,1],[1,0]],            name: 'Z-v',    w: 2, weight: 1 },
+  { shape: [[1,0],[1,1],[0,1]],            name: 'S-v',    w: 2, weight: 1 },
+  { shape: [[1,1,1],[0,1,0]],              name: 'T-down', w: 3, weight: 2 },  // 4变体合计8
+  { shape: [[0,1,0],[1,1,1]],              name: 'T-up',   w: 3, weight: 2 },
+  { shape: [[1,0],[1,1],[1,0]],            name: 'T-right',w: 2, weight: 2 },
+  { shape: [[0,1],[1,1],[0,1]],            name: 'T-left', w: 2, weight: 2 },
+];
+
+// Game state
+let grid = [];
+let score = 0;
+let highScore = 0;
+let pieces = [null, null, null];
+let dragState = null;
+let selectedPieceIdx = -1; // 点击选中的方块索引
+let refreshCount = 3;
+const REFRESH_MAX = 3;
+
+const SAVE_KEY = 'blockblast_save';
+
+function saveState() {
+  const state = {
+    grid,
+    score,
+    refreshCount,
+    pieces: pieces.map(p => p ? { shape: p.shape, color: p.color } : null),
+  };
+  localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+}
+
+const KNOWN_COLORS = new Set([
+  'gem-red','gem-orange','gem-wine','gem-yellow','gem-green',
+  'gem-teal','gem-blue','gem-purple','gem-pink','gem-white',
+]);
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    const s = JSON.parse(raw);
+    if (!s.grid || s.grid.length !== GRID) return false;
+    grid = s.grid;
+    score = s.score || 0;
+    refreshCount = (s.refreshCount != null) ? s.refreshCount : REFRESH_MAX;
+    pieces = (s.pieces || [null, null, null]).map(p => {
+      if (!p) return null;
+      // 不识别的颜色则丢弃该格子
+      if (!KNOWN_COLORS.has(p.color)) return null;
+      if (!p.shape || !Array.isArray(p.shape)) return null;
+      return p;
+    });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function newGame() {
+  localStorage.removeItem(SAVE_KEY);
+  highScore = parseInt(localStorage.getItem('blockblast_hs') || '0');
+  selectedPieceIdx = -1;
+  score = 0;
+  refreshCount = REFRESH_MAX;
+  grid = Array.from({length: GRID}, () => Array(GRID).fill(null));
+  updateScoreDisplay();
+  updateRefreshBadge();
+  renderBoard();
+  dealPieces();
+}
+
+function init() {
+  highScore = parseInt(localStorage.getItem('blockblast_hs') || '0');
+  selectedPieceIdx = -1;
+  if (loadState()) {
+    updateScoreDisplay();
+    updateRefreshBadge();
+    renderBoard();
+    renderPieces();
+  } else {
+    newGame();
+  }
+}
+
+function updateScoreDisplay() {
+  document.getElementById('score').textContent = score;
+  if (score > highScore) {
+    highScore = score;
+    localStorage.setItem('blockblast_hs', highScore);
+  }
+  document.getElementById('highscore-val').textContent = highScore;
+}
+
+// BOARD RENDERING
+function renderBoard() {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  for (let r = 0; r < GRID; r++) {
+    for (let c = 0; c < GRID; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell' + (grid[r][c] ? ' filled' : '');
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      if (grid[r][c]) {
+        const gem = document.createElement('div');
+        gem.className = 'gem ' + grid[r][c];
+        cell.appendChild(gem);
+      }
+      board.appendChild(cell);
+    }
+  }
+}
+
+function getCell(r, c) {
+  return document.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+}
+
+// PIECES
+const SHAPE_TOTAL_WEIGHT = SHAPES.reduce((s, p) => s + p.weight, 0);
+
+function randomPiece() {
+  let r = Math.random() * SHAPE_TOTAL_WEIGHT;
+  let shape;
+  for (const s of SHAPES) {
+    r -= s.weight;
+    if (r <= 0) { shape = s; break; }
+  }
+  if (!shape) shape = SHAPES[SHAPES.length - 1];
+  const colors = getColors();
+  const color = colors[Math.floor(Math.random() * colors.length)];
+  return { shape: shape.shape, color };
+}
+
+// 返回一个能恰好填满指定行缺口位置的单行方块 shape（横向连续格）
+// gaps: 缺口列索引数组（已排序）
+// 只支持长度 1~5 的连续缺口
+function makeHintPiece(gaps) {
+  const colors = getColors();
+  const color = colors[Math.floor(Math.random() * colors.length)];
+  const len = gaps.length;
+  return { shape: [Array(len).fill(1)], color };
+}
+
+// 检测棋盘，返回一个"提示方块"或 null
+// 优先级：单行/列缺1~4格 > 相邻两行/列缺口可被某SHAPES填满
+function getBoardHint() {
+  const filled = grid.reduce((s, row) => s + row.filter(v => v !== null).length, 0);
+  const total = GRID * GRID;
+  const ratio = filled / total;
+  if (ratio > 0.25 && ratio < 0.75) return null; // 占比在25%~75%之间，不触发
+
+  // ── 1. 单行缺口 1~4 格（连续或不连续均可，只要缺格数≤4）──
+  for (let r = 0; r < GRID; r++) {
+    const gaps = [];
+    for (let c = 0; c < GRID; c++) { if (!grid[r][c]) gaps.push(c); }
+    if (gaps.length >= 1 && gaps.length <= 4) {
+      return makeHintPiece(gaps);
+    }
+  }
+  // ── 2. 单列缺口 1~4 格 ──
+  for (let c = 0; c < GRID; c++) {
+    const gaps = [];
+    for (let r = 0; r < GRID; r++) { if (!grid[r][c]) gaps.push(r); }
+    if (gaps.length >= 1 && gaps.length <= 4) {
+      // 竖向单列方块
+      const colors = getColors();
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      return { shape: Array(gaps.length).fill([1]), color };
+    }
+  }
+  // ── 3. 相邻两行缺口，总格数 < 6 且某 SHAPE 能精确覆盖 ──
+  for (let r = 0; r < GRID - 1; r++) {
+    const gaps0 = [], gaps1 = [];
+    for (let c = 0; c < GRID; c++) {
+      if (!grid[r][c])   gaps0.push(c);
+      if (!grid[r+1][c]) gaps1.push(c);
+    }
+    if (gaps0.length === 0 || gaps1.length === 0) continue;
+    if (gaps0.length + gaps1.length >= 6) continue;
+    // 构建目标填充矩阵（2行×GRID列）
+    for (const s of SHAPES) {
+      if (s.shape.length !== 2) continue;
+      const sw = s.shape[0].length;
+      if (sw > GRID) continue;
+      // 尝试每个列偏移
+      for (let dc = 0; dc <= GRID - sw; dc++) {
+        // 检查该 shape 放在 (r, dc) 是否恰好填满 gaps0+gaps1 且不超出
+        let match = true;
+        for (let pr = 0; pr < 2 && match; pr++) {
+          for (let pc = 0; pc < sw && match; pc++) {
+            const gc = dc + pc;
+            const needs = (pr === 0 ? gaps0 : gaps1).includes(gc);
+            const provides = !!s.shape[pr][pc];
+            if (provides && grid[r + pr][gc]) match = false; // 该格已填
+            if (provides !== needs) match = false;
+          }
+        }
+        if (match) {
+          const colors = getColors();
+          const color = colors[Math.floor(Math.random() * colors.length)];
+          return { shape: s.shape, color };
+        }
+      }
+    }
+  }
+  // ── 4. 相邻两列同理 ──
+  for (let c = 0; c < GRID - 1; c++) {
+    const gaps0 = [], gaps1 = [];
+    for (let r = 0; r < GRID; r++) {
+      if (!grid[r][c])   gaps0.push(r);
+      if (!grid[r][c+1]) gaps1.push(r);
+    }
+    if (gaps0.length === 0 || gaps1.length === 0) continue;
+    if (gaps0.length + gaps1.length >= 6) continue;
+    for (const s of SHAPES) {
+      if (s.shape[0].length !== 2) continue;
+      const sh = s.shape.length;
+      if (sh > GRID) continue;
+      for (let dr = 0; dr <= GRID - sh; dr++) {
+        let match = true;
+        for (let pr = 0; pr < sh && match; pr++) {
+          for (let pc = 0; pc < 2 && match; pc++) {
+            const gr = dr + pr;
+            const needs = (pc === 0 ? gaps0 : gaps1).includes(gr);
+            const provides = !!s.shape[pr][pc];
+            if (provides && grid[gr][c + pc]) match = false;
+            if (provides !== needs) match = false;
+          }
+        }
+        if (match) {
+          const colors = getColors();
+          const color = colors[Math.floor(Math.random() * colors.length)];
+          return { shape: s.shape, color };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function dealPieces() {
+  const filled = grid.reduce((s, row) => s + row.filter(v => v !== null).length, 0);
+  const ratio = filled / (GRID * GRID);
+  const colors = getColors();
+  function randColor() { return colors[Math.floor(Math.random() * colors.length)]; }
+
+  // 屏占比 < 10%：50% 概率出现 2个9格方块 + 1个6格方块
+  if (ratio < 0.1 && Math.random() < 0.5) {
+    const shape9 = [[1,1,1],[1,1,1],[1,1,1]];
+    const shape6s = [[[1,1,1],[1,1,1]], [[1,1],[1,1],[1,1]]];
+    const shape6 = shape6s[Math.floor(Math.random() * 2)];
+    const slots = [0,1,2];
+    const sixSlot = slots.splice(Math.floor(Math.random() * 3), 1)[0];
+    pieces[sixSlot] = { shape: shape6, color: randColor() };
+    for (const s of slots) pieces[s] = { shape: shape9, color: randColor() };
+    renderPieces();
+    saveState();
+    return;
+  }
+
+  // 智能提示：棋盘占比 ≤25% 或 ≥75% 时，随机替换1个槽位为提示方块
+  const hint = getBoardHint();
+  const hintSlot = hint ? Math.floor(Math.random() * 3) : -1;
+  for (let i = 0; i < 3; i++) {
+    pieces[i] = (i === hintSlot) ? hint : randomPiece();
+  }
+
+  // 屏占比 < 30%：小于4格的方块有 50% 概率替换为其他随机方块
+  if (ratio < 0.3) {
+    for (let i = 0; i < 3; i++) {
+      if (i === hintSlot) continue; // 提示方块不替换
+      const p = pieces[i];
+      const cellCount = p.shape.reduce((s, row) => s + row.filter(v => v).length, 0);
+      if (cellCount < 4 && Math.random() < 0.5) {
+        pieces[i] = randomPiece();
+      }
+    }
+  }
+  // 约束：相邻两个方块宽度之和 > 7 会互相遮盖，需旋转最宽的那个
+  function colsOf(i) { return pieces[i] ? pieces[i].shape[0].length : 0; }
+  for (let attempts = 0; attempts < 6; attempts++) {
+    let worstIdx = -1, worstCols = 0;
+    for (let i = 0; i < 2; i++) {
+      if (colsOf(i) + colsOf(i + 1) > 7) {
+        // 旋转两者中较宽的
+        const wi = colsOf(i) >= colsOf(i + 1) ? i : i + 1;
+        if (colsOf(wi) > worstCols) { worstCols = colsOf(wi); worstIdx = wi; }
+      }
+    }
+    if (worstIdx < 0) break;
+    const p = pieces[worstIdx];
+    if (p.shape[0].length > p.shape.length) {
+      p.shape = rotateCW(p.shape);
+    } else {
+      break; // 已是正方形或更高，无法缩窄，退出
+    }
+  }
+  renderPieces();
+  saveState();
+}
+
+function renderPieces() {
+  for (let i = 0; i < 3; i++) {
+    renderPieceInSlot(i);
+  }
+}
+
+function renderPieceInSlot(idx) {
+  const slot = document.getElementById('slot-' + idx);
+  slot.innerHTML = '';
+  const piece = pieces[idx];
+  if (!piece) return;
+
+  const preview = document.createElement('div');
+  preview.className = 'piece-preview';
+  const rows = piece.shape.length;
+  const cols = piece.shape[0].length;
+  preview.style.gridTemplateColumns = `repeat(${cols}, 28px)`;
+  preview.style.gridTemplateRows = `repeat(${rows}, 28px)`;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = document.createElement('div');
+      if (piece.shape[r][c]) {
+        cell.className = 'piece-cell';
+        const gem = document.createElement('div');
+        gem.className = 'gem ' + piece.color;
+        cell.appendChild(gem);
+      } else {
+        cell.className = 'piece-cell';
+        cell.style.background = 'transparent';
+        cell.style.border = 'none';
+        cell.style.boxShadow = 'none';
+      }
+      preview.appendChild(cell);
+    }
+  }
+
+  // 根据方块尺寸缩放，确保完整显示在 slot 内（hitarea 90px）
+  const cellSize = 28, gap = 3;
+  const previewW = cols * cellSize + (cols - 1) * gap;
+  const previewH = rows * cellSize + (rows - 1) * gap;
+  const maxSize = 88; // hitarea 90px 留 1px 边距
+  const scale = Math.min(1, maxSize / previewW, maxSize / previewH);
+  if (scale < 1) {
+    preview.style.transform = `scale(${scale.toFixed(3)})`;
+    preview.style.transformOrigin = 'center center';
+  }
+
+  // 用固定 3x3 大小的热区 wrapper 包裹，方便点击小方块
+  const hitArea = document.createElement('div');
+  hitArea.className = 'piece-hitarea';
+  hitArea.appendChild(preview);
+
+  preview.draggable = false;
+  setupDrag(hitArea, idx);
+  slot.appendChild(hitArea);
+}
+
+// DRAG LOGIC
+const DRAG_THRESHOLD = 6; // px，超过此距离才视为拖拽
+
+function setupDrag(el, pieceIdx) {
+  // ── 鼠标 ──
+  el.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX, startY = e.clientY;
+    let dragging = false;
+
+    const onMove = (e) => {
+      if (!dragging) {
+        if (Math.abs(e.clientX - startX) > DRAG_THRESHOLD ||
+            Math.abs(e.clientY - startY) > DRAG_THRESHOLD) {
+          dragging = true;
+          deselectPiece();
+          startDrag(e, pieceIdx, false, startX, startY);
+        }
+        return;
+      }
+      onDragMove(e);
+    };
+
+    const onUp = (e) => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (!dragging) {
+        // 纯点击
+        toggleSelectPiece(pieceIdx);
+      } else {
+        onDragEnd(e);
+      }
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  // ── 触屏 ──
+  el.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const startX = e.touches[0].clientX, startY = e.touches[0].clientY;
+    let dragging = false;
+
+    const onMove = (e) => {
+      if (!dragging) {
+        if (Math.abs(e.touches[0].clientX - startX) > DRAG_THRESHOLD ||
+            Math.abs(e.touches[0].clientY - startY) > DRAG_THRESHOLD) {
+          dragging = true;
+          deselectPiece();
+          startDrag(e, pieceIdx, true, startX, startY);
+        }
+        return;
+      }
+      onDragMove(e);
+    };
+
+    const onEnd = (e) => {
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+      if (!dragging) {
+        toggleSelectPiece(pieceIdx);
+      } else {
+        onDragEnd(e);
+      }
+    };
+
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
+  }, { passive: false });
+}
+
+function startDrag(e, pieceIdx, isTouch, startX, startY) {
+  const piece = pieces[pieceIdx];
+  if (!piece) return;
+
+  const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+  const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+
+  // Build ghost
+  const ghost = document.getElementById('drag-ghost');
+  const rows = piece.shape.length;
+  const cols = piece.shape[0].length;
+  ghost.style.display = 'grid';
+  ghost.style.gridTemplateColumns = `repeat(${cols}, 44px)`;
+  ghost.style.gridTemplateRows = `repeat(${rows}, 44px)`;
+  ghost.style.gap = '3px';
+  ghost.innerHTML = '';
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = document.createElement('div');
+      if (piece.shape[r][c]) {
+        cell.className = 'piece-cell';
+        const gem = document.createElement('div');
+        gem.className = 'gem ' + piece.color;
+        cell.appendChild(gem);
+      } else {
+        cell.className = 'piece-cell';
+        cell.style.background = 'transparent';
+        cell.style.border = 'none';
+        cell.style.boxShadow = 'none';
+      }
+      ghost.appendChild(cell);
+    }
+  }
+
+  const ghostW = cols * 44 + (cols - 1) * 3;
+  const ghostH = rows * 44 + (rows - 1) * 3;
+
+  // 用按下时的起始坐标计算偏移，使 ghost 跟手不跳动
+  const hitArea = document.querySelector(`#slot-${pieceIdx} .piece-hitarea`);
+  const previewEl = hitArea?.querySelector('.piece-preview') || hitArea;
+  const previewRect = previewEl ? previewEl.getBoundingClientRect() : null;
+  let relX = ghostW / 2, relY = ghostH / 2;
+  if (previewRect) {
+    const scaleX = ghostW / previewRect.width;
+    const scaleY = ghostH / previewRect.height;
+    relX = Math.min(Math.max((startX - previewRect.left) * scaleX, 0), ghostW);
+    relY = Math.min(Math.max((startY - previewRect.top) * scaleY, 0), ghostH);
+  }
+
+  dragState = {
+    pieceIdx,
+    piece,
+    isTouch,
+    offsetX: relX,
+    // 触摸时让 ghost 显示在手指上方 80px，避免被手遮住，同时保持 X 轴跟手
+    offsetY: isTouch ? relY + 80 : relY,
+  };
+
+  document.body.classList.add('dragging');
+  positionGhost(clientX, clientY);
+}
+
+function positionGhost(clientX, clientY) {
+  const ghost = document.getElementById('drag-ghost');
+  const x = clientX - dragState.offsetX;
+  const y = clientY - dragState.offsetY;
+  ghost.style.transform = `translate(${x}px,${y}px)`;
+}
+
+let dragRafId = null;
+let dragPendingX = 0, dragPendingY = 0;
+
+function onDragMove(e) {
+  if (!dragState) return;
+  e.preventDefault();
+  dragPendingX = dragState.isTouch ? e.touches[0].clientX : e.clientX;
+  dragPendingY = dragState.isTouch ? e.touches[0].clientY : e.clientY;
+  if (dragRafId) return; // 已有帧在排队，跳过
+  dragRafId = requestAnimationFrame(() => {
+    dragRafId = null;
+    if (!dragState) return;
+    positionGhost(dragPendingX, dragPendingY);
+    highlightCells();
+  });
+}
+
+function onDragEnd(e) {
+  if (!dragState) return;
+  const clientX = dragState.isTouch ? e.changedTouches[0].clientX : e.clientX;
+  const clientY = dragState.isTouch ? e.changedTouches[0].clientY : e.clientY;
+
+  const board = document.getElementById('board');
+  const rect = board.getBoundingClientRect();
+  // Only attempt placement if ghost overlaps the board area
+  const ghost = document.getElementById('drag-ghost');
+  const ghostRect = ghost.getBoundingClientRect();
+  const overlaps = ghostRect.left < rect.right && ghostRect.right > rect.left &&
+                   ghostRect.top < rect.bottom && ghostRect.bottom > rect.top;
+
+  const target = overlaps ? getBoardTarget() : null;
+  clearHighlight();
+
+  if (target !== null) {
+    const { r, c } = target;
+    if (canPlace(dragState.piece, r, c)) {
+      placePiece(dragState.piece, r, c, dragState.pieceIdx);
+    }
+  }
+
+  document.getElementById('drag-ghost').style.display = 'none';
+  document.body.classList.remove('dragging');
+  if (dragRafId) { cancelAnimationFrame(dragRafId); dragRafId = null; }
+  dragState = null;
+}
+
+// Get board target from ghost's actual displayed position
+function getBoardTarget() {
+  const ghost = document.getElementById('drag-ghost');
+  const ghostRect = ghost.getBoundingClientRect();
+  const board = document.getElementById('board');
+  const boardRect = board.getBoundingClientRect();
+  const cellSize = boardRect.width / GRID;
+
+  const piece = dragState.piece;
+  const cols = piece.shape[0].length;
+  const rows = piece.shape.length;
+
+  // 用 ghost 中心点推算 piece 左上角所在格子
+  // ghost 尺寸（含 gap）
+  const ghostW = cols * 44 + (cols - 1) * 3;
+  const ghostH = rows * 44 + (rows - 1) * 3;
+  const ghostCenterX = ghostRect.left + ghostW / 2;
+  const ghostCenterY = ghostRect.top  + ghostH / 2;
+
+  const idealC = Math.round((ghostCenterX - boardRect.left) / cellSize - cols / 2);
+  const idealR = Math.round((ghostCenterY - boardRect.top)  / cellSize - rows / 2);
+
+  // Snap to nearest valid position within small radius
+  let bestR = idealR, bestC = idealC, bestDist = Infinity;
+  const searchRadius = 1;
+  for (let dr = -searchRadius; dr <= searchRadius; dr++) {
+    for (let dc = -searchRadius; dc <= searchRadius; dc++) {
+      const tr = idealR + dr, tc = idealC + dc;
+      if (canPlace(piece, tr, tc)) {
+        const dist = dr * dr + dc * dc;
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestR = tr;
+          bestC = tc;
+        }
+      }
+    }
+  }
+
+  return { r: bestR, c: bestC };
+}
+
+let highlightDebounceTimer = null;
+// 缓存上次高亮的 cells，避免每次 querySelectorAll 全量扫描
+let highlightedCells = [];
+
+function highlightCells() {
+  clearHighlight();
+  const target = getBoardTarget();
+  if (!target) return;
+  const { r, c } = target;
+  const piece = dragState.piece;
+  const valid = canPlace(piece, r, c);
+  const cls = valid ? 'highlight' : 'highlight-invalid';
+
+  // 标记放置格，同时记录进 highlightedCells
+  for (let pr = 0; pr < piece.shape.length; pr++) {
+    for (let pc = 0; pc < piece.shape[0].length; pc++) {
+      if (!piece.shape[pr][pc]) continue;
+      const gr = r + pr, gc = c + pc;
+      if (gr < 0 || gr >= GRID || gc < 0 || gc >= GRID) continue;
+      const cell = getCell(gr, gc);
+      if (!cell) continue;
+      cell.classList.add(cls);
+      highlightedCells.push(cell);
+    }
+  }
+
+  // 预测消除行/列（仅在合法放置时，防抖 120ms，老设备留更多时间）
+  clearTimeout(highlightDebounceTimer);
+  if (valid) {
+    highlightDebounceTimer = setTimeout(() => {
+      if (!dragState) return;
+      highlightClearableLines(piece, r, c);
+    }, 120);
+  }
+}
+
+function highlightClearableLines(piece, r, c) {
+  // 模拟放置后的网格
+  const simGrid = grid.map(row => [...row]);
+  for (let pr = 0; pr < piece.shape.length; pr++) {
+    for (let pc = 0; pc < piece.shape[0].length; pc++) {
+      if (!piece.shape[pr][pc]) continue;
+      simGrid[r + pr][c + pc] = piece.color;
+    }
+  }
+
+  const clearRows = new Set();
+  const clearCols = new Set();
+  for (let gr = 0; gr < GRID; gr++) {
+    if (simGrid[gr].every(v => v !== null)) clearRows.add(gr);
+  }
+  for (let gc = 0; gc < GRID; gc++) {
+    if (simGrid.every(row => row[gc] !== null)) clearCols.add(gc);
+  }
+
+  const activeColor = getActivePieceColor() || piece.color;
+  const style = getClearableStyle(activeColor);
+
+  function applyClearStyle(cell) {
+    const isAlsoHighlight = cell.classList.contains('highlight');
+    cell.classList.add('highlight-clearable');
+    cell.style.setProperty('background', isAlsoHighlight ? style.bgOver : style.bg, 'important');
+    cell.style.setProperty('border-color', style.border, 'important');
+    cell.style.setProperty('border-width', '2px', 'important');
+    cell.style.setProperty('box-shadow', style.shadow, 'important');
+    // 记录到缓存供 clearHighlight 快速清理
+    if (!highlightedCells.includes(cell)) highlightedCells.push(cell);
+  }
+
+  clearRows.forEach(gr => {
+    for (let gc = 0; gc < GRID; gc++) {
+      const cell = getCell(gr, gc);
+      if (cell) applyClearStyle(cell);
+    }
+  });
+  clearCols.forEach(gc => {
+    for (let gr = 0; gr < GRID; gr++) {
+      const cell = getCell(gr, gc);
+      if (cell) applyClearStyle(cell);
+    }
+  });
+}
+
+function clearHighlight() {
+  clearTimeout(highlightDebounceTimer);
+  // 只清理缓存的 cell，避免全局 querySelectorAll
+  for (let i = 0; i < highlightedCells.length; i++) {
+    const el = highlightedCells[i];
+    el.classList.remove('highlight', 'highlight-invalid', 'highlight-clearable');
+    el.style.removeProperty('background');
+    el.style.removeProperty('border-color');
+    el.style.removeProperty('border-width');
+    el.style.removeProperty('box-shadow');
+  }
+  highlightedCells = [];
+}
+
+function canPlace(piece, r, c) {
+  for (let pr = 0; pr < piece.shape.length; pr++) {
+    for (let pc = 0; pc < piece.shape[0].length; pc++) {
+      if (!piece.shape[pr][pc]) continue;
+      const gr = r + pr, gc = c + pc;
+      if (gr < 0 || gr >= GRID || gc < 0 || gc >= GRID) return false;
+      if (grid[gr][gc]) return false;
+    }
+  }
+  return true;
+}
+
+function placePiece(piece, r, c, idx) {
+  // Place on grid
+  for (let pr = 0; pr < piece.shape.length; pr++) {
+    for (let pc = 0; pc < piece.shape[0].length; pc++) {
+      if (!piece.shape[pr][pc]) continue;
+      grid[r + pr][c + pc] = piece.color;
+    }
+  }
+
+  // Score for placement
+  const blockCount = piece.shape.flat().filter(Boolean).length;
+  score += blockCount;
+  updateScoreDisplay();
+
+  // Mark piece as used
+  pieces[idx] = null;
+  const slot = document.getElementById('slot-' + idx);
+  const hitArea = slot.querySelector('.piece-hitarea');
+  if (hitArea) hitArea.classList.add('used');
+
+  // Render board then check clears
+  renderBoard();
+  setTimeout(() => {
+    checkAndClear(r, c, piece);
+  }, 50);
+}
+
+function checkAndClear(originR, originC, piece) {
+  const rowsToClear = new Set();
+  const colsToClear = new Set();
+
+  // Check all rows/cols touched by this piece
+  for (let pr = 0; pr < piece.shape.length; pr++) {
+    const gr = originR + pr;
+    if (gr >= 0 && gr < GRID && isRowFull(gr)) rowsToClear.add(gr);
+  }
+  for (let pc = 0; pc < piece.shape[0].length; pc++) {
+    const gc = originC + pc;
+    if (gc >= 0 && gc < GRID && isColFull(gc)) colsToClear.add(gc);
+  }
+
+  if (rowsToClear.size === 0 && colsToClear.size === 0) {
+    saveState();
+    checkDealNew();
+    return;
+  }
+
+  // Animate clearing cells
+  const clearSet = new Set();
+  rowsToClear.forEach(r => {
+    for (let c = 0; c < GRID; c++) clearSet.add(r + ',' + c);
+  });
+  colsToClear.forEach(c => {
+    for (let r = 0; r < GRID; r++) clearSet.add(r + ',' + c);
+  });
+
+  clearSet.forEach(key => {
+    const [r, c] = key.split(',').map(Number);
+    const cell = getCell(r, c);
+    if (cell) cell.classList.add('clearing');
+  });
+
+  // Calculate score
+  const linesCleared = rowsToClear.size + colsToClear.size;
+  const gainedScore = linesCleared * linesCleared * 100;
+  score += gainedScore;
+  updateScoreDisplay();
+
+  // Show score popup
+  showScorePopup('+' + gainedScore);
+
+  setTimeout(() => {
+    // Clear from grid
+    clearSet.forEach(key => {
+      const [r, c] = key.split(',').map(Number);
+      grid[r][c] = null;
+    });
+    renderBoard();
+    // 棋盘全空时奖励分数 + 一次刷新机会
+    if (isBoardEmpty()) {
+      const bonus = Math.floor(1000 + score * linesCleared / 100);
+      score += bonus;
+      updateScoreDisplay();
+      refreshCount = Math.min(refreshCount + 1, REFRESH_MAX);
+      updateRefreshBadge();
+      setTimeout(() => showClearBanner(bonus), 700);
+    }
+    saveState();
+    checkDealNew();
+  }, 380);
+}
+
+function isRowFull(r) {
+  return grid[r].every(v => v !== null);
+}
+
+function isColFull(c) {
+  return grid.every(row => row[c] !== null);
+}
+
+function checkDealNew() {
+  // If all 3 pieces used, deal new ones
+  if (pieces.every(p => p === null)) {
+    dealPieces();
+    return;
+  }
+  // Check if any remaining piece can be placed
+  if (!canPlaceAny()) {
+    setTimeout(showGameOver, 300);
+  }
+}
+
+function canPlaceAny() {
+  for (let i = 0; i < 3; i++) {
+    if (!pieces[i]) continue;
+    let shape = pieces[i].shape;
+    for (let rot = 0; rot < 4; rot++) {
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
+          if (canPlace({ shape }, r, c)) return true;
+        }
+      }
+      shape = rotateCW(shape);
+    }
+  }
+  return false;
+}
+
+function showGameOver() {
+  localStorage.removeItem(SAVE_KEY);
+  document.getElementById('final-score').textContent = score;
+  document.getElementById('best-score-display').textContent = highScore;
+  const reviveBtn = document.getElementById('revive-btn');
+  const quizReviveBtn = document.getElementById('quiz-revive-btn');
+  if (refreshCount > 0) {
+    document.getElementById('revive-count').textContent = `(剩余 ${refreshCount} 次)`;
+    reviveBtn.style.display = 'block';
+    quizReviveBtn.style.display = 'none';
+  } else {
+    reviveBtn.style.display = 'none';
+    quizReviveBtn.style.display = 'block';
+  }
+  document.getElementById('gameover-overlay').classList.add('show');
+}
+
+function showClearBanner(bonus) {
+  const banner = document.createElement('div');
+  banner.className = 'clear-banner';
+  banner.innerHTML = '🎉 完美清屏！<br><span style="font-size:22px">+' + bonus + '</span>';
+  document.body.appendChild(banner);
+  setTimeout(() => banner.remove(), 2000);
+}
+
+function showScorePopup(text) {
+  const popup = document.createElement('div');
+  popup.className = 'score-popup';
+  popup.textContent = text;
+  // Position near board center
+  const board = document.getElementById('board');
+  const rect = board.getBoundingClientRect();
+  popup.style.left = (rect.left + rect.width / 2 - 30) + 'px';
+  popup.style.top = (rect.top + rect.height / 2) + 'px';
+  document.body.appendChild(popup);
+  setTimeout(() => popup.remove(), 1000);
+}
+
+// 顺时针旋转 shape 90 度
+function rotateCW(shape) {
+  const rows = shape.length, cols = shape[0].length;
+  return Array.from({length: cols}, (_, c) =>
+    Array.from({length: rows}, (_, r) => shape[rows - 1 - r][c])
+  );
+}
+
+// ── 点击选中 ──────────────────────────────────────────────
+function toggleSelectPiece(idx) {
+  if (dragState) return; // 拖拽中不处理
+  if (selectedPieceIdx === idx) {
+    // 再次点击同一方块 → 顺时针旋转 90 度
+    const piece = pieces[idx];
+    if (!piece) return;
+    piece.shape = rotateCW(piece.shape);
+    renderPieceInSlot(idx);
+    // 保持选中状态
+    const hitArea = document.querySelector(`#slot-${idx} .piece-hitarea`);
+    if (hitArea) hitArea.classList.add('selected');
+    updateClickGhost(null);
+  } else {
+    deselectPiece();
+    selectedPieceIdx = idx;
+    const hitArea = document.querySelector(`#slot-${idx} .piece-hitarea`);
+    if (hitArea) hitArea.classList.add('selected');
+    updateClickGhost(null); // 初始不显示虚影
+  }
+}
+
+function deselectPiece() {
+  if (selectedPieceIdx >= 0) {
+    const hitArea = document.querySelector(`#slot-${selectedPieceIdx} .piece-hitarea`);
+    if (hitArea) hitArea.classList.remove('selected');
+  }
+  selectedPieceIdx = -1;
+  hideClickGhost();
+  clearHighlight();
+}
+
+function buildGhostHtml(piece, cellSize) {
+  const rows = piece.shape.length;
+  const cols = piece.shape[0].length;
+  const ghost = document.getElementById('click-ghost');
+  ghost.innerHTML = '';
+  ghost.style.display = 'grid';
+  ghost.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
+  ghost.style.gridTemplateRows = `repeat(${rows}, ${cellSize}px)`;
+  ghost.style.gap = '3px';
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'piece-cell';
+      if (piece.shape[r][c]) {
+        const gem = document.createElement('div');
+        gem.className = 'gem ' + piece.color;
+        cell.appendChild(gem);
+      } else {
+        cell.style.background = 'transparent';
+        cell.style.border = 'none';
+      }
+      ghost.appendChild(cell);
+    }
+  }
+}
+
+function updateClickGhost(e) {
+  if (selectedPieceIdx < 0) return;
+  const piece = pieces[selectedPieceIdx];
+  if (!piece) return;
+
+  const boardWrapper = document.getElementById('board-wrapper');
+  const board = document.getElementById('board');
+  const boardRect = board.getBoundingClientRect();
+  const wrapperRect = boardWrapper.getBoundingClientRect();
+  const cellSize = boardRect.width / GRID;
+
+  if (!e) { hideClickGhost(); return; }
+
+  // 计算 ghost 应该对应的格子
+  const cols = piece.shape[0].length;
+  const rows = piece.shape.length;
+  const idealC = Math.round((e.clientX - boardRect.left) / cellSize - cols / 2);
+  const idealR = Math.round((e.clientY - boardRect.top) / cellSize - rows / 2);
+
+  // 找最近合法位置
+  let bestR = idealR, bestC = idealC, bestDist = Infinity;
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      const tr = idealR + dr, tc = idealC + dc;
+      if (canPlace(piece, tr, tc)) {
+        const dist = dr*dr + dc*dc;
+        if (dist < bestDist) { bestDist = dist; bestR = tr; bestC = tc; }
+      }
+    }
+  }
+
+  const ghost = document.getElementById('click-ghost');
+  buildGhostHtml(piece, cellSize - 3);
+
+  // 位置相对于 board-wrapper
+  const left = boardRect.left - wrapperRect.left + bestC * cellSize;
+  const top = boardRect.top - wrapperRect.top + bestR * cellSize;
+  ghost.style.left = left + 'px';
+  ghost.style.top = top + 'px';
+
+  // 高亮
+  clearHighlight();
+  const valid = canPlace(piece, bestR, bestC);
+  for (let pr = 0; pr < rows; pr++) {
+    for (let pc = 0; pc < cols; pc++) {
+      if (!piece.shape[pr][pc]) continue;
+      const gr = bestR + pr, gc = bestC + pc;
+      if (gr < 0 || gr >= GRID || gc < 0 || gc >= GRID) continue;
+      const cell = getCell(gr, gc);
+      if (!cell) continue;
+      cell.classList.add(valid ? 'highlight' : 'highlight-invalid');
+      highlightedCells.push(cell);
+    }
+  }
+  if (valid) highlightClearableLines(piece, bestR, bestC);
+
+  // 存当前悬停格子供 click 使用
+  ghost.dataset.r = bestR;
+  ghost.dataset.c = bestC;
+  ghost.dataset.valid = valid ? '1' : '0';
+}
+
+function hideClickGhost() {
+  const ghost = document.getElementById('click-ghost');
+  ghost.style.display = 'none';
+  ghost.innerHTML = '';
+}
+
+// 棋盘鼠标移动 → 更新虚影
+document.getElementById('board').addEventListener('mousemove', (e) => {
+  if (dragState) return;
+  updateClickGhost(e);
+});
+
+document.getElementById('board').addEventListener('mouseleave', () => {
+  if (dragState || selectedPieceIdx < 0) return;
+  hideClickGhost();
+  clearHighlight();
+});
+
+// 棋盘点击 → 放置
+document.getElementById('board').addEventListener('click', (e) => {
+  if (dragState || selectedPieceIdx < 0) return;
+  const ghost = document.getElementById('click-ghost');
+  if (ghost.dataset.valid !== '1') return;
+  const r = parseInt(ghost.dataset.r);
+  const c = parseInt(ghost.dataset.c);
+  const piece = pieces[selectedPieceIdx];
+  const idx = selectedPieceIdx;
+  deselectPiece();
+  placePiece(piece, r, c, idx);
+});
+
+// 点击棋盘外部取消选中
+document.addEventListener('click', (e) => {
+  if (selectedPieceIdx < 0) return;
+  const board = document.getElementById('board');
+  const tray = document.getElementById('pieces-tray');
+  if (!board.contains(e.target) && !tray.contains(e.target)) {
+    deselectPiece();
+  }
+});
+
+// ── 刷新功能 ──────────────────────────────────────────────
+function isBoardEmpty() {
+  return grid.every(row => row.every(v => v === null));
+}
+
+function updateRefreshBadge() {
+  const badge = document.getElementById('refresh-badge');
+  badge.textContent = refreshCount;
+  badge.className = 'menu-item-badge' + (refreshCount === 0 ? ' empty' : '');
+  const item = document.getElementById('menu-refresh');
+  item.classList.toggle('disabled', refreshCount === 0);
+
+  // 顶部按钮同步
+  document.getElementById('refresh-topbar-badge').textContent = refreshCount;
+  document.getElementById('refresh-btn').classList.toggle('disabled', refreshCount === 0);
+}
+
+function doRefresh() {
+  if (refreshCount <= 0) return;
+  closeMenu();
+  showQuiz(() => {
+    refreshCount--;
+    updateRefreshBadge();
+    dealPieces();
+  }, null);
+}
+
+// ── 颜色选择 ──────────────────────────────────────────────
+// 选色后立即刷新棋盘上所有方块 + 待选区方块颜色
+function applyThemeToAll() {
+  const colors = getColors();
+  const pick = () => colors[Math.floor(Math.random() * colors.length)];
+
+  // 刷新棋盘上已放置的方块
+  for (let r = 0; r < GRID; r++) {
+    for (let c = 0; c < GRID; c++) {
+      if (grid[r][c]) {
+        grid[r][c] = pick();
+      }
+    }
+  }
+  renderBoard();
+
+  // 刷新待选区方块颜色
+  for (let i = 0; i < 3; i++) {
+    if (pieces[i]) {
+      pieces[i] = { ...pieces[i], color: pick() };
+    }
+  }
+  renderPieces();
+}
+
+function buildColorGrid() {
+  const grid = document.getElementById('color-grid');
+  grid.innerHTML = '';
+  COLOR_THEMES.forEach(theme => {
+    const sw = document.createElement('div');
+    sw.className = 'color-swatch' + (theme.id === selectedTheme.id ? ' active' : '');
+    sw.title = theme.label;
+    sw.style.background = theme.swatch;
+    sw.addEventListener('click', () => {
+      selectedTheme = theme;
+      document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+      sw.classList.add('active');
+      applyThemeToAll();
+    });
+    grid.appendChild(sw);
+  });
+}
+
+// ── 设置菜单 ──────────────────────────────────────────────
+function closeMenu() {
+  document.getElementById('settings-menu').classList.remove('open');
+}
+
+document.getElementById('settings-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const menu = document.getElementById('settings-menu');
+  const isOpen = menu.classList.contains('open');
+  menu.classList.toggle('open', !isOpen);
+  if (!isOpen) buildColorGrid();
+});
+
+document.getElementById('menu-refresh').addEventListener('click', doRefresh);
+document.getElementById('refresh-btn').addEventListener('click', doRefresh);
+
+// ── 全屏 ──────────────────────────────────────────────────
+function isFullscreen() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement ||
+            document.mozFullScreenElement || document.msFullscreenElement);
+}
+
+function toggleFullscreen() {
+  if (isFullscreen()) {
+    (document.exitFullscreen || document.webkitExitFullscreen ||
+     document.mozCancelFullScreen || document.msExitFullscreen).call(document);
+  } else {
+    const el = document.documentElement;
+    (el.requestFullscreen || el.webkitRequestFullscreen ||
+     el.mozRequestFullScreen || el.msRequestFullscreen).call(el);
+  }
+  closeMenu();
+}
+
+function updateFullscreenLabel() {
+  const fs = isFullscreen();
+  document.getElementById('fullscreen-icon').textContent = fs ? '⊠' : '⛶';
+  document.getElementById('fullscreen-label').textContent = fs ? '退出全屏' : '全屏显示';
+}
+
+document.getElementById('menu-fullscreen').addEventListener('click', toggleFullscreen);
+
+['fullscreenchange','webkitfullscreenchange','mozfullscreenchange','msfullscreenchange'].forEach(evt => {
+  document.addEventListener(evt, updateFullscreenLabel);
+});
+
+// ── 重新开始（二次确认） ────────────────────────────────────
+document.getElementById('menu-newgame').addEventListener('click', () => {
+  closeMenu();
+  document.getElementById('confirm-overlay').classList.add('show');
+});
+document.getElementById('confirm-cancel').addEventListener('click', () => {
+  document.getElementById('confirm-overlay').classList.remove('show');
+});
+document.getElementById('confirm-ok').addEventListener('click', () => {
+  document.getElementById('confirm-overlay').classList.remove('show');
+  newGame();
+});
+
+document.addEventListener('click', (e) => {
+  if (!document.getElementById('settings-menu').contains(e.target) &&
+      e.target !== document.getElementById('settings-btn')) {
+    closeMenu();
+  }
+});
+
+// REVIVE: 消除一半行或列（优先消除方块数最多的方向），然后重新发放方块
+function doRevive() {
+  if (refreshCount <= 0) return;
+  refreshCount--;
+  updateRefreshBadge();
+
+  // 统计每行、每列的方块数
+  const rowCounts = Array.from({length: GRID}, (_, r) =>
+    ({ idx: r, count: grid[r].filter(v => v !== null).length })
+  ).filter(x => x.count > 0);
+
+  const colCounts = Array.from({length: GRID}, (_, c) =>
+    ({ idx: c, count: grid.filter(row => row[c] !== null).length })
+  ).filter(x => x.count > 0);
+
+  // 选择总方块数更多的方向（行 vs 列），按数量降序排列
+  const rowTotal = rowCounts.reduce((s, x) => s + x.count, 0);
+  const colTotal = colCounts.reduce((s, x) => s + x.count, 0);
+  const candidates = (rowTotal >= colTotal ? rowCounts : colCounts)
+    .sort((a, b) => b.count - a.count);
+
+  // 清除前一半（向上取整），从最满的开始
+  const clearCount = Math.ceil(candidates.length / 2);
+  const toClear = candidates.slice(0, clearCount).map(x => x.idx);
+  const isRow = rowTotal >= colTotal;
+
+  toClear.forEach(idx => {
+    if (isRow) {
+      for (let c = 0; c < GRID; c++) grid[idx][c] = null;
+    } else {
+      for (let r = 0; r < GRID; r++) grid[r][idx] = null;
+    }
+  });
+
+  renderBoard();
+  dealPieces();
+  closeMenu();
+}
+
+document.getElementById('revive-btn').addEventListener('click', () => {
+  document.getElementById('gameover-overlay').classList.remove('show');
+  showQuiz(() => {
+    doRevive();
+  }, null);
+});
+
+// 答题支援：答对3题获得1次复活机会
+document.getElementById('quiz-revive-btn').addEventListener('click', () => {
+  document.getElementById('gameover-overlay').classList.remove('show');
+  startQuizRevive(3);
+});
+
+function startQuizRevive(remaining) {
+  document.getElementById('quiz-title').textContent = `还需答对 ${remaining} 题 🆘`;
+  quizErrorCount = 0;
+  loadQuizQuestion();
+  document.getElementById('quiz-overlay').classList.add('show');
+  quizCallback = () => {
+    const next = remaining - 1;
+    if (next > 0) {
+      startQuizRevive(next);
+    } else {
+      document.getElementById('quiz-title').textContent = '快呼叫支援 🆘';
+      refreshCount++;
+      updateRefreshBadge();
+      closeQuiz();
+      doRevive();
+    }
+  };
+  quizCancelCallback = null;
+}
+
+document.getElementById('restart-btn').addEventListener('click', () => {
+  document.getElementById('gameover-overlay').classList.remove('show');
+  newGame();
+});
+
+// ── 答题系统 ──────────────────────────────────────────────
+
+// 占位符（随机选一个）
+const QUIZ_PLACEHOLDERS = ['?', '□', '△'];
+
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// 题型1：一位数 + 两位数，和不超过100
+function genType1() {
+  let a, b;
+  do {
+    a = randInt(2, 9);
+    b = randInt(11, 99);
+  } while (a + b > 100);
+  const correct = a + b;
+  const wrong1 = a * 10 + b;  // 一位数乘10加两位数
+  const wrong2 = b - a;       // 两位数减一位数
+  const placeholder = QUIZ_PLACEHOLDERS[randInt(0, 2)];
+  const qText = Math.random() < 0.5 ? `${a} + ${b} = ${placeholder}` : `${b} + ${a} = ${placeholder}`;
+  const options = shuffle([correct, wrong1, wrong2]);
+  return { question: qText, correct, options };
+}
+
+// 题型2：两位数 - 两位数或一位数（被减数个位 < 减数个位，需退位）
+function genType2() {
+  let a, b;
+  // 保证退位：被减数个位 < 减数个位
+  let tries = 0;
+  do {
+    a = randInt(11, 99);
+    b = Math.random() < 0.5 ? randInt(2, 9) : randInt(11, 99);
+    tries++;
+  } while (tries < 50 && (a <= b || (a % 10) >= (b % 10)));
+
+  // a > b，且 a 个位 < b 个位（需要退位）
+  const correct = a - b;
+  const aOnes = a % 10, bOnes = b % 10, bTens = Math.floor(b / 10);
+  // 没退位（直接用个位相减绝对值）
+  const wrong1 = a - (b - 10); // 退位了但没减去借的那个十
+  // 多减了一个十
+  const wrong2 = correct - 10;
+
+  const placeholder = QUIZ_PLACEHOLDERS[randInt(0, 2)];
+  const qText = `${a} - ${b} = ${placeholder}`;
+  // 过滤掉重复或负数的选项
+  const rawOpts = [correct, wrong1, wrong2];
+  const seen = new Set();
+  const opts = [];
+  for (const v of rawOpts) {
+    if (v > 0 && !seen.has(v)) { seen.add(v); opts.push(v); }
+  }
+  // 如果去重后不足3个，补随机错误答案
+  while (opts.length < 3) {
+    const extra = correct + randInt(1, 5) * (Math.random() < 0.5 ? 1 : -1);
+    if (extra > 0 && !seen.has(extra)) { seen.add(extra); opts.push(extra); }
+  }
+  const options = shuffle(opts);
+  return { question: qText, correct, options };
+}
+
+// 题型3：两个一位数相乘
+function genType3() {
+  const a = randInt(2, 9);
+  const b = randInt(2, 9);
+  const correct = a * b;
+  let wrong1 = correct + a;
+  let wrong2 = correct - b;
+  if (wrong2 <= 0) wrong2 = correct + b;
+  const seen = new Set([correct]);
+  if (seen.has(wrong1)) wrong1 = correct + b + a;
+  seen.add(wrong1);
+  if (seen.has(wrong2)) wrong2 = correct + a + b + 1;
+  const placeholder = QUIZ_PLACEHOLDERS[randInt(0, 2)];
+  const qText = `${a} × ${b} = ${placeholder}`;
+  const options = shuffle([correct, wrong1, wrong2]);
+  return { question: qText, correct, options };
+}
+
+function generateQuiz() {
+  const r = Math.random();
+  if (r < 0.33) return genType1();
+  if (r < 0.66) return genType2();
+  return genType3();
+}
+
+// 当前答题状态
+let quizCallback = null;
+let quizCancelCallback = null;
+let currentQuiz = null;
+let quizErrorCount = 0; // 本次答题累计错误次数
+
+function loadQuizQuestion(isExtra = false) {
+  // 追加题（因错误而出的新题）出现时错误次数-1，最低为0
+  if (isExtra) quizErrorCount = Math.max(0, quizErrorCount - 1);
+  currentQuiz = generateQuiz();
+  document.getElementById('quiz-question').textContent = currentQuiz.question;
+  const fb = document.getElementById('quiz-feedback');
+  if (quizErrorCount > 0) {
+    fb.textContent = `还需答对 ${quizErrorCount} 题来抵消错误`;
+    fb.className = 'wrong';
+  } else {
+    fb.textContent = '';
+    fb.className = '';
+  }
+  const opts = document.querySelectorAll('.quiz-opt');
+  opts.forEach((btn, i) => {
+    btn.textContent = currentQuiz.options[i];
+    btn.classList.remove('shake', 'correct');
+    btn.disabled = false;
+  });
+}
+
+function showQuiz(onCorrect, onCancel) {
+  quizCallback = onCorrect;
+  quizCancelCallback = onCancel;
+  quizErrorCount = 0;
+  loadQuizQuestion();
+  document.getElementById('quiz-overlay').classList.add('show');
+}
+
+function closeQuiz() {
+  document.getElementById('quiz-overlay').classList.remove('show');
+  quizCallback = null;
+  quizCancelCallback = null;
+  currentQuiz = null;
+  quizErrorCount = 0;
+}
+
+// 选项点击
+document.querySelectorAll('.quiz-opt').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (!currentQuiz) return;
+    const val = parseInt(btn.textContent);
+    const fb = document.getElementById('quiz-feedback');
+    if (val === currentQuiz.correct) {
+      btn.classList.add('correct');
+      btn.disabled = true;
+      fb.textContent = '✓ 回答正确！';
+      fb.className = 'right';
+      setTimeout(() => {
+        if (quizErrorCount > 0) {
+          // 出新题时消耗一次错误计数
+          loadQuizQuestion(true);
+        } else {
+          const cb = quizCallback;
+          closeQuiz();
+          if (cb) cb();
+        }
+      }, 600);
+    } else {
+      quizErrorCount++;
+      btn.classList.add('shake');
+      btn.disabled = true;
+      fb.textContent = `✗ 答错了！需再额外答对 ${quizErrorCount} 题`;
+      fb.className = 'wrong';
+      setTimeout(() => {
+        btn.classList.remove('shake');
+        btn.disabled = false;
+      }, 400);
+    }
+  });
+});
+
+// 我不会
+document.getElementById('quiz-giveup').addEventListener('click', () => {
+  closeQuiz();
+  if (quizCancelCallback) { const cb = quizCancelCallback; quizCancelCallback = null; cb(); }
+  document.getElementById('quiz-giveup-msg').classList.add('show');
+});
+
+document.getElementById('quiz-giveup-ok').addEventListener('click', () => {
+  document.getElementById('quiz-giveup-msg').classList.remove('show');
+  newGame();
+});
+
+// ── 返回上一级（本站 = 教学模块首页 /learn）─────────────────
+// 原版这里是「退出游戏」：桌面端（Electron）走应用退出通道、移动端（Capacitor）退到后台、
+// 网页版兜底 window.close() 再加一个 alert。迁入本站后只剩「回教学模块」这一个语义，
+// 分支全部去掉，统一跳 /learn。
+document.getElementById('menu-quit').addEventListener('click', () => {
+  closeMenu();
+  window.location.href = '/learn';
+});
+
+// START
+init();
+</script>
+</body>
+</html>

@@ -17,43 +17,80 @@
 <main class="sc-main container py-4">
 
     <div class="mb-4">
-        <h3><i class="bi bi-mortarboard"></i> 教学模块</h3>
-        <p class="text-muted">通过互动动画和语音帮助学习基础知识</p>
+        <h2 class="sc-page-title"><i class="bi bi-mortarboard"></i> 教学模块</h2>
+        <p class="text-muted mb-0 mt-2">通过互动动画和语音帮助学习基础知识</p>
     </div>
 
+    <!-- 三张模块卡共用一套规格（.sc-learn-card，见 app.css 第 9 节）：
+         图标一律装进同款圆角色块（字形 5rem = 80px，与改造前的大号图标字号等大；
+         色块 7rem = 字形 + 四周 1rem 留白，**别为了色块小巧而缩字号**，那样图标会小到看不清）、
+         按钮同形状高度、描述同字号行高、动作区贴底；齿轮这类次级入口一律用绝对定位浮层（z-index 脱流），
+         不占排版位置，卡片之间就不会因它长短不一。
+         每卡只通过 data-accent 声明自己的主题色；卡片整体可点，卡内链接一律 stopPropagation。 -->
     <div class="row g-4">
+
         <div class="col-md-4">
-            <div class="card h-100 shadow-sm" style="cursor: pointer;" onclick="window.location.href='/learn/multiplication'">
-                <div class="card-body text-center position-relative">
-                    <a href="/learn/multiplication/settings" class="position-absolute top-0 end-0 m-2 sc-icon-link" title="音频设置" onclick="event.stopPropagation();">
-                        <i class="bi bi-gear fs-5"></i>
+            <div class="card sc-card sc-learn-card h-100" data-accent="blue" style="cursor: pointer;"
+                 onclick="window.location.href='/learn/multiplication'">
+                <div class="card-body d-flex flex-column text-center">
+                    <!-- 齿轮浮在卡片右上角：.sc-learn-extra 是绝对定位 + z-index 的浮层，
+                         不参与排版 ⇒ 三卡的主按钮依旧同宽同高同底边 -->
+                    <a href="/learn/multiplication/settings" class="sc-learn-extra" title="音频设置"
+                       aria-label="音频设置" onclick="event.stopPropagation();">
+                        <i class="bi bi-gear"></i>
                     </a>
-                    <div class="my-3">
-                        <i class="bi bi-grid-3x3 display-1 text-primary"></i>
-                    </div>
+                    <div class="sc-learn-icon"><i class="bi bi-grid-3x3-gap-fill"></i></div>
                     <h5 class="card-title">九九乘法口诀</h5>
-                    <p class="card-text text-muted">10×10方格动画演示每个乘法口诀的数量关系，配合语音同步播放</p>
-                    <a href="/learn/multiplication" class="btn btn-primary" onclick="event.stopPropagation();">
-                        <i class="bi bi-play-circle"></i> 开始学习
-                    </a>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card h-100 shadow-sm" style="cursor: pointer;"
-                 onclick="window.location.href='/learn/word-match'">
-                <div class="card-body text-center">
-                    <div class="my-3">
-                        <i class="bi bi-translate display-1 text-success"></i>
+                    <p class="card-text">10×10 方格动画演示每句口诀的数量关系，配合语音同步朗读</p>
+                    <div class="sc-learn-actions mt-auto">
+                        <a href="/learn/multiplication" class="btn" onclick="event.stopPropagation();">
+                            <i class="bi bi-play-circle"></i> 开始学习
+                        </a>
                     </div>
-                    <h5 class="card-title">英语单词匹配</h5>
-                    <p class="card-text text-muted">人教版小学 &amp; 初中 &amp; 高中英语单词配对闯关（3~12 年级共 24 册），同一个主题的单词在同一关，支持手机与电脑</p>
-                    <a href="/learn/word-match" class="btn btn-success" onclick="event.stopPropagation();">
-                        <i class="bi bi-play-circle"></i> 开始闯关
-                    </a>
                 </div>
             </div>
         </div>
+
+        <div class="col-md-4">
+            <div class="card sc-card sc-learn-card h-100" data-accent="green" style="cursor: pointer;"
+                 onclick="window.location.href='/learn/word-match'">
+                <div class="card-body d-flex flex-column text-center">
+                    <div class="sc-learn-icon"><i class="bi bi-translate"></i></div>
+                    <h5 class="card-title">英语单词匹配</h5>
+                    <p class="card-text">人教版 24 册词库（3~12 年级）按主题配对闯关，同一主题的单词落在同一关</p>
+                    <div class="sc-learn-actions mt-auto">
+                        <a href="/learn/word-match" class="btn" onclick="event.stopPropagation();">
+                            <i class="bi bi-play-circle"></i> 开始闯关
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card sc-card sc-learn-card h-100" data-accent="violet" style="cursor: pointer;"
+                 onclick="window.location.href='/learn/block-blast'">
+                <div class="card-body d-flex flex-column text-center">
+                    <div class="sc-learn-icon">
+                        <!-- 俄罗斯方块的图标：内联 SVG，配色与游戏内 .gem-* 同一套（6 色宝石方块），
+                             不引外部图标库、零网络请求。SVG 宽高写的是 1em，由 .sc-learn-icon 的
+                             font-size 驱动，与隔壁两张卡的 bootstrap-icons 同号同盒。
+                             改配色/排布请改脚本后重跑：python3 scripts/gen_block_blast_icon.py --write -->
+                        <!-- wm-bb-icon:start -->
+                        <svg class="wm-bb-icon" viewBox="0 0 83 83" style="width:1em;height:1em;vertical-align:baseline" role="img" aria-label="俄罗斯方块：多色方块拼合" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="bbg0" x1="0" y1="0" x2="1" y2="1"><stop offset=".08" stop-color="#6fd4ff"/><stop offset=".38" stop-color="#1a88f0"/><stop offset="1" stop-color="#0e5cc0"/></linearGradient><g id="bbk0"><rect width="15" height="15" rx="3.2" fill="url(#bbg0)" stroke="#0e5cc0" stroke-opacity=".5" stroke-width=".7"/><path d="M1.5,3.8 A2.3,2.3 0 0 1 3.8,1.5 L11.2,1.5" fill="none" stroke="#fffdf0" stroke-opacity=".62" stroke-width="0.8" stroke-linecap="round"/><path d="M13.5,3.8 L13.5,11.2 A2.3,2.3 0 0 1 11.2,13.5 L3.8,13.5" fill="none" stroke="#000" stroke-opacity=".22" stroke-width="0.8" stroke-linecap="round"/><ellipse cx="4.7" cy="4.2" rx="2.9" ry="2.1" fill="#fff" fill-opacity=".5" transform="rotate(-20 4.7 4.2)"/></g><linearGradient id="bbg1" x1="0" y1="0" x2="1" y2="1"><stop offset=".08" stop-color="#70ff90"/><stop offset=".38" stop-color="#18d040"/><stop offset="1" stop-color="#0e9830"/></linearGradient><g id="bbk1"><rect width="15" height="15" rx="3.2" fill="url(#bbg1)" stroke="#0e9830" stroke-opacity=".5" stroke-width=".7"/><path d="M1.5,3.8 A2.3,2.3 0 0 1 3.8,1.5 L11.2,1.5" fill="none" stroke="#fffdf0" stroke-opacity=".62" stroke-width="0.8" stroke-linecap="round"/><path d="M13.5,3.8 L13.5,11.2 A2.3,2.3 0 0 1 11.2,13.5 L3.8,13.5" fill="none" stroke="#000" stroke-opacity=".22" stroke-width="0.8" stroke-linecap="round"/><ellipse cx="4.7" cy="4.2" rx="2.9" ry="2.1" fill="#fff" fill-opacity=".5" transform="rotate(-20 4.7 4.2)"/></g><linearGradient id="bbg2" x1="0" y1="0" x2="1" y2="1"><stop offset=".08" stop-color="#d870ff"/><stop offset=".38" stop-color="#9820f0"/><stop offset="1" stop-color="#7010c8"/></linearGradient><g id="bbk2"><rect width="15" height="15" rx="3.2" fill="url(#bbg2)" stroke="#7010c8" stroke-opacity=".5" stroke-width=".7"/><path d="M1.5,3.8 A2.3,2.3 0 0 1 3.8,1.5 L11.2,1.5" fill="none" stroke="#fffdf0" stroke-opacity=".62" stroke-width="0.8" stroke-linecap="round"/><path d="M13.5,3.8 L13.5,11.2 A2.3,2.3 0 0 1 11.2,13.5 L3.8,13.5" fill="none" stroke="#000" stroke-opacity=".22" stroke-width="0.8" stroke-linecap="round"/><ellipse cx="4.7" cy="4.2" rx="2.9" ry="2.1" fill="#fff" fill-opacity=".5" transform="rotate(-20 4.7 4.2)"/></g><linearGradient id="bbg3" x1="0" y1="0" x2="1" y2="1"><stop offset=".08" stop-color="#ff7070"/><stop offset=".38" stop-color="#e83030"/><stop offset="1" stop-color="#b81818"/></linearGradient><g id="bbk3"><rect width="15" height="15" rx="3.2" fill="url(#bbg3)" stroke="#b81818" stroke-opacity=".5" stroke-width=".7"/><path d="M1.5,3.8 A2.3,2.3 0 0 1 3.8,1.5 L11.2,1.5" fill="none" stroke="#fffdf0" stroke-opacity=".62" stroke-width="0.8" stroke-linecap="round"/><path d="M13.5,3.8 L13.5,11.2 A2.3,2.3 0 0 1 11.2,13.5 L3.8,13.5" fill="none" stroke="#000" stroke-opacity=".22" stroke-width="0.8" stroke-linecap="round"/><ellipse cx="4.7" cy="4.2" rx="2.9" ry="2.1" fill="#fff" fill-opacity=".5" transform="rotate(-20 4.7 4.2)"/></g><linearGradient id="bbg4" x1="0" y1="0" x2="1" y2="1"><stop offset=".08" stop-color="#50e8e8"/><stop offset=".38" stop-color="#00c0c0"/><stop offset="1" stop-color="#008080"/></linearGradient><g id="bbk4"><rect width="15" height="15" rx="3.2" fill="url(#bbg4)" stroke="#008080" stroke-opacity=".5" stroke-width=".7"/><path d="M1.5,3.8 A2.3,2.3 0 0 1 3.8,1.5 L11.2,1.5" fill="none" stroke="#fffdf0" stroke-opacity=".62" stroke-width="0.8" stroke-linecap="round"/><path d="M13.5,3.8 L13.5,11.2 A2.3,2.3 0 0 1 11.2,13.5 L3.8,13.5" fill="none" stroke="#000" stroke-opacity=".22" stroke-width="0.8" stroke-linecap="round"/><ellipse cx="4.7" cy="4.2" rx="2.9" ry="2.1" fill="#fff" fill-opacity=".5" transform="rotate(-20 4.7 4.2)"/></g><linearGradient id="bbg5" x1="0" y1="0" x2="1" y2="1"><stop offset=".08" stop-color="#ffe870"/><stop offset=".38" stop-color="#f0c020"/><stop offset="1" stop-color="#c89010"/></linearGradient><g id="bbk5"><rect width="15" height="15" rx="3.2" fill="url(#bbg5)" stroke="#c89010" stroke-opacity=".5" stroke-width=".7"/><path d="M1.5,3.8 A2.3,2.3 0 0 1 3.8,1.5 L11.2,1.5" fill="none" stroke="#fffdf0" stroke-opacity=".62" stroke-width="0.8" stroke-linecap="round"/><path d="M13.5,3.8 L13.5,11.2 A2.3,2.3 0 0 1 11.2,13.5 L3.8,13.5" fill="none" stroke="#000" stroke-opacity=".22" stroke-width="0.8" stroke-linecap="round"/><ellipse cx="4.7" cy="4.2" rx="2.9" ry="2.1" fill="#fff" fill-opacity=".5" transform="rotate(-20 4.7 4.2)"/></g></defs><use href="#bbk3" x="17" y="0"/><use href="#bbk3" x="34" y="0"/><use href="#bbk0" x="68" y="0"/><use href="#bbk3" x="0" y="17"/><use href="#bbk3" x="17" y="17"/><use href="#bbk3" x="34" y="17"/><use href="#bbk0" x="68" y="17"/><use href="#bbk1" x="0" y="34"/><use href="#bbk4" x="34" y="34"/><use href="#bbk4" x="51" y="34"/><use href="#bbk1" x="0" y="51"/><use href="#bbk4" x="51" y="51"/><use href="#bbk5" x="68" y="51"/><use href="#bbk1" x="0" y="68"/><use href="#bbk2" x="17" y="68"/><use href="#bbk2" x="34" y="68"/><use href="#bbk5" x="68" y="68"/></svg>
+                        <!-- wm-bb-icon:end -->
+                    </div>
+                    <h5 class="card-title">俄罗斯方块</h5>
+                    <p class="card-text">8×8 棋盘拖放消除，填满整行或整列即消除，连消还有额外加分</p>
+                    <div class="sc-learn-actions mt-auto">
+                        <a href="/learn/block-blast" class="btn" onclick="event.stopPropagation();">
+                            <i class="bi bi-play-circle"></i> 开始游戏
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
 </main>

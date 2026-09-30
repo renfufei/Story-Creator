@@ -596,6 +596,154 @@ a.list-group-item.sc-anchor-link:focus .bi {
     color: var(--sc-link);
 }
 
+/* ---------- 9. 教学卡片墙：/learn 的模块卡（图标 / 按钮 / 文案共用一套规格） ---------- */
+/* 三张卡各带一种主题色，但**规格完全一致**：
+   - 图标统一装进同款圆角色块（浅底 + 描边 + 同色图标），色块是固定正方形 ⇒ 三卡等高、标题自然同一水平线；
+     色块里有 1rem 留白，所以图标字形仍是改造前的 5rem；要更大的图标就同时放大色块与 font-size；
+   - 主按钮统一形状/高度/字号（实心、白字、hover 转深色），描述统一字号行高，动作区 mt-auto 贴底；
+   - 换主题色只改 data-accent，或直接改下面那四个 --accent-* 变量。 */
+.sc-learn-card {
+    /* 齿轮角标是绝对定位的浮层，得有个定位上下文 */
+    position: relative;
+    --accent: #0d6efd;
+    --accent-strong: #0a58ca;
+    --accent-soft: #eef4ff;
+    --accent-border: #d3e2fd;
+}
+
+.sc-learn-card[data-accent="green"] {
+    --accent: #198754;
+    --accent-strong: #146c43;
+    --accent-soft: #eaf7f1;
+    --accent-border: #c9e9d9;
+}
+
+.sc-learn-card[data-accent="violet"] {
+    --accent: #6f42c1;
+    --accent-strong: #59359a;
+    --accent-soft: #f4f0fc;
+    --accent-border: #ded3f4;
+}
+
+.sc-learn-card:hover {
+    border-color: var(--accent-border);
+}
+
+.sc-learn-card .card-body {
+    padding: 1.75rem 1.5rem 1.5rem;
+}
+
+.sc-learn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* 色块边长 = 图标字号(5rem=80px) + 四周各 1rem 留白。
+       字号取 5rem（80px）是为了跟改造前那些大号图标（80px 字形）等大 ——
+       别为了色块好看而缩字号，那样图标会小到看不清。 */
+    width: 7rem;
+    height: 7rem;
+    margin: .25rem auto 1.15rem;
+    border-radius: 1.5rem;
+    background-color: var(--accent-soft);
+    border: 1px solid var(--accent-border);
+    color: var(--accent);
+    font-size: 5rem;
+    line-height: 1;
+}
+
+/* 自绘 SVG 图标（俄罗斯方块）的宽高写在行内是 1em，跟着上面这行 font-size 走，
+   与 bootstrap-icons 的字形同号；display:block 去掉行盒多余的行距。 */
+.sc-learn-icon svg.wm-bb-icon {
+    display: block;
+}
+
+.sc-learn-card .card-title {
+    font-size: 1.05rem;
+    margin-bottom: .5rem;
+}
+
+.sc-learn-card .card-text {
+    font-size: .875rem;
+    line-height: 1.65;
+    color: var(--sc-muted);
+    /* 两行高度：描述行数一致时按钮基线才齐；万一某张多一行，还有 mt-auto 兜底 */
+    min-height: 2.9rem;
+    margin-bottom: 0;
+    /* 两行长度自动均衡：默认断行是"第一行塞满、第二行只剩两三个字"，
+       那行孤字最显丑。balance 让每行宽度接近（三卡的 min/max 行宽比 ≥ 0.7）。 */
+    text-wrap: balance;
+}
+
+.sc-learn-actions {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin-top: auto;
+    padding-top: 1.15rem;
+}
+
+.sc-learn-actions .btn {
+    flex: 1 1 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .35rem;
+    height: 2.5rem;
+    padding: 0 .9rem;
+    border: 1px solid var(--accent);
+    border-radius: .5rem;
+    background-color: var(--accent);
+    color: #fff;
+    font-size: .95rem;
+    font-weight: 500;
+    line-height: 1;
+}
+
+.sc-learn-actions .btn:hover,
+.sc-learn-actions .btn:focus-visible {
+    background-color: var(--accent-strong);
+    border-color: var(--accent-strong);
+    color: #fff;
+}
+
+/* 次级入口（如乘法卡的音频设置齿轮）：中性方钮，浮在卡片右上角。
+   绝对定位 + z-index ⇒ 完全脱离文档流，不参与卡片排版：
+   三卡的主按钮仍同宽同高同底边，图标/标题也不会被它挤歪。 */
+.sc-learn-extra {
+    position: absolute;
+    top: .5rem;
+    right: .5rem;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: .5rem;
+    background-color: #fff;
+    border: 1px solid #dee2e6;
+    color: var(--sc-muted);
+    font-size: 1rem;
+    text-decoration: none;
+    transition: color .15s ease, background-color .15s ease, border-color .15s ease;
+}
+
+.sc-learn-extra:hover,
+.sc-learn-extra:focus-visible {
+    background-color: var(--accent-soft);
+    border-color: var(--accent-border);
+    color: var(--accent);
+}
+
+@media (max-width: 575.98px) {
+    .sc-learn-icon {
+        width: 5.5rem;
+        height: 5.5rem;
+        border-radius: 1.2rem;
+        font-size: 3.75rem;
+    }
+}
+
 /* ---------- 兼容：旧的 text-decoration-none 标题链 ---------- */
 .sc-card-link.text-decoration-none:hover,
 a.sc-link.text-decoration-none:hover {

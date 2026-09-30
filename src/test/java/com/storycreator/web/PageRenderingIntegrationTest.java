@@ -273,6 +273,25 @@ class PageRenderingIntegrationTest {
     }
 
     @Test
+    void learnBlockBlastPageIsServed() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/learn/block-blast"), String.class);
+        assertPageOk(response, "learn-block-blast (俄罗斯方块)");
+        assertThat(response.getBody())
+                .as("从 ../BlockBlast/index.html 迁入后必须仍是自包含单页：不引任何外部资源")
+                .doesNotContain("http://")
+                .doesNotContain("https://")
+                .doesNotContain("<script src=")
+                .as("迁入时把原版的「退出游戏」换成了跳回教学模块首页的「返回」")
+                .contains("menu-item-label\">返回<")
+                .contains("window.location.href = '/learn'")
+                .as("原来的 window.close() + alert 兜底必须去掉（浏览器会拦截并弹框）")
+                .doesNotContain("请直接关闭浏览器标签页")
+                .doesNotContain("electronAPI")
+                .as("存档 key 保持原前缀，避免与同源其它模块串数据")
+                .contains("blockblast_save");
+    }
+
+    @Test
     void staticDashboardAssetsAreServed() {
         // 静态页依赖的公共资源必须可访问，否则页面无样式/无脚本
         for (String asset : new String[]{"/pages/dashboard.html", "/js/common.js", "/js/nav.js", "/css/app.css"}) {
@@ -1676,11 +1695,28 @@ class PageRenderingIntegrationTest {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/learn"), String.class);
         assertStaticPage(response, "learn", "九九乘法口诀");
         assertThat(response.getBody())
-                .as("教学首页应含乘法学习、音频设置与英语单词匹配入口")
+                .as("教学首页应含乘法学习、音频设置、英语单词匹配与俄罗斯方块入口")
                 .contains("/learn/multiplication")
                 .contains("/learn/multiplication/settings")
                 .contains("英语单词匹配")
-                .contains("/learn/word-match");
+                .contains("/learn/word-match")
+                .contains("/learn/block-blast")
+                // 三张卡共用一套规格（见 app.css 第 9 节）：同款图标色块、同款底部动作区。
+                // 曾经是三种按钮色（btn-primary/success/warning）+ 一堆行内 display-1，故正反两面都钉住。
+                .contains("sc-learn-card")
+                .contains("sc-learn-icon")
+                .contains("sc-learn-actions")
+                .contains("sc-learn-extra")
+                .doesNotContain("btn-primary")
+                .doesNotContain("btn-success")
+                .doesNotContain("btn-warning")
+                .doesNotContain("display-1")
+                // 俄罗斯方块那张卡的图标是内联 SVG（多色方块），不是 bootstrap-icons，
+                // 也不能引外部图标库 —— 详见 scripts/gen_block_blast_icon.py
+                .contains("wm-bb-icon")
+                .doesNotContain("cdn.")
+                .doesNotContain("unpkg")
+                .doesNotContain("jsdelivr");
     }
 
     @Test
@@ -1691,7 +1727,21 @@ class PageRenderingIntegrationTest {
         assertThat(response.getBody())
                 .as("乘法页应含口诀数据与音频取值逻辑")
                 .contains("九九八十一")
-                .contains("/api/learn/multiplication/audio/");
+                .contains("/api/learn/multiplication/audio/")
+                // 没有已生成音频时降级到浏览器本地朗读（Web Speech API）读汉字口诀，
+                // 读不出来就只当没声音 —— 降级链与「不许报错」由 scripts/probe_multiplication.mjs 逐段验
+                .contains("speakText")
+                .contains("speechSynthesis")
+                .contains("textByKey")
+                .contains("playServerAudio")
+                // 格子配色：一句一色、按句轮换（一格取「最早点亮它的那一句」的颜色，形成色带）。
+                // 反断言是关键 —— 退回成整片都用 currentColor 涂色就又变回"一片同色"了。
+                // 逐格颜色由 scripts/probe_multiplication.mjs 在真浏览器里按行量。
+                .contains("cellStyle(row, col)")
+                .contains("cellColorAt")
+                .doesNotContain("'background-color:' + currentColor")
+                .doesNotContain("console.error")
+                .doesNotContain("alert(");
     }
 
     @Test

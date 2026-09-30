@@ -16,6 +16,8 @@
  * 用法：node scripts/probe_book_learned_words.mjs   （需脱沙箱）
  */
 import { spawn } from 'node:child_process';
+// 静音守门：--mute-audio + 注入 src/test/resources/silent-audio.js（管住平台 TTS）
+import { SILENT_AUDIO_FLAGS, installSilentAudio } from './lib/silent-audio.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -42,6 +44,7 @@ const check = (name, ok, extra = '') => {
 
 const chrome = spawn(CHROME, [
     '--headless=new', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
+    ...SILENT_AUDIO_FLAGS,            // ① 浏览器音频管线静音（媒体元素 + Web Audio）
     '--remote-debugging-port=' + PORT, '--user-data-dir=' + userDataDir, 'about:blank'
 ], { stdio: 'ignore' });
 
@@ -153,7 +156,8 @@ async function main() {
             m.error ? p.rej(new Error(JSON.stringify(m.error))) : p.res(m.result);
         }
     };
-    await send('Page.enable');
+    // ② 平台 TTS 管不到就去注入守门脚本（addScriptToEvaluateOnNewDocument，对每次导航都生效）
+    await installSilentAudio(send);
     await send('Runtime.enable');
     if (!NO_INTERCEPT) await send('Fetch.enable', {
         patterns: [{ urlPattern: PAGE, requestStage: 'Request' }]

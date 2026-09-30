@@ -116,4 +116,19 @@ public class LearnController {
         result.put("totalAudioCount", MultiplicationFormula.TOTAL_AUDIO_COUNT);
         return result;
     }
+
+    // ==================== 俄罗斯方块（Block Blast 网页版） ====================
+
+    /**
+     * 俄罗斯方块。整页由 {@code ../BlockBlast/index.html} 原样迁入：游戏逻辑、样式、存档
+     * （localStorage 的 {@code blockblast_save} / {@code blockblast_hs}）全部自包含，
+     * 不需要服务端数据，所以这里只是一个 forward，没有 {@code /data} 端点。
+     *
+     * <p>页面属于「沉浸式全屏页」（自带 flex 布局 + overflow:hidden），不挂站点导航栏，
+     * 返回教学模块首页靠页内设置菜单里的「返回」按钮。
+     */
+    @GetMapping("/learn/block-blast")
+    public String blockBlast() {
+        return "forward:/pages/learn-block-blast.html";
+    }
 }

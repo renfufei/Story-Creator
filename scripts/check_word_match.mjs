@@ -50,6 +50,8 @@
  *              WM_LOCAL=1（导航文档换成本地 HTML，改完静态页不必先打包重启就能跑全套断言）
  */
 import { spawn } from 'node:child_process';
+// 静音守门：--mute-audio + 注入 src/test/resources/silent-audio.js（管住平台 TTS）
+import { SILENT_AUDIO_FLAGS, installSilentAudio } from './lib/silent-audio.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -81,6 +83,7 @@ const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wm-cdp-'));
 const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wm-export-'));
 const chrome = spawn(CHROME, [
     '--headless=new', '--no-sandbox', '--disable-gpu', '--hide-scrollbars',
+    ...SILENT_AUDIO_FLAGS,            // ① 浏览器音频管线静音（媒体元素 + Web Audio）
     /* 导出验证要把产物从 file:// 打回来，必须放行本地文件访问 */
     '--allow-file-access-from-files',
     '--remote-debugging-port=' + PORT, '--user-data-dir=' + userDataDir, 'about:blank'
@@ -632,7 +635,8 @@ async function main() {
         }
     };
 
-    await send('Page.enable');
+    // ② 平台 TTS 管不到就去注入守门脚本（addScriptToEvaluateOnNewDocument，对每次导航都生效）
+    await installSilentAudio(send);
     await send('Runtime.enable');
     await send('Network.enable');
     await send('Log.enable');
