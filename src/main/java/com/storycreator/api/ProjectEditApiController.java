@@ -16,6 +16,7 @@ import com.storycreator.persistence.repository.AutoRunStepConfigRepository;
 import com.storycreator.persistence.repository.ChapterOutlineRepository;
 import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.CharacterRepository;
+import com.storycreator.persistence.repository.InspirationRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.ProofreadingReportRepository;
 import com.storycreator.persistence.repository.StepGuidanceRepository;
@@ -83,6 +84,7 @@ public class ProjectEditApiController {
     private AiUsageStatRepository aiUsageStatRepository;
     private AutoRunStepConfigRepository autoRunStepConfigRepository;
     private WorldSettingRepository worldSettingRepository;
+    private InspirationRepository inspirationRepository;
     private GlobalSettingService globalSettingService;
 
     @Autowired
@@ -153,6 +155,11 @@ public class ProjectEditApiController {
     @Autowired
     public void setWorldSettingRepository(WorldSettingRepository worldSettingRepository) {
         this.worldSettingRepository = worldSettingRepository;
+    }
+
+    @Autowired
+    public void setInspirationRepository(InspirationRepository inspirationRepository) {
+        this.inspirationRepository = inspirationRepository;
     }
 
     @Autowired
@@ -345,6 +352,9 @@ public class ProjectEditApiController {
         aiUsageStatRepository.deleteByProjectId(id);
         autoRunStepConfigRepository.deleteByProjectId(id);
         worldSettingRepository.deleteByProjectId(id);
+        // ⚠️ 灵感必须显式清理：V69 之后 inspirations 上没有外键了，删项目不再级联删灵感
+        //（原来靠 ON DELETE CASCADE）。漏掉这一步就会留下指向已删项目的孤儿灵感。
+        inspirationRepository.deleteByProjectId(id);
         projectRepository.deleteById(id);
         return ResponseEntity.ok(Map.of("id", id, "redirect", "/"));
     }

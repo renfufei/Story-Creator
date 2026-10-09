@@ -14,11 +14,31 @@
  * 约定：
  *   1) 每个静态页先引 /js/common.js，再引 /js/nav.js，最后写页面自身的脚本。
  *   2) 所有后端请求走 /api/**，返回 JSON。
+ *   3) 「无项目」灵感统一用 SC.NO_PROJECT_ID 判定，别在页面里写裸 0。
  */
 (function (global) {
     'use strict';
 
     var SC = global.SC || (global.SC = {});
+
+    /* ============================ 领域常量 ============================ */
+
+    /**
+     * 「未归属任何项目」的哨兵 project_id。
+     *
+     * <p>灵感允许不挂项目：「所有灵感」页可以直接新建一条还没归到任何项目里的灵感，
+     * 后端用 0 表示（InspirationApiController.NO_PROJECT_ID，表上已去掉外键，见 V69 迁移）。
+     * 列表 / 详情 / 编辑三处都要按它决定文案与链接，所以常量放公共库里，别各写一份裸 0。
+     */
+    SC.NO_PROJECT_ID = 0;
+
+    /** 无项目灵感的展示名（与后端 AllInspirationsApiController.NO_PROJECT_TITLE 保持一致） */
+    SC.NO_PROJECT_LABEL = '未归属项目';
+
+    /** projectId 是否代表「没有项目」 */
+    SC.isNoProject = function (pid) {
+        return pid !== null && pid !== undefined && String(pid) === String(SC.NO_PROJECT_ID);
+    };
 
     /* ============================ DOM 小工具 ============================ */
 

@@ -57,11 +57,17 @@
     function hideAlert() { $('alert').className = 'alert py-2 d-none'; }
 
     async function loadProject() {
-        try {
-            const p = await SC.api.get('/api/projects/' + pid);
-            $('project-link').textContent = p.title || ('项目 ' + pid);
-        } catch (e) { /* 非关键 */ }
-        $('project-link').href = '/projects/' + pid;
+        if (SC.isNoProject(pid)) {
+            // 无项目灵感：projects 表里没有这一行，别去请求它（会 400）。「所属项目」退回「所有灵感」。
+            $('project-link').textContent = SC.NO_PROJECT_LABEL;
+            $('project-link').href = '/inspirations';
+        } else {
+            try {
+                const p = await SC.api.get('/api/projects/' + pid);
+                $('project-link').textContent = p.title || ('项目 ' + pid);
+            } catch (e) { /* 非关键 */ }
+            $('project-link').href = '/projects/' + pid;
+        }
         $('back-list').href = '/projects/' + pid + '/inspirations';
         $('back-detail').href = '/projects/' + pid + '/inspirations/' + inspId;
     }

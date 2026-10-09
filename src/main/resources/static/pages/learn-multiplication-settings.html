@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>九九乘法口诀 - 音频管理 - AI故事创作</title>
+    <title>乘法口诀 - 音频管理 - AI故事创作</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
     <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
@@ -35,7 +35,7 @@ window.__LEARN_SETTINGS_DATA__ = (function () {
 <div x-data="settingsApp()" x-init="init()">
 
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3><i class="bi bi-gear"></i> 九九乘法口诀 - 音频管理</h3>
+        <h3><i class="bi bi-gear"></i> 乘法口诀 - 音频管理</h3>
         <div>
             <a href="/learn/multiplication" class="btn btn-outline-primary btn-sm me-2">
                 <i class="bi bi-play-circle"></i> 去学习
@@ -57,6 +57,12 @@ window.__LEARN_SETTINGS_DATA__ = (function () {
             </div>
             <div class="progress" style="height: 8px;">
                 <div class="progress-bar bg-success" :style="'width: ' + (readyCount/totalCount*100) + '%'"></div>
+            </div>
+            <!-- 口诀页有九九（45 句）与大九九（81 句）两张表，但它们共用这一批音频：
+                 同一对乘数的口诀写法完全一样（都是"小数在前"，2×3 念「二三得六」），
+                 音频 key 又是按乘数对取的 ⇒ 大九九不需要任何新增音频，这里不用重复生成。 -->
+            <div class="text-muted small mt-2">
+                九九与大乘法口诀共用这一批音频：同一句口诀两种表写法一致，音频按乘数对复用，不需要重复生成。
             </div>
         </div>
     </div>

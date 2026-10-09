@@ -34,6 +34,7 @@ public class ImportService {
     private AiModelConfigRepository aiModelConfigRepository;
     private ProofreadingReportRepository proofreadingReportRepository;
     private WorldSettingFacetRepository worldSettingFacetRepository;
+    private InspirationRepository inspirationRepository;
 
     @Autowired
     public void setObjectMapper(ObjectMapper objectMapper) {
@@ -103,6 +104,11 @@ public class ImportService {
     @Autowired
     public void setWorldSettingFacetRepository(WorldSettingFacetRepository worldSettingFacetRepository) {
         this.worldSettingFacetRepository = worldSettingFacetRepository;
+    }
+
+    @Autowired
+    public void setInspirationRepository(InspirationRepository inspirationRepository) {
+        this.inspirationRepository = inspirationRepository;
     }
 
 
@@ -333,6 +339,9 @@ public class ImportService {
         characterRepository.deleteByProjectId(projectId);
         worldSettingFacetRepository.deleteByProjectId(projectId);
         worldSettingRepository.deleteByProjectId(projectId);
+        // ⚠️ 灵感必须显式清理：V69 之后 inspirations 上已经没有外键了，
+        // 删项目不再级联删灵感（原来靠 ON DELETE CASCADE）。
+        inspirationRepository.deleteByProjectId(projectId);
         projectRepository.deleteById(projectId);
     }
 }

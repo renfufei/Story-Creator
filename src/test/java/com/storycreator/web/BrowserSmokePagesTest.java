@@ -55,7 +55,11 @@ class BrowserSmokePagesTest extends BrowserSmokeSupport {
                 new PageCase("/learn", ".sc-learn-icon", "教学模块", true),
                 new PageCase("/learn/multiplication", null, "九九乘法口诀", true),
                 new PageCase("/learn/multiplication/settings", "#voiceList", "音频管理", true),
-                new PageCase("/learn/word-match", ".wm-card", "选择配对", true),
+                // 默认视图是检索首页（2026-10-08 起）：棋盘用 <template x-if="… && view === 'play'">
+                // 挂在视图上，没进棋盘时 DOM 里连 .wm-card 都没有 —— 哨兵改成首页常驻的搜索框；
+                // 文案挑 x-text 渲染出来的占位文案【选择关卡练习】（静态 HTML 里没有，
+                // 脚本没跑完 / 词库没取到就不会出现），顺带把「页头下拉默认值」这条要求钉进冒烟
+                new PageCase("/learn/word-match", "#wm-home-input", "选择关卡练习", true),
                 // 俄罗斯方块：整页自包含的沉浸式全屏页（body 自带 flex + overflow:hidden，
                 // 引 Bootstrap / 挂 #site-nav 都会破版）⇒ requireNav=false。
                 // 哨兵挑 .piece-hitarea：它由 init→newGame→dealPieces→renderPieces 动态生成，

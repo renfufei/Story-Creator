@@ -4,6 +4,7 @@ import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.ModelType;
 import com.storycreator.persistence.entity.AiModelConfigEntity;
 import com.storycreator.persistence.entity.GlobalSettingEntity;
+import com.storycreator.api.InspirationApiController;
 import com.storycreator.persistence.entity.InspirationEntity;
 import com.storycreator.persistence.entity.ProjectEntity;
 import com.storycreator.persistence.repository.AiModelConfigRepository;
@@ -140,6 +141,13 @@ public abstract class BrowserSmokeSupport {
         second.setTitle("灵感：反派的动机");
         second.setContent("反派并非纯粹邪恶，他的出发点是重建被毁的宗门。");
         inspirationRepository.save(second);
+
+        // 无项目灵感（project_id = 0）：让「所有灵感」页的「未归属项目」分组有东西可渲染
+        InspirationEntity noProject = new InspirationEntity();
+        noProject.setProjectId(InspirationApiController.NO_PROJECT_ID);
+        noProject.setTitle("灵感：还没归到项目的念头");
+        noProject.setContent("半夜想到的开场，先记在这里。");
+        inspirationRepository.save(noProject);
     }
 
     @AfterEach
@@ -151,6 +159,9 @@ public abstract class BrowserSmokeSupport {
                 projectRepository.deleteById(pid);
             });
         }
+        // 无项目灵感（project_id = 0）不属于任何项目，上面的清理带不走它们，得单独清
+        transactionTemplate.executeWithoutResult(status ->
+                inspirationRepository.deleteByProjectId(InspirationApiController.NO_PROJECT_ID));
         transactionTemplate.executeWithoutResult(status -> {
             if (configId != null) {
                 aiModelConfigRepository.deleteById(configId);

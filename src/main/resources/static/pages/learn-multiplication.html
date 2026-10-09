@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>九九乘法口诀 - AI故事创作</title>
+    <title>乘法口诀 - AI故事创作</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
     <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
@@ -14,6 +14,98 @@
         @media (max-width: 767.98px) {
             #site-nav { display: none !important; }
             body.sc-page main.sc-main { padding-top: 0.5rem !important; }
+        }
+        /* ================= 控制条：设置段 + 主控段 =================
+           改造前是"一条杠上摆三组同权重选择器 + 一簇只在某个档位才出现的操作按钮"，
+           三个问题：① 分组只剩 12px 灰字，窄屏还把组名藏了，六个按钮两两并排
+           看不出哪两个一组；② title 悬停提示在触屏上没有替代品；③ 「上一句/下一句」
+           只在手动档、「播放/暂停」只在自动档 —— 想暂停得先确认自己在哪一档。
+
+           现在分两段，层次靠**颜色权重**说话，不靠说明文字：
+             · 设置段（口诀表 / 高亮）：选中是**柔和底色**，视觉更轻；
+             · 主控段（上一句 / 播放 / 下一句 / 重读 / 重置）：五键常驻，
+               整条**只有播放键是实色主色** —— 一眼分得出"调设置"和"按下去就播"。
+           ============================================================ */
+        .mul-label {
+            font-size: .74rem;
+            line-height: 1;
+            color: var(--bs-secondary-color, #6c757d);
+            user-select: none;
+            white-space: nowrap;
+        }
+        /* 同组两个选项等宽：flex 分摊 + 统一 min-width。
+           「小九九」三个字、「整块」两个字，靠这条才不会被撑成一胖一瘦。 */
+        .mul-seg > .btn {
+            flex: 1 1 0;
+            min-width: 4.25rem;
+            white-space: nowrap;
+        }
+        /* 设置段的选中态：柔和底色 + 主色字，**刻意不用实色**。
+           实色蓝整条只留给主控的播放键；否则「小九九 / 整块 / 播放」三个蓝块
+           同时出现，反而看不出哪个是"按下去就播"。 */
+        .mul-seg > .btn.is-on {
+            background-color: #e7f1ff;
+            border-color: #b6d4fe;
+            color: #0a58ca;
+            font-weight: 600;
+        }
+        /* 播放键换字（播放 / 暂停）时宽度不许跳，否则整簇按钮左右横移 */
+        .mul-play { min-width: 5.25rem; }
+        .mul-act { min-width: 2.5rem; }        /* 纯图标按钮也留个方形底 */
+        /* 序号：定宽 + 等宽数字，从 9/45 走到 10/45 时右半边不会跟着抖 */
+        .mul-counter {
+            min-width: 5.25rem;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+        /* 底边进度条：绝对定位贴卡片下沿，**不占任何垂直空间** ——
+           "控制条只占一行"是硬约束，进度条走这里才不把卡撑高。
+           .mul-bar 的 overflow:hidden 顺带把两端裁成卡片圆角。 */
+        .mul-bar { position: relative; overflow: hidden; }
+        .mul-progress {
+            position: absolute; left: 0; right: 0; bottom: 0;
+            height: 3px; background: rgba(13, 110, 253, .10);
+        }
+        .mul-progress-fill {
+            height: 100%; background: var(--bs-primary, #0d6efd);
+            border-radius: 0 2px 2px 0; transition: width .2s ease;
+        }
+
+        /* 两个设置组之间来一条竖线：分组名（口诀表 / 高亮）与选项之间的距离本来
+           和「两组之间」一样，看久了会分不清「高亮」是它左边那组的说明还是右边那组的。
+           窄屏不加 —— 那里两块各占一行，本来就分得开。 */
+        @media (min-width: 992px) {
+            .mul-set > .d-flex + .d-flex {
+                padding-left: 1rem;
+                border-left: 1px solid var(--bs-border-color, #dee2e6);
+            }
+        }
+
+        /* 窄屏（<992px）：主控在上、设置在下 —— 操作比配置更常用；
+           两块各自占满一行、内部居中，不会你挤我我挤你地乱换行。 */
+        @media (max-width: 991.98px) {
+            .mul-ctl { order: 1; flex: 1 1 100%; justify-content: center; }
+            .mul-set { order: 2; flex: 1 1 100%; justify-content: center; }
+        }
+        /* ⚠️ 这段必须写在上面几条**之后**：同样特异性的规则后出现的赢，
+           挪到文件顶部会被上面的 min-width 反盖掉，表现是窄屏只缩了字号、
+           定宽没缩，320px 下仍旧多排一行。 */
+        @media (max-width: 767.98px) {
+            /* 分段按钮整体收一档（字号 + 内边距 + 定宽）：
+               缩完「小九九」「大九九」都落在 3.5rem 以内 ⇒ 同组仍然等宽。 */
+            .mul-seg > .btn {
+                min-width: 3.5rem;
+                padding-left: .35rem;
+                padding-right: .35rem;
+                font-size: .8rem;
+            }
+            .mul-counter { min-width: 4rem; font-size: .78rem; }
+            .mul-act { min-width: 2.25rem; }
+            .mul-play { min-width: 2.25rem; }   /* 窄屏播放键只剩图标，别再占 5.25rem */
+        }
+        /* 极窄屏再把页头标题收一档：6 个汉字在 320px 下会把「诀」挤到第二行 */
+        @media (max-width: 575.98px) {
+            .mul-head h3 { font-size: 1.15rem; }
         }
         .multiplication-grid {
             display: grid;
@@ -77,70 +169,95 @@
 <main class="sc-main container py-4">
 <div x-data="multiplicationApp()" x-init="init()">
 
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3><i class="bi bi-grid-3x3"></i> 九九乘法口诀</h3>
-        <div>
-            <a href="/learn/multiplication/settings" class="btn btn-outline-secondary btn-sm me-2">
-                <i class="bi bi-gear"></i> 音频设置
+    <!-- 页头：窄屏（<576px）两个按钮收成纯图标，否则「九九乘法口诀」会被挤到换行 -->
+    <div class="mul-head d-flex justify-content-between align-items-center gap-2 mb-3">
+        <h3 class="mb-0"><i class="bi bi-grid-3x3"></i> <span x-text="tableTitle"></span></h3>
+        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+            <a href="/learn/multiplication/settings" class="btn btn-outline-secondary btn-sm"
+               title="音频设置" aria-label="音频设置">
+                <i class="bi bi-gear"></i><span class="d-none d-sm-inline ms-1">音频设置</span>
             </a>
-            <a href="/learn" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-left"></i> 返回
+            <a href="/learn" class="btn btn-outline-secondary btn-sm" title="返回" aria-label="返回">
+                <i class="bi bi-arrow-left"></i><span class="d-none d-sm-inline ms-1">返回</span>
             </a>
         </div>
     </div>
 
-    <!-- Mode Switch -->
-    <div class="card mb-3">
+    <!-- 控制条 = 设置段 + 主控段。
+         设置段：口诀表 / 高亮，选中是柔和底色（不是实色），分组名常驻 —— 不再靠 hover 提示。
+         主控段：上一句 / 播放 / 下一句 / 重读 / 重置 五键常驻，任何状态下都在；
+                 停着点【下一句】只前进一句并朗读，播放中点【下一句】立刻跳过去、连播不断。
+         底边那条 3px 细线是进度条（绝对定位，不占垂直空间）。 -->
+    <div class="card mb-3 mul-bar">
         <div class="card-body py-2">
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-                <div class="btn-group btn-group-sm">
-                    <button class="btn" :class="mode === 'auto' ? 'btn-primary' : 'btn-outline-primary'" @click="mode = 'auto'; localStorage.setItem('multiplication_mode', 'auto')">
-                        <i class="bi bi-play-circle"></i> <span class="d-none d-md-inline">自动播放</span><span class="d-md-none">自动</span>
-                    </button>
-                    <button class="btn" :class="mode === 'manual' ? 'btn-primary' : 'btn-outline-primary'" @click="mode = 'manual'; localStorage.setItem('multiplication_mode', 'manual'); stop()">
-                        <i class="bi bi-hand-index"></i> <span class="d-none d-md-inline">手动步进</span><span class="d-md-none">手动</span>
-                    </button>
-                </div>
-                <div class="btn-group btn-group-sm ms-2">
-                    <button class="btn" :class="gridLayout === 'rect' ? 'btn-secondary' : 'btn-outline-secondary'" @click="gridLayout = 'rect'; localStorage.setItem('multiplication_grid_layout', 'rect')">
-                        矩形
-                    </button>
-                    <button class="btn" :class="gridLayout === 'linear' ? 'btn-secondary' : 'btn-outline-secondary'" @click="gridLayout = 'linear'; localStorage.setItem('multiplication_grid_layout', 'linear')">
-                        累加
-                    </button>
-                </div>
-                <template x-if="mode === 'auto'">
+            <div class="d-flex align-items-center flex-wrap gap-2 gap-lg-3">
+
+                <div class="mul-set d-flex align-items-center flex-wrap gap-2 gap-lg-3">
                     <div class="d-flex align-items-center gap-2">
-                        <button class="btn btn-sm btn-success" @click="startAuto()" x-show="!playing">
-                            <i class="bi bi-play-fill"></i> <span class="d-none d-md-inline">播放</span>
-                        </button>
-                        <button class="btn btn-sm btn-warning" @click="stop()" x-show="playing">
-                            <i class="bi bi-pause-fill"></i> <span class="d-none d-md-inline">暂停</span>
-                        </button>
-                        <button class="btn btn-sm btn-secondary" @click="reset()">
-                            <i class="bi bi-arrow-counterclockwise"></i> <span class="d-none d-md-inline">重置</span>
-                        </button>
+                        <span class="mul-label">口诀表</span>
+                        <div class="btn-group btn-group-sm mul-seg" role="group" aria-label="口诀表">
+                            <button type="button" class="btn btn-outline-secondary"
+                                    :class="{ 'is-on': tableMode === 'small' }"
+                                    :aria-pressed="tableMode === 'small'"
+                                    title="小九九：每组数到它自己（一一得一 … 九九八十一），共 45 句"
+                                    @click="setTableMode('small')">小九九</button>
+                            <button type="button" class="btn btn-outline-secondary"
+                                    :class="{ 'is-on': tableMode === 'big' }"
+                                    :aria-pressed="tableMode === 'big'"
+                                    title="大九九：每组把另一个乘数数到 9（一二得二 … 二九十八），共 81 句"
+                                    @click="setTableMode('big')">大九九</button>
+                        </div>
                     </div>
-                </template>
-                <template x-if="mode === 'manual'">
                     <div class="d-flex align-items-center gap-2">
-                        <button class="btn btn-sm btn-outline-secondary" @click="prev()" :disabled="currentIndex <= 0">
+                        <span class="mul-label">高亮</span>
+                        <div class="btn-group btn-group-sm mul-seg" role="group" aria-label="高亮方式">
+                            <button type="button" class="btn btn-outline-secondary"
+                                    :class="{ 'is-on': gridLayout === 'rect' }"
+                                    :aria-pressed="gridLayout === 'rect'"
+                                    title="整块：一次点亮 a 行 × b 列整整一块"
+                                    @click="gridLayout = 'rect'; localStorage.setItem('multiplication_grid_layout', 'rect')">整块</button>
+                            <button type="button" class="btn btn-outline-secondary"
+                                    :class="{ 'is-on': gridLayout === 'linear' }"
+                                    :aria-pressed="gridLayout === 'linear'"
+                                    title="逐格：从左上角起，一格一格依次点亮"
+                                    @click="gridLayout = 'linear'; localStorage.setItem('multiplication_grid_layout', 'linear')">逐格</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mul-ctl ms-auto d-flex align-items-center gap-2">
+                    <span class="mul-counter text-secondary"
+                          x-text="'第 ' + (currentIndex + 1) + ' / ' + formulas.length + ' 句'"></span>
+                    <div class="btn-group btn-group-sm mul-transport" role="group" aria-label="播放控制">
+                        <button type="button" class="btn btn-outline-secondary mul-act" @click="stepPrev()"
+                                :disabled="currentIndex <= 0" title="上一句：回退一句并朗读" aria-label="上一句">
                             <i class="bi bi-chevron-left"></i>
                         </button>
-                        <button class="btn btn-sm btn-outline-secondary" @click="next()" :disabled="currentIndex >= formulas.length - 1">
+                        <button type="button" class="btn btn-primary mul-play" @click="togglePlay()"
+                                :title="playing ? '暂停' : '从当前这句起连续播放'"
+                                :aria-label="playing ? '暂停' : '播放'">
+                            <i class="bi" :class="playing ? 'bi-pause-fill' : 'bi-play-fill'"></i>
+                            <span class="d-none d-sm-inline ms-1" x-text="playing ? '暂停' : '播放'"></span>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary mul-act" @click="stepNext()"
+                                :disabled="currentIndex >= formulas.length - 1"
+                                title="下一句：前进一句并朗读" aria-label="下一句">
                             <i class="bi bi-chevron-right"></i>
                         </button>
-                        <button class="btn btn-sm btn-outline-primary" @click="playCurrentAudio()">
-                            <i class="bi bi-volume-up"></i>
-                        </button>
                     </div>
-                </template>
-            </div>
-            <template x-if="mode === 'manual'">
-                <div class="text-center mt-2">
-                    <span class="badge bg-secondary" x-text="(currentIndex + 1) + ' / ' + formulas.length"></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary mul-act" @click="replayCurrent()"
+                            title="重读这一句" aria-label="重读这一句">
+                        <i class="bi bi-volume-up"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary mul-act" @click="reset()"
+                            title="回到第一句" aria-label="回到第一句">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
                 </div>
-            </template>
+            </div>
+        </div>
+        <div class="mul-progress" role="progressbar" aria-label="练习进度">
+            <div class="mul-progress-fill" :style="'width:' + progressPercent + '%'"></div>
         </div>
     </div>
 
@@ -183,38 +300,50 @@
 <script src="/js/common.js"></script>
 <script src="/js/nav.js"></script>
 <script>
-function multiplicationApp() {
-    return {
-        formulas: [
+/* ============================ 两张口诀表 ============================
+   九九乘法口诀（小九九，45 句）：每组只数到"它自己"—— 二的乘法口诀就「一二得二、二二得四」两句。
+   大九九乘法口诀（81 句）：每组的另一个乘数一律从 1 数到 9 —— 二的乘法口诀是
+     「一二得二、二二得四、二三得六、二四得八 …… 二九十八」共九句。
+
+   ⚠️ 两张表是**同一批乘数对**：大九九只是把每一对 a×b 在 a 组与 b 组里各出现一次
+   （9 句对角 + 36 对 × 2 = 81）。口诀写法完全一致（都"小数在前"，2×3 念「二三得六」），
+   所以 itemKey（= min x max）、汉字原文、算式、组名前缀**全部复用九九表那 45 条**
+   ⇒ 81 句**不需要任何新音频**，服务端 54 条（45 口诀 + 9 组名前缀）一条都不用加。
+
+   组号一律落在 b 上（九九里 b 本来就是组号，大九九见 buildBigTable），
+   于是「矩形高亮 / 组边界 / 组名前缀 / 配色带」那一整套逻辑两张表通用。
+   矩形语义两张表也一致：**宽 = 组号，高 = 另一个乘数**。
+   ================================================================= */
+const FORMULAS_99 = [
             // 一的乘法口诀
-            {itemKey:"1x1",a:1,b:1,chineseText:"一一得一",mathExpression:"1×1=1",groupPrefix:"一的乘法口诀"},
+            {itemKey:"1x1",a:1,b:1,chineseText:"一一得一",mathExpression:"1×1=1"},
             // 二的乘法口诀
-            {itemKey:"1x2",a:1,b:2,chineseText:"一二得二",mathExpression:"1×2=2",groupPrefix:"二的乘法口诀"},
+            {itemKey:"1x2",a:1,b:2,chineseText:"一二得二",mathExpression:"1×2=2"},
             {itemKey:"2x2",a:2,b:2,chineseText:"二二得四",mathExpression:"2×2=4"},
             // 三的乘法口诀
-            {itemKey:"1x3",a:1,b:3,chineseText:"一三得三",mathExpression:"1×3=3",groupPrefix:"三的乘法口诀"},
+            {itemKey:"1x3",a:1,b:3,chineseText:"一三得三",mathExpression:"1×3=3"},
             {itemKey:"2x3",a:2,b:3,chineseText:"二三得六",mathExpression:"2×3=6"},
             {itemKey:"3x3",a:3,b:3,chineseText:"三三得九",mathExpression:"3×3=9"},
             // 四的乘法口诀
-            {itemKey:"1x4",a:1,b:4,chineseText:"一四得四",mathExpression:"1×4=4",groupPrefix:"四的乘法口诀"},
+            {itemKey:"1x4",a:1,b:4,chineseText:"一四得四",mathExpression:"1×4=4"},
             {itemKey:"2x4",a:2,b:4,chineseText:"二四得八",mathExpression:"2×4=8"},
             {itemKey:"3x4",a:3,b:4,chineseText:"三四十二",mathExpression:"3×4=12"},
             {itemKey:"4x4",a:4,b:4,chineseText:"四四十六",mathExpression:"4×4=16"},
             // 五的乘法口诀
-            {itemKey:"1x5",a:1,b:5,chineseText:"一五得五",mathExpression:"1×5=5",groupPrefix:"五的乘法口诀"},
+            {itemKey:"1x5",a:1,b:5,chineseText:"一五得五",mathExpression:"1×5=5"},
             {itemKey:"2x5",a:2,b:5,chineseText:"二五一十",mathExpression:"2×5=10"},
             {itemKey:"3x5",a:3,b:5,chineseText:"三五十五",mathExpression:"3×5=15"},
             {itemKey:"4x5",a:4,b:5,chineseText:"四五二十",mathExpression:"4×5=20"},
             {itemKey:"5x5",a:5,b:5,chineseText:"五五二十五",mathExpression:"5×5=25"},
             // 六的乘法口诀
-            {itemKey:"1x6",a:1,b:6,chineseText:"一六得六",mathExpression:"1×6=6",groupPrefix:"六的乘法口诀"},
+            {itemKey:"1x6",a:1,b:6,chineseText:"一六得六",mathExpression:"1×6=6"},
             {itemKey:"2x6",a:2,b:6,chineseText:"二六十二",mathExpression:"2×6=12"},
             {itemKey:"3x6",a:3,b:6,chineseText:"三六十八",mathExpression:"3×6=18"},
             {itemKey:"4x6",a:4,b:6,chineseText:"四六二十四",mathExpression:"4×6=24"},
             {itemKey:"5x6",a:5,b:6,chineseText:"五六三十",mathExpression:"5×6=30"},
             {itemKey:"6x6",a:6,b:6,chineseText:"六六三十六",mathExpression:"6×6=36"},
             // 七的乘法口诀
-            {itemKey:"1x7",a:1,b:7,chineseText:"一七得七",mathExpression:"1×7=7",groupPrefix:"七的乘法口诀"},
+            {itemKey:"1x7",a:1,b:7,chineseText:"一七得七",mathExpression:"1×7=7"},
             {itemKey:"2x7",a:2,b:7,chineseText:"二七十四",mathExpression:"2×7=14"},
             {itemKey:"3x7",a:3,b:7,chineseText:"三七二十一",mathExpression:"3×7=21"},
             {itemKey:"4x7",a:4,b:7,chineseText:"四七二十八",mathExpression:"4×7=28"},
@@ -222,7 +351,7 @@ function multiplicationApp() {
             {itemKey:"6x7",a:6,b:7,chineseText:"六七四十二",mathExpression:"6×7=42"},
             {itemKey:"7x7",a:7,b:7,chineseText:"七七四十九",mathExpression:"7×7=49"},
             // 八的乘法口诀
-            {itemKey:"1x8",a:1,b:8,chineseText:"一八得八",mathExpression:"1×8=8",groupPrefix:"八的乘法口诀"},
+            {itemKey:"1x8",a:1,b:8,chineseText:"一八得八",mathExpression:"1×8=8"},
             {itemKey:"2x8",a:2,b:8,chineseText:"二八十六",mathExpression:"2×8=16"},
             {itemKey:"3x8",a:3,b:8,chineseText:"三八二十四",mathExpression:"3×8=24"},
             {itemKey:"4x8",a:4,b:8,chineseText:"四八三十二",mathExpression:"4×8=32"},
@@ -231,7 +360,7 @@ function multiplicationApp() {
             {itemKey:"7x8",a:7,b:8,chineseText:"七八五十六",mathExpression:"7×8=56"},
             {itemKey:"8x8",a:8,b:8,chineseText:"八八六十四",mathExpression:"8×8=64"},
             // 九的乘法口诀
-            {itemKey:"1x9",a:1,b:9,chineseText:"一九得九",mathExpression:"1×9=9",groupPrefix:"九的乘法口诀"},
+            {itemKey:"1x9",a:1,b:9,chineseText:"一九得九",mathExpression:"1×9=9"},
             {itemKey:"2x9",a:2,b:9,chineseText:"二九十八",mathExpression:"2×9=18"},
             {itemKey:"3x9",a:3,b:9,chineseText:"三九二十七",mathExpression:"3×9=27"},
             {itemKey:"4x9",a:4,b:9,chineseText:"四九三十六",mathExpression:"4×9=36"},
@@ -240,15 +369,73 @@ function multiplicationApp() {
             {itemKey:"7x9",a:7,b:9,chineseText:"七九六十三",mathExpression:"7×9=63"},
             {itemKey:"8x9",a:8,b:9,chineseText:"八九七十二",mathExpression:"8×9=72"},
             {itemKey:"9x9",a:9,b:9,chineseText:"九九八十一",mathExpression:"9×9=81"}
-        ],
+];
+
+/**
+ * 大九九：81 句 = 9 组 × 9 句。组号 n 固定，另一个乘数 k 从 1 数到 9。
+ *
+ * 第 k 句的**口诀原文与音频 key 一律取九九表里那一对乘数**（k ≤ n 取 "kx n"，k > n 取 "nx k"），
+ * 因为同一对乘数两种表念法完全一样。所以这条链路上：
+ *   · itemKey / chineseText / mathExpression ← 来自九九表那一条，是口诀与音频的唯一真相；
+ *   · a = k（另一个乘数）、b = n（组号）← 只用于画矩形与判断组边界；
+ *     矩形 = k 行 × n 列，与九九表「宽 = 组号、高 = 另一个乘数」的语义一致。
+ * 三者乘积都是 k×n，格子上标的数字也就是它，不会打架。
+ */
+function buildBigTable(small) {
+    const byPair = {};                              // "a x b"（a ≤ b）→ 九九表里的那一条
+    small.forEach(f => { byPair[f.a + 'x' + f.b] = f; });
+    const out = [];
+    for (let n = 1; n <= 9; n++) {                  // 组号：这一组固定"几"
+        for (let k = 1; k <= 9; k++) {              // 另一个乘数：大九九一律数到 9
+            const lo = Math.min(n, k), hi = Math.max(n, k);
+            const src = byPair[lo + 'x' + hi];
+            out.push({
+                itemKey: src.itemKey,               // ← 音频就按它取，81 句共用那 45 条
+                a: k,                               // 矩形行数
+                b: n,                               // 矩形列数；也是组名前缀 prefix_n 的数字
+                chineseText: src.chineseText,
+                mathExpression: src.mathExpression
+            });
+        }
+    }
+    return out;
+}
+
+/** 两张表都是静态数据，大九九在加载时算一次就够。 */
+const FORMULAS_BIG = buildBigTable(FORMULAS_99);
+
+function multiplicationApp() {
+    return {
+        // 当前生效的是哪张表：'small' = 九九（45 句）/ 'big' = 大九九（81 句）
+        tableMode: localStorage.getItem('multiplication_table_mode') || 'small',
+        get formulas() { return this.tableMode === 'big' ? FORMULAS_BIG : FORMULAS_99; },
+        // 页头标题用全名（九九 / 大九九 乘法口诀），按钮上用简称（小九九 / 大九九），两处口径别混。
+        // 原来还有一条 tableHint 挂在控制条右侧讲「每组只数到它自己，共 45 句」——
+        // 用户说「用户自己会理解」，删掉；这点信息改由每个选项自己的 title 承载。
+        get tableTitle() { return this.tableMode === 'big' ? '大九九乘法口诀' : '九九乘法口诀'; },
+        /**
+         * 换表。两张表的句数与分组完全不同（同一个下标指向的是完全不同的一句口诀），
+         * 所以必须 stop() + 下标归零 —— 否则从九九第 45 句切过去会停在越界/错位的地方。
+         */
+        setTableMode(m) {
+            if (this.tableMode === m) return;
+            this.stop();
+            this.currentIndex = 0;
+            this.tableMode = m;
+            localStorage.setItem('multiplication_table_mode', m);
+        },
+
         // 格子配色板：沿用乘法页原有的 4 个颜色，只把顺序改成「深浅交替」——
         // 相邻两句的色带是紧贴在一起的，原顺序里 #98D8C8 与 #96CEB4 几乎是同色（ΔRGB≈22），
         // 排在相邻位就白换色了；调成 浅-深-浅-深 后相邻两色的最小距离 ≈74，换色才一眼能看出来。
         colors: ['#98D8C8', '#4ECDC4', '#96CEB4', '#45B7D1'],
         currentIndex: 0,
-        mode: localStorage.getItem('multiplication_mode') || 'auto',
         gridLayout: localStorage.getItem('multiplication_grid_layout') || 'rect',
         playing: false,
+        /* 中断令牌：stop() / 换表 / 重读 每做一次就 +1。正在跑的那条播放链手里攥着一个号，
+           发现对不上就自己退出 —— 没有它，连播只能干等整轮跑完，"暂停"按钮形同虚设。 */
+        playToken: 0,
+        currentPlayback: null, // 正在响的 <audio>：stop() 要把它掐掉，否则"暂停"只是不再往下读
         audioCache: {},        // key → 服务端有没有生成过音频（false 表示已确认没有，别再问一次）
 
         init() {
@@ -318,7 +505,8 @@ function multiplicationApp() {
 
         /**
          * 一格的背景色，由「最早把它点亮的那一句」决定 ⇒ 同一组里一句一条色带，不再是一片同色。
-         * 同组内高亮区域是层层嵌套、只增不减的（矩形布局＝往外扩一圈行列，累加布局＝行优先前缀），
+         * 同组内高亮区域是层层嵌套、只增不减的（rect＝往外扩一圈行列，linear＝行优先前缀；
+         * 控制条上这两个按钮的文案分别是「整块」「逐格」），
          * 所以「第一个包含这一格的 j」就是把它加进来的那一句，颜色天然等于"它是第几句长出来的"。
          * 别退回成整片都用 currentColor 涂色：那样每推进一步整片都会重新染色，又变回一片同色。
          */
@@ -359,11 +547,16 @@ function multiplicationApp() {
                 const blob = await resp.blob();
                 url = URL.createObjectURL(blob);
                 const audio = new Audio(url);
+                this.currentPlayback = audio;
                 await audio.play();
                 await new Promise(resolve => {
                     audio.onended = resolve;
                     audio.onerror = resolve;      // 音频损坏 / 解码失败也算「放完了」
+                    // 被 stop() 掐掉时也要放行：pause() **不会**触发 ended，少了这条，
+                    // 播放循环会永远卡在这一句的 await 里，连"停"都停不下来。
+                    audio.onpause = resolve;
                 });
+                if (this.currentPlayback === audio) this.currentPlayback = null;
                 return true;
             } catch (e) {
                 return false;
@@ -444,64 +637,96 @@ function multiplicationApp() {
             return '';
         },
 
-        async playCurrentAudio() {
-            // Play prefix audio if this is the first formula in a group
-            if (this.isFirstInGroup(this.currentIndex)) {
-                await this.playAudioByKey('prefix_' + this.currentFormula.b);
+        /** 进度百分比：卡片底边那条细线用（0~100）。 */
+        get progressPercent() {
+            const n = this.formulas.length;
+            return n ? Math.round((this.currentIndex + 1) * 100 / n) : 0;
+        },
+
+        /**
+         * 读第 index 句：组首先读组名再读口诀。返回「这一句有没有真的放出声音」，
+         * 调用方靠它决定下一步停多久（有声 600ms / 没声 2000ms）。
+         * 中途被 stop() / 换表打断就立刻收手，别再往下读 —— 否则"暂停"之后还会蹦出一句。
+         */
+        async readAt(index) {
+            const f = this.formulas[index];
+            if (!f) return false;
+            const token = this.playToken;
+            const alive = () => this.playToken === token;
+            let ok = false;
+            if (this.isFirstInGroup(index)) {
+                ok = (await this.playAudioByKey('prefix_' + f.b)) || ok;
+                if (!alive()) return ok;
                 await this.sleep(300);
+                if (!alive()) return ok;
             }
-            await this.playAudioByKey(this.currentFormula.itemKey);
+            ok = (await this.playAudioByKey(f.itemKey)) || ok;
+            return ok;
         },
 
-        async startAuto() {
+        /** 【重读】当前这一句。正在连播时先停 —— 否则会和跑着的那一轮叠成两个声音。 */
+        async replayCurrent() {
+            if (this.playing) this.stop();
+            await this.readAt(this.currentIndex);
+        },
+
+        /** 【播放 / 暂停】一键切换：停着就从当前句起连播，播着就停。 */
+        async togglePlay() {
+            if (this.playing) { this.stop(); return; }
+            await this.playFromCurrent();
+        },
+
+        /**
+         * 从当前这句起连续播放，到末句自然停。
+         * 每一轮都**重新取** currentIndex（不是闭包里的 i）—— 播放中点【上一句 / 下一句】
+         * 改的就是它，循环下一轮自然跟着走：既不用重启循环，也不会"用户 +1、循环又 +1"跳两句。
+         */
+        async playFromCurrent() {
             this.playing = true;
-            await this.runAutoLoop();
+            const token = ++this.playToken;
+            while (this.playing && this.playToken === token) {
+                const i = this.currentIndex;
+                const ok = await this.readAt(i);
+                if (!this.playing || this.playToken !== token) break;
+                if (i >= this.formulas.length - 1) break;        // 末句读完自然停
+                const before = this.currentIndex;
+                await this.sleep(ok ? 600 : 2000);
+                if (!this.playing || this.playToken !== token) break;
+                // 只有「这一轮里没人动过下标」才自己往前挪；用户手动挪过就以用户的位置为准
+                if (this.currentIndex === before) this.currentIndex = before + 1;
+            }
+            if (this.playToken === token) this.playing = false;
         },
 
-        async runAutoLoop() {
-            while (this.playing && this.currentIndex < this.formulas.length) {
-                let audioPlayed = false;
-                // Play prefix audio if first in group
-                if (this.isFirstInGroup(this.currentIndex)) {
-                    const prefixOk = await this.playAudioByKey('prefix_' + this.currentFormula.b);
-                    audioPlayed = audioPlayed || prefixOk;
-                    if (!this.playing) break;
-                    // Extra pause on group change
-                    await this.sleep(600);
-                    if (!this.playing) break;
-                }
-                // Play formula audio
-                const formulaOk = await this.playAudioByKey(this.currentFormula.itemKey);
-                audioPlayed = audioPlayed || formulaOk;
-                if (!this.playing) break;
+        /** 【上一句】回退一句。播放中回退不打断连播（退回去接着往下读）。 */
+        async stepPrev() {
+            if (this.currentIndex <= 0) return;
+            this.currentIndex--;
+            if (!this.playing) await this.readAt(this.currentIndex);
+        },
 
-                // Wait: 0.6s if audio played, 5s if no audio
-                await this.sleep(audioPlayed ? 600 : 2000);
-                if (!this.playing) break;
+        /** 【下一句】前进一句。停着时顺手读出来；播放中只改下标，交给循环去读（不叠音）。 */
+        async stepNext() {
+            if (this.currentIndex >= this.formulas.length - 1) return;
+            this.currentIndex++;
+            if (!this.playing) await this.readAt(this.currentIndex);
+        },
 
-                if (this.currentIndex < this.formulas.length - 1) {
-                    this.currentIndex++;
-                } else {
-                    this.playing = false;
-                }
-            }
+        reset() {
+            this.stop();
+            this.currentIndex = 0;
         },
 
         stop() {
             this.playing = false;
-        },
-
-        reset() {
-            this.playing = false;
-            this.currentIndex = 0;
-        },
-
-        prev() {
-            if (this.currentIndex > 0) this.currentIndex--;
-        },
-
-        next() {
-            if (this.currentIndex < this.formulas.length - 1) this.currentIndex++;
+            this.playToken++;                     // 让正在跑的那条链自己退出
+            const a = this.currentPlayback;
+            if (a) {
+                try { a.pause(); } catch (e) { /* 暂停失败也不影响"停下"这个语义 */ }
+                this.currentPlayback = null;
+            }
+            try { if (window.speechSynthesis) window.speechSynthesis.cancel(); }
+            catch (e) { /* 同上：读不出来只是"没声音"，静默 */ }
         },
 
         sleep(ms) {

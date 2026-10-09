@@ -1,5 +1,6 @@
 package com.storycreator.web;
 
+import com.storycreator.api.InspirationApiController;
 import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.MaterialCategory;
 import com.storycreator.core.domain.ModelType;
@@ -234,6 +235,10 @@ class PageRenderingIntegrationTest {
             }
             globalSettingRepository.deleteById("default_model_config_id");
         });
+        // 无项目灵感（project_id = 0）不属于任何项目，按项目清理带不走它们 —— 单独兜底，
+        // 免得某条用例断言失败时把残留留给下一条（汇总接口那条断言依赖「0 号组置顶」）。
+        transactionTemplate.executeWithoutResult(status ->
+                inspirationRepository.deleteByProjectId(InspirationApiController.NO_PROJECT_ID));
     }
 
     // ==================== Dashboard & Project Pages ====================
@@ -816,6 +821,80 @@ class PageRenderingIntegrationTest {
                 .isNotEqualTo(HttpStatus.OK);
         assertThat(restTemplate.getForEntity(apiBase, String.class).getBody())
                 .doesNotContain("HTTP 往返灵感（已改）");
+    }
+
+    /**
+     * 「所有灵感」页可以直接新建**无项目**灵感（project_id = 0）。
+     *
+     * <p>0 号是哨兵值：projects 表里根本没有这一行，所以项目存在性校验必须对它放行，
+     * 否则新建 / 查看 / 编辑 / 删除整条链路都会 400。
+     */
+    @Test
+    void inspiration_canBeCreatedWithoutProject() {
+        String apiBase = url("/api/projects/" + InspirationApiController.NO_PROJECT_ID + "/inspirations");
+        try {
+            ResponseEntity<String> created = restTemplate.postForEntity(
+                    apiBase, jsonEntity("无项目灵感：雨夜的灯塔", "先记下来，回头再归到某个项目。"), String.class);
+            assertThat(created.getStatusCode().is2xxSuccessful()).as("不带项目的灵感应能创建").isTrue();
+            assertThat(created.getBody()).as("返回体里的 projectId 必须是 0").contains("\"projectId\":0");
+            Long id = extractId(created.getBody());
+
+            // 详情与列表都要能读到 —— 这是 requireProject 对 0 号放行的证据
+            assertThat(restTemplate.getForEntity(apiBase + "/" + id, String.class).getBody())
+                    .contains("雨夜的灯塔");
+            assertThat(restTemplate.getForEntity(apiBase, String.class).getBody()).contains("雨夜的灯塔");
+
+            // 隔离：真实项目的灵感列表里绝不能出现它
+            //（0 号是「没有项目」，不是「第 0 个项目」）
+            assertThat(restTemplate.getForEntity(
+                    url("/api/projects/" + projectId + "/inspirations"), String.class).getBody())
+                    .as("无项目灵感不能串到真实项目里")
+                    .doesNotContain("雨夜的灯塔");
+
+            // 拿真实项目的 projectId 去访问这条 0 号灵感，同样要被拒
+            assertThat(restTemplate.getForEntity(
+                    url("/api/projects/" + projectId + "/inspirations/" + id), String.class).getStatusCode())
+                    .as("跨项目访问 0 号灵感也必须被拒")
+                    .isEqualTo(HttpStatus.BAD_REQUEST);
+        } finally {
+            transactionTemplate.executeWithoutResult(status ->
+                    inspirationRepository.deleteByProjectId(InspirationApiController.NO_PROJECT_ID));
+        }
+    }
+
+    /**
+     * 汇总接口（「所有灵感」页的数据源）：无项目灵感要独立成一组，名字是「未归属项目」
+     * （不能顺着项目表兜底成「项目 0」），并且**固定置顶** —— 那一组正是本页新建灵感的落点，
+     * 刚记下来的东西必须一眼可见。
+     */
+    @Test
+    void allInspirationsApi_putsProjectLessGroupFirstWithItsOwnName() {
+        try {
+            restTemplate.postForEntity(
+                    url("/api/projects/" + InspirationApiController.NO_PROJECT_ID + "/inspirations"),
+                    jsonEntity("无项目灵感：置顶检查", "x"), String.class);
+
+            String body = restTemplate.getForEntity(url("/api/inspirations"), String.class).getBody();
+            assertThat(body)
+                    .as("无项目分组必须排在最前，标题是「未归属项目」而不是「项目 0」")
+                    .startsWith("[{\"projectId\":0,\"projectTitle\":\"未归属项目\"");
+            assertThat(body).contains("无项目灵感：置顶检查");
+        } finally {
+            transactionTemplate.executeWithoutResult(status ->
+                    inspirationRepository.deleteByProjectId(InspirationApiController.NO_PROJECT_ID));
+        }
+    }
+
+    /** 「所有灵感」页要能直接新建无项目灵感：入口 + 表单 + 0 号哨兵都得在静态页里。 */
+    @Test
+    void allInspirationsPage_offersCreateWithoutProject() {
+        ResponseEntity<String> page = restTemplate.getForEntity(url("/inspirations"), String.class);
+        assertStaticPage(page, "all-inspirations", "新建灵感");
+        assertThat(page.getBody())
+                .as("新建入口必须落在「无项目」哨兵上（SC.NO_PROJECT_ID），而不是某个具体项目")
+                .contains("SC.NO_PROJECT_ID")
+                .contains("id=\"toggle-add\"")
+                .contains("id=\"save-new\"");
     }
 
     /** 标题为空白（或干脆没传 title 参数）时不应落库，也不应 500。 */
@@ -1693,7 +1772,7 @@ class PageRenderingIntegrationTest {
     @Test
     void learn_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/learn"), String.class);
-        assertStaticPage(response, "learn", "九九乘法口诀");
+        assertStaticPage(response, "learn", "乘法口诀");
         assertThat(response.getBody())
                 .as("教学首页应含乘法学习、音频设置、英语单词匹配与俄罗斯方块入口")
                 .contains("/learn/multiplication")
@@ -1727,6 +1806,14 @@ class PageRenderingIntegrationTest {
         assertThat(response.getBody())
                 .as("乘法页应含口诀数据与音频取值逻辑")
                 .contains("九九八十一")
+                // 大乘法口诀：九九（45 句）之外的第二种表（81 句 = 9 组 × 9 句）。
+                // 它由 buildBigTable 从九九表算出来 —— 口诀文字与音频 key 全部复用，
+                // 所以服务端 54 条音频（45 口诀 + 9 组名前缀）一条都不用加。
+                // 逐句内容 / 组号 / 前缀音频 key 由 scripts/probe_multiplication.mjs 在真浏览器里核。
+                .contains("大九九乘法口诀")
+                .contains("buildBigTable")
+                .contains("FORMULAS_BIG")
+                .contains("multiplication_table_mode")
                 .contains("/api/learn/multiplication/audio/")
                 // 没有已生成音频时降级到浏览器本地朗读（Web Speech API）读汉字口诀，
                 // 读不出来就只当没声音 —— 降级链与「不许报错」由 scripts/probe_multiplication.mjs 逐段验
@@ -1740,6 +1827,27 @@ class PageRenderingIntegrationTest {
                 .contains("cellStyle(row, col)")
                 .contains("cellColorAt")
                 .doesNotContain("'background-color:' + currentColor")
+                // 控制条：设置段（口诀表 / 高亮，柔和选中）+ 主控段（常驻五键）。
+                .contains("mul-set")
+                .contains("mul-ctl")
+                .contains("mul-transport")
+                .contains("mul-play")
+                // 序号升成「第 N / M 句」，进度走卡片底边那条 3px 细线（绝对定位，不占垂直空间）
+                .contains("mul-progress")
+                .contains("progressPercent")
+                // 播放器三键：停着点【下一句】只前进一句并朗读，播放中点【下一句】只挪下标。
+                .contains("togglePlay")
+                .contains("playFromCurrent")
+                .contains("stepPrev")
+                .contains("stepNext")
+                .contains("replayCurrent")
+                // 连播的中断手段：stop() 递增令牌，正在跑的那条链自己退出
+                .contains("playToken")
+                // 交互改造的反断言：「自动 / 手动」档位必须**不在**了 ——
+                // 旧实现按住档位把整簇按钮换掉，想暂停得先确认自己在哪一档。
+                // 注意 multiplication_table_mode 不含这个子串，反断言不会误伤口诀表开关。
+                .doesNotContain("multiplication_mode")
+                .doesNotContain("startAuto")
                 .doesNotContain("console.error")
                 .doesNotContain("alert(");
     }
@@ -1788,6 +1896,23 @@ class PageRenderingIntegrationTest {
                 .contains("navNext()")
                 .contains("下一册")
                 .contains("最后一册");
+        assertThat(response.getBody())
+                .as("类别标签应可点开「本册该类别全部单词与关卡」面板，并能进入「只练这些关」的分类模式："
+                        + "作用域只收窄可走的关卡，不改写本册关卡数组（levelIndex 仍是本册真实下标，"
+                        + "进度 / 错题本 / 关号口径都不变）")
+                .contains("openTheme()")
+                .contains("themeInfo")
+                .contains("wm-theme-modal")
+                .contains("练习本分类")
+                .contains("startThemePractice")
+                .contains("themeScope")
+                .contains("wm-scope-bar")
+                .contains("atScopeEnd")
+                .contains("nextIndexOf")
+                .contains("结束分类")
+                .as("分类练习里【自动学习】的起点必须是该分类第一关，按钮提示也得跟着改口 —— "
+                        + "否则按钮写着「从第 1 关开始」，点下去却从别处开始（文案与行为不一致）")
+                .contains("autoStartTitle");
         assertThat(response.getBody())
                 .as("移动端浮动胶囊按钮必须是白底，且**连 hover/active/focus 的文字色一起钉死**："
                         + "真机点完会留下粘滞 :hover，Bootstrap 的 btn-outline-secondary:hover "
@@ -1865,6 +1990,35 @@ class PageRenderingIntegrationTest {
                 .contains("cetPromise")
                 .contains("await this.enterBookInAuto(nextBook.id)")
                 .contains("正在载入大学词库");
+        assertThat(response.getBody())
+                .as("默认落地在**检索首页**（与小程序 pages/index 同一形态：先查词、查到再进玩法页），"
+                        + "页头下拉停在占位文案【选择关卡练习】上 —— 首次访问刻意**不预设册次**，"
+                        + "否则占位文案永远不出现，那个按钮也就没人看得出是干什么的")
+                .contains("wm-home")
+                .contains("homeStatText")
+                .contains("wm-home-drop")
+                .contains("wm-home-result")
+                .contains("wm-home-guide")
+                .contains("homeDropOpen")
+                .contains("HOME_DEBOUNCE")
+                .contains("onHomeInput")
+                .contains("queryGo")
+                .contains("enterPlay")
+                .contains("选择关卡练习")
+                .contains("wm-back-btn")
+                .contains("goSearch()");
+        assertThat(response.getBody())
+                .as("棋盘用 x-if 而不是 x-show 挂在 view 上：未渲染时 x-show 对 template 无效；"
+                        + "棋盘专属按钮（返回搜索 / 自动学习 / 暂停 / 搜索）也必须一并挂 view === 'play'，"
+                        + "否则检索首页上会浮出一排点不通的按钮。暂停是 autoMode 的三态之一，"
+                        + "条件得写成 `view === 'play' && autoMode` 一个表达式 —— "
+                        + "同一元素上叠两个 x-show 只有后一个生效")
+                .contains("levels.length && view === 'play'")
+                .contains("view === 'play' && autoMode");
+        assertThat(response.getBody())
+                .as("导出件例外：单页 HTML 是「发出去双击就能玩」的东西，落在检索页反而多一步，"
+                        + "所以视图初值由 __WM_STANDALONE__ 三分 —— 导出件直接进棋盘")
+                .contains("window.__WM_STANDALONE__) ? 'play' : 'search'");
     }
 
     @Test
@@ -1950,7 +2104,8 @@ class PageRenderingIntegrationTest {
                 .contains("必修1")              // 高中 11 册（必修1-5 + 选修6-11）
                 .contains("选修11")
                 .contains("pep-h-1")
-                .contains("Unit 1")            // 高中按课本单元分组
+                .contains("人物与称谓")           // 高中已按「跨学段统一语义域」重分类
+                .doesNotContain("\"theme\":\"Unit 1\"")  // 原先是课本单元 Unit 1~5，已退役
                 .contains("astronomy")
                 .contains("天文学");
     }

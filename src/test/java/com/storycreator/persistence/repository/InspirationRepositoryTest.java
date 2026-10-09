@@ -1,5 +1,6 @@
 package com.storycreator.persistence.repository;
 
+import com.storycreator.api.InspirationApiController;
 import com.storycreator.core.domain.Genre;
 import com.storycreator.persistence.entity.InspirationEntity;
 import com.storycreator.persistence.entity.ProjectEntity;
@@ -123,5 +124,39 @@ class InspirationRepositoryTest {
 
         InspirationEntity empty = inspiration(projectA, "空内容", "  ");
         assertThat(empty.getContentPreview()).isEmpty();
+    }
+
+    /**
+     * 无项目灵感（project_id = 0）：能落库、能单独列出，且不会串到任何真实项目里。
+     * <p>0 号是「没有项目」，不是「第 0 个项目」—— 它必须与有项目的灵感互不可见。
+     */
+    @Test
+    void projectLessInspirationsAreIsolatedFromRealProjects() {
+        inspiration(InspirationApiController.NO_PROJECT_ID, "无项目灵感：雨夜的灯塔", "先记下来");
+        inspiration(projectA, "A 的灵感", "只属于 A");
+
+        assertThat(inspirationRepository
+                .findByProjectIdOrderByCreatedAtDescIdDesc(InspirationApiController.NO_PROJECT_ID))
+                .extracting(InspirationEntity::getTitle)
+                .containsExactly("无项目灵感：雨夜的灯塔");
+        assertThat(inspirationRepository.findByProjectIdOrderByCreatedAtDescIdDesc(projectA))
+                .extracting(InspirationEntity::getTitle)
+                .containsExactly("A 的灵感");
+        assertThat(inspirationRepository.countByProjectId(InspirationApiController.NO_PROJECT_ID)).isEqualTo(1);
+    }
+
+    /**
+     * V69 去掉外键后删项目不再级联删灵感：按项目清理时必须**只**清目标项目，
+     * 0 号（无项目）的那些灵感一条都不能被顺手带走。
+     */
+    @Test
+    void deleteByProjectIdKeepsProjectLessInspirations() {
+        inspiration(InspirationApiController.NO_PROJECT_ID, "无项目灵感", null);
+        inspiration(projectA, "A 的灵感", null);
+
+        assertThat(inspirationRepository.deleteByProjectId(projectA)).isEqualTo(1);
+
+        assertThat(inspirationRepository.countByProjectId(InspirationApiController.NO_PROJECT_ID)).isEqualTo(1);
+        assertThat(inspirationRepository.countByProjectId(projectA)).isZero();
     }
 }

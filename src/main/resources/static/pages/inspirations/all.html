@@ -18,17 +18,44 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="mb-0"><i class="bi bi-globe2"></i> 所有灵感</h2>
-            <small class="text-muted">跨项目汇总，按项目分组</small>
+            <small class="text-muted">跨项目汇总，按项目分组；没归到项目里的灵感放在「未归属项目」下</small>
         </div>
-        <a class="btn btn-outline-secondary btn-sm" href="/"><i class="bi bi-house"></i> 返回首页</a>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-primary btn-sm" id="toggle-add">
+                <i class="bi bi-plus"></i> 新建灵感
+            </button>
+            <a class="btn btn-outline-secondary btn-sm" href="/"><i class="bi bi-house"></i> 返回首页</a>
+        </div>
     </div>
 
     <div id="alert" class="alert py-2 d-none"></div>
 
+    <!-- 新建：**不挂任何项目**（project_id = 0）。灵感常常先于项目出现，所以这一页就能直接记，
+         以后要归到某个项目再去编辑补充。 -->
+    <div class="card mb-4 d-none" id="add-card">
+        <div class="card-body">
+            <div class="text-muted small mb-3">
+                <i class="bi bi-info-circle"></i> 这条灵感不归属任何项目，会落在「未归属项目」分组里。
+            </div>
+            <div class="mb-3">
+                <label class="form-label small mb-1" for="new-title">标题 <span class="text-danger">*</span></label>
+                <input type="text" class="form-control form-control-sm" id="new-title"
+                       maxlength="200" placeholder="一句话概括这条灵感">
+            </div>
+            <div class="mb-3">
+                <label class="form-label small mb-1" for="new-content">内容</label>
+                <textarea class="form-control form-control-sm" id="new-content" rows="6"
+                          placeholder="记录灵感片段、想法、场景、对白、设定……"></textarea>
+            </div>
+            <button type="button" class="btn btn-sm btn-primary" id="save-new">保存</button>
+            <button type="button" class="btn btn-sm btn-secondary" id="cancel-add">取消</button>
+        </div>
+    </div>
+
     <div id="groups"></div>
     <div id="empty" class="text-center text-muted py-5 d-none">
         <i class="bi bi-lightbulb" style="font-size: 2.5rem;"></i>
-        <p class="mt-2 mb-0">还没有任何灵感记录。</p>
+        <p class="mt-2 mb-0">还没有任何灵感记录，点右上角「新建灵感」记下第一条。</p>
     </div>
 </main>
 
@@ -65,11 +92,18 @@
 
     function groupHtml(g) {
         const listUrl = '/projects/' + g.projectId + '/inspirations';
+        // 0 号分组 = 未归属项目（后端 AllInspirationsApiController.NO_PROJECT_TITLE）。
+        // 它跟普通项目组长得一样会让人以为存在这么个项目，所以换成收件箱图标 + 自己的说法。
+        const noProject = SC.isNoProject(g.projectId);
         return '<div class="card mb-4">' +
             '<div class="card-header bg-transparent d-flex justify-content-between align-items-center">' +
-            '<div><i class="bi bi-folder2"></i> <a class="sc-card-link" href="' + listUrl + '">' + esc(g.projectTitle) + '</a>' +
-            ' <span class="badge bg-secondary ms-1">' + g.count + '</span></div>' +
-            '<a class="btn btn-sm btn-outline-secondary" href="' + listUrl + '"><i class="bi bi-list-ul"></i> 进入项目灵感</a>' +
+            '<div><i class="bi ' + (noProject ? 'bi-inbox' : 'bi-folder2') + '"></i> ' +
+            '<a class="sc-card-link" href="' + listUrl + '">' + esc(g.projectTitle) + '</a>' +
+            ' <span class="badge bg-secondary ms-1">' + g.count + '</span>' +
+            (noProject ? ' <span class="text-muted small ms-1">还没归到项目里的灵感</span>' : '') +
+            '</div>' +
+            '<a class="btn btn-sm btn-outline-secondary" href="' + listUrl + '">' +
+            '<i class="bi bi-list-ul"></i> ' + (noProject ? '管理未归属灵感' : '进入项目灵感') + '</a>' +
             '</div>' +
             '<div class="card-body">' +
             (g.items.length ? g.items.map(itemHtml).join('') : '<div class="text-muted small">该项目暂无灵感</div>') +
@@ -91,6 +125,41 @@
             showAlert('灵感加载失败：' + (e.message || ''), 'danger');
         }
     }
+
+    /* ==================== 新建（不挂项目） ====================
+       后端以 project_id = 0 表示「未归属任何项目」，沿用项目灵感那套 CRUD 接口
+       （/api/projects/0/inspirations），所以这里不需要第二套接口。 */
+
+    $('toggle-add').addEventListener('click', () => {
+        $('add-card').classList.toggle('d-none');
+        if (!$('add-card').classList.contains('d-none')) $('new-title').focus();
+    });
+
+    $('cancel-add').addEventListener('click', () => {
+        $('add-card').classList.add('d-none');
+        $('new-title').value = '';
+        $('new-content').value = '';
+    });
+
+    $('save-new').addEventListener('click', async () => {
+        const title = $('new-title').value.trim();
+        const content = $('new-content').value;
+        if (!title) { SC.toast.error('标题不能为空'); return; }
+        const btn = $('save-new');
+        btn.disabled = true;
+        try {
+            await SC.api.post('/api/projects/' + SC.NO_PROJECT_ID + '/inspirations', { title, content });
+            SC.toast.success('灵感已保存');
+            $('new-title').value = '';
+            $('new-content').value = '';
+            $('add-card').classList.add('d-none');
+            await loadAll();
+        } catch (e) {
+            SC.toast.error('保存失败：' + (e.message || ''));
+        } finally {
+            btn.disabled = false;
+        }
+    });
 
     loadAll();
 })();

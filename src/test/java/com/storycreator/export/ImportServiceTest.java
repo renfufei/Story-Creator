@@ -40,6 +40,7 @@ class ImportServiceTest {
     @Mock private AiModelConfigRepository aiModelConfigRepository;
     @Mock private ProofreadingReportRepository proofreadingReportRepository;
     @Mock private WorldSettingFacetRepository worldSettingFacetRepository;
+    @Mock private InspirationRepository inspirationRepository;
 
     private ImportService importService;
     private ObjectMapper objectMapper;
@@ -63,6 +64,7 @@ class ImportServiceTest {
         importService.setAiModelConfigRepository(aiModelConfigRepository);
         importService.setProofreadingReportRepository(proofreadingReportRepository);
         importService.setWorldSettingFacetRepository(worldSettingFacetRepository);
+        importService.setInspirationRepository(inspirationRepository);
     }
 
     // ==================== parseJson ====================
@@ -309,6 +311,8 @@ class ImportServiceTest {
         verify(characterRepository).deleteByProjectId(5L);
         verify(worldSettingFacetRepository).deleteByProjectId(5L);
         verify(worldSettingRepository).deleteByProjectId(5L);
+        // V69 之后 inspirations 没有外键了，灵感必须显式清理（原来靠 ON DELETE CASCADE）
+        verify(inspirationRepository).deleteByProjectId(5L);
         verify(projectRepository).deleteById(5L);
     }
 

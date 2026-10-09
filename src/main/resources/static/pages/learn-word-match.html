@@ -86,6 +86,18 @@
             color: #86909c;
         }
 
+        /* 标题 + 【返回搜索】共用标题行。返回键必须放在这儿、不能混进右边那排按钮：
+           320x568 下右边那排本来只剩约 28px 余量，多塞一个按钮就把「设置」顶到第二行，
+           工具栏高出一行 → 舞台可用高度少一截、卡片网格（44px 触控下限，压不下去）
+           溢出 20px，浮动胶囊还会盖住最后一行单词。放标题左边则一分纵向空间都不多占，
+           也是移动端最标准的「返回」位置。 */
+        .wm-toolbar-title {
+            display: flex;
+            align-items: center;
+            gap: .55rem;
+            min-width: 0;
+        }
+
         .wm-toolbar-actions {
             display: flex;
             align-items: center;
@@ -102,6 +114,176 @@
         }
 
         .wm-caret { font-size: .7rem; opacity: .6; }
+
+        /* ==================== 检索首页（默认视图） ====================
+           与小程序 pages/index 同一形态：常驻搜索框 + 输入即出的下拉 + 结果落到下方列表，
+           没搜索时给「怎么查」，不让主界面空着。进棋盘的入口有两个：搜索结果【查看】、
+           或页头【选择关卡练习】挑一册（见 pickBook）。
+
+           ⚠️ 这一块**不复用** .wm-search-* ：那些是弹层里的，几何被 S13 的断言钉住了，
+           为了改首页去动它们，会顺手把弹层的断言弄红。两套样式各自独立、互不影响。 */
+        .wm-home {
+            width: 100%;
+            max-width: 640px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: .85rem;
+        }
+
+        .wm-home-hero {
+            padding: 1.05rem 1.15rem 1rem;
+            border: 1px solid var(--wm-line);
+            border-radius: 18px;
+            background: linear-gradient(160deg, #f6fbff, #ffffff 62%);
+            box-shadow: 0 4px 18px rgba(31, 45, 61, .05);
+        }
+
+        .wm-home-title {
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--wm-ink);
+        }
+
+        .wm-home-title i { color: var(--wm-sel-line); }
+        .wm-home-sub { margin-top: .35rem; font-size: .84rem; color: #6b7683; line-height: 1.65; }
+        .wm-home-stat { margin-top: .45rem; font-size: .76rem; color: var(--wm-muted); font-variant-numeric: tabular-nums; }
+        .wm-home-cta { margin-top: .8rem; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+        .wm-home-tip { font-size: .78rem; color: #6b7683; }
+        .wm-home-tip b { color: var(--wm-sel-ink); }
+
+        /* 搜索区：下拉要浮在下方卡片之上，所以外层 relative + 面板绝对定位 */
+        .wm-home-search { position: relative; }
+
+        .wm-home-bar {
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            padding: .3rem .35rem .3rem .7rem;
+            border: 1px solid #cfe0fb;
+            border-radius: 14px;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(31, 45, 61, .04);
+            transition: border-color .15s ease, box-shadow .15s ease;
+        }
+
+        .wm-home-bar:focus-within {
+            border-color: var(--wm-sel-line);
+            box-shadow: 0 0 0 3px rgba(53, 163, 243, .13);
+        }
+
+        .wm-home-bar > i { flex: 0 0 auto; font-size: 1rem; color: var(--wm-muted); }
+
+        .wm-home-input {
+            flex: 1 1 auto;
+            min-width: 0;
+            border: 0;
+            outline: 0;
+            background: transparent;
+            font-size: .95rem;
+            color: var(--wm-ink);
+            padding: .38rem 0;
+        }
+
+        .wm-home-input::placeholder { color: #a8b0ba; }
+        .wm-home-input::-webkit-search-cancel-button { display: none; }
+
+        .wm-home-clear {
+            flex: 0 0 auto;
+            width: 24px;
+            height: 24px;
+            border: 0;
+            border-radius: 50%;
+            background: #eef1f4;
+            color: #6b7683;
+            font-size: .7rem;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .wm-home-clear:hover { background: #e3e8ee; color: var(--wm-ink); }
+
+        /* 输入即出的下拉：最多 5 个单词（与弹层共用同一份 searchHits） */
+        .wm-home-drop {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: calc(100% + 6px);
+            z-index: 20;
+            padding: .3rem;
+            background: #fff;
+            border: 1px solid var(--wm-line);
+            border-radius: 14px;
+            box-shadow: 0 12px 28px rgba(31, 45, 61, .13);
+            max-height: min(56vh, 24rem);
+            overflow: auto;
+        }
+
+        .wm-home-hit {
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            width: 100%;
+            padding: .5rem .55rem;
+            border: 0;
+            border-radius: 10px;
+            background: transparent;
+            text-align: left;
+        }
+
+        .wm-home-hit:hover { background: #f3f8fe; }
+        .wm-home-hit-main { flex: 1 1 auto; min-width: 0; display: block; }
+        .wm-home-hit-en { display: flex; align-items: center; gap: .3rem; font-weight: 600; font-size: .92rem; color: var(--wm-ink); }
+        .wm-home-hit-en .wm-speak { position: static; transform: none; font-size: .82rem; }
+        .wm-home-hit-zh { display: block; font-size: .8rem; color: #5a6472; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .wm-home-hit-src { display: block; font-size: .72rem; color: var(--wm-muted); margin-top: 1px; }
+        .wm-home-hit-go { flex: 0 0 auto; font-size: .78rem; font-weight: 600; color: var(--wm-sel-ink); }
+        .wm-home-none { padding: .8rem .55rem; font-size: .82rem; color: #6b7683; }
+
+        /* 结果列表 / 怎么查：两张卡片同一个位置，二选一显示 */
+        .wm-home-sec {
+            padding: .9rem 1rem 1rem;
+            border: 1px solid var(--wm-line);
+            border-radius: 18px;
+            background: #fff;
+            box-shadow: 0 4px 18px rgba(31, 45, 61, .05);
+        }
+
+        .wm-home-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
+        .wm-home-sec-title { font-size: .92rem; font-weight: 700; color: var(--wm-ink); }
+        .wm-home-sec-tip { font-size: .74rem; color: var(--wm-muted); }
+        .wm-home-hint { margin: .45rem 0 0; font-size: .76rem; color: var(--wm-muted); }
+        .wm-home-list { margin-top: .55rem; }
+
+        .wm-home-row {
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            padding: .5rem .6rem;
+            margin-top: .4rem;
+            border: 1px solid var(--wm-line);
+            border-radius: 12px;
+            background: #fff;
+        }
+
+        .wm-home-row.is-exact { border-left: 3px solid var(--wm-ok); background: #fbfefc; }
+        .wm-home-empty { padding: 1.1rem .4rem .3rem; font-size: .84rem; color: #6b7683; }
+        .wm-home-guide { margin-top: .4rem; }
+        .wm-home-guide-item { font-size: .83rem; color: #55606d; line-height: 1.9; }
+
+        .wm-home-code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: .78rem;
+            padding: .05rem .32rem;
+            border-radius: 5px;
+            background: #eef4fb;
+            color: var(--wm-sel-ink);
+        }
 
         /* 错题数量：贴着按钮内的计数胶囊，不用绝对定位，免得压住旁边的按钮 */
         .wm-count {
@@ -291,6 +473,14 @@
             transition: background-color .25s ease;
         }
 
+        /* 分类练习：进度条仍画整册进度，但把「本次要练的那几段」标出来 ——
+           范围内未完成的染浅蓝、范围外压更淡。
+           ⚠️ 别把这条改成「只把范围外压深/压淡」：两种灰（#ebedf0 / #f4f6f8）在 13 段
+           这种密度下实测看不出差别，等于没标。浅蓝才是有区分度的那一半。
+           用 :not() 把自己限定成「范围内 + 未完成 + 非当前」，就不跟 is-done / is-current
+           抢层叠（否则这条比重更高，会把已完成/当前也刷成蓝）。 */
+        .wm-progress.is-scoped .wm-seg:not(.is-out):not(.is-done):not(.is-current) { background: #cfe2fb; }
+        .wm-seg.is-out { background: #f4f6f8; }
         .wm-seg.is-done { background: var(--wm-ok); }
         .wm-seg.is-current { background: var(--wm-accent); }
         .wm-progress.is-auto .wm-seg.is-done { background: #f5c46b; }
@@ -335,14 +525,29 @@
             letter-spacing: .01em;
         }
 
+        /* 类别标签：可点 —— 打开「这个类别在本册的全部单词与关卡」面板（见 openTheme）。
+           用 <button> 而不是 <span>：Tab 可达、回车可触发，语义上它确实是个「打开面板」的控件；
+           右边那个小箭头就是「点得动」的提示，之前是个静态标签，没人会想到去点。 */
         .wm-theme {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            font-family: inherit;
             font-size: .75rem;
             color: #0f6cbd;
             background: #eaf4fe;
+            border: 1px solid #cfe6fb;
             border-radius: 999px;
-            padding: 2px 9px;
+            padding: 2px 8px;
             font-weight: 600;
+            line-height: 1.45;
+            cursor: pointer;
+            transition: background .12s ease, border-color .12s ease;
         }
+
+        .wm-theme:hover { background: #dceefd; border-color: #a9d4f5; }
+        .wm-theme:active { background: #cfe6fb; }
+        .wm-theme .wm-theme-more { font-size: .9em; opacity: .6; }
 
         .wm-auto-badge {
             font-size: .72rem;
@@ -431,6 +636,69 @@
         .wm-auto-btn:hover { background: #fff8ea; }
         .wm-auto-btn.is-exit { border-color: #f2b8b5; color: #b42318; }
         .wm-auto-btn.is-exit:hover { background: #fff1f0; }
+
+        /* ---------- 分类练习作用域条（点类别标签 -> 「练习本分类」后出现） ----------
+           与自动学习条同构：flex 单行、高度固定，窄屏不会被长文案撑高。 */
+        .wm-scope-bar {
+            display: flex;
+            flex-wrap: nowrap;
+            align-items: center;
+            gap: .5rem;
+            min-height: 2.4rem;
+            background: linear-gradient(96deg, #eef4ff, #f8fbff);
+            border: 1px solid #cfe0fb;
+            border-radius: 12px;
+            padding: 6px 10px;
+            color: #1f4b8f;
+            font-size: .84rem;
+        }
+
+        .wm-scope-cap {
+            flex: 0 0 auto;
+            background: #fff;
+            border: 1px solid #cfe0fb;
+            border-radius: 999px;
+            padding: 1px 8px;
+            font-size: .72rem;
+            font-weight: 700;
+            line-height: 1.5;
+        }
+
+        /* 类别名可能很长（四六级细域名）：自己可省略，但不挤掉右边的进度与退出钮 */
+        .wm-scope-name {
+            flex: 0 1 auto;
+            min-width: 0;
+            font-weight: 700;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .wm-scope-pos {
+            flex: 1 1 auto;
+            min-width: 0;
+            text-align: right;
+            font-size: .78rem;
+            opacity: .85;
+            font-variant-numeric: tabular-nums;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .wm-scope-exit {
+            flex: 0 0 auto;
+            border: 1px solid #b9cff0;
+            background: #fff;
+            color: #1f4b8f;
+            border-radius: 999px;
+            font-size: .78rem;
+            font-weight: 600;
+            padding: 3px 10px;
+            line-height: 1.5;
+        }
+
+        .wm-scope-exit:hover { background: #f2f7ff; }
 
         /* ---------- 配对棋盘（浅色底 + 边框，与上方信息栏分区） ---------- */
         .wm-board {
@@ -1058,6 +1326,76 @@
 
         .wm-wrong-empty i { display: block; font-size: 1.8rem; margin-bottom: .4rem; color: var(--wm-ok); }
 
+        /* ---------- 类别面板（点页头的类别标签打开） ----------
+           position:relative 必须自己开：.wm-modal 没设 position，
+           漏了的话右上角的关闭叉会以遮罩（fixed）为参照飞到弹窗外面去（错题本/导出也踩过）。 */
+        .wm-modal.is-wide.is-theme { max-width: 500px; position: relative; }
+        .wm-modal.is-wide.is-theme .wm-modal-head { padding-right: 26px; }
+
+        .wm-theme-list {
+            display: flex;
+            flex-direction: column;
+            gap: .55rem;
+            margin: .7rem 0 0;
+            max-height: min(52vh, 26rem);
+            overflow: auto;
+        }
+
+        /* 一关一块：左侧那道蓝边就是「这个类别的主色」（与选中态的蓝同源，不与错题本的红混） */
+        .wm-theme-group {
+            border: 1px solid var(--wm-line);
+            border-left: 3px solid var(--wm-sel-line);
+            border-radius: 10px;
+            padding: 7px 10px 8px;
+            background: #fff;
+        }
+
+        .wm-theme-grouphead {
+            display: flex;
+            align-items: center;
+            gap: .4rem;
+            margin-bottom: .35rem;
+        }
+
+        .wm-theme-lv { font-weight: 700; font-size: .88rem; color: var(--wm-ink); }
+        .wm-theme-n { font-size: .72rem; color: var(--wm-muted); }
+
+        .wm-theme-done {
+            margin-left: auto;               /* 靠右：一眼看出「哪几关已经练过」 */
+            font-size: .68rem;
+            font-weight: 700;
+            border-radius: 999px;
+            padding: 1px 7px;
+            color: var(--wm-ok-ink);
+            background: var(--wm-ok-bg);
+        }
+
+        /* 自动列宽：宽屏两列、窄屏自动收成一列，不必另写媒体查询 */
+        .wm-theme-words {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+            gap: .2rem .6rem;
+        }
+
+        .wm-theme-word {
+            display: flex;
+            align-items: center;
+            gap: .25rem;
+            min-width: 0;
+            font-size: .84rem;
+        }
+
+        .wm-theme-en { font-weight: 600; }
+        .wm-theme-word .wm-speak { position: static; transform: none; font-size: .82rem; }
+
+        .wm-theme-zh {
+            color: #5a6472;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
         /* ---------- 搜索单词（工具栏按钮 + 弹窗） ----------
            弹窗挂在 .wm-modal is-wide 上再加 .is-search 放宽到 560px：
            .wm-modal.is-wide.is-search 是 (0,3,0)，压得住 .wm-modal.is-wide 的 (0,2,0)，
@@ -1361,29 +1699,45 @@ window.__WORD_MATCH_DATA__ = (function () {
 <div class="wm-root" x-data="wordMatchApp()">
 
     <div class="wm-toolbar">
-        <div>
-            <h2 class="sc-page-title mb-0"><i class="bi bi-translate"></i> 英语单词匹配</h2>
-            <div class="wm-toolbar-sub">人教版小学 / 初中 / 高中 + 大学 · 同一主题的单词在同一关</div>
+        <div class="wm-toolbar-title">
+            <!-- 返回检索首页：只在棋盘视图出现。棋盘里的「搜索」按钮仍然保留 ——
+                 正在练的时候想查个词，弹层里查完点【查看】就能跳到那一关。
+                 ⚠️ 位置别挪进右边那排按钮（理由见 .wm-toolbar-title 的样式注释） -->
+            <button type="button" class="btn btn-sm btn-outline-secondary wm-back-btn"
+                    x-show="view === 'play'" x-cloak @click="goSearch()"
+                    title="返回搜索：查单词或换一册">
+                <i class="bi bi-arrow-left"></i>
+                <span class="d-none d-sm-inline ms-1">返回搜索</span>
+            </button>
+            <div>
+                <h2 class="sc-page-title mb-0"><i class="bi bi-translate"></i> 英语单词匹配</h2>
+                <div class="wm-toolbar-sub">人教版小学 / 初中 / 高中 + 大学 · 同一主题的单词在同一关</div>
+            </div>
         </div>
         <div class="wm-toolbar-actions">
+            <!-- 册次下拉：未选册时停在【选择关卡练习】这个占位文案上（首次访问不预设册次，
+                 见 init），选完即进棋盘（见 pickBook） -->
             <button type="button" class="btn btn-sm btn-outline-primary wm-book-btn" @click="openBookPicker()"
-                    :title="'当前：' + (bookLabel || '未选择') + '，点击切换册次'">
-                <i class="bi bi-book"></i> <span x-text="bookLabel || '选择册次'"></span>
+                    :title="bookId ? ('当前：' + bookLabel + '，点击切换册次') : '选择要练习的册次，选好即进入配对练习'">
+                <i class="bi bi-book"></i> <span x-text="bookLabel || '选择关卡练习'"></span>
                 <i class="bi bi-caret-down-fill wm-caret"></i>
             </button>
             <button type="button" class="btn btn-sm" :class="autoMode ? 'btn-outline-danger' : 'btn-success'"
+                    x-show="view === 'play'" x-cloak
                     @click="autoMode ? stopAuto() : startAuto()"
-                    :title="autoMode ? '退出自动学习' : '从第 1 关开始自动点击配对并朗读'">
+                    :title="autoMode ? '退出自动学习' : autoStartTitle">
                 <i class="bi" :class="autoMode ? 'bi-box-arrow-left' : 'bi-play-circle'"></i>
                 <span x-text="autoMode ? '退出学习' : '自动学习'"></span>
             </button>
-            <button type="button" class="btn btn-sm btn-outline-warning" x-show="autoMode" x-cloak
+            <button type="button" class="btn btn-sm btn-outline-warning"
+                    x-show="view === 'play' && autoMode" x-cloak
                     @click="toggleAutoPause()" :title="autoPaused ? '继续自动学习' : '暂停自动学习'">
                 <i class="bi" :class="autoPaused ? 'bi-play-fill' : 'bi-pause-fill'"></i>
                 <span class="d-none d-sm-inline" x-text="autoPaused ? '继续' : '暂停'"></span>
             </button>
             <!-- 搜索：放在「设置」左边（越常用的越靠左）。窄屏只留图标，与相邻按钮一致 -->
             <button type="button" class="btn btn-sm btn-outline-secondary wm-search-btn"
+                    x-show="view === 'play'" x-cloak
                     @click="openSearch()" :class="{ 'is-open': searchOpen }"
                     title="搜索单词：按英文或中文查，可直接跳到它所在的册次与关卡"
                     aria-haspopup="true" :aria-expanded="searchOpen ? 'true' : 'false'">
@@ -1484,7 +1838,116 @@ window.__WORD_MATCH_DATA__ = (function () {
         </div>
     </div>
 
-    <template x-if="!levels.length">
+    <!-- ==================== 检索首页（默认视图） ====================
+         与小程序 pages/index 同构：打开先是检索，查到词、或挑好册才进棋盘。
+         与弹层共用同一份 searchQ / searchHits / searchHintText / searchRan（同一套匹配口径），
+         只是呈现方式不同 —— 这里「输入即出」是下拉，「点搜索」把结果铺到下方列表。 -->
+    <section class="wm-home" x-show="view === 'search' && books.length" x-cloak>
+
+        <div class="wm-home-hero">
+            <div class="wm-home-title"><i class="bi bi-search"></i> 查单词 · 练配对</div>
+            <div class="wm-home-sub">
+                输入英文单词或中文意思，查它在哪个册次、第几关；也可以从右上角挑一册直接开始练习。
+            </div>
+            <div class="wm-home-stat" x-text="homeStatText"></div>
+            <div class="wm-home-cta">
+                <button type="button" class="btn btn-sm btn-primary" id="wm-home-play"
+                        x-show="!!bookId" x-cloak @click="enterPlay()">
+                    <i class="bi bi-play-fill"></i> <span x-text="'继续练习 · ' + bookLabel"></span>
+                </button>
+                <span class="wm-home-tip" x-show="!bookId" x-cloak>
+                    还没选册：点右上角 <b>选择关卡练习</b> 挑一册开始
+                </span>
+            </div>
+        </div>
+
+        <div class="wm-home-search" @click.outside="homeDropOpen = false">
+            <div class="wm-home-bar">
+                <i class="bi bi-search"></i>
+                <input type="search" id="wm-home-input" class="wm-home-input"
+                       x-model="searchQ" @input="onHomeInput()" @focus="onHomeInput(true)"
+                       @keydown.enter.prevent="runSearch()"
+                       placeholder="英文单词 / 中文意思，如 liberty / 自由">
+                <button type="button" class="wm-home-clear" x-show="searchQ" x-cloak
+                        @click="clearHomeSearch()" title="清空" aria-label="清空">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" id="wm-home-go"
+                        @click="runSearch()" :disabled="searchPending">
+                    <i class="bi" :class="searchPending ? 'bi-hourglass-split' : 'bi-search'"></i>
+                    <span class="ms-1" x-text="searchPending ? '载入中' : '搜索'"></span>
+                </button>
+            </div>
+
+            <!-- 输入即出：最多 5 个单词，点一行直接去那一关 -->
+            <div class="wm-home-drop" id="wm-home-drop" x-show="homeDropOpen" x-cloak>
+                <template x-for="h in homeDropHits" :key="'hd' + h.uid">
+                    <button type="button" class="wm-home-hit" @click="gotoHit(h)">
+                        <span class="wm-home-hit-main">
+                            <span class="wm-home-hit-en">
+                                <span x-text="h.en"></span>
+                                <span class="wm-search-badge" x-show="h.rank === 0" x-cloak>完全匹配</span>
+                                <span class="wm-search-badge is-prefix" x-show="h.rank === 1" x-cloak>前缀</span>
+                            </span>
+                            <span class="wm-home-hit-zh" x-text="h.zh"></span>
+                            <span class="wm-home-hit-src" x-text="srcText(h.bookId, h.bookLabel, h.level)"></span>
+                        </span>
+                        <span class="wm-home-hit-go">查看</span>
+                    </button>
+                </template>
+                <div class="wm-home-none" x-show="!searchHits.length" x-cloak>
+                    没有匹配的单词，换个说法或只输前几个字母试试
+                </div>
+            </div>
+        </div>
+
+        <!-- 搜过之后：结果落到下方列表，每行带【查看】 -->
+        <div class="wm-home-sec" id="wm-home-result" x-show="searchRan" x-cloak>
+            <div class="wm-home-sec-head">
+                <span class="wm-home-sec-title">「<span x-text="searchQ"></span>」的查询结果</span>
+                <span class="wm-home-sec-tip" x-text="searchCountText"></span>
+            </div>
+            <p class="wm-home-hint" x-text="searchHintText"></p>
+            <div class="wm-home-list" x-show="searchHits.length">
+                <template x-for="h in searchHits" :key="'hr' + h.uid">
+                    <div class="wm-home-row" :class="{ 'is-exact': h.rank === 0 }">
+                        <span class="wm-home-hit-main">
+                            <span class="wm-home-hit-en">
+                                <span x-text="h.en"></span>
+                                <button type="button" class="wm-speak" @click="speak(h.en)" title="朗读"><i
+                                        class="bi bi-volume-up-fill"></i></button>
+                                <span class="wm-search-badge" x-show="h.rank === 0" x-cloak>完全匹配</span>
+                                <span class="wm-search-badge is-prefix" x-show="h.rank === 1" x-cloak>前缀</span>
+                                <span class="wm-search-badge is-prefix" x-show="h.rank === 2" x-cloak>包含</span>
+                            </span>
+                            <span class="wm-home-hit-zh" x-text="h.zh"></span>
+                            <span class="wm-home-hit-src" x-text="srcText(h.bookId, h.bookLabel, h.level)"></span>
+                        </span>
+                        <button type="button" class="btn btn-sm btn-outline-primary" @click="gotoHit(h)"
+                                :title="'跳到「' + srcText(h.bookId, h.bookLabel, h.level) + '」'">查看</button>
+                    </div>
+                </template>
+            </div>
+            <div class="wm-home-empty" x-show="!searchHits.length" x-cloak x-text="searchEmptyText"></div>
+        </div>
+
+        <!-- 还没搜索时给用法说明，别让主界面空着 -->
+        <div class="wm-home-sec" id="wm-home-guide" x-show="!searchRan" x-cloak>
+            <div class="wm-home-sec-head"><span class="wm-home-sec-title">怎么查</span></div>
+            <div class="wm-home-guide">
+                <div class="wm-home-guide-item">· 查英文：输入 <span class="wm-home-code">liberty</span>，完全匹配的排在最前</div>
+                <div class="wm-home-guide-item">· 查中文：输入 <span class="wm-home-code">自由</span>，会剥掉 n. / v. 这类词性前缀再比</div>
+                <div class="wm-home-guide-item">· 边敲边看：每敲一下，下拉里最多列 5 个单词，点一行直接去那一关</div>
+                <div class="wm-home-guide-item">· 查不到就减字：只输前几个字母（如 <span class="wm-home-code">libe</span>）更容易命中</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 词库真的没拿到时才报「加载失败」。⚠️ 条件不能只写 !levels.length ——
+         默认视图是检索首页，「一个册次都还没选」时 levels 本来就是空的，
+         只写 levels 会在首页下面挂出一块「单词库加载失败，请刷新页面重试」（探针 S0 抓到过）。
+         两个分支各自对应一种真空：books 空 = 引导数据没取到；棋盘里 levels 空 = 选中册没关卡。 -->
+    <template x-if="!books.length || (!levels.length && view === 'play')">
         <div class="wm-stage">
             <div class="wm-fallback text-center text-muted py-5">
                 <i class="bi bi-exclamation-circle fs-1 d-block mb-2"></i>
@@ -1493,7 +1956,7 @@ window.__WORD_MATCH_DATA__ = (function () {
         </div>
     </template>
 
-    <template x-if="levels.length">
+    <template x-if="levels.length && view === 'play'">
         <div class="wm-stage">
 
             <!-- HUD -->
@@ -1501,7 +1964,8 @@ window.__WORD_MATCH_DATA__ = (function () {
                 <button type="button" class="wm-close" @click="exit()" title="退出" aria-label="退出">
                     <i class="bi bi-x-lg"></i>
                 </button>
-                <div class="wm-progress" :class="{ 'is-auto': autoMode }" role="progressbar"
+                <div class="wm-progress" :class="{ 'is-auto': autoMode, 'is-scoped': !!themeScope }"
+                     role="progressbar"
                      :aria-valuenow="levelIndex + 1" aria-valuemin="1" :aria-valuemax="levelCount">
                     <template x-for="i in levelCount" :key="'seg' + i">
                         <span class="wm-seg" :class="segClass(i - 1)"></span>
@@ -1513,8 +1977,13 @@ window.__WORD_MATCH_DATA__ = (function () {
             <!-- 标题（同时也是过关提示的位置：提示出现时整行让位给它） -->
             <div class="wm-titlebar" :class="{ 'is-flashing': !!flash }">
                 <h3 class="wm-title" x-text="autoMode ? '自动学习' : '选择配对'"></h3>
-                <span class="wm-theme" x-show="currentLevel"><i class="bi bi-tag-fill"></i> <span
-                        x-text="currentLevel ? currentLevel.theme : ''"></span></span>
+                <!-- 类别标签：点开看这个类别在本册的全部单词与关卡，并可一键只练这些关 -->
+                <button type="button" class="wm-theme" x-show="currentLevel" @click="openTheme()"
+                        :title="'查看「' + (currentLevel ? currentLevel.theme : '') + '」这个类别的全部单词与关卡，并可只练这些关卡'">
+                    <i class="bi bi-tag-fill"></i>
+                    <span x-text="currentLevel ? currentLevel.theme : ''"></span>
+                    <i class="bi bi-chevron-right wm-theme-more"></i>
+                </button>
                 <span class="wm-auto-badge" x-show="autoMode" x-cloak>
                     <i class="bi bi-magic"></i> 自动学习中
                 </span>
@@ -1524,6 +1993,18 @@ window.__WORD_MATCH_DATA__ = (function () {
                     <span class="wm-flash-emoji" x-text="flashEmoji"></span>
                     <span x-text="flash"></span>
                 </div>
+            </div>
+
+            <!-- 分类练习状态条：点类别标签 -> 「练习本分类」后出现。
+                 作用域只收窄「能走哪几关」，进度条仍显示整册进度（范围外的分段压暗）。 -->
+            <div class="wm-scope-bar" x-show="themeScope" x-cloak>
+                <span class="wm-scope-cap"><i class="bi bi-funnel-fill"></i> 分类练习</span>
+                <span class="wm-scope-name" x-text="themeScope ? themeScope.theme : ''"></span>
+                <span class="wm-scope-pos" x-text="scopePosText"></span>
+                <button type="button" class="wm-scope-exit" @click="exitThemeScope()"
+                        title="退出分类练习，回到本册全部关卡">
+                    <i class="bi bi-x-lg"></i> 退出
+                </button>
             </div>
 
             <!-- 自动学习状态条 -->
@@ -1706,6 +2187,55 @@ window.__WORD_MATCH_DATA__ = (function () {
                 </button>
                 <button type="button" class="btn btn-outline-secondary btn-sm flex-fill"
                         @click="wrongOpen = false">关闭
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 类别面板：本册里属于这个类别的全部单词，按关卡分组 —— 也就是「本册这个类别的全部关卡」 -->
+    <div class="wm-modal-backdrop" x-show="themeOpen" x-cloak @click.self="closeTheme()">
+        <div class="wm-modal is-wide is-theme" id="wm-theme-modal">
+            <button type="button" class="wm-modal-close" @click="closeTheme()" aria-label="关闭">
+                <i class="bi bi-x-lg"></i>
+            </button>
+            <div class="wm-modal-head">
+                <h5><i class="bi bi-tag-fill"></i> 类别：<span x-text="themeInfo.theme"></span></h5>
+                <span class="wm-count-total"
+                      x-text="themeInfo.levelCount + ' 关 · ' + themeInfo.wordCount + ' 个单词'"></span>
+            </div>
+            <p class="mb-0 mt-1">「<span x-text="bookLabel"></span>」里属于这个类别的全部单词，按关卡分组。</p>
+
+            <div class="wm-theme-list">
+                <template x-for="g in themeInfo.levels" :key="'tg' + g.index">
+                    <div class="wm-theme-group">
+                        <div class="wm-theme-grouphead">
+                            <span class="wm-theme-lv" x-text="'第 ' + (g.index + 1) + ' 关'"></span>
+                            <span class="wm-theme-n" x-text="g.pairs.length + ' 个单词'"></span>
+                            <span class="wm-theme-done" x-show="g.done" x-cloak>
+                                <i class="bi bi-check-lg"></i> 已完成
+                            </span>
+                        </div>
+                        <div class="wm-theme-words">
+                            <template x-for="p in g.pairs" :key="p.key">
+                                <div class="wm-theme-word">
+                                    <span class="wm-theme-en" x-text="p.en"></span>
+                                    <button type="button" class="wm-speak" @click="speak(p.en)" title="朗读"><i
+                                            class="bi bi-volume-up-fill"></i></button>
+                                    <span class="wm-theme-zh" x-text="p.zh"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div class="d-flex gap-2 mt-3">
+                <button type="button" class="btn btn-primary btn-sm flex-fill" id="wm-theme-practice"
+                        @click="startThemePractice()">
+                    <i class="bi bi-play-fill"></i> 练习本分类
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm flex-fill" id="wm-theme-cancel"
+                        @click="closeTheme()">关闭
                 </button>
             </div>
         </div>
@@ -1926,17 +2456,23 @@ var WM_SEARCH = (function () {
         return items;
     }
 
-    /* 截断到「最多 maxWords 个不同单词」—— 同一个词的所有出处要么都留、要么都不留 */
+    /* 截断到「最多 maxWords 个不同单词」—— 先按出现顺序挑出前 maxWords 个**不同单词**，再把这一步挑中的单词在这份候选列表里的
+       全部行收进来。不能边扫边收 —— 候选列表是按「册 → 关 → 词对」排的，同一个词的多处
+       出处分散在天各一方（例：student 同时在三年级下册第 2 关与七年级上册第 49 关），扫到
+       第 6 个新词就 break，会把前面那 5 个词**排在后面的出处**一起丢掉 —— 于是「同一个词的
+       所有出处一起列出来」这条口径名存实亡，用户还会以为那是唯一出处。 */
     function capWords(list, maxWords) {
-        var seen = {}, out = [], words = 0;
-        for (var i = 0; i < list.length; i++) {
+        /* 用 Object.create(null) 而不是 {}：Object.prototype 上的键名
+           （constructor / toString）会被误判成「这个键已经见过了」 */
+        var allow = Object.create(null);
+        var words = 0, i;
+        for (i = 0; i < list.length && words < maxWords; i++) {
             var w = list[i].enL;
-            if (!seen[w]) {
-                if (words >= maxWords) break;
-                seen[w] = true;
-                words++;
-            }
-            out.push(list[i]);
+            if (!allow[w]) { allow[w] = true; words++; }
+        }
+        var out = [];
+        for (i = 0; i < list.length; i++) {
+            if (allow[list[i].enL]) out.push(list[i]);
         }
         return out;
     }
@@ -2024,6 +2560,12 @@ function wordMatchApp() {
     } catch (e) { /* 隐私模式等场景忽略 */ }
     var WRONG_KEY = 'word_match_wrong_v1';              // 错题本（本机浏览器）
     var BOOK_KEY = 'word_match_book_v1';
+    /* 首页「输入即出」的去抖：每敲一个字就摊平两万条去比没必要（索引已缓存，但逐次 run 仍要过）
+       140ms 是「肉眼看不出延迟、又不会每键一查」的折中（与小程序 DEBOUNCE 同一个值）。 */
+    var HOME_DEBOUNCE = 140;
+    /* 「输入即出」下拉最多列几行。行与行是**不同的单词**（同一个词的多个出处由结果列表负责摊开），
+       WM_SEARCH 本身已经把「不同单词」限制在 5 个，这里再兜一道，免得日后改搜索层时下拉被撑长。 */
+    var HOME_DROP_MAX = 5;
     var SOUND_KEY = 'word_match_sound_v1';
     var MAX_WRONG = 300;
 
@@ -2109,9 +2651,29 @@ function wordMatchApp() {
         /* 设置弹层（错题本 / 重做本关 / 朗读开关 / 重置进度 都收在这里） */
         settingsOpen: false,
 
-        /* 搜索单词：弹窗内的临时状态。词库索引本身在闭包里（见 searchIdx），不进响应式。
-           searchRan 用来区分「还没搜」与「搜了但没结果」—— 两者的空态文案不一样。 */
+        /* 类别（主题）面板：点页头的类别标签打开 */
+        themeOpen: false,
+
+        /* 分类练习作用域：null = 不限（本册全部关卡）。
+           形状 { theme, indexes: [本册关卡下标…升序], wordCount }。
+           **刻意不改写 this.levels**：levels 始终是本册全部关卡，作用域只记「本次允许走哪几关」，
+           于是 levelIndex 的语义完全不变（仍是本册关卡下标）⇒ 进度记录（markDone 存的就是它）、
+           错题本（recordWrong 存的 level）、「第 N 关」这些既有逻辑一行都不用改。
+           导航换成「在 indexes 里找上/下一个」（nextIndexOf / prevIndexOf）即可。 */
+        themeScope: null,
+
+        /* 视图：'search' = 检索首页（默认），'play' = 配对棋盘。
+           与小程序一致：打开先是检索，查到词或选好册才进棋盘（棋盘左上【返回搜索】退回来）。
+           导出件例外 —— 单页 HTML 是「发出去双击就能玩」的东西，落在搜索页反而多一步。 */
+        view: (typeof window !== 'undefined' && window.__WM_STANDALONE__) ? 'play' : 'search',
+
+        /* 搜索单词：弹窗与检索首页**共用**这一份状态（同一套匹配口径，见 WM_SEARCH）。
+           词库索引本身在闭包里（见 searchIdx），不进响应式。
+           searchRan 用来区分「还没搜」与「搜了但没结果」—— 两者的空态文案不一样；
+           首页还多一个 homeDropOpen：「输入即出」那个下拉是否展开。 */
         searchOpen: false,
+        homeDropOpen: false,
+        homeTimer: null,
         searchQ: '',
         searchHits: [],
         searchHintText: '',
@@ -2150,11 +2712,20 @@ function wordMatchApp() {
             var books = this.books;
             var has = function (id) { return !!id && books.some(function (b) { return b.id === id; }); };
             if (!has(saved)) saved = window.__WM_DEFAULT_BOOK__ || '';
-            this.bookId = has(saved) ? saved : (books.length ? books[0].id : '');
-            this.applyBook(this.bookId, true);
-            /* 上次停在大学、而这次还没拉过词库：补一次，否则进去是空棋盘 */
-            if (this.isCetBook(this.bookId) && !this.cetLoaded) {
-                this.applyBookWhenReady(this.bookId, true);
+            /* ⚠️ 首次访问**不预设册次**（原来会兜底到第一册）。默认视图是检索首页，
+               页头那个下拉要停在占位文案【选择关卡练习】上等用户自己挑 ——
+               一旦预设了册，占位文案永远不出现，那个按钮也就没人看得出是干什么的。
+               导出件照旧：它锁定了起始册（__WM_DEFAULT_BOOK__），并且直接落在棋盘上。 */
+            this.bookId = has(saved) ? saved : '';
+            if (this.bookId) {
+                this.applyBook(this.bookId, true);
+                /* 上次停在大学、而这次还没拉过词库：补一次，否则进去是空棋盘 */
+                if (this.isCetBook(this.bookId) && !this.cetLoaded) {
+                    this.applyBookWhenReady(this.bookId, true);
+                }
+            } else {
+                this.levels = [];
+                this.levelIndex = 0;
             }
 
             var self = this;
@@ -2164,13 +2735,18 @@ function wordMatchApp() {
                 if (e.key === 'Escape') {
                     if (self.bookPickerOpen) { self.bookPickerOpen = false; return; }
                     if (self.wrongOpen) { self.wrongOpen = false; return; }
+                    if (self.themeOpen) { self.themeOpen = false; return; }
                     /* 搜索弹窗：焦点在输入框里时上面的 INPUT 判断会先 return，
                        那一支由输入框自己的 @keydown.escape 兜住 */
                     if (self.searchOpen) { self.searchOpen = false; return; }
+                    /* 首页「输入即出」的下拉也吃 Esc，否则只能靠点空白处收起来 */
+                    if (self.homeDropOpen) { self.homeDropOpen = false; return; }
                     if (self.autoMode) self.stopAuto();
                     return;
                 }
                 if (self.autoMode) return;
+                /* ← → 只属于棋盘：在检索首页按方向键不该偷偷把下面的关卡换掉 */
+                if (self.view !== 'play') return;
                 if (e.key === 'ArrowLeft') self.prevLevel();
                 else if (e.key === 'ArrowRight') self.navNext();
             });
@@ -2206,6 +2782,7 @@ function wordMatchApp() {
             localStorage.setItem(this.bookKey || BOOK_KEY, bookId);
             this.levels = this.allLevels[bookId] || [];
             this.finishedAll = false;
+            this.themeScope = null;   // 换册即退出分类练习：作用域里的关卡下标只对上一册有意义
 
             var done = this.progress[bookId] || [];
             var start = 0;
@@ -2245,7 +2822,14 @@ function wordMatchApp() {
             this.stageOpen = open;
         },
 
-        resetStageOpen: function () { this.openStageOnly(this.stageOf(this.bookId)); },
+        /* ⚠️ 没有当前册时要兜底展开**第一个**学段：首次访问（默认视图是检索页、页头停在
+           【选择关卡练习】）时 stageOf('') 返回空串，若原样传下去会让三个学段全部折叠，
+           弹层里一册都看不见 —— 用户得先猜一个学段点开，等于把「选册」这一步堵住了。 */
+        resetStageOpen: function () {
+            var stage = this.stageOf(this.bookId);
+            if (!stage && this.bookGroups.length) stage = this.bookGroups[0].stage;
+            this.openStageOnly(stage);
+        },
 
         isStageOpen: function (stage) { return !!this.stageOpen[stage]; },
 
@@ -2265,6 +2849,10 @@ function wordMatchApp() {
             if (bookId !== this.bookId) this.applyBookWhenReady(bookId, true);
             // 换册后，下次打开弹层时新册所在学段必须是展开的
             this.openStageOnly(this.stageOf(bookId));
+            /* 选册 = 「我要练这一册」：从检索首页切进棋盘（对应小程序首页底部那张入口卡）。
+               棋盘里换册时 view 本来就是 'play'，这一行不产生额外动作。 */
+            this.view = 'play';
+            this.measureTop();
         },
 
         switchBook: function (bookId) { this.pickBook(bookId); },
@@ -2400,24 +2988,30 @@ function wordMatchApp() {
 
         nextLevel: function () {
             if (this.autoMode) return;
-            if (this.levelIndex < this.levels.length - 1) {
-                this.levelIndex++;
+            var next = this.nextIndexOf(this.levelIndex);
+            if (next >= 0) {
+                this.levelIndex = next;
                 this.loadLevel();
             }
         },
 
-        /* 导航条右侧按钮（按钮本身 / → 方向键）统一的动作：
-           普通关卡 = 下一关；本册最后一关 = 下一册（见 navNextLabel 处的说明） */
+        /* 导航条右侧按钮（按钮本身 / → 方向键）统一的动作，三种收尾依次判定：
+           ① 分类练完  -> 结束分类（退回本册全量）
+           ② 本册最后一关 -> 下一册
+           ③ 否则 -> 下一关
+           （见 navNextLabel / atScopeEnd 处的说明） */
         navNext: function () {
             if (this.autoMode) return;
+            if (this.atScopeEnd) { this.exitThemeScope(); return; }
             if (this.atBookEnd) { this.gotoNextBook(); return; }
             this.nextLevel();
         },
 
         prevLevel: function () {
             if (this.autoMode) return;
-            if (this.levelIndex > 0) {
-                this.levelIndex--;
+            var prev = this.prevIndexOf(this.levelIndex);
+            if (prev >= 0) {
+                this.levelIndex = prev;
                 this.loadLevel();
             }
         },
@@ -2511,6 +3105,18 @@ function wordMatchApp() {
                 return;
             }
             this.markDone(this.levelIndex);
+
+            /* 分类练完：不弹「本册全部通关」—— 那个弹窗讲的是整册收尾 + 下一册，
+               用在「只练了 2 关」的场景是错的。给一句提示后自动退回本册全量。 */
+            if (this.themeScope && this.nextIndexOf(this.levelIndex) < 0) {
+                this.showFlash(perfect ? '🎉' : '👍', perfect ? '全对！本分类练完' : '本分类练完！', 1400);
+                var scopeSelf = this;
+                this.advanceTimer = setTimeout(function () {
+                    scopeSelf.advanceTimer = null;
+                    scopeSelf.exitThemeScope();
+                }, 1150);
+                return;
+            }
 
             if (this.levelIndex >= this.levels.length - 1) {
                 this.showFlash(perfect ? '🎉' : '👍', perfect ? '全对通关！本册完成' : '本册完成！');
@@ -2642,6 +3248,7 @@ function wordMatchApp() {
             this.levels = this.allLevels[bookId] || [];
             this.levelIndex = 0;
             this.finishedAll = false;
+            this.themeScope = null;   // 跨册那一刻分类练习就到头了（分类的作用域不跨册）
             this.loadLevel();
             this.measureTop();
         },
@@ -2653,7 +3260,8 @@ function wordMatchApp() {
             this.autoPaused = false;
             this.finishedAll = false;
             this.autoProgress = this.loadAutoProgress();
-            this.levelIndex = 0;                 // 每次开启都从第 1 关开始
+            // 每次开启都从该范围的「第 1 关」开始（有分类作用域就从该分类第一关起）
+            this.levelIndex = this.autoStartIndex();
             this.loadLevel();
             this.autoSeq++;
             var token = this.autoSeq;
@@ -2716,6 +3324,21 @@ function wordMatchApp() {
 
                 if (!this.autoMode || this.autoSeq !== token) return;
 
+                /* 分类练完：停在原地收尾，**不跨册**（分类是本次练习的边界，不是一册的边界） */
+                if (this.themeScope && this.nextIndexOf(this.levelIndex) < 0) {
+                    var scopeTheme = this.themeScope.theme;
+                    this.autoStage = 'finish';
+                    this.setAutoTip('分类完成', '「' + scopeTheme + '」已练习完');
+                    this.showFlash('✅', '「' + scopeTheme + '」练习完成！', 2600);
+                    await this.autoSleep(1200, token);
+                    this.stopAuto(true);
+                    this.exitThemeScope(true);
+                    if (typeof SC !== 'undefined' && SC.toast) {
+                        SC.toast.success('分类「' + scopeTheme + '」自动练习完成');
+                    }
+                    return;
+                }
+
                 /* 本册学完：先给 5 秒记忆 + 跳转提示，再自动接着学下一册（最后一册才收尾） */
                 if (this.levelIndex >= this.levels.length - 1) {
                     var nextBook = this.nextBookRef();
@@ -2749,7 +3372,7 @@ function wordMatchApp() {
                 this.showFlash('✅', '本关完成！即将进入下一关', AUTO_GAP);
                 if (!(await this.autoSleep(AUTO_GAP, token))) return;
 
-                this.levelIndex++;
+                this.levelIndex = this.nextIndexOf(this.levelIndex);   // 有作用域时按作用域走
                 this.loadLevel();
             }
         },
@@ -2887,7 +3510,164 @@ function wordMatchApp() {
             return out;
         },
 
+        /* ==================== 类别（主题）面板 · 分类练习 ====================
+           页头的类别标签（.wm-theme）可点：打开面板看「本册里属于这个类别的全部单词」，
+           并可一键进入「只练这个类别的关卡」的作用域。
+
+           作用域的实现要点是**不改写 this.levels** —— 见 themeScope 的说明。 */
+        openTheme: function () {
+            if (!this.currentLevel || !this.currentLevel.theme) return;
+            this.themeOpen = true;
+        },
+
+        closeTheme: function () { this.themeOpen = false; },
+
+        /* 面板内容：本册里 theme 相同的关卡，按关卡顺序分组（含每关的单词）。
+           「已完成」标记取 activeProgress —— 与进度条分段同一口径
+           （练习进度与自动学习进度各一套，看当前模式是哪套）。 */
+        get themeInfo() {
+            var theme = this.currentLevel ? (this.currentLevel.theme || '') : '';
+            var out = { theme: theme, levels: [], levelCount: 0, wordCount: 0, doneCount: 0 };
+            if (!theme) return out;
+            var done = this.activeProgress[this.bookId] || [];
+            for (var i = 0; i < this.levels.length; i++) {
+                if ((this.levels[i].theme || '') !== theme) continue;
+                var pairs = this.levels[i].pairs || [];
+                var isDone = done.indexOf(i) >= 0;
+                out.levels.push({ index: i, pairs: pairs, done: isDone });
+                out.levelCount++;
+                out.wordCount += pairs.length;
+                if (isDone) out.doneCount++;
+            }
+            return out;
+        },
+
+        /* 【练习本分类】：关面板 + 进入作用域，只走该类别那几关 */
+        startThemePractice: function () {
+            var info = this.themeInfo;
+            this.themeOpen = false;
+            if (!info.levelCount) return;
+            if (this.autoMode) this.stopAuto(true);
+            var idxs = info.levels.map(function (g) { return g.index; });
+            this.themeScope = { theme: info.theme, indexes: idxs, wordCount: info.wordCount };
+            /* 起点：该分类里第一个还没练过的关；都练过就从第一关重来。
+               与 applyBook 的「回到第一个未通关的关卡」同一套口径 ——
+               半路退出后再点一次「练习本分类」，不该让人把练过的关再走一遍。 */
+            var start = idxs[0];
+            for (var i = 0; i < info.levels.length; i++) {
+                if (!info.levels[i].done) { start = idxs[i]; break; }
+            }
+            this.levelIndex = start;
+            this.loadLevel();
+            this.measureTop();
+            if (typeof SC !== 'undefined' && SC.toast) {
+                SC.toast.success('开始练习「' + info.theme + '」：' + idxs.length + ' 关 / ' +
+                    info.wordCount + ' 个单词');
+            }
+        },
+
+        /* 退出分类练习。silent = 连 toast 都不给（被跳转/收尾连带触发时用，免得叠两条提示）。
+           退出去只清作用域，**不挪 levelIndex** —— 人还站在刚才那一关，只是又能走整册了。 */
+        exitThemeScope: function (silent) {
+            if (!this.themeScope) return;
+            var theme = this.themeScope.theme;
+            this.themeScope = null;
+            this.measureTop();
+            if (!silent && typeof SC !== 'undefined' && SC.toast) {
+                SC.toast.info('已退出「' + theme + '」分类练习，回到本册全部关卡');
+            }
+        },
+
+        /* 当前关卡是否在分类作用域内（没有作用域时恒为真） */
+        inScope: function (index) {
+            if (!this.themeScope) return true;
+            return this.themeScope.indexes.indexOf(index) >= 0;
+        },
+
+        /* 本册关卡下标 → 作用域内的序号；不在作用域内返回 0。
+           不传参数就取当前关卡（scopePosText 用）。 */
+        scopePos: function (index) {
+            if (index == null) index = this.levelIndex;
+            if (!this.themeScope) return index;
+            var p = this.themeScope.indexes.indexOf(index);
+            return p < 0 ? 0 : p;
+        },
+
+        /* 作用域内的下一个 / 上一个关卡下标，到头返回 -1。
+           无作用域时退化成「本册顺序」—— 与改动前的 nextLevel / prevLevel 逐字等价。 */
+        nextIndexOf: function (index) {
+            if (!this.themeScope) return (index < this.levels.length - 1) ? index + 1 : -1;
+            var a = this.themeScope.indexes;
+            var p = this.scopePos(index);
+            return (p < a.length - 1) ? a[p + 1] : -1;
+        },
+
+        prevIndexOf: function (index) {
+            if (!this.themeScope) return (index > 0) ? index - 1 : -1;
+            var a = this.themeScope.indexes;
+            var p = this.scopePos(index);
+            return (p > 0) ? a[p - 1] : -1;
+        },
+
+        /* 自动学习的「从头开始」落在哪一关：有作用域就是该分类第一关。
+           否则用户在「颜色」里点自动学习会被拽回本册第 1 关去学完整册，像是把自己的选择丢了。
+           （重置进度**不**走这里 —— 它清的是整册，会先退出分类练习，见 resetProgress。） */
+        autoStartIndex: function () {
+            if (!this.themeScope) return 0;
+            var a = this.themeScope.indexes;
+            return a.length ? a[0] : 0;
+        },
+
         /* ==================== 搜索单词 ==================== */
+        /* ==================== 检索首页（默认视图） ==================== */
+
+        /* 进棋盘：从首页的【继续练习】进来。**不重新 loadLevel** —— 棋盘一直是挂着的，
+           再 load 一次会把当前这关已经配好的对子打散。 */
+        enterPlay: function () {
+            if (!this.bookId) { this.openBookPicker(); return; }
+            this.homeDropOpen = false;
+            this.view = 'play';
+            this.measureTop();
+        },
+
+        /* 回检索首页：棋盘左上【返回搜索】。不动进度、不动册次，只切视图 */
+        goSearch: function () {
+            if (this.autoMode) this.stopAuto(true);
+            this.searchOpen = false;
+            this.homeDropOpen = false;
+            this.view = 'search';
+            this.measureTop();
+        },
+
+        /* 首页输入：去抖后「输入即出」。force=true 用于 focus —— 有内容时点回输入框，
+           不必再敲一下才看得到下拉。 */
+        onHomeInput: function (force) {
+            var self = this;
+            if (this.homeTimer) { clearTimeout(this.homeTimer); this.homeTimer = null; }
+            var q = (this.searchQ || '').trim();
+            /* 清空输入：立刻收起下拉并清掉命中 —— 否则下拉里还挂着上一个词的旧结果。
+               注意别在这里动 searchRan：下面那块的旧结果留着，用户还能回头看。 */
+            if (!q) {
+                this.homeDropOpen = false;
+                this.searchHits = [];
+                this.searchHintText = '';
+                return;
+            }
+            var fire = function () { self.homeTimer = null; self.runDropQuery(); };
+            if (force) fire();
+            else this.homeTimer = setTimeout(fire, HOME_DEBOUNCE);
+        },
+
+        /* 首页的清空按钮：连下面那块结果一起复位回「怎么查」 */
+        clearHomeSearch: function () {
+            if (this.homeTimer) { clearTimeout(this.homeTimer); this.homeTimer = null; }
+            this.searchQ = '';
+            this.homeDropOpen = false;
+            this.searchHits = [];
+            this.searchHintText = '';
+            this.searchRan = false;
+        },
+
         openSearch: function () {
             this.searchOpen = true;
             /* 大学 2 册（13159 条）占全库三分之二，要搜就得先把它热起来。
@@ -2904,14 +3684,27 @@ function wordMatchApp() {
 
         closeSearch: function () { this.searchOpen = false; },
 
-        runSearch: function () {
+        /* 【搜索】按钮 / 回车：收起下拉，把结果落到下方列表（弹层与检索首页共用） */
+        runSearch: function () { this.queryGo(true); },
+
+        /* 输入即出：只算命中给下拉，**不**动 searchRan —— 下面那块还停在「怎么查」。
+           与小程序一致：边敲边看的是下拉，点了搜索才把结果铺成列表。 */
+        runDropQuery: function () { this.queryGo(false); },
+
+        queryGo: function (submit) {
             var q = (this.searchQ || '').trim();
-            this.searchRan = true;
+            /* ⚠️ 空词必须**先**返回：去抖回调可能落在「用户已经清空输入」之后，
+               这时若先置 homeDropOpen = true，就会弹出一个空下拉框。 */
             if (!q) {
+                this.homeDropOpen = false;
                 this.searchHits = [];
                 this.searchHintText = '';
+                /* 空词提交：留在「怎么查」—— 什么都没查，谈不上结果 */
+                if (submit) this.searchRan = false;
                 return;
             }
+            if (submit) { this.homeDropOpen = false; this.searchRan = true; }
+            else { this.homeDropOpen = true; }
             var self = this;
             /* 词库没载完就先等：否则搜不到大学那 13159 条，而那是全库的大头 */
             if (!this.cetLoaded) {
@@ -2921,7 +3714,8 @@ function wordMatchApp() {
                     .catch(function () { /* 载不到就按已经有的部分搜，不拦着用户 */ })
                     .then(function () {
                         self.searchPending = false;
-                        if (self.searchOpen) self.computeHits(q);
+                        /* 弹层关掉、或用户已经退回检索首页，都得把命中算出来 */
+                        if (self.searchOpen || self.view === 'search') self.computeHits(q);
                     });
                 return;
             }
@@ -2964,9 +3758,15 @@ function wordMatchApp() {
         gotoHit: function (h) {
             var self = this;
             this.searchOpen = false;
+            this.homeDropOpen = false;
+            /* 查到词就去看那一关：从检索首页切进棋盘 */
+            this.view = 'play';
             if (this.autoMode) this.stopAuto(true);
             var go = function () {
                 if (h.level >= 0 && h.level < self.levels.length) {
+                    /* 从搜索跳过来：目标不在当前分类作用域内就退出作用域 ——
+                       否则会出现「显示第 7 关，左右箭头却只在分类里那几关之间走」的错乱。 */
+                    if (self.themeScope && !self.inScope(h.level)) self.exitThemeScope(true);
                     self.levelIndex = h.level;
                     self.loadLevel();
                 }
@@ -2998,6 +3798,28 @@ function wordMatchApp() {
             return '没有找到「' + q + '」，换个拼写试试（也可以直接输入中文）';
         },
 
+        /* 首页顶部那行统计（与册次弹层同一份口径：册 / 关 / 词） */
+        get homeStatText() {
+            return this.books.length + ' 册词库 · ' + this.totalLevels + ' 关 · ' +
+                this.totalWords.toLocaleString('en-US') + ' 词';
+        },
+
+        /* 「输入即出」下拉里的行：**一个单词只占一行**，最多 HOME_DROP_MAX 个单词。
+           命中列表是按「出处」摊平的（liberty 在高中册 + 四级册共 3 处 = 3 条），
+           照原样铺进下拉，一个词就把后面几个词全挤掉 —— 下拉是「挑一个词去那一关」的地方，
+           结果列表（点【搜索】后那块）才是「这个词都有哪些出处」的地方。
+           命中已按 rank 排好序，每个单词取第一次出现的那条 —— 那正是它最靠前的出处。 */
+        get homeDropHits() {
+            var seen = {}, out = [];
+            for (var i = 0; i < this.searchHits.length && out.length < HOME_DROP_MAX; i++) {
+                var h = this.searchHits[i];
+                if (!h || seen[h.enL]) continue;
+                seen[h.enL] = 1;
+                out.push(h);
+            }
+            return out;
+        },
+
         openWrongBook: function () { this.wrongOpen = true; },
 
         removeWrong: function (w) {
@@ -3024,11 +3846,13 @@ function wordMatchApp() {
 
         gotoWrong: function (w) {
             this.wrongOpen = false;
+            this.view = 'play';          /* 错题本【去练】也进棋盘 */
             if (this.autoMode) this.stopAuto(true);
             if (w.bookId !== this.bookId) {
                 this.applyBook(w.bookId, false);
             }
             if (w.level >= 0 && w.level < this.levels.length) {
+                if (this.themeScope && !this.inScope(w.level)) this.exitThemeScope(true);
                 this.levelIndex = w.level;
                 this.loadLevel();
             }
@@ -3089,10 +3913,19 @@ function wordMatchApp() {
                     self.progress[self.bookId] = [];
                     self.saveProgress();
                 }
+                /* 重置清的是**整册**进度（上面那句 msg 也明说了「本册」），所以顺手退出分类练习：
+                   否则会出现「刚清空全册、界面却只让我练这个分类」的错位状态。
+                   落地回本册第 1 关，而不是分类第一关 —— 已经不是分类练习了。
+                   提示语跟着说清楚，免得用户以为分类还开着。 */
+                /* ⚠️ 变量名别叫 inScope —— 上面有个同名方法 this.inScope(index)，
+                   虽然这里不用它，但同名会让人以为在调方法。 */
+                var wasScoped = !!self.themeScope;
+                if (wasScoped) self.exitThemeScope(true);
                 self.levelIndex = 0;
                 self.loadLevel();
                 if (typeof SC !== 'undefined' && SC.toast) {
-                    SC.toast.success('已重置「' + self.bookLabel + '」的' + kind + '进度');
+                    SC.toast.success('已重置「' + self.bookLabel + '」的' + kind + '进度'
+                        + (wasScoped ? '，并退出分类练习' : ''));
                 }
             });
         },
@@ -3114,6 +3947,8 @@ function wordMatchApp() {
             var done = this.activeProgress[this.bookId] || [];
             if (done.indexOf(index) >= 0) return 'is-done';
             if (index === this.levelIndex) return 'is-current';
+            /* 分类练习里，范围外的关卡压暗：一眼看出「本次只练这几关」 */
+            if (this.themeScope && !this.inScope(index)) return 'is-out';
             return '';
         },
 
@@ -3384,9 +4219,9 @@ function wordMatchApp() {
 
         get hasNextBook() { return !!this.nextBookRef(); },
 
-        get canPrev() { return !this.autoMode && this.levelIndex > 0; },
+        get canPrev() { return !this.autoMode && this.prevIndexOf(this.levelIndex) >= 0; },
 
-        get canNext() { return !this.autoMode && this.levelIndex < this.levels.length - 1; },
+        get canNext() { return !this.autoMode && this.nextIndexOf(this.levelIndex) >= 0; },
 
         /* ==================== 本册收尾：最后一关 -> 下一册 ====================
            站到本册最后一关时「下一关」这个说法就不成立了，而 canNext 在那里恒为 false：
@@ -3403,22 +4238,50 @@ function wordMatchApp() {
                 && (this.activeProgress[this.bookId] || []).indexOf(this.levelIndex) >= 0;
         },
 
+        /* 分类作用域里已经走到最后一关。**与 atBookEnd 严格分开**：
+           atBookEnd 说的是「本册最后一关」，它决定的是「下一册」这个动作；
+           分类练完时要给的是「结束分类」，两件事不能混。 */
+        get atScopeEnd() {
+            if (!this.themeScope || this.autoMode) return false;
+            return this.nextIndexOf(this.levelIndex) < 0;
+        },
+
+        get scopePosText() {
+            if (!this.themeScope) return '';
+            var a = this.themeScope.indexes;
+            return '第 ' + (this.scopePos(this.levelIndex) + 1) + ' / ' + a.length + ' 关 · 共 ' +
+                this.themeScope.wordCount + ' 个单词';
+        },
+
+        /* 【自动学习】按钮的提示。分类练习里起点是该分类第一关（见 autoStartIndex），
+           按钮上不能再写「从第 1 关开始」—— 否则点下去会「不像它说的那样」。 */
+        get autoStartTitle() {
+            if (this.themeScope) {
+                return '从「' + this.themeScope.theme + '」这个分类的第一关开始自动点击配对并朗读（只练这几关）';
+            }
+            return '从第 1 关开始自动点击配对并朗读';
+        },
+
         get navNextLabel() {
+            if (this.atScopeEnd) return '结束分类';
             if (!this.atBookEnd) return '下一关';
             return this.nextBookRef() ? '下一册' : '最后一册';
         },
 
         get navNextIcon() {
+            if (this.atScopeEnd) return 'bi-check2-circle';
             return this.atBookEnd ? 'bi-arrow-right-circle' : 'bi-chevron-right';
         },
 
         get navNextTitle() {
+            if (this.atScopeEnd) return '「' + this.themeScope.theme + '」这个类别练完了，退出分类练习';
             if (!this.atBookEnd) return '下一关（→ 方向键）';
             if (!this.nextBookRef()) return '已是最后一册，没有下一册了';
             return this.lastLevelDone ? '本册已完成，进入下一册' : '先打完本册最后一关，再进入下一册';
         },
 
         get canNavNext() {
+            if (this.atScopeEnd) return true;   // 分类练完：按钮已变成「结束分类」，一定可点
             if (!this.atBookEnd) return this.canNext;
             return this.lastLevelDone && !!this.nextBookRef();
         },

@@ -83,6 +83,15 @@
     function fmtTime(s) { return s ? esc(s) : ''; }
 
     async function loadProject() {
+        if (SC.isNoProject(pid)) {
+            // 无项目灵感（project_id = 0）：没有项目页可回，也没有「创作流程」可返回，
+            // 两处链接都指回「所有灵感」。
+            $('project-link').textContent = SC.NO_PROJECT_LABEL;
+            $('project-link').href = '/inspirations';
+            $('back-workflow').href = '/inspirations';
+            $('back-workflow').innerHTML = '<i class="bi bi-globe2"></i> 所有灵感';
+            return;
+        }
         try {
             const p = await SC.api.get('/api/projects/' + pid);
             $('project-link').textContent = p.title || ('项目 ' + pid);

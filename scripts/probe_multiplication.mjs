@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * 探针：九九乘法口诀（/learn/multiplication）的**朗读降级链** + **格子配色**。
+ * 探针：乘法口诀（/learn/multiplication）的**朗读降级链** + **格子配色**
+ *      + **两张口诀表（九九 / 大九九）** + **控制条（设置段 / 主控段与播放器三键的行为）**。
  *
  * 需求：服务端没有已生成音频时，改用浏览器本地朗读（Web Speech API）把汉字口诀读出来，
  * 而且**读不出来也不能报错**。这条链子有三段，任何一段都不能把播放打断：
@@ -138,15 +139,7 @@ const INSTALL_STUBS = `(() => {
     return true;
 })()`;
 
-/** 点「手动步进」→ 页面才出现音量按钮 */
-const SWITCH_MANUAL = `(() => {
-    const btn = Array.from(document.querySelectorAll('button'))
-        .find(b => b.textContent.includes('手动'));
-    if (!btn) return 'no-button';
-    btn.click();
-    return 'clicked';
-})()`;
-
+/** 主控段里的【重读】按钮 —— 认 🔊 图标那一个，点它会把当前这句再读一遍。 */
 const CLICK_PLAY = `(() => {
     const btn = Array.from(document.querySelectorAll('button'))
         .find(b => b.querySelector('.bi-volume-up'));
@@ -257,10 +250,10 @@ async function main() {
 
     /* ---------- 2. 降级链 ②：没有服务端音频 → 本地朗读汉字 ---------- */
     await evalJs(INSTALL_STUBS);
-    const manual = await evalJs(SWITCH_MANUAL);
-    await waitFor(`!!Array.from(document.querySelectorAll('button')).find(b => b.querySelector('.bi-volume-up'))`, 20, 100);
-    check('切到「手动步进」后出现朗读按钮（后续点击都点它）', manual === 'clicked',
-        manual);
+    // 改造后【重读】常驻主控段，不再需要先切「手动步进」档位才冒出来 —— 改验它一开始就在。
+    const volAlways = await waitFor(
+        `!!document.querySelector('.mul-ctl button .bi-volume-up')`, 20, 100);
+    check('【重读】按钮一开始就在（不再需要先切档位才出现）', volAlways);
 
     await evalJs(`window.__audioMode = 'none'; window.__spoke = []; window.__fetchLog = []`);
     await evalJs(CLEAR_CACHE);
@@ -327,7 +320,7 @@ async function main() {
     const autoRun = await evalJs(`(async () => {
         const el = document.querySelector('[x-data]');
         const data = window.Alpine.$data(el);
-        data.startAuto();
+        data.playFromCurrent();
         await new Promise(r => setTimeout(r, 2600));
         data.stop();
         return { index: data.currentIndex, playing: data.playing,
@@ -471,7 +464,387 @@ async function main() {
     await sleep(120);
     await shot('53-multiplication-after');
 
-    /* ---------- 8. 整页自包含 ---------- */
+    /* ---------- 8. 大乘法口诀（大九九，81 句）----------
+       九九（45 句）每组只数到"它自己"；大九九（81 句）每组都把另一个乘数数到 9。
+       两张表是**同一批乘数对**，所以口诀原文与音频 key 完全复用 —— 服务端 54 条音频一条都不用加。
+       最容易错的一处：组名前缀要按**组号**取（九九里「二三得六」在三组 → prefix_3，
+       大九九里它属于二组 → prefix_2），下面单独钉住。 */
+    const READ_TABLE = `(() => {
+        const d = window.Alpine.$data(document.querySelector('[x-data]'));
+        const texts = {};
+        d.formulas.forEach(f => { (texts[f.b] = texts[f.b] || []).push(f.chineseText); });
+        return { mode: d.tableMode, title: d.tableTitle, n: d.formulas.length,
+                 index: d.currentIndex, playing: d.playing,
+                 stored: localStorage.getItem('multiplication_table_mode'),
+                 keys: d.formulas.map(f => f.itemKey),
+                 sizes: Object.keys(texts).map(b => texts[b].length),
+                 group2: texts[2] };
+    })()`;
+    // 按钮文案改成简称（小九九 / 大九九）之后必须**整串**比：
+    // '九九' 是 '小九九' 的子串，用 indexOf 会先命中「小九九」，一按就切错表。
+    const CLICK_TABLE = (label) => `(async () => {
+        const btn = Array.from(document.querySelectorAll('button'))
+            .find(b => b.textContent.trim() === '${label}');
+        if (!btn) return 'no-button';
+        btn.click();
+        await new Promise(r => setTimeout(r, 60));
+        return 'clicked';
+    })()`;
+
+    const bigNav = await nav(PAGE, `document.querySelectorAll('.multiplication-grid .grid-cell').length === 100`);
+    await evalJs(INSTALL_STUBS);
+    // 先摆成「第 31 句 + 正在自动播放」，用来看切表有没有 stop + 归零
+    await evalJs(`(() => {
+        const d = window.Alpine.$data(document.querySelector('[x-data]'));
+        d.currentIndex = 30; d.playing = true;
+        return true;
+    })()`);
+    const bigSwitch = await evalJs(CLICK_TABLE('大九九'));
+    const big = await evalJs(READ_TABLE);
+    check('「大九九」切出 81 句（9 组 × 9 句），页头标题与 localStorage 一起跟上',
+        bigNav && bigSwitch === 'clicked' && big.n === 81 && big.mode === 'big'
+        && big.title === '大九九乘法口诀' && big.stored === 'big',
+        `${big.n} 句 / ${big.title} / stored=${big.stored}`);
+    check('切表时自动播放停掉、下标归零（同一个下标在两张表里是两句不同的口诀）',
+        big.index === 0 && big.playing === false, `index=${big.index} playing=${big.playing}`);
+    check('大九九每组都 9 句（九九是 1..9 的递增组）',
+        big.sizes.join(',') === '9,9,9,9,9,9,9,9,9', big.sizes.join(','));
+    check('大九九「二的乘法口诀」= 一二得二 二二得四 二三得六 二四得八 二五一十 二六十二 二七十四 二八十六 二九十八',
+        big.group2.join(' ') === '一二得二 二二得四 二三得六 二四得八 二五一十 二六十二 二七十四 二八十六 二九十八',
+        big.group2.join(' '));
+    check('大九九只用九九那 45 个音频 key（81 句零新增音频）',
+        new Set(big.keys).size === 45, '去重后 ' + new Set(big.keys).size + ' 个');
+    check('「二三得六」在两张表里是同一个 itemKey（音频复用靠它）',
+        big.keys[11] === '2x3', String(big.keys[11]));
+
+    // 组名前缀按「组号」取：大九九是"每 9 句一组"，组首 = 那句"×1"（一二得二、二二得四…）。
+    // 大九九的组首必须落在 0,9,18,…,72，且组号就是那句的 b —— 组名音频 prefix_b 就靠它。
+    await waitFor(`!!document.querySelector('.mul-ctl button .bi-volume-up')`, 20, 100);
+    const starts = await evalJs(`(() => {
+        const d = window.Alpine.$data(document.querySelector('[x-data]'));
+        const out = [];
+        d.formulas.forEach((f, i) => { if (d.isFirstInGroup(i)) out.push(i + ':' + f.b); });
+        return out;
+    })()`);
+    check('大九九的组首正好 9 个（下标 0,9,…,72），且组号 = 那句的 b（prefix_b 才不会取错）',
+        starts.join(' ') === '0:1 9:2 18:3 27:4 36:5 45:6 54:7 63:8 72:9',
+        starts.join(' '));
+
+    // want = 这一句预期会读几条：组首读「组名 + 口诀」两条，其余只读口诀一条。
+    // （组首两条之间还有 300ms 停顿，所以必须等到 want 条，不然会读到一半就下结论。）
+    const playAt = async (index, want) => {
+        await evalJs(`(async () => {
+            const d = window.Alpine.$data(document.querySelector('[x-data]'));
+            d.currentIndex = ${index};
+            d.audioCache = {};
+            window.__audioMode = 'none'; window.__spoke = []; window.__fetchLog = [];
+            await new Promise(r => setTimeout(r, 40));
+            return true;
+        })()`);
+        await evalJs(CLICK_PLAY);
+        await waitFor(`window.__spoke.length >= ${want}`, 40, 120);
+        await sleep(150);
+        return evalJs(`({ spoke: window.__spoke.map(s => s.text), text: window.Alpine.$data(
+                            document.querySelector('[x-data]')).currentFormula.chineseText,
+                        fetchLog: window.__fetchLog.slice() })`);
+    };
+
+    const firstOfG2 = await playAt(9, 2);       // 大九九 二组第 1 句 = 一二得二
+    check('大九九组首按组号取组名：二组第 1 句问的是 prefix_2，再问口诀本身 1x2',
+        firstOfG2.fetchLog.join(',') === AUDIO_API + 'prefix_2,' + AUDIO_API + '1x2',
+        firstOfG2.fetchLog.join(' , ') || '（没有请求）');
+    check('大九九组首连读照旧：先「二的乘法口诀」再「一二得二」',
+        firstOfG2.spoke.join(' → ') === '二的乘法口诀 → 一二得二', firstOfG2.spoke.join(' → '));
+
+    const thirdOfG2 = await playAt(11, 1);      // 二组第 3 句 = 二三得六，不是组首
+    check('不是组首就不重复读组名：二组第 3 句只读「二三得六」，也不问 prefix 音频',
+        thirdOfG2.text === '二三得六' && thirdOfG2.spoke.join(' → ') === '二三得六'
+        && thirdOfG2.fetchLog.join(',') === AUDIO_API + '2x3',
+        `${thirdOfG2.text} ｜ ${thirdOfG2.spoke.join(' → ')} ｜ ${thirdOfG2.fetchLog.join(' , ')}`);
+
+    // 矩形语义：宽 = 组号、高 = 另一个乘数（与九九表同一套）
+    const bigPaint = await evalJs(`(async () => {
+        const d = window.Alpine.$data(document.querySelector('[x-data]'));
+        d.gridLayout = 'rect';
+        d.currentIndex = 17;                  // 大九九 二组第 9 句 = 二九十八 → 9 行 × 2 列
+        await new Promise(r => setTimeout(r, 60));
+        const cells = Array.from(document.querySelectorAll('.multiplication-grid .grid-cell'));
+        const colored = cells.filter(c => c.style.backgroundColor);
+        const col2 = cells.filter(c => c.style.gridColumn === '3')     // 第 2 列（网格线 3）
+            .map(c => ({ row: parseInt(c.style.gridRow, 10) - 1,
+                         label: c.querySelector('.cell-number').textContent }))
+            .sort((a, b) => a.row - b.row);
+        return { n: colored.length,
+                 rows: new Set(colored.map(c => c.style.gridRow)).size,
+                 colors: new Set(colored.map(c => c.style.backgroundColor)).size,
+                 col2: col2.filter(c => c.label).map(c => c.label).join(',') };
+    })()`);
+    check('大九九「二九十八」画成 9 行 × 2 列（宽 = 组号），18 格全着色且不止一色',
+        bigPaint.n === 18 && bigPaint.rows === 9 && bigPaint.colors >= 2, JSON.stringify(bigPaint));
+    check('该矩形第 2 列自上而下依次标着 2,4,6,…,18（每句的乘积落在自己那一行）',
+        bigPaint.col2 === '2,4,6,8,10,12,14,16,18', bigPaint.col2);
+    await shot('57-multiplication-big');
+
+    const smallSwitch = await evalJs(CLICK_TABLE('小九九'));
+    const small = await evalJs(READ_TABLE);
+    check('切回「小九九」：45 句、组数回到 1..9、localStorage 一并回写',
+        smallSwitch === 'clicked' && small.n === 45 && small.mode === 'small'
+        && small.stored === 'small' && small.sizes.join(',') === '1,2,3,4,5,6,7,8,9',
+        `${small.n} 句 / ${small.sizes.join(',')} / stored=${small.stored}`);
+    check('两张表的 itemKey 集合完全相同（同一句口诀 = 同一条音频）',
+        JSON.stringify(Array.from(new Set(small.keys)).sort())
+        === JSON.stringify(Array.from(new Set(big.keys)).sort()));
+
+    /* ---------- 10. 控制条：设置段 + 主控段 ----------
+       用户反馈「中间的按钮栏要更友好的交互和展示」。改造口径：
+       ① 拆两段：设置段（口诀表 / 高亮，选中是**柔和底色**，不跟主控抢）+ 主控段（常驻五键）；
+       ② 去掉「自动 / 手动」档位 —— 上一句 / 播放 / 下一句 任何时候都在，
+          想暂停不必先确认自己在哪一档（旧实现是按住档位把整簇按钮换掉）；
+       ③ 整条只剩播放键一个实色主色，层次靠颜色权重说话；
+       ④ 分组名常驻（窄屏不再隐藏）、序号升成「第 N / M 句」+ 卡片底边 3px 进度条。
+       全部从渲染后的 DOM 量，不读源码文本 —— 样式表没生效时量得出来是假绿。 */
+    const READ_BAR = `(() => {
+        const box = (el) => { const r = el.getBoundingClientRect();
+            return { w: Math.round(r.width), h: Math.round(r.height),
+                     mid: Math.round(r.top + r.height / 2) }; };
+        const bar = document.querySelector('.mul-bar');
+        const groups = Array.from(document.querySelectorAll('.mul-seg'));
+        const seg = groups.map(g => Array.from(g.querySelectorAll('.btn')));
+        const items = Array.from(document.querySelectorAll(
+            '.mul-label, .mul-seg > .btn, .mul-counter, .mul-act, .mul-play'));
+        const fill = document.querySelector('.mul-progress-fill');
+        const d = window.Alpine.$data(document.querySelector('[x-data]'));
+        return {
+            n: groups.length,
+            labels: Array.from(document.querySelectorAll('.mul-label')).map(e => e.textContent.trim()),
+            texts: seg.map(g => g.map(b => b.textContent.trim())),
+            tips: seg.map(g => g.map(b => (b.getAttribute('title') || '').trim().length)),
+            pressed: seg.map(g => g.map(b => b.getAttribute('aria-pressed'))),
+            onState: seg.map(g => g.map(b => b.classList.contains('is-on'))),
+            outlines: seg.map(g => g.map(b => b.classList.contains('btn-outline-secondary'))),
+            widths: seg.map(g => g.map(b => box(b).w)),
+            groupW: groups.map(g => box(g).w),
+            solidPrimary: Array.from(bar.querySelectorAll('.btn-primary'))
+                .map(b => b.getAttribute('aria-label') || b.textContent.trim()),
+            ctlBtns: Array.from(document.querySelectorAll('.mul-ctl .btn'))
+                .map(b => b.getAttribute('aria-label') || ''),
+            hasReplay: !!document.querySelector('.mul-ctl .bi-volume-up'),
+            hasReset: !!document.querySelector('.mul-ctl .bi-arrow-counterclockwise'),
+            counter: (document.querySelector('.mul-counter') || {}).textContent || '',
+            fillPct: fill ? Math.round(parseFloat(fill.style.width) || 0) : -1,
+            index: d.currentIndex, total: d.formulas.length,
+            cardH: Math.round(bar.getBoundingClientRect().height),
+            tallest: Math.max.apply(null, items.map(e => box(e).h)),
+            mids: Array.from(new Set(items.map(e => box(e).mid))),
+            hasHint: typeof d.tableHint !== 'undefined',
+            hasMode: typeof d.mode !== 'undefined',
+            title: d.tableTitle,
+        };
+    })()`;
+
+    const barStopped = await evalJs(READ_BAR);
+    const pair = (v) => JSON.stringify(v).replace(/","/g, ' | ');
+
+    check('设置段只剩两组：口诀表 / 高亮（「播放方式」那组档位已去掉）',
+        barStopped.n === 2 && barStopped.labels.join(',') === '口诀表,高亮',
+        `${barStopped.n} 组：[${barStopped.labels.join(' / ')}]`);
+    check('选项名换成同一维度、看得懂的对子：小九九/大九九 · 整块/逐格',
+        JSON.stringify(barStopped.texts) === JSON.stringify([['小九九', '大九九'], ['整块', '逐格']]),
+        barStopped.texts.map(g => g.join('/')).join(' ｜ '));
+    check('未选项仍有描边（btn-outline-secondary）：不会退化成两段游离的文字',
+        barStopped.outlines.every(g => g.every(Boolean)), pair(barStopped.outlines));
+    check('设置段的选中是「柔和底色」（is-on）不是实色 —— 实色整条只留给主控的播放键',
+        barStopped.onState.every(g => g.filter(Boolean).length === 1)
+        && barStopped.solidPrimary.length === 1 && barStopped.solidPrimary[0] === '播放',
+        `选中 ${pair(barStopped.onState)} ｜ 实色主色按钮：${barStopped.solidPrimary.join(' / ') || '无'}`);
+    check('每组恰好一个选中，aria-pressed 同步（键控与读屏读得出当前选项）',
+        barStopped.pressed.every(g => g.filter(v => v === 'true').length === 1),
+        pair(barStopped.pressed));
+    check('同组两个选项等宽（「小九九」与「大九九」不会再一胖一瘦）',
+        barStopped.widths.every(g => Math.abs(g[0] - g[1]) <= 1),
+        barStopped.widths.map(g => g.join('=')).join(' | ') + ' px');
+    check('两个分段控件也等宽（设置段左半截是等距的）',
+        new Set(barStopped.groupW).size === 1, barStopped.groupW.join(' / ') + ' px');
+    check('每个选项都带 title 说明（文案看不明白时停一下鼠标就有解释）',
+        barStopped.tips.every(g => g.every(n => n >= 8)),
+        barStopped.tips.map(g => g.join('/')).join(' ｜ ') + ' 字');
+    check('「每组只数到它自己，共 45 句」那句说明已删掉（tableHint 不复存在）',
+        barStopped.hasHint === false, 'tableHint=' + barStopped.hasHint);
+    check('「自动 / 手动」档位彻底移除：state 里没有 mode，localStorage 里也没有那一项',
+        barStopped.hasMode === false
+        && (await evalJs(`localStorage.getItem('multiplication_mode')`)) === null,
+        `hasMode=${barStopped.hasMode}`);
+    check('主控常驻五键：上一句 / 播放 / 下一句 / 重读 / 重置（不再按住档位整簇换掉）',
+        barStopped.ctlBtns.join(',') === '上一句,播放,下一句,重读这一句,回到第一句'
+        && barStopped.hasReplay && barStopped.hasReset,
+        barStopped.ctlBtns.join(' | '));
+    check('序号写清「第 N / M 句」（不再是一个没有上下文的 1 / 45 徽标）',
+        new RegExp('^第 ' + (barStopped.index + 1) + ' / ' + barStopped.total + ' 句$')
+            .test(barStopped.counter),
+        barStopped.counter);
+    check('底边进度条按当前句走，且不额外占高度（卡高只比最高控件多一点内边距）',
+        barStopped.fillPct === Math.round((barStopped.index + 1) * 100 / barStopped.total)
+        && barStopped.mids.length === 1
+        && barStopped.cardH - barStopped.tallest <= 24,
+        `${barStopped.counter} → ${barStopped.fillPct}% ｜ 卡高 ${barStopped.cardH} 最高 ${barStopped.tallest}`);
+    check('页头标题用全名（九九乘法口诀 / 大九九乘法口诀），与按钮上的简称对得上',
+        barStopped.title === '九九乘法口诀', barStopped.title);
+
+    /* ---------- 10b. 播放器三键的行为（本次交互改造的核心） ---------- */
+
+    /** 按 aria-label 精确点主控段里的某个键。 */
+    const clickAct = (label) => evalJs(`(async () => {
+        const btn = Array.from(document.querySelectorAll('.mul-ctl button'))
+            .find(b => (b.getAttribute('aria-label') || '') === ${JSON.stringify(label)});
+        if (!btn) return 'no-button';
+        if (btn.disabled) return 'disabled';
+        btn.click();
+        await new Promise(r => setTimeout(r, 80));
+        return 'clicked';
+    })()`);
+    const readState = () => evalJs(`(() => {
+        const d = window.Alpine.$data(document.querySelector('[x-data]'));
+        return { index: d.currentIndex, playing: d.playing,
+                 spoke: window.__spoke.map(s => s.text) };
+    })()`);
+    const armFrom = (index) => evalJs(`(async () => {
+        const d = window.Alpine.$data(document.querySelector('[x-data]'));
+        d.stop(); d.currentIndex = ${index}; d.audioCache = {};
+        window.__audioMode = 'none'; window.__spoke = [];
+        await new Promise(r => setTimeout(r, 60));
+        return true;
+    })()`);
+
+    // ① 停着点【下一句】：只前进一句 + 读这一句，不会顺手开始连播
+    await armFrom(0);
+    const nextClick = await clickAct('下一句');
+    await waitFor(`window.__spoke.length >= 2`, 30, 120);
+    const afterNext = await readState();
+    check('停着点【下一句】：只前进一句并朗读（组首还会先读组名），不会顺手开始连播',
+        nextClick === 'clicked' && afterNext.index === 1 && afterNext.playing === false
+        && afterNext.spoke.join(' → ') === '二的乘法口诀 → 一二得二',
+        `index=${afterNext.index} playing=${afterNext.playing} ｜ 朗读 ${afterNext.spoke.join(' → ')}`);
+
+    // ② 停着点【上一句】：回退一句 + 读这一句
+    await evalJs(`window.__spoke = []`);
+    const prevClick = await clickAct('上一句');
+    await waitFor(`window.__spoke.length >= 2`, 30, 120);
+    const afterPrev = await readState();
+    check('停着点【上一句】：回退一句并朗读（与【下一句】对称）',
+        prevClick === 'clicked' && afterPrev.index === 0 && afterPrev.playing === false
+        && afterPrev.spoke.join(' → ') === '一的乘法口诀 → 一一得一',
+        `index=${afterPrev.index} ｜ 朗读 ${afterPrev.spoke.join(' → ')}`);
+
+    // ③ 边界：第 1 句时【上一句】置灰
+    const prevDisabled = await evalJs(`(() => {
+        const b = Array.from(document.querySelectorAll('.mul-ctl button'))
+            .find(x => (x.getAttribute('aria-label') || '') === '上一句');
+        return !!b && b.disabled;
+    })()`);
+    check('第 1 句时【上一句】置灰（没有更早的一句，按了也不该有反应）', prevDisabled);
+
+    // ④ 点【播放】→ 连播开始、按钮切成「暂停」、主控五键一个不少
+    await armFrom(0);
+    const playClick = await clickAct('播放');
+    await sleep(900);
+    const during = await evalJs(`(() => {
+        const d = window.Alpine.$data(document.querySelector('[x-data]'));
+        const btn = document.querySelector('.mul-play');
+        return { playing: d.playing, index: d.currentIndex,
+                 icon: btn.querySelector('i').className,
+                 label: btn.getAttribute('aria-label'),
+                 spoke: window.__spoke.length,
+                 ctlN: document.querySelectorAll('.mul-ctl .btn').length };
+    })()`);
+    check('点【播放】开始连播：按钮切成「暂停」、主控五键一个不少、每句都落到朗读',
+        playClick === 'clicked' && during.playing === true
+        && during.icon.indexOf('bi-pause-fill') >= 0 && during.label === '暂停'
+        && during.ctlN === 5 && during.spoke >= 2,
+        `playing=${during.playing} 第 ${during.index + 1} 句 朗读 ${during.spoke} 条`);
+
+    // ⑤ 播放中点【下一句】：只按用户的意思 +1，循环不许又替它 +1（否则一次点击跳两句）。
+    //    做成确定性的：先连播起来、等它进到那一轮的 600ms 停顿里，这时才点。
+    const manualJump = await evalJs(`(async () => {
+        const d = window.Alpine.$data(document.querySelector('[x-data]'));
+        d.stop(); d.currentIndex = 5; d.audioCache = {};
+        window.__audioMode = 'none';
+        await new Promise(r => setTimeout(r, 60));
+        d.playFromCurrent();                          // 不 await：让循环跑在后台
+        await new Promise(r => setTimeout(r, 300));   // 这时它应该正卡在那一轮的停顿里
+        const playingBefore = d.playing;
+        const btn = Array.from(document.querySelectorAll('.mul-ctl button'))
+            .find(b => (b.getAttribute('aria-label') || '') === '下一句');
+        btn.click();
+        const atClick = d.currentIndex;
+        await new Promise(r => setTimeout(r, 900));   // 等那一轮停顿走完 + 下一句读完
+        const after = d.currentIndex;
+        const stillPlaying = d.playing;
+        d.stop();
+        return { playingBefore, atClick, after, stillPlaying };
+    })()`);
+    check('播放中点【下一句】：下标按用户的意思只 +1，循环不会又替它 +1（连播也不中断）',
+        manualJump.playingBefore === true && manualJump.atClick === 6
+        && manualJump.after === 6 && manualJump.stillPlaying === true,
+        JSON.stringify(manualJump));
+
+    // ⑥ 连播到末句自然停，不空转、不越界
+    const tail = await evalJs(`(async () => {
+        const d = window.Alpine.$data(document.querySelector('[x-data]'));
+        d.stop(); d.audioCache = {};
+        window.__audioMode = 'none';
+        d.currentIndex = d.formulas.length - 1;
+        await new Promise(r => setTimeout(r, 60));
+        d.playFromCurrent();
+        await new Promise(r => setTimeout(r, 700));
+        return { index: d.currentIndex, total: d.formulas.length, playing: d.playing };
+    })()`);
+    check('连播到末句自然停（不空转、不越界）',
+        tail.index === tail.total - 1 && tail.playing === false, JSON.stringify(tail));
+
+    // ⑦ 再点一次（此时按钮是【暂停】）立刻停
+    await armFrom(0);
+    await clickAct('播放');
+    await sleep(250);
+    const pauseClick = await clickAct('暂停');
+    await sleep(140);
+    const afterPause = await readState();
+    check('再点一次（此时是【暂停】）立刻停：playing 归位、按钮变回「播放」',
+        pauseClick === 'clicked' && afterPause.playing === false, JSON.stringify(afterPause));
+
+    // ⑧ 窄屏：组名常驻、主控在上设置在下、不横向溢出
+    for (const [w, h, name] of [[390, 844, '390px'], [320, 568, '320px']]) {
+        await send('Emulation.setDeviceMetricsOverride',
+            { width: w, height: h, deviceScaleFactor: 2, mobile: true });
+        await sleep(280);
+        const m = await evalJs(`(() => {
+            const r = (sel) => document.querySelector(sel).getBoundingClientRect();
+            return {
+                labels: Array.from(document.querySelectorAll('.mul-label'))
+                    .filter(e => e.getClientRects().length > 0)
+                    .map(e => e.textContent.trim()).join(','),
+                ctlTop: Math.round(r('.mul-ctl').top),
+                setTop: Math.round(r('.mul-set').top),
+                // 控制条总高 + 设置段折了几行：390 与 320 就靠这两个值区分开
+                // （前两个字段在两种宽度下是一样的，只报它们等于没验 320）
+                barH: Math.round(r('.mul-bar').height),
+                setRows: new Set(Array.from(document.querySelectorAll('.mul-set > .d-flex'))
+                    .map(e => Math.round(e.getBoundingClientRect().top))).size,
+                overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                ctlVisible: document.querySelector('.mul-ctl').getClientRects().length > 0,
+                setVisible: document.querySelector('.mul-set').getClientRects().length > 0,
+            };
+        })()`);
+        check(`窄屏 ${name}：组名照样看得见（口诀表 / 高亮）、主控在上设置在下、不横向溢出`,
+            m.labels === '口诀表,高亮' && m.ctlTop < m.setTop && m.overflowX === 0
+            && m.ctlVisible && m.setVisible && m.setRows <= 2 && m.barH <= 140,
+            `组名[${m.labels}] 主控 ${m.ctlTop} / 设置 ${m.setTop} ｜ 设置段 ${m.setRows} 行 `
+            + `控制条高 ${m.barH}px 溢出 ${m.overflowX}px`);
+    }
+    await send('Emulation.setDeviceMetricsOverride',
+        { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+    await sleep(220);
+
+    /* ---------- 9. 整页自包含 ---------- */
     check('零外部请求（不引任何 CDN）', external.length === 0, external.join(' | ') || '零外部请求');
     check('无资源加载失败', failures.length === 0, failures.join(' | ') || '无');
     check('无未捕获的运行时 JS 错误', pageErrors.length === 0, pageErrors.join(' | ') || '无');

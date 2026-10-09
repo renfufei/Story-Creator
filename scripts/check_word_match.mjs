@@ -39,6 +39,11 @@
  *      中文可反查；一个词的多处出处一起列出；出处行带学段前缀（「高中 · 必修4 · 第 12 关」——
  *      高中的必修/选修系列不带年级，只写册名会被误读成「4 年级」）；
  *      点【查看】跳到对应册次与关卡；点遮罩、按 Esc 都能关）
+ *  S14 类别面板 / 分类练习：点页头的类别标签 -> 弹出面板，按关卡分组列出「本册这个类别的
+ *      全部单词」（关号 / 每关单词数 / 已完成标记 / 朗读）；
+ *      【练习本分类】进入过滤模式（作用域只收窄「能走哪几关」，不改写本册关卡数组，
+ *      于是 levelIndex 仍是本册真实关卡下标 —— 进度 / 错题本 / 「第 N 关」口径全不变）：
+ *      作用域内走关、范围外分段压暗、末关按钮变「结束分类」、练完自动退出、换册自动退出
  *  S11 运行时错误采集
  *
  * 静音约定：脚本开头把 word_match_sound_v1 写成 0，整轮默认不发声；
@@ -361,7 +366,26 @@ async function waitFor(desc, fn, timeout = 10000, interval = 100) {
     return false;
 }
 
+/* 把界面切进棋盘视图。**每次 Page.navigate 之后都必须做** —— 2026-10-07 起页面默认落在
+   检索首页（view='search'），棋盘压根不渲染，直接等卡片会一路超时（而且是「等了 15 秒然后
+   抛异常」这种最费时间的失败）。挂在 waitCards() 里统一处理，各段的调用点一行都不用改。
+   这里直接写状态、不用真实点击 —— 视图切换**本身**的行为由 S0 用真实点击验，不重复验。 */
+async function enterPlayView() {
+    try {
+        return await evalJs(`(() => {
+            if (typeof Alpine === 'undefined' || !window.Alpine) return false;
+            const r = document.querySelector('.wm-root');
+            if (!r) return false;
+            const d = Alpine.$data(r);
+            if (!d || !d.bookId) return false;      // 还没选册：等 S0 真点选册
+            if (d.view !== 'play') { d.view = 'play'; if (d.measureTop) d.measureTop(); }
+            return true;
+        })()`);
+    } catch (e) { return false; }
+}
+
 async function waitCards() {
+    await waitFor('棋盘视图', async () => await enterPlayView(), 15000, 150);
     const ok = await waitFor('卡片', async () =>
         (await evalJs(`document.querySelectorAll('.wm-card').length`)) > 0, 15000, 150);
     if (!ok) throw new Error('卡片未渲染，后续断言无法进行');
@@ -659,8 +683,235 @@ async function main() {
        「点英文即朗读」那几条断言由 speakProbeSetup() 临时打开语音后再验。 */
     await evalJs(`localStorage.setItem('word_match_sound_v1', '0')`);
     await send('Page.navigate', { url: PAGE });
-    await waitCards();
+    /* ⚠️ 这里**不能**等卡片：2026-10-07 起默认视图是检索首页，首屏没有棋盘；而且刚清空过
+       localStorage，一个册次都没有，waitCards() 里的 enterPlayView 会一直等不到 bookId。 */
+    const homeReady = await waitFor('检索首页', async () => await evalJs(`(() => {
+        const el = document.getElementById('wm-home-input');
+        return !!el && el.getClientRects().length > 0;
+    })()`), 15000, 150);
+    if (!homeReady) throw new Error('检索首页未渲染，后续断言无法进行');
     await sleep(400);
+
+    /* ---------- S0. 默认落地：检索首页（2026-10-07 新增） ---------- */
+    console.log('\n— S0 默认落地页（检索首页 / 视图切换 / 选册入口） —');
+
+    /* 首页快照：可见性 + Alpine 数据层一次抓全 */
+    const homeSnap = () => evalJs(`(() => {
+        const vis = (id) => { const e = document.getElementById(id); return !!e && e.getClientRects().length > 0; };
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const book = document.querySelector('.wm-book-btn');
+        const back = document.querySelector('.wm-back-btn');
+        const search = document.querySelector('.wm-search-btn');
+        const auto = document.querySelector('.wm-toolbar-actions button[title*="自动"]');
+        const stage = document.querySelector('.wm-stage');
+        return {
+            view: d.view, bookId: d.bookId, levels: d.levels.length, q: d.searchQ, ran: d.searchRan,
+            homeVisible: vis('wm-home-input'), dropVisible: vis('wm-home-drop'),
+            resultVisible: vis('wm-home-result'), guideVisible: vis('wm-home-guide'),
+            playBtnVisible: vis('wm-home-play'),
+            stageVisible: !!stage && stage.getClientRects().length > 0,
+            cards: document.querySelectorAll('.wm-card').length,
+            bookText: book ? book.innerText.replace(/\\s+/g, ' ').trim() : '',
+            bookTitle: book ? book.getAttribute('title') : '',
+            backVisible: !!back && back.getClientRects().length > 0,
+            searchBtnVisible: !!search && search.getClientRects().length > 0,
+            autoBtnVisible: !!auto && auto.getClientRects().length > 0,
+            stat: ((document.querySelector('.wm-home-stat') || {}).innerText || '').trim(),
+            inputValue: (document.getElementById('wm-home-input') || {}).value || ''
+        };
+    })()`);
+
+    let hs = await homeSnap();
+    await shot('00-home-default');
+    check('S0 默认落在检索首页：搜索框可见、棋盘未渲染、一张卡片都没有',
+        hs.view === 'search' && hs.homeVisible && !hs.stageVisible && hs.cards === 0,
+        `view=${hs.view} home=${hs.homeVisible} stage=${hs.stageVisible} cards=${hs.cards}`);
+    check('S0 首次访问不预设册次：页头下拉停在【选择关卡练习】占位文案上',
+        hs.bookId === '' && hs.bookText === '选择关卡练习' && hs.levels === 0,
+        `bookId="${hs.bookId}" 按钮="${hs.bookText}" levels=${hs.levels}`);
+    check('S0 未选册时按钮提示说清「选好即进入配对练习」（不是「未选择」那种没用的兜底文案）',
+        /选好即进入配对练习/.test(hs.bookTitle), hs.bookTitle);
+    check('S0 首屏三块齐了：统计行 + 常驻搜索框 + 「怎么查」说明卡（结果卡还没出现）',
+        /^\d+ 册词库 · \d+ 关 · [\d,]+ 词$/.test(hs.stat) && hs.homeVisible
+        && hs.guideVisible && !hs.resultVisible,
+        `stat="${hs.stat}" guide=${hs.guideVisible} result=${hs.resultVisible}`);
+    check('S0 检索页收起棋盘专属按钮：自动学习 / 搜索都不显示，也没有「返回搜索」',
+        !hs.autoBtnVisible && !hs.searchBtnVisible && !hs.backVisible,
+        `auto=${hs.autoBtnVisible} search=${hs.searchBtnVisible} back=${hs.backVisible}`);
+
+    /* 册次弹层：没有当前册时**必须**兜底展开第一个学段，否则一册都看不见（回归守卫） */
+    await clickSel('.wm-book-btn');
+    await sleep(340);
+    const picker0 = await evalJs(`(() => {
+        const items = Array.from(document.querySelectorAll('.wm-book-item'))
+            .filter(e => e.getClientRects().length > 0);
+        const stages = Array.from(document.querySelectorAll('.wm-book-group-name')).map(e => e.innerText.trim());
+        const open = Array.from(document.querySelectorAll('.wm-book-group-head.is-open .wm-book-group-name'))
+            .map(e => e.innerText.trim());
+        return { items: items.length, stages, open };
+    })()`);
+    check('S0 没有当前册时册次弹层也要有册可点（默认展开第一个学段，三个学段全折叠就点不着了）',
+        picker0.items > 0 && picker0.open.length === 1 && picker0.open[0] === picker0.stages[0],
+        `可见册次=${picker0.items} 展开=${JSON.stringify(picker0.open)} 学段=${JSON.stringify(picker0.stages)}`);
+    await send('Input.dispatchKeyEvent',
+        { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await send('Input.dispatchKeyEvent',
+        { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await sleep(300);
+    check('S0 册次弹层按 Esc 能收起', !(await evalJs(`Alpine.$data(document.querySelector('.wm-root')).bookPickerOpen`)));
+
+    /* 输入即出：去抖后弹出下拉，且下面那块仍停在「怎么查」（与小程序一致） */
+    await evalJs(`(() => {
+        const el = document.getElementById('wm-home-input');
+        el.focus();
+        el.value = 'liberty';
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+    })()`);
+    /* 第一次搜索要等大学词库（13159 条 / gzip 225KB）载完，给足时间 */
+    const dropUp = await waitFor('输入即出的下拉', async () => (await homeSnap()).dropVisible, 30000, 150);
+    hs = await homeSnap();
+    const dropRows = await evalJs(`Array.from(document.querySelectorAll('#wm-home-drop .wm-home-hit')).map(r => ({
+        en: ((r.querySelector('.wm-home-hit-en') || {}).innerText || '').replace(/\\s+/g, ' ').trim(),
+        src: ((r.querySelector('.wm-home-hit-src') || {}).innerText || '').trim()
+    }))`);
+    await shot('00b-home-drop');
+    check('S0 输入即出：去抖后弹出下拉，且下面那块仍停在「怎么查」（没被搜索抢走）',
+        dropUp && hs.dropVisible && hs.guideVisible && !hs.resultVisible,
+        `下拉=${hs.dropVisible} 说明卡=${hs.guideVisible} 结果卡=${hs.resultVisible}`);
+    check('S0 下拉里最多 5 个不同单词、每行都带出处（与弹层同一套匹配口径）',
+        dropRows.length > 0 && dropRows.length <= 5
+        && new Set(dropRows.map(r => r.en)).size === dropRows.length
+        && dropRows.every(r => /第 \d+ 关/.test(r.src)),
+        `${dropRows.length} 行：` + dropRows.map(r => r.en + '@' + r.src.slice(0, 16)).join(' | '));
+    check('S0 下拉第一行就是完全匹配的 liberty',
+        /^liberty/i.test((dropRows[0] || {}).en || ''), (dropRows[0] || {}).en);
+
+    /* 点【搜索】：下拉收起，结果落到下方列表（同一份命中，换一种呈现） */
+    await clickSel('#wm-home-go');
+    await sleep(420);
+    hs = await homeSnap();
+    const resRows = await evalJs(`Array.from(document.querySelectorAll('#wm-home-result .wm-home-row'))
+        .map(r => ((r.querySelector('.wm-home-hit-en') || {}).innerText || '').replace(/\\s+/g, ' ').trim())`);
+    /* 下拉一词一行（最多 5 个单词），结果列表把同一个词的每处出处都摊开 ——
+       两者行数**本来就不该相等**（liberty 3 处出处：下拉 1 行、结果 3 行），
+       相等才是巧合。要断言的是「同一份命中，只是聚合粒度不同」：
+       结果列表里剥掉角标后的不同单词数 == 下拉行数。 */
+    const bareWord = (s) => s.replace(/\s*(完全匹配|前缀)\s*$/, '').trim();
+    check('S0 点【搜索】：下拉收起、结果卡出现、「怎么查」让位',
+        !hs.dropVisible && hs.resultVisible && !hs.guideVisible,
+        `下拉=${hs.dropVisible} 结果=${hs.resultVisible} 说明=${hs.guideVisible}`);
+    check('S0 结果列表与下拉是同一份命中：下拉一词一行，结果列表把每处出处都摊开',
+        resRows.length >= dropRows.length
+        && new Set(resRows.map(bareWord)).size === dropRows.length,
+        `结果 ${resRows.length} 行 / 剥角标后 ${new Set(resRows.map(bareWord)).size} 个单词，下拉 ${dropRows.length} 行`);
+    check('S0 结果每行都有【查看】按钮', (await evalJs(`document.querySelectorAll(
+        '#wm-home-result .wm-home-row button.btn-outline-primary').length`)) === resRows.length);
+
+    /* 点【查看】= 去看那一关：切进棋盘 */
+    const hit0 = await evalJs(`(() => {
+        const h = Alpine.$data(document.querySelector('.wm-root')).searchHits[0];
+        return { bookId: h.bookId, bookLabel: h.bookLabel, level: h.level, en: h.en };
+    })()`);
+    await clickSel('#wm-home-result .wm-home-row button.btn-outline-primary');
+    /* 变量名带 0 后缀：S13 段落里已有一个 jumped（同名会 SyntaxError，整个脚本都跑不起来） */
+    const jumped0 = await waitFor('跳转后棋盘出现', async () =>
+        (await evalJs(`document.querySelectorAll('.wm-card').length`)) > 0, 20000, 150);
+    await sleep(340);
+    hs = await homeSnap();
+    const jumpState = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        return { bookId: d.bookId, levelIndex: d.levelIndex, label: d.bookLabel };
+    })()`);
+    check('S0 点结果【查看】：直接切进棋盘并落在命中那一关（首页收起）',
+        jumped0 && hs.view === 'play' && !hs.homeVisible && hs.stageVisible
+        && jumpState.bookId === hit0.bookId && jumpState.levelIndex === hit0.level,
+        `view=${hs.view} 落在「${jumpState.label}」第 ${jumpState.levelIndex + 1} 关（期望第 ${hit0.level + 1} 关）`);
+    check('S0 进棋盘后棋盘专属按钮回来：【返回搜索】出现、自动学习与搜索按钮也都在',
+        hs.backVisible && hs.autoBtnVisible && hs.searchBtnVisible,
+        `back=${hs.backVisible} auto=${hs.autoBtnVisible} search=${hs.searchBtnVisible}`);
+
+    /* 先在棋盘上配一对，用来验【继续练习】不会把本关重开 */
+    {
+        const plan = await evalJs(`(() => {
+            const d = Alpine.$data(document.querySelector('.wm-root'));
+            const l = d.leftCards.findIndex(c => !c.done);
+            const r = d.rightCards.findIndex(c => !c.done && c.text === d.leftCards[l].mean);
+            return { l, r };
+        })()`);
+        const bb = await board();
+        await clickAt(bb.en[plan.l].x, bb.en[plan.l].y);
+        await sleep(220);
+        const bb2 = await board();
+        await clickAt(bb2.zh[plan.r].x, bb2.zh[plan.r].y);
+        await sleep(360);
+    }
+
+    /* 【返回搜索】退回来：查询词与结果都留着 */
+    await clickSel('.wm-back-btn');
+    await sleep(380);
+    hs = await homeSnap();
+    check('S0 点【返回搜索】：回到检索首页、棋盘收起，且刚才的查询与结果都留着（不用重敲）',
+        hs.view === 'search' && hs.homeVisible && !hs.stageVisible
+        && hs.q === 'liberty' && hs.resultVisible && hs.inputValue === 'liberty',
+        `view=${hs.view} q="${hs.q}" 输入框="${hs.inputValue}" 结果卡=${hs.resultVisible}`);
+
+    /* 【继续练习】入口：已选过册才出现；点它回棋盘且**不重开本关** */
+    const playBtnText = (await evalJs(`(document.getElementById('wm-home-play') || {}).innerText || ''`)
+    ).replace(/\s+/g, ' ').trim();
+    check('S0 选过册之后首页出现【继续练习 · 册名】入口',
+        hs.playBtnVisible && /继续练习/.test(playBtnText), `visible=${hs.playBtnVisible} text="${playBtnText}"`);
+    const beforeResume = await evalJs(`(() => { const d = Alpine.$data(document.querySelector('.wm-root'));
+        return { levelIndex: d.levelIndex, matched: d.matchedCount }; })()`);
+    await clickSel('#wm-home-play');
+    await sleep(400);
+    const afterResume = await evalJs(`(() => { const d = Alpine.$data(document.querySelector('.wm-root'));
+        return { view: d.view, levelIndex: d.levelIndex, matched: d.matchedCount }; })()`);
+    check('S0 点【继续练习】回到棋盘，且**不重开本关**（已配好的对子没被打散）',
+        afterResume.view === 'play' && afterResume.levelIndex === beforeResume.levelIndex
+        && beforeResume.matched >= 1 && afterResume.matched === beforeResume.matched,
+        `第 ${beforeResume.levelIndex + 1} 关 已配对 ${beforeResume.matched} -> ${afterResume.matched}`);
+
+    /* 用真实点击从册次弹层挑一册：这就是「选册 = 进棋盘」那条路径，
+       同时把基准状态复位成「三年级上册第 1 关」供后面各段沿用 */
+    await clickSel('.wm-book-btn');
+    await sleep(360);
+    let picked = null;
+    for (let i = 0; i < 4 && !picked; i++) {
+        const t = await evalJs(`(() => {
+            const items = Array.from(document.querySelectorAll('.wm-book-item'))
+                .filter(e => e.getClientRects().length > 0);
+            const hit = items.find(e =>
+                ((e.querySelector('.wm-book-label') || {}).innerText || '').trim() === '三年级上册');
+            if (hit) { const r = hit.getBoundingClientRect();
+                return { ok: true, x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }; }
+            /* 没展开就点开它所在的学段（手风琴：同时只展开一组），下一轮再找 */
+            const head = Array.from(document.querySelectorAll('.wm-book-group-head'))
+                .find(e => e.innerText.trim().indexOf('小学') === 0 && !e.classList.contains('is-open'));
+            if (!head) return { ok: false };
+            const hr = head.getBoundingClientRect();
+            return { ok: false, x: Math.round(hr.x + hr.width / 2), y: Math.round(hr.y + hr.height / 2) };
+        })()`);
+        if (t.ok) { picked = t; break; }
+        if (t.x === undefined) break;
+        await clickAt(t.x, t.y);
+        await sleep(340);
+    }
+    check('S0 册次弹层里点得到「三年级上册」（学段手风琴切换后册次可见）', !!picked, JSON.stringify(picked));
+    if (picked) await clickAt(picked.x, picked.y);
+    await sleep(560);
+    const pickedState = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        return { view: d.view, bookId: d.bookId, label: d.bookLabel, levelIndex: d.levelIndex,
+                 cards: document.querySelectorAll('.wm-card').length, pickerOpen: d.bookPickerOpen,
+                 bookText: document.querySelector('.wm-book-btn').innerText.replace(/\\s+/g, ' ').trim() };
+    })()`);
+    check('S0 选册 = 直接进棋盘：弹层关闭、view 切到 play、按钮文案换成册名、卡片渲染出来',
+        pickedState.view === 'play' && pickedState.bookId === 'pep-3-1'
+        && pickedState.label === '三年级上册' && !pickedState.pickerOpen && pickedState.cards > 0,
+        JSON.stringify(pickedState));
+    check('S0 基准状态复位成「三年级上册第 1 关」（后面各段沿用）',
+        pickedState.levelIndex === 0, 'levelIndex=' + pickedState.levelIndex);
 
     /* ---------- S1. 初始结构 ---------- */
     console.log('\n— S1 初始结构 / 洗牌 —');
@@ -1022,6 +1273,7 @@ async function main() {
     console.log('\n— S4b 闪绿配色（拉长时长取样） —');
     await send('Page.navigate', { url: PAGE + '?wmOkFlash=2400' });
     await sleep(2600);
+    await enterPlayView();          // 这一段没走 waitCards，默认视图又是检索页，得自己切进棋盘
     b = await board();
     {
         const en1 = b.en.find(c => !c.done);
@@ -1448,10 +1700,19 @@ async function main() {
     const hsInfo = await evalJs(`(() => {
         const d = Alpine.$data(document.querySelector('.wm-root'));
         const meta = d.books.filter(x => x.id === d.bookId)[0];
+        const themes = [...new Set(d.levels.map(l => l.theme))];
         return { levels: d.levels.length, theme: d.currentLevel ? d.currentLevel.theme : '',
+                 themeCount: themes.length, first3: themes.slice(0, 3).join(','),
                  bookWord: meta.wordCount, declared: meta.levelCount };
     })()`);
-    check('高中册主题即课本单元（Unit N）', /^Unit [1-5]$/.test(hsInfo.theme || ''), `theme=${hsInfo.theme}`);
+    // 高中 11 册已按「跨学段统一语义域」重分类（原先主题是课本单元 Unit 1~5，
+    // 段内词汇风马牛不相及）。此处只断言「主题是中文语义域名、不再是 Unit N」，
+    // 不写死具体域名 —— 域表将来调整时这条不该红。
+    check('高中册按语义域切关（主题不再是课本单元 Unit N）',
+        /^[\u4e00-\u9fa5]{2,8}$/.test(hsInfo.theme || '') && !/^Unit/.test(hsInfo.theme || ''),
+        `theme=${hsInfo.theme}`);
+    check('高中册主题数 = 语义域数（远多于原来的 5 个课本单元）',
+        hsInfo.themeCount >= 25, `themes=${hsInfo.themeCount} first3=${hsInfo.first3}`);
     // 词量是源清单口径（稳定）；关数随「每关几对」变化，故只与引导数据自洽校验，不写死
     check('必修1 收录 311 词且关数与引导数据自洽',
         hsInfo.bookWord === 311 && hsInfo.levels === hsInfo.declared && hsInfo.levels > 0,
@@ -2409,8 +2670,8 @@ async function main() {
     check('S12 全选：26 册全勾上、文案翻成「取消全选」',
         allSel.n === 26 && allSel.all === true && allSel.label === '取消全选',
         `n=${allSel.n} label=${allSel.label}`);
-    check('S12 全选后汇总 = 26 册 / 3452 关 / 20191 词（含大学 2 册 / 2203 关 / 13159 词）',
-        /已选 26 册/.test(allSel.sum) && /3452 关/.test(allSel.sum) && /20191 词/.test(allSel.sum),
+    check('S12 全选后汇总 = 26 册 / 3534 关 / 20191 词（含大学 2 册 / 2203 关 / 13159 词）',
+        /已选 26 册/.test(allSel.sum) && /3534 关/.test(allSel.sum) && /20191 词/.test(allSel.sum),
         allSel.sum);
     await shot('24-export-dialog-all');
 
@@ -2935,8 +3196,612 @@ async function main() {
     check('S13 移动端右上角的关闭叉不与标题角标重叠',
         !!sMob && sMob.closeClear, sMob ? `closeClear=${sMob.closeClear}` : 'null');
     await shot('31-search-mobile');
+    /* ⚠️ 离场前必须关掉：弹窗遮罩是 fixed + inset:0，留着它，下一段的所有点击都会落在遮罩上
+       （实测踩过：S14 点类别标签被遮罩吃掉 → 面板一直打不开，还顺手把搜索弹窗关了，
+       现象看起来像「新功能坏了」，其实是上一段没收拾干净）。 */
+    await clickSel('#wm-search-modal .wm-modal-close');
+    await sleep(260);
+    check('S13 移动端也能关掉搜索弹窗（离场不留遮挡，后续段落的点击才落得到页面上）',
+        !(await searchVisible()));
     await send('Emulation.setDeviceMetricsOverride',
         { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+    await sleep(240);
+
+    /* ---------- S14. 类别面板 + 分类练习（过滤模式） ---------- */
+    console.log('\n— S14 类别面板 / 分类练习 —');
+
+    const s14PanelVisible = () => evalJs(`(() => {
+        const m = document.getElementById('wm-theme-modal');
+        return !!m && m.getClientRects().length > 0;
+    })()`);
+
+    /* 起点定死：三年级上册（13 关）+ 清空练习进度。
+       选它是因为首关类别「学习用品」正好跨 2 关（下标 0、1）——
+       进、走、收尾三条路径一套跑全。 */
+    const s14 = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        localStorage.removeItem('word_match_progress_v2');
+        d.progress = {};
+        d.themeScope = null;
+        d.themeOpen = false;
+        /* 再把可能开着的弹窗一并收掉（遮罩 fixed + inset:0，留着会吃掉后面所有点击） */
+        d.searchOpen = false; d.wrongOpen = false; d.bookPickerOpen = false;
+        d.settingsOpen = false; d.exportOpen = false;
+        d.applyBook('pep-3-1', false);
+        const lv = d.allLevels['pep-3-1'];
+        const want = [];
+        lv.forEach((l, i) => { if (l.theme === lv[0].theme) want.push(i); });
+        return { bookId: d.bookId, label: d.bookLabel, levels: lv.length,
+                 theme: lv[0].theme, want: want };
+    })()`);
+    await waitCards();
+    await sleep(240);
+    check('S14 用例前提：三年级上册 13 关，首关类别正好跨 2 关',
+        s14.bookId === 'pep-3-1' && s14.levels === 13 && s14.want.length === 2,
+        s14.label + ' / ' + s14.levels + ' 关 / 类别「' + s14.theme + '」→ 关 ' + s14.want.join(','));
+
+    /* 前置守卫：没有任何弹窗遮罩盖住页面，且类别标签中心点确实点得到它自己。
+       少了这条，万一上一段留着遮挡，这里会以「面板打不开」的形式出红，
+       排查方向会被带偏到新功能上。 */
+    const s14Cover = await evalJs(`(() => {
+        const open = Array.from(document.querySelectorAll('.wm-modal-backdrop'))
+            .filter(b => getComputedStyle(b).display !== 'none');
+        const el = document.querySelector('.wm-theme');
+        const r = el ? el.getBoundingClientRect() : null;
+        const top = r ? document.elementFromPoint(Math.round(r.x + r.width / 2),
+                                                  Math.round(r.y + r.height / 2)) : null;
+        return { openCount: open.length, hitBadge: !!top && !!el && el.contains(top),
+                 topEl: top ? top.tagName + '.' + top.className : null };
+    })()`);
+    check('S14 前置：没有弹窗遮罩盖住页面，类别标签中心点真能点到它自己',
+        !!s14Cover && s14Cover.openCount === 0 && s14Cover.hitBadge,
+        s14Cover ? `openBackdrops=${s14Cover.openCount} hit=${s14Cover.topEl}` : 'null');
+
+    const s14Badge = await evalJs(`(() => {
+        const el = document.querySelector('.wm-theme');
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        return { tag: el.tagName, cursor: cs.cursor, h: Math.round(r.height),
+                 icon: !!el.querySelector('i.bi-tag-fill'),
+                 more: !!el.querySelector('.wm-theme-more'),
+                 title: el.getAttribute('title') || '',
+                 panelOpen: (() => { const m = document.getElementById('wm-theme-modal');
+                     return !!m && m.getClientRects().length > 0; })() };
+    })()`);
+    check('S14 页头类别标签是 <button>（Tab 可达），且有「点得动」的提示（指针 + 右侧小箭头）',
+        !!s14Badge && s14Badge.tag === 'BUTTON' && s14Badge.cursor === 'pointer' && s14Badge.more
+        && s14Badge.h >= 18,
+        s14Badge ? `tag=${s14Badge.tag} cursor=${s14Badge.cursor} more=${s14Badge.more} h=${s14Badge.h}` : 'null');
+    check('S14 类别标签带标签图标 + title（说清点开会看到什么）',
+        !!s14Badge && s14Badge.icon && /全部单词/.test(s14Badge.title),
+        s14Badge ? `title=${s14Badge.title}` : 'null');
+    check('S14 初始状态下类别面板是收起的', !!s14Badge && !s14Badge.panelOpen);
+
+    await clickSel('.wm-theme');
+    await sleep(320);
+    /* 期望值一律由探针自己扫本册关卡算出来（不读 themeInfo），否则是拿实现验自己 */
+    const s14Panel = await evalJs(`(() => {
+        const m = document.getElementById('wm-theme-modal');
+        if (!m || !m.getClientRects().length) return null;
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const lv = d.allLevels[d.bookId];
+        const theme = d.currentLevel.theme;
+        const want = [];
+        lv.forEach((l, i) => { if (l.theme === theme)
+            want.push({ index: i, pairs: l.pairs.map(p => ({ en: p.en, zh: p.zh })) }); });
+        const groups = Array.from(m.querySelectorAll('.wm-theme-group')).map(g => {
+            const dn = g.querySelector('.wm-theme-done');
+            return {
+                head: g.querySelector('.wm-theme-lv').innerText.trim(),
+                n: g.querySelector('.wm-theme-n').innerText.trim(),
+                done: !!dn && dn.getClientRects().length > 0,
+                words: Array.from(g.querySelectorAll('.wm-theme-word')).map(w => ({
+                    en: w.querySelector('.wm-theme-en').innerText.trim(),
+                    zh: w.querySelector('.wm-theme-zh').innerText.trim(),
+                    speak: !!w.querySelector('.wm-speak')
+                }))
+            };
+        });
+        const r = m.getBoundingClientRect();
+        return { theme: theme, want: want, groups: groups,
+                 h5: m.querySelector('h5').innerText.replace(/\s+/g, ' ').trim(),
+                 total: m.querySelector('.wm-count-total').innerText.trim(),
+                 desc: m.querySelector('p').innerText.replace(/\s+/g, ' ').trim(),
+                 practice: document.getElementById('wm-theme-practice').innerText.replace(/\s+/g, ' ').trim(),
+                 practiceIcon: !!document.querySelector('#wm-theme-practice i.bi-play-fill'),
+                 cancel: !!document.getElementById('wm-theme-cancel'),
+                 closeIcon: !!m.querySelector('.wm-modal-close i.bi-x-lg'),
+                 left: Math.round(r.left), right: Math.round(r.right), vw: window.innerWidth };
+    })()`);
+    check('S14 点类别标签弹出面板，标题写明「类别：<主题>」',
+        !!s14Panel && s14Panel.h5 === '类别：' + s14.theme && s14Panel.theme === s14.theme,
+        s14Panel ? s14Panel.h5 : 'null');
+    check('S14 右上角角标 = 该类别在本册的关卡数 + 单词数（两个数都给）',
+        !!s14Panel && s14Panel.total === s14Panel.want.length + ' 关 · '
+        + s14Panel.want.reduce((n, g) => n + g.pairs.length, 0) + ' 个单词',
+        s14Panel ? s14Panel.total : 'null');
+    check('S14 说明文字点明「是哪一册的这个类别」',
+        !!s14Panel && s14Panel.desc.includes(s14.label) && s14Panel.desc.includes('按关卡分组'),
+        s14Panel ? s14Panel.desc : 'null');
+    check('S14 关卡分组与真实数据一一对应（关号 / 每关单词数 / 顺序都按本册关卡顺序）',
+        !!s14Panel && s14Panel.groups.length === s14Panel.want.length
+        && s14Panel.groups.every((g, i) => g.head === '第 ' + (s14Panel.want[i].index + 1) + ' 关'
+            && g.n === s14Panel.want[i].pairs.length + ' 个单词'),
+        s14Panel ? s14Panel.groups.map(g => g.head + '/' + g.n).join(' ') : 'null');
+    check('S14 每个分组里的单词与词库逐字一致（en/zh 全等、顺序不变、不重不漏）',
+        !!s14Panel && s14Panel.groups.every((g, i) =>
+            g.words.length === s14Panel.want[i].pairs.length
+            && g.words.every((w, j) => w.en === s14Panel.want[i].pairs[j].en
+                && w.zh === s14Panel.want[i].pairs[j].zh)),
+        s14Panel ? s14Panel.groups.map((g, i) => g.head + ':' + g.words.map(w => w.en).join('/')).join(' | ') : 'null');
+    check('S14 每个单词都带朗读按钮（与错题本 / 搜索面板同构）',
+        !!s14Panel && s14Panel.groups.every(g => g.words.length > 0 && g.words.every(w => w.speak)));
+    check('S14 还没练过时不显示「已完成」标记',
+        !!s14Panel && s14Panel.groups.every(g => !g.done));
+    check('S14 面板底部是【练习本分类】主按钮（带播放图标）+【关闭】，右上角有关闭叉',
+        !!s14Panel && /练习本分类/.test(s14Panel.practice) && s14Panel.practiceIcon
+        && s14Panel.cancel && s14Panel.closeIcon,
+        s14Panel ? `practice=${s14Panel.practice}` : 'null');
+    check('S14 面板完整落在视口内',
+        !!s14Panel && s14Panel.left >= 0 && s14Panel.right <= s14Panel.vw + 1,
+        s14Panel ? `left=${s14Panel.left} right=${s14Panel.right} vw=${s14Panel.vw}` : 'null');
+    await shot('32-theme-panel');
+
+    await clickSel('#wm-theme-modal .wm-modal-close');
+    await sleep(260);
+    check('S14 点右上角关闭叉可关面板', !(await s14PanelVisible()));
+    await clickSel('.wm-theme');
+    await sleep(280);
+    await send('Input.dispatchKeyEvent',
+        { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await send('Input.dispatchKeyEvent',
+        { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await sleep(280);
+    check('S14 按 Esc 也能关（与选册 / 错题本 / 搜索一致）', !(await s14PanelVisible()));
+
+    /* --- 【练习本分类】-> 过滤模式 --- */
+    await clickSel('.wm-theme');
+    await sleep(280);
+    await clickSel('#wm-theme-practice');
+    await sleep(380);
+    const s14Scope = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const bar = document.querySelector('.wm-scope-bar');
+        const nav = document.querySelectorAll('.wm-nav .btn');
+        return { modalOpen: (() => { const m = document.getElementById('wm-theme-modal');
+                     return !!m && m.getClientRects().length > 0; })(),
+                 barVisible: !!bar && bar.getClientRects().length > 0,
+                 barText: bar ? bar.innerText.replace(/\s+/g, ' ').trim() : '',
+                 theme: d.themeScope ? d.themeScope.theme : null,
+                 indexes: d.themeScope ? d.themeScope.indexes.slice() : null,
+                 wordCount: d.themeScope ? d.themeScope.wordCount : 0,
+                 levelIndex: d.levelIndex, levelsLen: d.levels.length,
+                 counter: document.querySelector('.wm-counter').innerText.replace(/\s+/g, ''),
+                 navMid: document.querySelector('.wm-nav-mid').innerText.replace(/\s+/g, ' ').trim(),
+                 segOut: document.querySelectorAll('.wm-seg.is-out').length,
+                 segTotal: document.querySelectorAll('.wm-seg').length,
+                 prevDisabled: nav[0].disabled,
+                 nextText: nav[nav.length - 1].innerText.replace(/\s+/g, ''),
+                 nextDisabled: nav[nav.length - 1].disabled };
+    })()`);
+    check('S14 点【练习本分类】：面板关闭 + 进入过滤模式（作用域状态条出现）',
+        !!s14Scope && !s14Scope.modalOpen && s14Scope.barVisible && s14Scope.theme === s14.theme,
+        s14Scope ? `bar=${s14Scope.barText}` : 'null');
+    check('S14 作用域正好覆盖该类别那几关（下标与独立算出来的完全一致）',
+        !!s14Scope && JSON.stringify(s14Scope.indexes) === JSON.stringify(s14.want),
+        s14Scope ? `scope=${JSON.stringify(s14Scope.indexes)} want=${JSON.stringify(s14.want)}` : 'null');
+    check('S14 起点 = 该类别第一关；「第 N 关」显示的仍是本册真实关号（不是作用域内的序号）',
+        !!s14Scope && s14Scope.levelIndex === s14.want[0]
+        && s14Scope.counter === (s14.want[0] + 1) + '/' + s14Scope.levelsLen
+        && s14Scope.navMid === '第 ' + (s14.want[0] + 1) + ' 关 / 共 ' + s14Scope.levelsLen + ' 关',
+        s14Scope ? `levelIndex=${s14Scope.levelIndex} counter=${s14Scope.counter} navMid=${s14Scope.navMid}` : 'null');
+    check('S14 状态条报出类别名与「第 x/n 关 · 共 M 个单词」',
+        !!s14Scope && /分类练习/.test(s14Scope.barText) && s14Scope.barText.includes(s14.theme)
+        && new RegExp('第 1 / ' + s14.want.length + ' 关 · 共 ' + s14Scope.wordCount + ' 个单词')
+            .test(s14Scope.barText),
+        s14Scope ? s14Scope.barText : 'null');
+    check('S14 进度条把范围外的关卡压暗（is-out = 本册关数 - 作用域关数，总分段数不变）',
+        !!s14Scope && s14Scope.segOut === s14Scope.levelsLen - s14.want.length
+        && s14Scope.segTotal === s14Scope.levelsLen,
+        s14Scope ? `is-out=${s14Scope.segOut} total=${s14Scope.segTotal} levels=${s14Scope.levelsLen}` : 'null');
+
+    /* 光有 is-out 这个类不算数：两种灰（#ebedf0 / #f4f6f8）在 13 段这种密度下**肉眼分不出**，
+       等于没标。所以直接量计算出来的颜色，要求「范围内未完成段」与「范围外段」明显不同色。 */
+    const s14Seg = await evalJs(`(() => {
+        const bar = document.querySelector('.wm-progress');
+        const segs = Array.from(bar.querySelectorAll('.wm-seg'));
+        const bg = (el) => el ? getComputedStyle(el).backgroundColor : null;
+        /* 期望值从页面自己的变量取：.wm-counter b 就是 --wm-accent */
+        const counterB = document.querySelector('.wm-counter b');
+        const rgb = (c) => (c || '').replace(/\s/g, '');
+        return { scoped: bar.classList.contains('is-scoped'),
+                 inScope: rgb(bg(segs[1])),            // 作用域内、未完成
+                 out: rgb(bg(segs[segs.length - 1])),  // 作用域外
+                 current: rgb(bg(segs[0])),
+                 accent: rgb(counterB ? getComputedStyle(counterB).color : '') };
+    })()`);
+    check('S14 进度条标出「本次要练哪几段」：范围内未完成段与范围外段明显不同色（浅蓝 vs 淡灰）',
+        !!s14Seg && s14Seg.scoped && s14Seg.inScope !== s14Seg.out
+        && s14Seg.inScope !== s14Seg.current && s14Seg.out !== s14Seg.current,
+        s14Seg ? `in=${s14Seg.inScope} out=${s14Seg.out} current=${s14Seg.current}` : 'null');
+    check('S14 当前关仍是强调色（没被新的浅蓝规则盖掉）',
+        !!s14Seg && s14Seg.current === s14Seg.accent,
+        s14Seg ? `current=${s14Seg.current} accent=${s14Seg.accent}` : 'null');
+    check('S14 站在作用域第一关：「上一关」禁用（走不出作用域）',
+        !!s14Scope && s14Scope.prevDisabled && !s14Scope.nextDisabled
+        && /下一关/.test(s14Scope.nextText),
+        s14Scope ? `prevOff=${s14Scope.prevDisabled} next=${s14Scope.nextText}` : 'null');
+    await shot('33-theme-scope');
+
+    await clickSel('.wm-nav .btn:last-child');
+    await sleep(340);
+    const s14Next = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const nav = document.querySelectorAll('.wm-nav .btn');
+        const bar = document.querySelector('.wm-scope-bar');
+        return { levelIndex: d.levelIndex, theme: d.currentLevel.theme,
+                 prevDisabled: nav[0].disabled,
+                 nextText: nav[nav.length - 1].innerText.replace(/\s+/g, ''),
+                 nextDisabled: nav[nav.length - 1].disabled,
+                 bar: bar ? bar.innerText.replace(/\s+/g, ' ').trim() : '' };
+    })()`);
+    check('S14 作用域内「下一关」跳到该类别的下一关（不是本册下一关）',
+        s14Next.levelIndex === s14.want[1] && s14Next.theme === s14.theme,
+        `levelIndex=${s14Next.levelIndex}（期望 ${s14.want[1]}）theme=${s14Next.theme}`);
+    check('S14 走到作用域末关：按钮变成「结束分类」（而不是「下一册」）且可点、上一关也可用',
+        /结束分类/.test(s14Next.nextText) && !s14Next.nextDisabled && !s14Next.prevDisabled,
+        `next=${s14Next.nextText} off=${s14Next.nextDisabled} prevOff=${s14Next.prevDisabled}`);
+    check('S14 状态条进度跟着走（第 2/2 关）',
+        new RegExp('第 2 / ' + s14.want.length + ' 关').test(s14Next.bar), s14Next.bar);
+
+    await clickSel('.wm-nav .btn:last-child');
+    await sleep(360);
+    const s14Exit = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const bar = document.querySelector('.wm-scope-bar');
+        const nav = document.querySelectorAll('.wm-nav .btn');
+        return { scope: d.themeScope, levelIndex: d.levelIndex,
+                 barVisible: !!bar && bar.getClientRects().length > 0,
+                 segOut: document.querySelectorAll('.wm-seg.is-out').length,
+                 nextText: nav[nav.length - 1].innerText.replace(/\s+/g, '') };
+    })()`);
+    check('S14 点「结束分类」退出过滤模式：作用域清空、状态条收起、进度条恢复整册',
+        !!s14Exit && s14Exit.scope === null && !s14Exit.barVisible && s14Exit.segOut === 0,
+        s14Exit ? `scope=${JSON.stringify(s14Exit.scope)} bar=${s14Exit.barVisible} is-out=${s14Exit.segOut}` : 'null');
+    check('S14 退出时人不被挪走（仍站在刚才那一关），按钮回到「下一关」',
+        !!s14Exit && s14Exit.levelIndex === s14.want[1] && /下一关/.test(s14Exit.nextText),
+        s14Exit ? `levelIndex=${s14Exit.levelIndex} next=${s14Exit.nextText}` : 'null');
+
+    /* --- 已练过一关：面板标「已完成」，再进过滤模式应从「第一个还没练过的关」起 --- */
+    await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        d.progress[d.bookId] = [${s14.want[0]}];
+        d.progress = Object.assign({}, d.progress);
+        d.levelIndex = ${s14.want[0]};
+        d.loadLevel();
+        return true;
+    })()`);
+    await sleep(220);
+    await clickSel('.wm-theme');
+    await sleep(300);
+    const s14Marks = await evalJs(`(() => {
+        const m = document.getElementById('wm-theme-modal');
+        return Array.from(m.querySelectorAll('.wm-theme-group')).map(g => {
+            const dn = g.querySelector('.wm-theme-done');
+            return !!dn && dn.getClientRects().length > 0;
+        });
+    })()`);
+    check('S14 已练过的关卡在面板里标「已完成」（只标它一个）',
+        s14Marks.length === 2 && s14Marks[0] === true && s14Marks[1] === false,
+        s14Marks.join(','));
+    await clickSel('#wm-theme-practice');
+    await sleep(360);
+    const s14Resume = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const bar = document.querySelector('.wm-scope-bar');
+        return { levelIndex: d.levelIndex,
+                 indexes: d.themeScope ? d.themeScope.indexes.slice() : null,
+                 bar: bar ? bar.innerText.replace(/\s+/g, ' ').trim() : '' };
+    })()`);
+    check('S14 再点【练习本分类】从该类别第一个「还没练过」的关开始（练过的关不重来）',
+        !!s14Resume.indexes && s14Resume.levelIndex === s14.want[1]
+        && new RegExp('第 2 / ' + s14.want.length + ' 关').test(s14Resume.bar),
+        `levelIndex=${s14Resume.levelIndex} bar=${s14Resume.bar}`);
+
+    await clickSel('.wm-scope-exit');
+    await sleep(320);
+    check('S14 状态条上的【退出】也能退出过滤模式',
+        await evalJs(`(() => {
+            const d = Alpine.$data(document.querySelector('.wm-root'));
+            const bar = document.querySelector('.wm-scope-bar');
+            return d.themeScope === null && !(bar && bar.getClientRects().length > 0);
+        })()`));
+
+    /* --- 过关收尾：作用域末关打完 -> 「本分类练完」+ 自动退出（不弹本册通关窗） --- */
+    await clickSel('.wm-theme');
+    await sleep(280);
+    await clickSel('#wm-theme-practice');
+    await sleep(360);
+    await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        d.levelWrong = 0;
+        d.completeLevel();
+        return true;
+    })()`);
+    await sleep(220);
+    const s14Finish = await evalJs(`(() => {
+        const f = document.querySelector('.wm-flash');
+        const fin = document.querySelector('.wm-modal.is-finish');
+        return { flash: f && f.getClientRects().length ? f.lastElementChild.textContent.trim() : '',
+                 finishModal: !!fin && fin.getClientRects().length > 0 };
+    })()`);
+    check('S14 作用域末关打完给的是「本分类练完」，不弹「本册全部通关」（那个弹窗讲的是整册 + 下一册）',
+        /本分类练完/.test(s14Finish.flash) && !s14Finish.finishModal,
+        `flash=${s14Finish.flash} finishModal=${s14Finish.finishModal}`);
+    await sleep(1300);   // 等自动退出（1150ms）
+    const s14After = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const bar = document.querySelector('.wm-scope-bar');
+        const sortNum = a => a.slice().sort((x, y) => x - y);
+        return { scope: d.themeScope, levelIndex: d.levelIndex,
+                 barVisible: !!bar && bar.getClientRects().length > 0,
+                 progress: sortNum(d.progress[d.bookId] || []),
+                 stored: sortNum((JSON.parse(localStorage.getItem('word_match_progress_v2') || '{}')[d.bookId]) || []) };
+    })()`);
+    check('S14 分类练完自动退出过滤模式，人仍站在原地',
+        !!s14After && s14After.scope === null && !s14After.barVisible
+        && s14After.levelIndex === s14.want[1],
+        s14After ? `scope=${JSON.stringify(s14After.scope)} bar=${s14After.barVisible} levelIndex=${s14After.levelIndex}` : 'null');
+    check('S14 作用域内过关的进度记在**本册真实关卡下标**上（不是作用域内的序号），且已落盘',
+        !!s14After && JSON.stringify(s14After.progress) === JSON.stringify(s14.want)
+        && JSON.stringify(s14After.stored) === JSON.stringify(s14.want),
+        s14After ? `progress=${JSON.stringify(s14After.progress)} stored=${JSON.stringify(s14After.stored)} want=${JSON.stringify(s14.want)}` : 'null');
+
+    /* --- 换册：作用域里的下标只对上一册有意义，必须自动清掉 --- */
+    await clickSel('.wm-theme');
+    await sleep(280);
+    await clickSel('#wm-theme-practice');
+    await sleep(340);
+    await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const other = d.books.find(b => b.id !== d.bookId && b.stage === '小学');
+        d.applyBook(other.id, false);
+        return true;
+    })()`);
+    await sleep(280);
+    check('S14 换册自动退出分类练习（作用域里的关卡下标只对上一册有意义）',
+        await evalJs(`(() => {
+            const d = Alpine.$data(document.querySelector('.wm-root'));
+            const bar = document.querySelector('.wm-scope-bar');
+            return d.themeScope === null && !(bar && bar.getClientRects().length > 0);
+        })()`));
+
+    /* --- 窄屏：类别标签仍可点、面板与单词行都不出界 --- */
+    await send('Emulation.setDeviceMetricsOverride',
+        { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    await sleep(300);
+    await clickSel('.wm-theme');
+    await sleep(320);
+    const s14Mob = await evalJs(`(() => {
+        const m = document.getElementById('wm-theme-modal');
+        const r = m.getBoundingClientRect();
+        const el = document.querySelector('.wm-theme');
+        const br = el.getBoundingClientRect();
+        const rows = Array.from(document.querySelectorAll('.wm-theme-word')).map(w => {
+            const wr = w.getBoundingClientRect();
+            return { right: Math.round(wr.right), h: Math.round(wr.height) };
+        });
+        return { left: Math.round(r.left), right: Math.round(r.right), vw: window.innerWidth,
+                 badgeVisible: el.getClientRects().length > 0 && br.width > 0,
+                 badgeLeft: Math.round(br.left), badgeRight: Math.round(br.right),
+                 rows: rows,
+                 overflowX: document.documentElement.scrollWidth > window.innerWidth + 1 };
+    })()`);
+    check('S14 移动端：类别标签仍在视口内可点，面板不出横向滚动条',
+        !!s14Mob && s14Mob.badgeVisible && s14Mob.badgeLeft >= 0 && s14Mob.badgeRight <= s14Mob.vw + 1
+        && s14Mob.left >= 0 && s14Mob.right <= s14Mob.vw + 1 && !s14Mob.overflowX,
+        s14Mob ? `badge=${s14Mob.badgeLeft}~${s14Mob.badgeRight} modal=${s14Mob.left}~${s14Mob.right} vw=${s14Mob.vw} overflowX=${s14Mob.overflowX}` : 'null');
+    check('S14 移动端：单词行都没出界（自动列宽收成一列也不溢出）',
+        !!s14Mob && s14Mob.rows.length > 0 && s14Mob.rows.every(w => w.right <= s14Mob.vw + 1),
+        s14Mob ? `行数=${s14Mob.rows.length} right=${s14Mob.rows.map(w => w.right).join(',')}` : 'null');
+    await shot('34-theme-mobile');
+    await clickSel('#wm-theme-cancel');
+    await sleep(260);
+    check('S14 移动端点【关闭】可关面板', !(await s14PanelVisible()));
+    await send('Emulation.setDeviceMetricsOverride',
+        { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+    await sleep(240);
+
+    /* ---------- S14b. 分类作用域 × 自动学习 ---------- */
+    /* 页面支持 ?wmStep=&wmThink=&wmGap=&wmBookGap= 覆盖自动学习节奏（见 AUTO_* 常量），
+       否则「跑完一个分类」要一两分钟。节奏是页面加载时读一次的，所以必须重进页面。
+       挑类别有三条约束，每条都对着下面一条断言 —— 少了任何一条，这段就失去判别力：
+       ① 首关不在本册第 1 关：否则「从该分类第一关起」与「从第 1 关起」根本没差别；
+       ② 末关不是本册最后一关：这样「练完分类就停」才与「本册学完才跨册」分得开
+          （两个分支的判据都是 nextIndexOf < 0，混在一起就测不出分支选对没有）；
+       ③ 优先跨 2 关、单词最少：2 关才能验「按分类推进」，单词少纯粹为了跑得快。 */
+    console.log('\n— S14b 分类作用域 × 自动学习（快速节奏） —');
+    const S14B_FAST = '?wmStep=120&wmThink=120&wmGap=150&wmBookGap=150';
+    await send('Page.navigate', { url: PAGE + S14B_FAST });
+    await waitCards();
+    await evalJs(`(() => {
+        localStorage.setItem('word_match_book_v1', 'pep-3-1');
+        localStorage.removeItem('word_match_progress_v2');
+        localStorage.removeItem('word_match_auto_progress_v2');
+        return true;
+    })()`);
+    await send('Page.navigate', { url: PAGE + S14B_FAST });
+    await waitCards();
+    await sleep(380);
+
+    const s14bPick = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const lv = d.levels;
+        const done = {};
+        const cands = [];
+        /* ⚠️ 必须从 i=0 扫起。从 1 扫的话，首个类别（下标 0）会被当成「首次出现在 1」，
+           firstIndex 与实际不符 → 约束①形同虚设，后面几条断言的期望值全跟着错
+           （实测踩过：挑出「学习用品」却报 firstIndex=1，而它的 indexes 是 [0,1]）。 */
+        for (let i = 0; i < lv.length; i++) {
+            const theme = lv[i].theme || '';
+            if (!theme || done[theme]) continue;
+            done[theme] = true;
+            if (i < 1) continue;                            /* 约束①：首关不能在本册第 1 关 */
+            const idxs = [];
+            lv.forEach((l, j) => { if ((l.theme || '') === theme) idxs.push(j); });
+            const last = idxs[idxs.length - 1];
+            if (last >= lv.length - 1) continue;            /* 约束②：末关不能是本册最后一关 */
+            var words = 0;
+            idxs.forEach(j => { words += (lv[j].pairs || []).length; });
+            cands.push({ theme: theme, firstIndex: i, lastIndex: last, indexes: idxs,
+                         levelCount: idxs.length, words: words });
+        }
+        const multi = cands.filter(c => c.levelCount >= 2);
+        const pool = multi.length ? multi : cands;
+        let best = null;
+        pool.forEach(c => { if (!best || c.words < best.words) best = c; });
+        return { best: best, levels: lv.length, bookId: d.bookId, cands: cands.length, multi: multi.length };
+    })()`);
+    check('S14b 用例前提：挑到「首关不在本册第 1 关 + 末关不是本册最后一关 + 跨 ≥2 关」的类别（这三条才是判别力所在）',
+        !!s14bPick && !!s14bPick.best && s14bPick.best.firstIndex >= 1
+        && s14bPick.best.firstIndex === s14bPick.best.indexes[0]
+        && s14bPick.best.levelCount >= 2
+        && s14bPick.best.lastIndex < s14bPick.levels - 1,
+        s14bPick && s14bPick.best
+            ? ('「' + s14bPick.best.theme + '」= 关 ' + s14bPick.best.indexes.join(',')
+                + ' / 本册共 ' + s14bPick.levels + ' 关 / ' + s14bPick.best.words + ' 词 / 候选 '
+                + s14bPick.cands + ' 个（跨多关的 ' + s14bPick.multi + ' 个）')
+            : 'null');
+    const s14bT = s14bPick.best;
+
+    /* 站到该类别第一关 -> 点类别标签 -> 【练习本分类】 */
+    await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        d.levelIndex = ${s14bT.firstIndex};
+        d.loadLevel();
+        return true;
+    })()`);
+    await sleep(300);
+    await clickSel('.wm-theme');
+    await sleep(320);
+    /* 面板打开的这一刻 themeScope 还是 null —— 提示语本就该是「从第 1 关」。
+       把这一刻也读下来，和进入分类后的读数对照，才能证明提示是**动态**的，
+       而不是我把文案换成了另一个写死的字符串（在进作用域前断言，等于测了个寂寞，踩过）。 */
+    const s14bTitleBefore = await evalJs(`(() => {
+        const b = document.querySelector('.wm-toolbar-actions button[title*="自动"]');
+        return b ? b.getAttribute('title') : '';
+    })()`);
+    await clickSel('#wm-theme-practice');
+    await sleep(380);
+    const s14bTitle = await evalJs(`(() => {
+        const b = document.querySelector('.wm-toolbar-actions button[title*="自动"]');
+        return b ? b.getAttribute('title') : '';
+    })()`);
+    check('S14b 【自动学习】按钮的提示是**动态**的：分类练习里改口成「从该分类第一关开始」（再写「从第 1 关」就是假话）',
+        s14bTitleBefore.indexOf('从第 1 关') >= 0
+        && s14bTitle.indexOf('「' + s14bT.theme + '」') >= 0 && s14bTitle.indexOf('分类') >= 0
+        && s14bTitle.indexOf('从第 1 关') < 0,
+        '进入前=「' + s14bTitleBefore + '」 / 进入后=「' + s14bTitle + '」');
+    const s14bScope = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        return { levelIndex: d.levelIndex,
+                 indexes: d.themeScope ? d.themeScope.indexes.slice() : null };
+    })()`);
+    check('S14b 【练习本分类】把作用域收到该类别那几关，并落在该分类第一关',
+        !!s14bScope.indexes
+        && JSON.stringify(s14bScope.indexes) === JSON.stringify(s14bT.indexes)
+        && s14bScope.levelIndex === s14bT.firstIndex && s14bT.firstIndex !== 0,
+        `levelIndex=${s14bScope.levelIndex} want=${s14bT.firstIndex} indexes=${JSON.stringify(s14bScope.indexes)}`);
+
+    /* 挪到该分类**最后一关**再开自动学习：这样「起点」才是可判别的量 ——
+       站在第一关点下去的话，接没接上 autoStartIndex 结果都一样，等于没测。 */
+    await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        d.levelIndex = d.themeScope.indexes[d.themeScope.indexes.length - 1];
+        d.loadLevel();
+        return true;
+    })()`);
+    await sleep(300);
+    const s14bStand = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const a = d.themeScope ? d.themeScope.indexes : [];
+        return { levelIndex: d.levelIndex, last: a.length ? a[a.length - 1] : -1 };
+    })()`);
+    check('S14b 实验前提：开自动学习前人贴在该分类**最后一关**（起点这条才有判别力）',
+        s14bStand.levelIndex === s14bT.lastIndex && s14bStand.levelIndex === s14bStand.last,
+        `本册下标 ${s14bStand.levelIndex} / 分类末关 ${s14bStand.last}`);
+
+    await clickSel('.wm-toolbar-actions button[title*="自动"]');
+    /* 点完立刻同步读一次：startAuto 在点击回调里同步把 levelIndex 挪到 autoStartIndex()，
+       这一刻读到的是真正的起点，不用靠轮询去猜（轮询可能错过一个短关） */
+    const s14bStart = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const bar = document.querySelector('.wm-auto-bar');
+        return { levelIndex: d.levelIndex, auto: d.autoMode,
+                 scope: d.themeScope ? d.themeScope.indexes.slice() : null,
+                 bar: !!bar && bar.getClientRects().length > 0 };
+    })()`);
+    const canSpeakB = await speakProbeSetup();   // 静音路径下 speakThenWait 固定等 600ms/词，接管后 120ms
+    await sleep(500);
+    await shot('35-theme-scope-auto');
+    check('S14b 分类练习里点【自动学习】从该分类第一关起（不被拽回本册第 1 关，也不落在刚站的那关）',
+        !!s14bStart && s14bStart.auto && s14bStart.levelIndex === s14bT.firstIndex
+        && s14bStart.levelIndex !== s14bT.lastIndex
+        && JSON.stringify(s14bStart.scope) === JSON.stringify(s14bT.indexes),
+        `起点=本册下标 ${s14bStart.levelIndex} / want ${s14bT.firstIndex} / 刚站 ${s14bT.lastIndex} / scope=${JSON.stringify(s14bStart.scope)}`);
+
+    /* 全程轮询：记下走到过哪些关，并盯住有没有踩到作用域外面 */
+    let sawAuto = s14bStart.auto, overrun = null, crossBook = false;
+    const seenIdx = [s14bStart.levelIndex];
+    const t0b = Date.now();
+    while (Date.now() - t0b < 30000) {
+        const s = await evalJs(`(() => {
+            const d = Alpine.$data(document.querySelector('.wm-root'));
+            const bar = document.querySelector('.wm-auto-bar');
+            return { idx: d.levelIndex, auto: d.autoMode, book: d.bookId,
+                     scope: d.themeScope ? d.themeScope.indexes.slice() : null,
+                     bar: !!bar && bar.getClientRects().length > 0 };
+        })()`);
+        if (s.auto) {
+            sawAuto = true;
+            if (seenIdx.indexOf(s.idx) < 0) seenIdx.push(s.idx);
+            if (!s.scope || s.scope.indexOf(s.idx) < 0) overrun = s.idx;
+        }
+        if (s.book !== 'pep-3-1') crossBook = true;
+        if (sawAuto && !s.auto) break;      // 自动学习自己收尾了
+        await sleep(70);
+    }
+    const s14bEnd = await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const bar = document.querySelector('.wm-auto-bar');
+        return { auto: d.autoMode, scope: d.themeScope, book: d.bookId, levelIndex: d.levelIndex,
+                 bar: !!bar && bar.getClientRects().length > 0 };
+    })()`);
+    if (canSpeakB) await speakProbeTeardown();
+
+    check('S14b 自动学习全程没走出分类作用域（没有跑到范围外的关卡上）',
+        overrun === null && seenIdx.length > 0 && seenIdx.every(i => s14bT.indexes.indexOf(i) >= 0),
+        `越界到本册下标 ${overrun} / 走过 ${JSON.stringify(seenIdx)} / 范围 ${JSON.stringify(s14bT.indexes)}`);
+    check('S14b 自动学习按分类把每一关都走到了（不是只走了第一关就停）',
+        s14bT.indexes.every(i => seenIdx.indexOf(i) >= 0),
+        `走过 ${JSON.stringify(seenIdx)} / 范围 ${JSON.stringify(s14bT.indexes)}`);
+    check('S14b 分类末关练完就收尾：自动学习已停 + 作用域已清 + 状态条已收起',
+        !!s14bEnd && !s14bEnd.auto && s14bEnd.scope === null && !s14bEnd.bar,
+        s14bEnd ? `auto=${s14bEnd.auto} scope=${s14bEnd.scope} bar=${s14bEnd.bar}` : 'null');
+    check('S14b 分类练完不跨册、也不越到本册下一关（末关不是本册最后一关，走错分支就会滑到下一册或下标 -1）',
+        !crossBook && !!s14bEnd && s14bEnd.book === 'pep-3-1' && s14bEnd.levelIndex === s14bT.lastIndex,
+        s14bEnd ? `book=${s14bEnd.book} 停在 ${s14bEnd.levelIndex} / want ${s14bT.lastIndex} crossBook=${crossBook}` : 'null');
+
+    /* 复位：别把 S14 的状态留给后面的运行时错误采集 */
+    await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        localStorage.removeItem('word_match_progress_v2');
+        d.progress = {};
+        d.themeScope = null;
+        d.applyBook('pep-3-1', false);
+        return true;
+    })()`);
     await sleep(240);
 
     /* ---------- S11. 运行期错误 ---------- */

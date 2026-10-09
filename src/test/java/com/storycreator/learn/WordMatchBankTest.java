@@ -64,12 +64,26 @@ class WordMatchBankTest {
         }
     }
 
+    /**
+     * 每关对数围绕 6 对展开。两个软指标（均值、恰好 6 对占比）随「主题粒度」漂移，
+     * 不是产品需求，故按当前词库结构取经验值：
+     *
+     * <p>2026-10-09 高中 11 册从「课文单元 Unit 1~5」重分类为跨学段统一语义域后，
+     * 主题数由 55 涨到 ~390、单册主题由 5 个涨到 32~45 个，于是出现大量 3~7 词的
+     * 小语义域（{@code splitBalanced} 对 n≤7 直接成一关，因此这些小关的对数就等于
+     * 域的词数）。均值因此由 5.54 下移到 5.28、「恰好 6 对」由 56.8% 降到 35.4%。
+     * 这是「分类准确度 vs 关卡长度」的取舍，选择了前者。
+     *
+     * <p>硬边界（每关 3~7 对、同关同主题）由别的测试钉着，未放宽；
+     * 这里改为盯「碎片关不成为主流」（≤4 对占比 ≤30%，当前 24%）。
+     */
     @Test
-    @DisplayName("每关词数围绕 6 对展开（3~7 硬边界，均值 ≥5.4，恰好 6 对的占多数）")
+    @DisplayName("每关词数围绕 6 对展开（3~7 硬边界，均值 ≥5.0，碎片关不成为主流）")
     void levels_centerAroundSixPairs() {
         int levels = 0;
         int pairs = 0;
         int exactlyTarget = 0;
+        int tiny = 0;
         for (WordMatchBank.BookInfo book : bank.getBooks()) {
             for (WordMatchBank.Level level : bank.getLevels(book.id())) {
                 int n = level.pairs().size();
@@ -78,15 +92,21 @@ class WordMatchBankTest {
                 if (n == WordMatchBank.TARGET_PAIRS) {
                     exactlyTarget++;
                 }
+                if (n <= 4) {
+                    tiny++;
+                }
             }
         }
         assertThat(levels).as("关卡总数").isPositive();
         assertThat(pairs / (double) levels)
                 .as("平均每关配对数（目标 %d）", WordMatchBank.TARGET_PAIRS)
-                .isBetween(5.4, 6.2);
+                .isBetween(5.0, 6.2);
         assertThat(exactlyTarget * 100.0 / levels)
-                .as("恰好 %d 对的关卡占比（碎片关不应成为主流）", WordMatchBank.TARGET_PAIRS)
-                .isGreaterThanOrEqualTo(50.0);
+                .as("恰好 %d 对的关卡占比", WordMatchBank.TARGET_PAIRS)
+                .isGreaterThanOrEqualTo(30.0);
+        assertThat(tiny * 100.0 / levels)
+                .as("碎片关（≤4 对）占比（细粒度语义域只够一关，但不该成为主流）")
+                .isLessThanOrEqualTo(30.0);
     }
 
     @Test

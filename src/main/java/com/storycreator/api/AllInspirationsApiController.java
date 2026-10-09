@@ -25,6 +25,9 @@ public class AllInspirationsApiController {
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
+    /** 「未归属任何项目」分组在页面上的名字（{@code project_id = 0}，项目表里查不到它）。 */
+    public static final String NO_PROJECT_TITLE = "未归属项目";
+
     private final InspirationRepository inspirationRepository;
     private final ProjectRepository projectRepository;
 
@@ -53,7 +56,7 @@ public class AllInspirationsApiController {
         for (Map.Entry<Long, List<InspirationEntity>> e : byProject.entrySet()) {
             Long pid = e.getKey();
             List<Summary> items = e.getValue().stream().map(Summary::from).toList();
-            groups.add(new ProjectGroup(pid, titles.getOrDefault(pid, "项目 " + pid), items.size(), items));
+            groups.add(new ProjectGroup(pid, groupTitle(pid, titles), items.size(), items));
         }
 
         // 项目按「最新灵感时间」倒序（组内已倒序，取首条即可；格式 yyyy-MM-dd HH:mm 可直接字符串比较）
@@ -62,7 +65,26 @@ public class AllInspirationsApiController {
             String t2 = g2.items().isEmpty() ? "" : g2.items().get(0).createdAt();
             return t2.compareTo(t1);
         });
+
+        // 「未归属项目」这一组固定置顶：它是「所有灵感」页新建灵感的默认落点，
+        // 刚记下来的东西必须一眼可见 —— 若跟着时间排序，用户会以为新建没成功。
+        groups.sort((g1, g2) -> {
+            boolean n1 = g1.projectId() == InspirationApiController.NO_PROJECT_ID;
+            boolean n2 = g2.projectId() == InspirationApiController.NO_PROJECT_ID;
+            return n1 == n2 ? 0 : (n1 ? -1 : 1);
+        });
         return groups;
+    }
+
+    /**
+     * 分组标题：0 号分组是「未归属任何项目」的灵感（见 {@link InspirationApiController#NO_PROJECT_ID}），
+     * projects 表里没有这一行，不能顺着 {@code titles} 兜底成「项目 0」。
+     */
+    private static String groupTitle(Long pid, Map<Long, String> titles) {
+        if (pid != null && pid == InspirationApiController.NO_PROJECT_ID) {
+            return NO_PROJECT_TITLE;
+        }
+        return titles.getOrDefault(pid, "项目 " + pid);
     }
 
     public record Summary(Long id, Long projectId, String title, String contentPreview, String createdAt) {

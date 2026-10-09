@@ -65,6 +65,39 @@ class BrowserSmokeTest extends BrowserSmokeSupport {
     }
 
     /**
+     * 「所有灵感」页新建**无项目**灵感：真实点击 → 真实接口 → 列表刷新，一条龙。
+     *
+     * <p>这是「允许创建无项目的灵感记录」这条需求的端到端证据：入口按钮、POST 到
+     * {@code /api/projects/0/inspirations}、保存后回落进「未归属项目」分组，任何一环断掉都会红。
+     */
+    @Test
+    void allInspirationsPage_createsProjectLessInspiration() {
+        String title = "冒烟：无项目灵感";
+        smoke("/inspirations", "#groups .card", "所有灵感", true, page -> {
+            page.evaluate("document.getElementById('toggle-add').click()");
+            page.evaluate("document.getElementById('new-title').value = '" + title + "'");
+            page.evaluate("document.getElementById('new-content').value = '点出来的无项目灵感'");
+            page.evaluate("document.getElementById('save-new').click()");
+
+            assertThat(waitForText(page, title, RENDER_TIMEOUT))
+                    .as("保存后新灵感应出现在列表里（入口 / 接口 / 刷新任一环断了都会失败）")
+                    .isTrue();
+            assertThat(page.count("#groups .card-header .bi-inbox"))
+                    .as("「未归属项目」分组要用收件箱图标和普通项目分组区分开")
+                    .isGreaterThanOrEqualTo(1);
+            assertThat(page.evaluate("[...document.querySelectorAll('#groups .card-header a')]"
+                    + ".some(a => a.getAttribute('href') === '/projects/0/inspirations')"))
+                    .as("无项目分组的入口应指向 /projects/0/inspirations")
+                    .isEqualTo("true");
+            // 存证：这一屏就是「无项目灵感 + 未归属项目分组」的成品
+            page.screenshot(ARTIFACT_DIR.resolve("inspirations-no-project.png"));
+
+            // 刚才那几次点击也可能踩出新的 JS 错误 / 请求失败，收网前再过一遍信号
+            assertClean(page, "/inspirations", true);
+        });
+    }
+
+    /**
      * 自校验：确认采集器真的能抓到运行时 JS 错误。
      *
      * <p>没有这条用例，前面所有断言都可能因为"信号压根没采集到"而恒绿——那就等于没测。
