@@ -46,7 +46,10 @@ class BrowserSmokePagesTest extends BrowserSmokeSupport {
     static Stream<PageCase> pages() {
         return Stream.of(
                 // —— 全局 ——
-                new PageCase("/", "#projectContainer", "我的创作项目", true),
+                // 首页（2026-10-09 改版）已是模块卡片墙，项目列表降级为二级页 /projects。
+                // 哨兵挑 .sc-module-links：首页四张模块卡独有的「卡内子入口清单」，/learn 的卡片墙没有它。
+                new PageCase("/", ".sc-module-links", "从这里开始", true),
+                new PageCase("/projects", "#projectContainer", "我的创作项目", true),
                 new PageCase("/settings", "#main", "全局默认模型", true),
                 new PageCase("/chat", null, "新建会话", true),
 
@@ -234,6 +237,121 @@ class BrowserSmokePagesTest extends BrowserSmokeSupport {
                         .as("第 %d 张卡的两行应长度均衡（短行 ≥ 长行 70%%，实测 %s）", i + 1, descLines[i])
                         .isGreaterThanOrEqualTo(Math.max(first, second) * 7);
             }
+        });
+    }
+
+    /**
+     * 首页的四张模块卡必须沿用教学卡片墙那套规格，且卡内子入口清单真的生效。
+     *
+     * <p>2026-10-09 改版后首页退化为纯入口页：四卡各带一个主按钮，另有数量不等的子入口
+     * （故事创作 3 / 教学 3 / 聊天 2 / 设置 5）。**子入口数量不等，最容易被它把主按钮顶歪** ——
+     * 所以这里量的还是「四卡等高 + 按钮底边对齐」，另加两条首页独有的断言：
+     * 子入口清单必须左对齐（与居中的图标/标题/描述形成层次），以及四张卡各用各的主题色
+     * （第四个 accent 是 {@code slate}，与 blue/green/violet 都不同，防止写错属性名后静默回落到默认蓝）。
+     */
+    @Test
+    @DisplayName("首页：四张模块卡共用一套规格 + 卡内子入口清单左对齐、四色各不相同")
+    void homeCardWallUsesOneSpec() {
+        smoke("/", ".sc-module-links", "从这里开始", true, page -> {
+            String spec = page.evaluate("(() => {"
+                    + "const cards = Array.from(document.querySelectorAll('main .card'));"
+                    + "const box = el => { const r = el.getBoundingClientRect();"
+                    + "    return Math.round(r.width) + 'x' + Math.round(r.height); };"
+                    + "const chips = cards.map(c => box(c.querySelector('.sc-learn-icon')));"
+                    + "const btns = cards.map(c => c.querySelector('.sc-learn-actions .btn'));"
+                    + "const rects = btns.map(b => b.getBoundingClientRect());"
+                    + "const heights = rects.map(r => Math.round(r.height));"
+                    + "const bottoms = rects.map(r => Math.round(r.bottom));"
+                    + "const bgs = btns.map(b => getComputedStyle(b).backgroundColor);"
+                    // 卡内子入口清单：必须存在、左对齐、且真的装了链接
+                    + "const links = cards.map(c => {"
+                    + "    const ul = c.querySelector('.sc-module-links');"
+                    + "    if (!ul) return 'none';"
+                    + "    return getComputedStyle(ul).textAlign + ':' + ul.querySelectorAll('a').length;"
+                    + "});"
+                    + "return [cards.length, chips.join(','), heights.join(','),"
+                    + "        bottoms.join(','), bgs.join('~'), links.join(';')].join('|');"
+                    + "})()");
+
+            String[] parts = spec.split("\\|", -1);
+            assertThat(parts).as("首页卡片墙读数应齐 6 段：%s", spec).hasSize(6);
+            assertThat(parts[0]).as("首页应有 4 张模块卡").isEqualTo("4");
+            assertThat(distinct(parts[1]))
+                    .as("四张卡的图标色块应同尺寸（实测 %s）", parts[1]).hasSize(1);
+            assertThat(distinct(parts[2]))
+                    .as("四个主按钮应同高（实测 %s）", parts[2]).hasSize(1);
+            assertThat(distinct(parts[3]))
+                    .as("四个主按钮应底边对齐 —— 子入口数量 3/3/2/5 不等也不该把按钮顶歪（实测 %s）", parts[3])
+                    .hasSize(1);
+            // 注意：按钮底色读数形如 rgb(13, 110, 253) 自带逗号，所以第 5 段是 ~ 分隔的
+            assertThat(new LinkedHashSet<>(Arrays.asList(parts[4].split("~", -1))))
+                    .as("四张卡应各用各的主题色（blue/green/violet/slate，实测 %s）", parts[4])
+                    .hasSize(4);
+
+            String[] links = parts[5].split(";", -1);
+            assertThat(links).as("四张卡都要报子入口读数：%s", parts[5]).hasSize(4);
+            for (int i = 0; i < links.length; i++) {
+                assertThat(links[i])
+                        .as("第 %d 张卡应有左对齐且非空的子入口清单（实测 %s）", i + 1, links[i])
+                        .matches("left:[1-9]\\d*");
+            }
+        });
+    }
+
+    /**
+     * 导航栏只放「一级入口」，二级入口一律下线。
+     *
+     * <p>2026-10-09 精简后：首页 + 首页那三张模块卡（AI教学 / AI聊天 / 故事创作）+ 设置下拉。
+     * 语音导出 / 导入项目已挪进 {@code /projects} 页头的按钮组 —— 这条断言就是钉住
+     * 「别再往导航栏塞二级入口」，顺带守住**顺序与文案**：
+     * 首页 → AI教学 → AI聊天 → 故事创作 → 设置▾
+     * （「项目列表」→「故事创作」、「教学」→「AI教学」、「聊天」→「AI聊天」；
+     * 两个 AI 前缀是导航栏专有，首页卡片标题没跟着改，别去「顺手统一」。）
+     */
+    @Test
+    @DisplayName("导航栏只保留一级入口：首页/AI教学/AI聊天/故事创作/设置")
+    void navKeepsOnlyTopLevelEntries() {
+        smoke("/", ".sc-module-links", "从这里开始", true, page -> {
+            // 只取一级 li（.nav-item），下拉菜单里的 li 不带这个类，天然被排除
+            String nav = page.evaluate("(() => Array.from("
+                    + "document.querySelectorAll('#site-nav ul.navbar-nav > li.nav-item > a.nav-link'))"
+                    + ".map(a => a.textContent.trim()).join(','))()");
+            assertThat(nav)
+                    .as("导航栏应只剩一级入口（二级入口如语音导出/导入项目一律下线）")
+                    .isEqualTo("首页,AI教学,AI聊天,故事创作,设置");
+        });
+    }
+
+    /**
+     * 设置下拉末位的 GitHub 外链：真浏览器里确认它渲染成了**新标签页打开**的锚点。
+     *
+     * <p>只断言 {@code nav.js} 源码里写了 URL 是不够的 —— 外链最容易出的岔子是
+     * 「模板把 target/rel 漏掉了」或「外链的地址只在 JS 常量里、根本没进 DOM」，
+     * 所以这里量的是渲染结果：文案 / href / rel，外加它与 6 个内链的分组关系。
+     *
+     * <p>⚠️ 别想着「点一下验证」：真跳转既会打死冒烟用例，也会被
+     * {@code BrowserSmokeSupport} 的「不得请求外部资源」红线拦下。只看锚点属性。
+     */
+    @Test
+    @DisplayName("设置下拉：末位 GitHub 外链新标签页打开，6 个内链保持同窗口")
+    void navSettingDropdownHasGithubLink() {
+        smoke("/", ".sc-module-links", "从这里开始", true, page -> {
+            String ext = page.evaluate("(() => {"
+                    + "var a = document.querySelector('#site-nav .dropdown-menu a[target=\"_blank\"]');"
+                    + "if (!a) return 'MISSING';"
+                    + "return [a.textContent.trim().replace(/\\s+/g, ' '), a.getAttribute('href'),"
+                    + "a.getAttribute('rel') || ''].join('|');"
+                    + "})()");
+            assertThat(ext)
+                    .as("设置下拉应有 GitHub 外链，且新标签页打开（实测 %s）", ext)
+                    .isEqualTo("Github项目|https://github.com/renfufei/Story-Creator|noopener noreferrer");
+
+            assertThat(page.count("#site-nav .dropdown-menu a.dropdown-item:not([target])"))
+                    .as("内链数量应仍是 6 个（外链另算，不能把内链也变成新窗口打开）")
+                    .isEqualTo(6);
+            assertThat(page.count("#site-nav .dropdown-menu .dropdown-divider"))
+                    .as("外链前应有一条分隔线，把它与 6 个内链分组")
+                    .isEqualTo(1);
         });
     }
 

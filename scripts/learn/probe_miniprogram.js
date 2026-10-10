@@ -128,8 +128,8 @@ function rankHolds(row, q) {
   section('A. utils/search.js —— 检索口径');
 
   const totals = bank.totals();
-  check('词库规模与 data/books.js 声明一致（26 册 / 3534 组 / 20191 词）',
-    totals.books === 26 && totals.levels === 3534 && totals.words === 20191,
+  check('词库规模与 data/books.js 声明一致（26 册 / 3546 组 / 20191 词）',
+    totals.books === 26 && totals.levels === 3546 && totals.words === 20191,
     JSON.stringify(totals));
   check('索引摊平后的行数 = 词条总数（没有漏册漏关）',
     search._size() === ALL_ROWS && ALL_ROWS === 20191,
@@ -238,7 +238,7 @@ function rankHolds(row, q) {
 
   /* 页头统计串是 bank.totals() 拼出来的，所以这里**从 totals 反推期望值**，
      别再抄第二遍数字 —— 词库规模真要变，只需要改 A 段那一处 canary
-     （'词库规模与 data/books.js 声明一致（26 册 / 3534 组 / 20191 词）'）。 */
+     （'词库规模与 data/books.js 声明一致（26 册 / 3546 组 / 20191 词）'）。 */
   const statsWant = totals.books + ' 个词库 · ' + totals.levels + ' 组 · ' + totals.words + ' 词';
   check('页头统计取自 bank.totals()（不是写死的文案）',
     idx.data.stats === statsWant, idx.data.stats);
@@ -391,7 +391,7 @@ function rankHolds(row, q) {
   const onlyBook = openPlay({ bookId: 'pep-9-1' });
   check('只给 bookId（以后加「练这一册」按钮）→ 从该册第 1 关开始',
     onlyBook.data.bookId === 'pep-9-1' && onlyBook.data.levelIndex === 0
-      && onlyBook.data.levelCount === 103,
+      && onlyBook.data.levelCount === 104,
     JSON.stringify({ id: onlyBook.data.bookId, idx: onlyBook.data.levelIndex }));
 
   const r0 = search.run('vacation').hits[0];

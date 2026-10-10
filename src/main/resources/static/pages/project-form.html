@@ -20,7 +20,7 @@
 
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div class="d-flex align-items-center gap-2">
-                    <a id="backLink" href="/" class="btn btn-outline-secondary btn-sm">
+                    <a id="backLink" href="/projects" class="btn btn-outline-secondary btn-sm">
                         <i class="bi bi-arrow-left"></i> 返回
                     </a>
                     <h2 class="mb-0" id="pageTitle">新建创作项目</h2>
@@ -129,7 +129,7 @@
 
     function renderForm() {
         var back = document.getElementById('backLink');
-        back.href = isEdit ? '/projects/' + projectId : '/';
+        back.href = isEdit ? '/projects/' + projectId : '/projects';
         document.getElementById('pageTitle').textContent = isEdit ? '编辑项目' : '新建创作项目';
         document.getElementById('btnRef').hidden = isEdit;
         document.title = (isEdit ? '编辑项目' : '新建创作项目') + ' - AI故事创作';
@@ -354,7 +354,7 @@
         try {
             await SC.api.del('/api/projects/' + projectId);
             SC.toast.success('项目已删除');
-            location.href = '/';
+            location.href = '/projects';
         } catch (e) { /* SC.api 已提示 */ }
     }
 

@@ -244,22 +244,48 @@ class PageRenderingIntegrationTest {
     // ==================== Dashboard & Project Pages ====================
 
     @Test
-    void dashboard_rendersSuccessfully() {
+    void home_rendersModuleCards() {
+        // 2026-10-09 改版：/ 由「项目列表」改为模块入口卡片墙，项目列表降级为 /projects
         ResponseEntity<String> response = restTemplate.getForEntity(url("/"), String.class);
-        assertPageOk(response, "dashboard");
-        // 首页已改造为静态页：不得再出现 Thymeleaf 痕迹，且须挂载导航栏 + Ajax 数据源
+        assertPageOk(response, "home (模块卡片首页)");
         assertThat(response.getBody())
                 .as("首页应为静态 HTML，不再使用 Thymeleaf")
                 .doesNotContain("xmlns:th")
                 .doesNotContain("th:href")
-                .as("首页应挂载共享导航栏并引用项目列表 API")
+                .as("首页应挂载共享导航栏与公共脚本")
+                .contains("id=\"site-nav\"")
+                .contains("/js/common.js")
+                .contains("/js/nav.js")
+                .as("首页应为四个模块的卡片墙（故事创作 / 教学 / 聊天 / 设置）")
+                .contains("故事创作")
+                .contains(">教学</h5>")
+                .contains(">聊天</h5>")
+                .contains(">设置</h5>")
+                .as("首页只做模块分发，本身不再渲染项目列表")
+                .contains("href=\"/projects\"")
+                .doesNotContain("id=\"projectContainer\"");
+    }
+
+    @Test
+    void projectList_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/projects"), String.class);
+        assertPageOk(response, "projects (项目列表二级页)");
+        String body = response.getBody();
+        assertThat(body)
+                .as("项目列表页应挂载导航栏、Ajax 数据源与工具栏")
                 .contains("id=\"site-nav\"")
                 .contains("/js/common.js")
                 .contains("/js/nav.js")
                 .contains("/api/projects")
-                .as("首页「导入项目」按钮应指向 TXT 导入页，而非备份导入 /import")
+                .contains("id=\"projectContainer\"")
+                .as("「导入项目」按钮应指向 TXT 导入页，而非备份导入 /import")
                 .contains("href=\"/import/txt\"")
-                .doesNotContain("href=\"/import\"");
+                .doesNotContain("href=\"/import\"")
+                .as("语音导出从导航栏下线后收在页头按钮组（2026-10-09）")
+                .contains("href=\"/tts-export\"");
+        assertThat(body.indexOf("href=\"/tts-export\""))
+                .as("语音导出按钮应排在【导入项目】的左侧")
+                .isLessThan(body.indexOf("href=\"/import/txt\""));
     }
 
     @Test
@@ -1195,7 +1221,8 @@ class PageRenderingIntegrationTest {
                 .doesNotContain("th:action")
                 .as("导入页应挂载导航栏、提交到 /import 并保留 TXT 导入入口")
                 .contains("id=\"site-nav\"")
-                .contains("data-nav=\"import\"")
+                // 导入页归属「故事创作」一级入口（导航栏已无独立的「导入项目」项，2026-10-09）
+                .contains("data-nav=\"projects\"")
                 .contains("action=\"/import\"")
                 .as("备份导入页应提供跳转到 TXT 导入页的按钮")
                 .contains("href=\"/import/txt\"")
@@ -1203,15 +1230,44 @@ class PageRenderingIntegrationTest {
     }
 
     @Test
-    void navigationImportEntry_pointsToTxtImportPage() {
-        // 导航栏「导入项目」的默认入口是 TXT 导入页；备份导入（/import）靠页内按钮进入。
+    void navigationKeepsOnlyTopLevelEntries() {
+        // 2026-10-09：导航栏精简为「一级入口」—— 首页 + 首页那三张模块卡（AI教学/AI聊天/故事创作）+ 设置下拉。
+        // 语音导出与导入项目从导航栏下线，两者都收进 /projects 页头的按钮组（见 projectList_rendersSuccessfully）。
+        // 「AI」前缀只在导航栏用，首页卡片标题仍是「教学」「聊天」（用户要求只改导航栏）。
         ResponseEntity<String> response = restTemplate.getForEntity(url("/js/nav.js"), String.class);
         assertThat(response.getStatusCode()).as("/js/nav.js 应可访问").isEqualTo(HttpStatus.OK);
         assertThat(response.getBody())
-                .as("导航栏「导入项目」应指向 /import/txt")
-                .contains("text: '导入项目'")
-                .contains("href: '/import/txt'")
-                .doesNotContain("href: '/import'");
+                .as("导航栏应保留四个一级入口")
+                .contains("text: '首页'")
+                .contains("text: 'AI教学'")
+                .contains("text: 'AI聊天'")
+                .contains("text: '故事创作'")
+                .as("旧文案已退役（「教学」「聊天」须带 AI 前缀）")
+                .doesNotContain("text: '教学'")
+                .doesNotContain("text: '聊天'")
+                .as("二级入口必须从导航栏下线")
+                .doesNotContain("text: '语音导出'")
+                .doesNotContain("text: '导入项目'")
+                .as("导航项不应再指向这两个二级页")
+                .doesNotContain("href: '/tts-export'")
+                .doesNotContain("href: '/import/txt'");
+
+        // 顺序也钉住：首页 → AI教学 → AI聊天 → 故事创作（设置下拉由模板追加在最后）。
+        String js = response.getBody();
+        assertThat(js.indexOf("text: '首页'")).as("首页应是第一个导航项")
+                .isGreaterThanOrEqualTo(0).isLessThan(js.indexOf("text: 'AI教学'"));
+        assertThat(js.indexOf("text: 'AI教学'")).as("AI教学 应排在 AI聊天 之前")
+                .isLessThan(js.indexOf("text: 'AI聊天'"));
+        assertThat(js.indexOf("text: 'AI聊天'")).as("AI聊天 应排在 故事创作 之前")
+                .isLessThan(js.indexOf("text: '故事创作'"));
+
+        // 设置下拉末位的外链（GitHub 仓库）：必须 external 标记 + 新窗口 + noopener。
+        assertThat(js)
+                .as("设置下拉末位应挂 GitHub 仓库外链（新窗口打开、带 noopener）")
+                .contains("text: 'Github项目'")
+                .contains("href: 'https://github.com/renfufei/Story-Creator'")
+                .contains("external: true")
+                .contains("rel=\"noopener noreferrer\"");
     }
 
     // ==================== 创作指导库 ====================

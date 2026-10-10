@@ -18,7 +18,7 @@
 
     <nav aria-label="breadcrumb" class="mb-2">
         <ol class="breadcrumb small mb-0">
-            <li class="breadcrumb-item"><a href="/">项目列表</a></li>
+            <li class="breadcrumb-item"><a href="/projects">项目列表</a></li>
             <li class="breadcrumb-item active" id="crumbTitle">项目详情</li>
         </ol>
     </nav>
@@ -140,7 +140,7 @@
         try {
             await SC.api.del('/api/projects/' + projectId);
             SC.toast.success('项目已删除');
-            location.href = '/';
+            location.href = '/projects';
         } catch (e) { /* SC.api 已提示 */ }
     }
 

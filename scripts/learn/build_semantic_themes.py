@@ -2,10 +2,12 @@
 # -*- coding: utf-8 -*-
 """重建 PEP 词库主题：把「按课文顺序切段」的语义主题换成按语义域归类的主题。
 
-支持两个学段
+支持三个学段
+  · primary（小学 8 册 pep-3-1 ~ pep-6-2） → primary-semantic-domains.tsv
   · junior（初中 5 册 pep-7-1 ~ pep-9-1）  → junior-semantic-domains.tsv
   · senior（高中 11 册 pep-h-1 ~ pep-h-11）→ senior-semantic-domains.tsv
-两份域表共用同一套域名（跨学段统一域池），senior 新增了
+小学与初/高中各自一套域名（小学主题=课本单元主题，域名只在小写内部复用）；
+初中/高中共用同一套域名（跨学段统一域池），senior 新增了
 政治与政府 / 科学与研究 / 经济与商业 / 宗教与信仰 四个域。
 
 输入（唯一真相）
@@ -22,9 +24,10 @@
   · 域内词序 = 域表中的顺序；域顺序 = 域表行序。
 
 用法
-  python3 scripts/learn/build_semantic_themes.py --stage senior
+  python3 scripts/learn/build_semantic_themes.py --stage primary
   python3 scripts/learn/build_semantic_themes.py --stage senior --write
-  python3 scripts/learn/build_semantic_themes.py --stage both --write
+  python3 scripts/learn/build_semantic_themes.py --stage both --write        # 初中+高中
+  python3 scripts/learn/build_semantic_themes.py --stage all --write         # 小学+初中+高中
 """
 import argparse
 import collections
@@ -38,6 +41,12 @@ JSON_PATH = os.path.join(ROOT, 'src/main/resources/learn/pep-words.json')
 SRC_DIR = os.path.join(ROOT, 'src/test/resources/learn/pep-words-source')
 
 STAGES = {
+    'primary': {
+        'label': '小学',
+        'books': ['pep-3-1', 'pep-3-2', 'pep-4-1', 'pep-4-2',
+                  'pep-5-1', 'pep-5-2', 'pep-6-1', 'pep-6-2'],
+        'dom': 'primary-semantic-domains.tsv',
+    },
     'junior': {
         'label': '初中',
         'books': ['pep-7-1', 'pep-7-2', 'pep-8-1', 'pep-8-2', 'pep-9-1'],
@@ -165,12 +174,17 @@ def rebuild(data, stage, write):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--stage', choices=['junior', 'senior', 'both'], default='both')
+    ap.add_argument('--stage', choices=['primary', 'junior', 'senior', 'both', 'all'], default='both')
     ap.add_argument('--write', action='store_true', help='覆盖 pep-words.json')
     ap.add_argument('--out', default=None, help='预览输出路径（不给则用 /tmp/<stage>-preview.json）')
     args = ap.parse_args()
 
-    stages = ['junior', 'senior'] if args.stage == 'both' else [args.stage]
+    if args.stage == 'all':
+        stages = ['primary', 'junior', 'senior']
+    elif args.stage == 'both':
+        stages = ['junior', 'senior']
+    else:
+        stages = [args.stage]
     data = json.load(open(JSON_PATH, encoding='utf-8'))
 
     all_ok = True

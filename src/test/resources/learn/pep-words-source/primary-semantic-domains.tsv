@@ -1,0 +1,79 @@
+# 人教版小学（三上~六下）语义主题表 —— 小学唯一真相
+# 格式：主题名<TAB>英文@册id,英文@册id,...
+# 特殊主题（常用功能词* / 不规则变化 / 同义表达：*）不入表，由构建脚本原样保留。
+# 域顺序 = 行序；每个主题的册内相对顺序与课本单元顺序一致（稳定拓扑排序保证）。
+学习用品	ruler@pep-3-1,pencil@pep-3-1,eraser@pep-3-1,crayon@pep-3-1,bag@pep-3-1,pen@pep-3-1,pencil box@pep-3-1,book@pep-3-1
+颜色	red@pep-3-1,green@pep-3-1,yellow@pep-3-1,blue@pep-3-1,black@pep-3-1,brown@pep-3-1,white@pep-3-1,orange@pep-3-1
+身体部位	face@pep-3-1,ear@pep-3-1,eye@pep-3-1,nose@pep-3-1,mouth@pep-3-1,arm@pep-3-1,hand@pep-3-1,head@pep-3-1,body@pep-3-1,leg@pep-3-1,foot@pep-3-1
+动物伙伴	duck@pep-3-1,pig@pep-3-1,cat@pep-3-1,bear@pep-3-1,dog@pep-3-1,elephant@pep-3-1,monkey@pep-3-1,bird@pep-3-1,tiger@pep-3-1,panda@pep-3-1,zoo@pep-3-1
+食物与餐具	bread@pep-3-1,egg@pep-3-1,cake@pep-3-1,fish@pep-3-1,rice@pep-3-1,plate@pep-3-1
+饮料	juice@pep-3-1,milk@pep-3-1,water@pep-3-1
+数字 1-10	one@pep-3-1,two@pep-3-1,three@pep-3-1,four@pep-3-1,five@pep-3-1,six@pep-3-1,seven@pep-3-1,eight@pep-3-1,nine@pep-3-1,ten@pep-3-1
+日常用语	no@pep-3-1,your@pep-3-1,OK@pep-3-1,mum@pep-3-1,school@pep-3-1,funny@pep-3-1,brother@pep-3-1
+国家与国籍	Canada@pep-3-2,USA@pep-3-2,China@pep-3-2,UK@pep-3-2
+人物与身份	student@pep-3-2,pupil@pep-3-2,teacher@pep-3-2,boy@pep-3-2,girl@pep-3-2,friend@pep-3-2
+家庭成员	father@pep-3-2,dad@pep-3-2,man@pep-3-2,woman@pep-3-2,mother@pep-3-2,sister@pep-3-2,brother@pep-3-2,family@pep-3-2
+描述人与动物	new@pep-3-2,thin@pep-3-2,fat@pep-3-2,tall@pep-3-2,short@pep-3-2,long@pep-3-2,small@pep-3-2,big@pep-3-2,giraffe@pep-3-2,beautiful@pep-3-2
+教室与设备	classroom@pep-4-1,window@pep-4-1,blackboard@pep-4-1,light@pep-4-1,picture@pep-4-1,door@pep-4-1,teacher's desk@pep-4-1,computer@pep-4-1,fan@pep-4-1,wall@pep-4-1,floor@pep-4-1,TV@pep-4-1
+文具与物品	schoolbag@pep-4-1,maths book@pep-4-1,English book@pep-4-1,Chinese book@pep-4-1,storybook@pep-4-1,notebook@pep-4-1,toy@pep-4-1,key@pep-4-1,basketball@pep-4-1
+朋友与外貌	really@pep-4-1,wow@pep-4-1,cute@pep-4-1,strong@pep-4-1,friendly@pep-4-1,quiet@pep-4-1,hair@pep-4-1,shoe@pep-4-1,glasses@pep-4-1,hat@pep-4-1,little@pep-4-1,puppy@pep-4-1
+房间与家具	bedroom@pep-4-1,living room@pep-4-1,study@pep-4-1,kitchen@pep-4-1,bathroom@pep-4-1,bed@pep-4-1,phone@pep-4-1,table@pep-4-1,sofa@pep-4-1,fridge@pep-4-1
+餐具	chopsticks@pep-4-1,bowl@pep-4-1,fork@pep-4-1,knife@pep-4-1,spoon@pep-4-1
+食物	beef@pep-4-1,chicken@pep-4-1,noodles@pep-4-1,soup@pep-4-1,vegetable@pep-4-1,dinner@pep-4-1,candy@pep-4-1
+家人与职业	parents@pep-4-1,cousin@pep-4-1,uncle@pep-4-1,aunt@pep-4-1,baby brother@pep-4-1,doctor@pep-4-1,cook@pep-4-1,driver@pep-4-1,farmer@pep-4-1,nurse@pep-4-1,football player@pep-4-1,job@pep-4-1
+动作与表达	near@pep-4-1,clean@pep-4-1,help@pep-4-1,lost@pep-4-1,so much@pep-4-1,right@pep-4-1,find@pep-4-1,ready@pep-4-1,help yourself@pep-4-1,pass@pep-4-1,try@pep-4-1,people@pep-4-1
+学校场所	first floor@pep-4-2,second floor@pep-4-2,teacher's office@pep-4-2,library@pep-4-2,playground@pep-4-2,computer room@pep-4-2,art room@pep-4-2,music room@pep-4-2,next to@pep-4-2,homework@pep-4-2,class@pep-4-2
+课程与三餐	breakfast@pep-4-2,English class@pep-4-2,lunch@pep-4-2,music class@pep-4-2,PE class@pep-4-2,dinner@pep-4-2
+作息与时间	way@pep-4-2,get up@pep-4-2,go to school@pep-4-2,go home@pep-4-2,go to bed@pep-4-2,over@pep-4-2,now@pep-4-2,o'clock@pep-4-2,kid@pep-4-2,hurry up@pep-4-2,come on@pep-4-2,just a minute@pep-4-2
+天气	cold@pep-4-2,cool@pep-4-2,warm@pep-4-2,hot@pep-4-2,sunny@pep-4-2,windy@pep-4-2,cloudy@pep-4-2,snowy@pep-4-2,rainy@pep-4-2,outside@pep-4-2,be careful@pep-4-2,weather@pep-4-2,how about ...@pep-4-2,degree@pep-4-2
+世界城市	New York@pep-4-2,world@pep-4-2,London@pep-4-2,Moscow@pep-4-2,Singapore@pep-4-2,Sydney@pep-4-2
+农场与动物	horse@pep-4-2,cow@pep-4-2,sheep@pep-4-2,hen@pep-4-2,yum@pep-4-2,animal@pep-4-2,garden@pep-4-2,farm@pep-4-2,goat@pep-4-2,eat@pep-4-2
+蔬菜	tomato@pep-4-2,potato@pep-4-2,green beans@pep-4-2,carrot@pep-4-2
+服装	clothes@pep-4-2,pants@pep-4-2,hat@pep-4-2,dress@pep-4-2,skirt@pep-4-2,coat@pep-4-2,sweater@pep-4-2,sock@pep-4-2,shorts@pep-4-2,jacket@pep-4-2,shirt@pep-4-2,glove@pep-4-2,scarf@pep-4-2
+购物与常用词	fly@pep-4-2,love@pep-4-2,pack@pep-4-2,wait@pep-4-2,pretty@pep-4-2,expensive@pep-4-2,cheap@pep-4-2,nice@pep-4-2,try on@pep-4-2,of course@pep-4-2,just@pep-4-2,sale@pep-4-2,more@pep-4-2
+数量与价格	forty@pep-4-2,thirty@pep-4-2,size@pep-4-2,how much@pep-4-2,eighty@pep-4-2,dollar@pep-4-2
+物主与随身物	whose@pep-4-2,umbrella@pep-4-2,sunglasses@pep-4-2
+性格与外貌	young@pep-5-1,funny@pep-5-1,kind@pep-5-1,strict@pep-5-1,polite@pep-5-1,hard-working@pep-5-1,helpful@pep-5-1,clever@pep-5-1,shy@pep-5-1
+星期与频率	sometimes@pep-5-1,Monday@pep-5-1,Tuesday@pep-5-1,Wednesday@pep-5-1,Thursday@pep-5-1,Friday@pep-5-1,Saturday@pep-5-1,Sunday@pep-5-1,weekend@pep-5-1,often@pep-5-1
+日常活动	wash@pep-5-1,wash my clothes@pep-5-1,watch@pep-5-1,watch TV@pep-5-1,do homework@pep-5-1,read@pep-5-1,read books@pep-5-1,play@pep-5-1,play football@pep-5-1,day@pep-5-1,schedule@pep-5-1
+食物与味道	sandwich@pep-5-1,salad@pep-5-1,hamburger@pep-5-1,ice cream@pep-5-1,tea@pep-5-1,fresh@pep-5-1,healthy@pep-5-1,delicious@pep-5-1,hot@pep-5-1,sweet@pep-5-1,drink@pep-5-1,thirsty@pep-5-1,favourite@pep-5-1,food@pep-5-1,onion@pep-5-1
+才艺与运动	speak@pep-5-1,sing@pep-5-1,song@pep-5-1,sing English songs@pep-5-1,play the pipa@pep-5-1,kung fu@pep-5-1,do kung fu@pep-5-1,dance@pep-5-1,draw@pep-5-1,cartoon@pep-5-1,draw cartoons@pep-5-1,swim@pep-5-1,play basketball@pep-5-1,ping-pong@pep-5-1,play ping-pong@pep-5-1,speak English@pep-5-1
+物品与方位	on@pep-3-2,in@pep-3-2,under@pep-3-2,chair@pep-3-2,desk@pep-3-2,cap@pep-3-2,ball@pep-3-2,car@pep-3-2,boat@pep-3-2,map@pep-3-2,toy@pep-3-2,box@pep-3-2,kite@pep-3-2,at@pep-5-1,clock@pep-5-1,plant@pep-5-1,bottle@pep-5-1,water bottle@pep-5-1,bike@pep-5-1,photo@pep-5-1,front@pep-5-1,in front of@pep-5-1,between@pep-5-1,above@pep-5-1,beside@pep-5-1,behind@pep-5-1,there@pep-5-1
+水果与购买	pear@pep-3-2,apple@pep-3-2,orange@pep-3-2,banana@pep-3-2,watermelon@pep-3-2,strawberry@pep-3-2,grape@pep-3-2,buy@pep-3-2,fruit@pep-3-2
+数字与时间	today@pep-3-2,eleven@pep-3-2,twelve@pep-3-2,thirteen@pep-3-2,fourteen@pep-3-2,fifteen@pep-3-2,sixteen@pep-3-2,seventeen@pep-3-2,eighteen@pep-3-2,nineteen@pep-3-2,twenty@pep-3-2
+自然与乡村	park@pep-5-1,flower@pep-5-1,nature@pep-5-1,forest@pep-5-1,river@pep-5-1,lake@pep-5-1,mountain@pep-5-1,hill@pep-5-1,tree@pep-5-1,bridge@pep-5-1,building@pep-5-1,village@pep-5-1
+居住与动物	grandparent@pep-5-1,move@pep-5-1,dirty@pep-5-1,everywhere@pep-5-1,mouse@pep-5-1,live@pep-5-1,rabbit@pep-5-1
+运动与户外	tired@pep-5-1,sport@pep-5-1,play sports@pep-5-1,boating@pep-5-1,go boating@pep-5-1,high@pep-5-1
+常用词与表达	old@pep-5-1,know@pep-5-1,Ms@pep-5-1,robot@pep-5-1,finish@pep-5-1,we'll@pep-5-1,party@pep-5-1,next@pep-5-1,wonderful@pep-5-1,learn@pep-5-1,want@pep-5-1,send@pep-5-1,email@pep-5-1,aren't@pep-5-1,Dear@pep-5-1
+日常作息	play sports@pep-5-2,exercise@pep-5-2,eat dinner@pep-5-2,clean my room@pep-5-2,take@pep-5-2,dancing@pep-5-2,take a dancing class@pep-5-2,go swimming@pep-5-2,walk@pep-5-2
+时间与频率	after@pep-5-2,start@pep-5-2,usually@pep-5-2,late@pep-5-2,a.m.@pep-5-2,last@pep-5-2,busy@pep-5-2,always@pep-5-2,still@pep-5-2
+国家与语言	Spain@pep-5-2,Canadian@pep-5-2,Spanish@pep-5-2
+季节与植物	spring@pep-5-2,summer@pep-5-2,autumn@pep-5-2,winter@pep-5-2,season@pep-5-2,snowman@pep-5-2,make a snowman@pep-5-2,snow@pep-5-2,pink@pep-5-2,lovely@pep-5-2,leaf@pep-5-2,fall@pep-5-2,paint@pep-5-2,plant@pep-5-2
+月份	January@pep-5-2,February@pep-5-2,March@pep-5-2,April@pep-5-2,May@pep-5-2,June@pep-5-2,July@pep-5-2,August@pep-5-2,September@pep-5-2,October@pep-5-2,November@pep-5-2,December@pep-5-2
+节日与庆祝	Easter@pep-5-2,the Great Wall@pep-5-2,national@pep-5-2,National Day@pep-5-2,American@pep-5-2,Thanksgiving@pep-5-2,Christmas@pep-5-2,holiday@pep-5-2
+序数词	first@pep-5-2,second@pep-5-2,third@pep-5-2,fourth@pep-5-2,fifth@pep-5-2,twelfth@pep-5-2,twentieth@pep-5-2,twenty-first@pep-5-2,twenty-third@pep-5-2,thirtieth@pep-5-2
+野餐与旅行	picnic@pep-5-2,go on a picnic@pep-5-2,pick@pep-5-2,pick apples@pep-5-2,vacation@pep-5-2,meet@pep-5-2,sports meet@pep-5-2,trip@pep-5-2,year@pep-5-2,contest@pep-5-2,game@pep-5-2,roll@pep-5-2,by@pep-5-2
+寻找与发现	a few@pep-5-2,thing@pep-5-2,look for@pep-5-2,chocolate@pep-5-2,bunny@pep-5-2,RSVP@pep-5-2,special@pep-5-2,fool@pep-5-2,kitten@pep-5-2,diary@pep-5-2,noise@pep-5-2,fur@pep-5-2,open@pep-5-2
+正在做	climbing@pep-5-2,eating@pep-5-2,playing@pep-5-2,jumping@pep-5-2,drinking@pep-5-2,sleeping@pep-5-2,eating lunch@pep-5-2,reading a book@pep-5-2,listening to music@pep-5-2
+规则与要求	each other@pep-5-2,excited@pep-5-2,like@pep-5-2,keep@pep-5-2,keep to the right@pep-5-2,keep your desk clean@pep-5-2,talk quietly@pep-5-2,turn@pep-5-2,take turns@pep-5-2
+常用动词	work@pep-5-2,sound@pep-5-2,play@pep-5-2,live@pep-5-2,win@pep-5-2,show@pep-5-2,say@pep-5-2,have a look@pep-5-2,teach@pep-5-2
+常用词	eat breakfast@pep-5-2,p.m.@pep-5-2,why@pep-5-2,letter@pep-5-2,island@pep-5-2,cave@pep-5-2,which@pep-5-2,best@pep-5-2,good job@pep-5-2,bamboo@pep-5-2,anything@pep-5-2,else@pep-5-2,exhibition@pep-5-2,sushi@pep-5-2,sure@pep-5-2
+城市与问路	science@pep-6-1,museum@pep-6-1,post office@pep-6-1,bookstore@pep-6-1,cinema@pep-6-1,hospital@pep-6-1,crossing@pep-6-1,turn@pep-6-1,left@pep-6-1
+交通方式与地名	on foot@pep-6-1,by@pep-6-1,bus@pep-6-1,plane@pep-6-1,taxi@pep-6-1,ship@pep-6-1,subway@pep-6-1,train@pep-6-1,Munich@pep-6-1,Germany@pep-6-1,Alaska@pep-6-1,sled@pep-6-1,ferry@pep-6-1,Papa Westray@pep-6-1,Scotland@pep-6-1
+交通规则	slow@pep-6-1,down@pep-6-1,slow down@pep-6-1,stop@pep-6-1,early@pep-6-1,helmet@pep-6-1,wear@pep-6-1,traffic@pep-6-1,traffic lights@pep-6-1,fast@pep-6-1
+周末计划	visit@pep-6-1,film@pep-6-1,see a film@pep-6-1,take a trip@pep-6-1,supermarket@pep-6-1,half@pep-6-1,price@pep-6-1
+比较级	younger@pep-6-2,older@pep-6-2,taller@pep-6-2,shorter@pep-6-2,longer@pep-6-2,thinner@pep-6-2,heavier@pep-6-2,bigger@pep-6-2,smaller@pep-6-2,stronger@pep-6-2,lower@pep-6-2,smarter@pep-6-2,faster@pep-6-2
+恐龙与计量	dinosaur@pep-6-2,hall@pep-6-2,kilogram@pep-6-2,countryside@pep-6-2,shadow@pep-6-2,become@pep-6-2,loud@pep-6-2,dining hall@pep-6-2,grass@pep-6-2,gym@pep-6-2
+上周末活动	cleaned@pep-6-2,stayed@pep-6-2,washed@pep-6-2,camp@pep-6-2,went camping@pep-6-2,fish@pep-6-2,went fishing@pep-6-2,took pictures@pep-6-2,licked@pep-6-2,laughed@pep-6-2
+身体与意外	had a cold@pep-6-2,fixed@pep-6-2,broken@pep-6-2,lamp@pep-6-2,gift@pep-6-2,off@pep-6-2
+旅行与景点	before@pep-6-2,show@pep-6-2,magazine@pep-6-2,hotel@pep-6-2,enjoy@pep-6-2,stay@pep-6-2,Labour Day@pep-6-2,mule@pep-6-2,Turpan@pep-6-2,till@pep-6-2,beach@pep-6-2,basket@pep-6-2,part@pep-6-2
+日期时间	evening@pep-6-1,tonight@pep-6-1,tomorrow@pep-6-1,next week@pep-6-1,yesterday@pep-6-2,last@pep-6-2,ago@pep-6-2
+书籍与学习	dictionary@pep-6-1,comic@pep-6-1,comic book@pep-6-1,word@pep-6-1,word book@pep-6-1,post card@pep-6-1,lesson@pep-6-1,studies@pep-6-1,puzzle@pep-6-1,idea@pep-6-1
+太空与探索	space@pep-6-1,amazing@pep-6-1,sea@pep-6-1,deep@pep-6-1
+中秋与家人	Mid-Autumn Festival@pep-6-1,together@pep-6-1,get together@pep-6-1,mooncake@pep-6-1,poem@pep-6-1,moon@pep-6-1,jasmine@pep-6-1
+爱好与朋友	hiking@pep-6-1,pen pal@pep-6-1,hobby@pep-6-1,Canberra@pep-6-1,goal@pep-6-1,join@pep-6-1,club@pep-6-1,share@pep-6-1
+职业	factory@pep-6-1,worker@pep-6-1,postman@pep-6-1,businessman@pep-6-1,police officer@pep-6-1,fisherman@pep-6-1,scientist@pep-6-1,pilot@pep-6-1,coach@pep-6-1,country@pep-6-1,head teacher@pep-6-1,university@pep-6-1,reporter@pep-6-1,secretary@pep-6-1
+情绪与健康	Mrs@pep-6-1,angry@pep-6-1,afraid@pep-6-1,sad@pep-6-1,worried@pep-6-1,happy@pep-6-1,see a doctor@pep-6-1,breath@pep-6-1,take a deep breath@pep-6-1,count@pep-6-1,count to ten@pep-6-1,bad@pep-6-1,ill@pep-6-1,wrong@pep-6-1,feel@pep-6-1,well@pep-6-1,sit@pep-6-1
+自然与动物	stay@pep-6-1,gym@pep-6-1,use@pep-6-1,type@pep-6-1,quickly@pep-6-1,chase@pep-6-1,grass@pep-6-1,ant@pep-6-1,worry@pep-6-1,mud@pep-6-1,pull@pep-6-1,everyone@pep-6-1
+运动与技能	cycling@pep-6-2,go cycling@pep-6-2,ice-skate@pep-6-2,badminton@pep-6-2,star@pep-6-2,easy@pep-6-2,look up@pep-6-2,Internet@pep-6-2,race@pep-6-2
+变化与感受	different@pep-6-2,active@pep-6-2,nothing@pep-6-2,cheetah@pep-6-2,trip@pep-6-2,dream@pep-6-2,straight@pep-6-2,right@pep-6-2,ask@pep-6-2,sir@pep-6-2,interesting@pep-6-2,Italian@pep-6-2,restaurant@pep-6-2,pizza@pep-6-2,street@pep-6-2,get@pep-6-2,GPS@pep-6-2,feature@pep-6-2,follow@pep-6-2,far@pep-6-2,tell@pep-6-2

@@ -22,8 +22,20 @@ import org.springframework.web.bind.annotation.RequestParam;
 @Controller
 public class StaticPageController {
 
+    /**
+     * 首页：模块入口卡片墙（故事创作 / 教学 / 聊天 / 设置）。
+     *
+     * <p>2026-10-09 改版 —— 原先 {@code /} 直接是项目列表，现降级为二级页 {@code /projects}，
+     * 首页改为与 {@code /learn} 同款的模块卡片页，便于从入口直达各模块。
+     */
     @GetMapping("/")
-    public String dashboard() {
+    public String home() {
+        return "forward:/pages/home.html";
+    }
+
+    /** 项目列表（二级页）：原首页内容，URL 由 {@code /} 迁到 {@code /projects}。 */
+    @GetMapping("/projects")
+    public String projectList() {
         return "forward:/pages/dashboard.html";
     }
 

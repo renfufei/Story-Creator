@@ -14,6 +14,7 @@
 """
 
 import json
+import math
 import os
 import sys
 
@@ -26,6 +27,18 @@ JUNIOR = ['pep-7-1', 'pep-7-2', 'pep-8-1', 'pep-8-2', 'pep-9-1']
 SHORT = {'pep-7-1': '七上', 'pep-7-2': '七下', 'pep-8-1': '八上', 'pep-8-2': '八下', 'pep-9-1': '九全'}
 SPECIAL_EXACT = {'不规则变化', '问候与日常用语', '句型框架与常用搭配'}
 SPECIAL_PREFIX = ('专有名词', '常用功能词', '同义表达：')
+
+
+def split_balanced(n):
+    """复刻 WordMatchBank.splitBalanced（MIN_PAIRS 3 / MAX_PAIRS 7 / TARGET_PAIRS 6）。
+
+    注意 Java 用 Math.round，Python 必须写成 floor(x + 0.5)；内置 round() 是银行家舍入，
+    在 n=9 这类点上会差 1（9/6+0.5=2.0 两法相同，但 15/6+0.5=3.0... 边界一律按 floor+0.5）。
+    """
+    if n <= 7:
+        return 1
+    groups = min(max(int(math.ceil(n / 7)), int(math.floor(n / 6.0 + 0.5))), n)
+    return groups
 
 # 关数（旧 → 新）：旧值取自重分类前的 pep-words.json（重切关算法未变，可按 splitBalanced 复算）
 def read_domains():
@@ -123,25 +136,39 @@ def main():
     L.append('')
     L.append('## 五、结果与下游')
     L.append('')
-    L.append('| 册 | id | 主题 | 词 | 关（旧 → 新） |')
+    L.append('「关」列是 `splitBalanced`（MIN 3 / MAX 7 / TARGET 6）对本册各域词数**现算**的，')
+    L.append('与 `WordMatchBank` 运行时逐字一致；「旧」是重分类前（课文顺序切段）的值。')
+    L.append('')
+    L.append('| 册 | id | 语义域（旧 → 现） | 词 | 关（旧 → 现） |')
     L.append('|---|---|---|---|---|')
-    old_levels = {'pep-7-1': (75, 74), 'pep-7-2': (91, 90), 'pep-8-1': (75, 80),
-                  'pep-8-2': (81, 92), 'pep-9-1': (97, 103)}
-    old_themes = {'pep-7-1': 43, 'pep-7-2': 51, 'pep-8-1': 32, 'pep-8-2': 33, 'pep-9-1': 37}
+    OLD_THEMES = {'pep-7-1': 43, 'pep-7-2': 51, 'pep-8-1': 32, 'pep-8-2': 33, 'pep-9-1': 37}
+    OLD_LEVELS = {'pep-7-1': 75, 'pep-7-2': 91, 'pep-8-1': 75, 'pep-8-2': 81, 'pep-9-1': 97}
     LABEL = {'pep-7-1': '七年级上册', 'pep-7-2': '七年级下册', 'pep-8-1': '八年级上册',
              'pep-8-2': '八年级下册', 'pep-9-1': '九年级全一册'}
+    tot_old = tot_new = 0
     for bid in JUNIOR:
         b = books[bid]
         sem = [t for t in b['themes'] if not (t['name'] in SPECIAL_EXACT or t['name'].startswith(SPECIAL_PREFIX))]
         words = sum(len(t.get('words', [])) for t in b['themes'])
-        o, n = old_levels[bid]
+        n = sum(split_balanced(len(t.get('words', []))) for t in b['themes'])
+        tot_old += OLD_LEVELS[bid]
+        tot_new += n
         L.append('| %s | %s | %d → %d | %d | %d → **%d** |'
-                 % (LABEL[bid], bid, old_themes[bid], len(sem), words, o, n))
+                 % (LABEL[bid], bid, OLD_THEMES[bid], len(sem), words, OLD_LEVELS[bid], n))
+    L.append('| **合计** | | | 2309 | %d → **%d** |' % (tot_old, tot_new))
     L.append('')
-    L.append('- **词数一条不差**（初中 2309 / PEP 7032 / 全站 20191 均不变）；关数 初中 419 → **439**。')
-    L.append('  （本次初中改动后）PEP 24 册 1249 → **1269**、26 册合计 3452 → **3472**；')
-    L.append('  其后高中 11 册重分类又各加了 62 关 ⇒ PEP **1331** / 26 册 **3534**，'
-             '见 `docs/senior-domain-taxonomy.md`。')
+    L.append('- **词数一条不差**（初中 2309 / PEP 7032 / 全站 20191 均不变）；关数 初中 419 → **444**。')
+    L.append('  四段变化：① 初中重分类 419 → **439** ⇒ PEP 24 册 1249 → 1269、26 册 3452 → 3472；')
+    L.append('  ② 高中 11 册重分类 +62 ⇒ PEP **1331**、26 册 **3534**（见 `docs/senior-domain-taxonomy.md`）；')
+    L.append('  ③ 初中「逐关校对」+5 ⇒ PEP **1336** / 26 册 **3539**（见 `docs/junior-level-audit.md`）；')
+    L.append('  ④ 高中「逐关校对」+5 ⇒ PEP **1341** / 26 册 **3544**（见 `docs/senior-level-audit.md`）。')
+    L.append('- **逐关校对（2026-10-09）**：只动**归属**不动词 —— 子代理逐关共标出 **96 条**不搭词，')
+    L.append('  75 条落地 + 21 条放弃（目标域在该册凑不到 3 词，硬塞会让**整域连词一起丢**）；')
+    L.append('  另外为把目标域补到 ≥3 词**补了 6 条移动** ⇒ 合计 **81 条域变更**（59 条换语义域 + 22 条进特殊主题）。')
+    L.append('  新点亮了 `媒体与通讯`(七上/七下)、`科技与网络`(七上)、`厨房与餐具`(七下)、')
+    L.append('  `水果与蔬菜`(九全) 这些此前在该册为空的域实例。完整清单见 `docs/junior-level-audit.md`。')
+    L.append('  **不为凑数扭曲语义**：宁可放弃，也不把 `waste` 塞进只剩 2 词的域。')
+    L.append('- 逐册关数：七上 74 · 七下 **91** · 八上 **83** · 八下 92 · 九全 **104**。')
     L.append('- **进度指纹不手工升版**：关数变了 ⇒ `dataSignature()` / `signature()` 的数字部分自动失配 ⇒')
     L.append('  旧进度自动作废。项目约定：只有「只改顺序、数量不变」才需要手工升版本号。')
     L.append('- 复核方式：本页「合计」列对不上就该重跑 `build_semantic_themes.py --stage junior`；')

@@ -625,6 +625,15 @@ a.list-group-item.sc-anchor-link:focus .bi {
     --accent-border: #ded3f4;
 }
 
+/* 第四种主题色：首页「设置」卡。中性石板灰 —— 设置属于配置类入口，
+   不像三个内容模块那样需要抢眼，但仍与其他卡共用同一套色块/按钮规格。 */
+.sc-learn-card[data-accent="slate"] {
+    --accent: #64748b;
+    --accent-strong: #475569;
+    --accent-soft: #f1f5f9;
+    --accent-border: #e2e8f0;
+}
+
 .sc-learn-card:hover {
     border-color: var(--accent-border);
 }
@@ -672,6 +681,47 @@ a.list-group-item.sc-anchor-link:focus .bi {
     /* 两行长度自动均衡：默认断行是"第一行塞满、第二行只剩两三个字"，
        那行孤字最显丑。balance 让每行宽度接近（三卡的 min/max 行宽比 ≥ 0.7）。 */
     text-wrap: balance;
+}
+
+/* 卡内子入口清单（首页模块卡专用，见 pages/home.html）：
+   主入口之外的次级页面。左对齐 + 顶部虚线分隔，与居中的图标/标题/描述形成层次；
+   hover 用本卡主题色的浅底，颜色全部取自 --accent-*，因此换 data-accent 即整体换色。
+   注意：这里不改卡片高度 —— 四卡仍由 h-100 等高、主按钮由 .sc-learn-actions 的 mt-auto 贴底。 */
+.sc-module-links {
+    list-style: none;
+    margin: .25rem 0 0;
+    padding: .8rem 0 0;
+    border-top: 1px dashed var(--accent-border);
+    text-align: left;
+}
+
+.sc-module-links li + li {
+    margin-top: .15rem;
+}
+
+.sc-module-links a {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .32rem .55rem;
+    border-radius: .375rem;
+    color: #495057;
+    font-size: .875rem;
+    line-height: 1.4;
+    text-decoration: none;
+    transition: background-color .15s ease, color .15s ease;
+}
+
+.sc-module-links a:hover,
+.sc-module-links a:focus-visible {
+    background-color: var(--accent-soft);
+    color: var(--accent-strong);
+}
+
+.sc-module-links a .bi {
+    flex: 0 0 auto;
+    color: var(--accent);
+    font-size: .95rem;
 }
 
 .sc-learn-actions {

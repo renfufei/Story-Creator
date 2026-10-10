@@ -2670,8 +2670,8 @@ async function main() {
     check('S12 全选：26 册全勾上、文案翻成「取消全选」',
         allSel.n === 26 && allSel.all === true && allSel.label === '取消全选',
         `n=${allSel.n} label=${allSel.label}`);
-    check('S12 全选后汇总 = 26 册 / 3534 关 / 20191 词（含大学 2 册 / 2203 关 / 13159 词）',
-        /已选 26 册/.test(allSel.sum) && /3534 关/.test(allSel.sum) && /20191 词/.test(allSel.sum),
+    check('S12 全选后汇总 = 26 册 / 3546 关 / 20191 词（含大学 2 册 / 2203 关 / 13159 词）',
+        /已选 26 册/.test(allSel.sum) && /3546 关/.test(allSel.sum) && /20191 词/.test(allSel.sum),
         allSel.sum);
     await shot('24-export-dialog-all');
 
