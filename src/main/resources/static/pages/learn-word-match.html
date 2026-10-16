@@ -855,6 +855,7 @@
         /* 系统开了「减少动态效果」时保留「变绿」这个结果，只去掉闪烁与缩放 */
         @media (prefers-reduced-motion: reduce) {
             .wm-card.is-ok { animation: none; }
+            .wm-hand { animation: none; }        /* 小手留在原地指着，只是不点 */
         }
 
         /* 不匹配：后选中的那张标红 */
@@ -896,6 +897,41 @@
 
         .wm-card .wm-speak { opacity: .55; }
         .wm-card .wm-speak:hover { opacity: 1; }
+
+        /* ---------- 自动学习的「小手」引导 ----------
+           一只卡通小手浮在**即将被自动点选**的那张卡的右下角，一下一下地轻点，
+           提示「下一个点这里」。只在自动学习模式且未暂停时出现（见 isAutoSpot）。
+           · absolute + pointer-events:none —— 卡片是 <button>，手若吃点击就等于缩小了点击区；
+           · 只往右下各溢出 8px：正好落进 10px 的行/列间距，不压住相邻卡片的文字，
+             也不会撑出棋盘的滚动高度（S10b 的 320x568 溢出断言盯的就是这个）；
+           · 纯 SVG 无文字节点 —— 卡片 innerText 不受影响（探针按 innerText 读卡面文案）；
+           · 白描边 + 投影：落在白卡、浅蓝「选中」卡、7 色 tint 卡上都看得清。 */
+        .wm-hand {
+            position: absolute;
+            right: -7px;
+            bottom: -8px;
+            width: 30px;
+            height: 35px;
+            z-index: 3;               /* 越过相邻卡片（它们都是 z-index:auto 的定位元素） */
+            pointer-events: none;
+            animation: wm-hand-tap 1.15s ease-in-out infinite;
+        }
+
+        .wm-hand svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+            overflow: visible;        /* 旋转后指尖可能探出 viewBox，别被裁掉 */
+            filter: drop-shadow(0 1px 2px rgba(31, 45, 61, .2));
+        }
+
+        /* 指尖朝卡片里轻点两下：先探进去一点，回位，再轻点一下（幅度都很小，只是「活」） */
+        @keyframes wm-hand-tap {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            36%      { transform: translate(-2px, -3px) rotate(-4deg); }
+            58%      { transform: translate(0, 0) rotate(0deg); }
+            80%      { transform: translate(-1px, -2px) rotate(-2deg); }
+        }
 
         /* ---------- 单词区上方的信息栏（说明文字 + 关卡导航） ----------
            原先这两块都在棋盘「下方」：桌面端大窗口下离单词区很远，
@@ -1650,6 +1686,8 @@
             .wm-board { padding: 8px 10px 46px; }    /* 底部给浮动胶囊留位 */
             /* 6~7 对时要塞下 7 行：卡片压到 46px（仍 >=44px 触控下限） */
             .wm-card { min-height: 46px; max-height: 88px; border-radius: 13px; }
+            /* 小手跟着卡片缩一档（窄屏卡片矮、列也窄，30px 会显得糊在字上） */
+            .wm-hand { right: -6px; bottom: -7px; width: 26px; height: 30px; }
             /* 窄屏状态条更紧凑，给「步骤标签 + 单词」留宽度（依旧只有一行） */
             .wm-auto-bar { padding: 6px 8px; gap: .4rem; font-size: .8rem; }
             .wm-auto-tip { gap: .3rem; }
@@ -1672,7 +1710,25 @@
             .wm-infobar { padding: 3px 8px; }
             .wm-board { padding: 6px 8px 40px; gap: 8px 10px; }
             .wm-card { min-height: 44px; font-size: .92rem; }
+            /* 超小屏卡片只有 44px 高、列宽 ~140px，小手再收一档并把溢出收到 5px
+               （棋盘左右内边距此时只有 8px —— 小手必须整个留在棋盘内） */
+            .wm-hand { right: -5px; bottom: -6px; width: 24px; height: 28px; }
             .wm-nav { bottom: calc(6px + env(safe-area-inset-bottom)); }
+        }
+
+        /* ---------- 超窄屏（<=360px）：工具栏右边那排必须收成一行 ----------
+           实测（320x568，7 对满员关）：「册次 122 + 自动学习 89 + 搜索 36 + 设置 41」再加
+           3 个 5.6px 间隙 = 305px，而可用宽度只有 298px（左右各 11px）—— 差 7px 放不下，
+           .wm-toolbar-actions 的 flex-wrap 就把【设置】折到第二行，工具栏高一行
+           ⇒ 整页比视口高 31px、底部浮动胶囊（524~562）压住最后一行单词（底 554）。
+           这里只收「间隙 + 左右内边距」，**一个文字标签都不藏**（省 ~13px：320px 下从差 7px
+           变成余 10px），360px 以上不受影响。
+           ⚠️ 别图省事把【自动学习】收成纯图标钮：它是这一页的主操作，窄屏更需要看得懂；
+           也别去动卡片高度 —— 44px 已经是触控下限（见上面那段注释）。
+           这两条断言由 scripts/check_word_match.mjs 的 S10b 守着。 */
+        @media (max-width: 360px) {
+            .wm-toolbar-actions { gap: .25rem; }
+            .wm-toolbar-actions > .btn { padding-left: .375rem; padding-right: .375rem; }
         }
     </style>
 </head>
@@ -1793,7 +1849,7 @@ window.__WORD_MATCH_DATA__ = (function () {
                         <span class="wm-set-main">
                             <span class="wm-set-title">音效与朗读</span>
                             <span class="wm-set-desc"
-                                  x-text="soundOn ? '已开启：点到英文会朗读发音' : '已关闭：不朗读也不播提示音'"></span>
+                                  x-text="soundOn ? '已开启：点到英文即朗读，自动学习会连读中英文' : '已关闭：不朗读也不播提示音'"></span>
                         </span>
                         <span class="wm-set-switch" :class="{ 'is-on': soundOn }">
                             <i class="bi" :class="soundOn ? 'bi-toggle-on' : 'bi-toggle-off'"></i>
@@ -2060,6 +2116,51 @@ window.__WORD_MATCH_DATA__ = (function () {
                             <span class="wm-card-text" x-text="card.text"></span>
                             <i class="bi bi-volume-up-fill wm-speak" x-show="!card.done" @click.stop="speakCard(card)"
                                title="朗读"></i>
+                            <!-- 自动学习的小手引导（只在「即将被自动点选」的那张卡上出现）。
+                                 ⚠️ 这个 SVG 与中文列那份是**同一个图形**，改一处要改两处。 -->
+                            <span class="wm-hand" x-show="isAutoSpot(card)" aria-hidden="true">
+                                <svg viewBox="3 0 30 36" aria-hidden="true">
+                                    <g transform="rotate(-8 17 20)">
+                                        <!-- ① 白色粗描边铺底：白卡、浅蓝选中卡、7 色 tint 卡上都能跟底色分开 -->
+                                        <g fill="#fff" stroke="#fff" stroke-width="5.4" stroke-linejoin="round">
+                                            <rect x="12.6" y="2" width="6" height="20" rx="3"/>
+                                            <rect x="10.4" y="19.5" width="18.6" height="13.5" rx="6.4"/>
+                                            <rect x="6.2" y="23" width="5.4" height="7" rx="2.7"/>
+                                            <rect x="18.8" y="17.3" width="5.4" height="8" rx="2.6"/>
+                                            <rect x="23.6" y="18.4" width="5.2" height="7" rx="2.5"/>
+                                        </g>
+                                        <!-- ② 同一组形状再画一遍做橙色外框：内侧会被 ③ 盖住，只留外面那 ~1.2px -->
+                                        <g fill="#f2a33c" stroke="#f2a33c" stroke-width="2.4" stroke-linejoin="round">
+                                            <rect x="12.6" y="2" width="6" height="20" rx="3"/>
+                                            <rect x="10.4" y="19.5" width="18.6" height="13.5" rx="6.4"/>
+                                            <rect x="6.2" y="23" width="5.4" height="7" rx="2.7"/>
+                                            <rect x="18.8" y="17.3" width="5.4" height="8" rx="2.6"/>
+                                            <rect x="23.6" y="18.4" width="5.2" height="7" rx="2.5"/>
+                                        </g>
+                                        <!-- ③ 手掌本体：整组同一个填充、都不描边 ⇒ 形状交界处不会露出白缝。
+                                             ⚠️ 比例是造型成败的关键（我在真机截图上返工过两轮）：
+                                                食指(12.6~18.6, 2~22) 要又细又长、露出掌顶 17.5；
+                                                手掌(10.4~29, 19.5~33) 要明显更矮更宽压在下面；
+                                                拇指(6.2~11.6, 23~30) 只能是掌侧**靠下**的一小块；
+                                                掌顶右侧两颗小凸 = 蜷起的三根指节。
+                                                把拳头画胖、食指画短，整只手立刻读成「👍」（v1/v2 就这么翻车的）。 -->
+                                        <g fill="#ffd79a">
+                                            <rect x="12.6" y="2" width="6" height="20" rx="3"/>
+                                            <rect x="10.4" y="19.5" width="18.6" height="13.5" rx="6.4"/>
+                                            <rect x="6.2" y="23" width="5.4" height="7" rx="2.7"/>
+                                            <rect x="18.8" y="17.3" width="5.4" height="8" rx="2.6"/>
+                                            <rect x="23.6" y="18.4" width="5.2" height="7" rx="2.5"/>
+                                        </g>
+                                        <!-- 指甲 + 蜷起那三根手指的折痕 -->
+                                        <ellipse cx="15.6" cy="5.4" rx="2" ry="2.3" fill="#ffe9c2"/>
+                                        <path d="M16.4 24.4h8M17 28h7" stroke="#eda64f" stroke-width="1.3"
+                                              stroke-linecap="round" fill="none"/>
+                                    </g>
+                                    <!-- 指尖那颗小星星（站点强调蓝）：强调「就点这里」 -->
+                                    <path d="M24.4 6.2 L24.9 8.8 L27.5 9.3 L24.9 9.8 L24.4 12.4 L23.9 9.8 L21.3 9.3 L23.9 8.8 Z"
+                                          fill="#2f9ceb" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>
+                                </svg>
+                            </span>
                         </button>
                     </template>
                 </div>
@@ -2068,6 +2169,50 @@ window.__WORD_MATCH_DATA__ = (function () {
                         <button type="button" class="wm-card" :class="cardClass(card)" @click="pick(card)"
                                 :aria-label="'中文 ' + card.text">
                             <span class="wm-card-text" x-text="card.text"></span>
+                            <!-- 同上：与英文列那份小手是同一个图形，改一处要改两处 -->
+                            <span class="wm-hand" x-show="isAutoSpot(card)" aria-hidden="true">
+                                <svg viewBox="3 0 30 36" aria-hidden="true">
+                                    <g transform="rotate(-8 17 20)">
+                                        <!-- ① 白色粗描边铺底：白卡、浅蓝选中卡、7 色 tint 卡上都能跟底色分开 -->
+                                        <g fill="#fff" stroke="#fff" stroke-width="5.4" stroke-linejoin="round">
+                                            <rect x="12.6" y="2" width="6" height="20" rx="3"/>
+                                            <rect x="10.4" y="19.5" width="18.6" height="13.5" rx="6.4"/>
+                                            <rect x="6.2" y="23" width="5.4" height="7" rx="2.7"/>
+                                            <rect x="18.8" y="17.3" width="5.4" height="8" rx="2.6"/>
+                                            <rect x="23.6" y="18.4" width="5.2" height="7" rx="2.5"/>
+                                        </g>
+                                        <!-- ② 同一组形状再画一遍做橙色外框：内侧会被 ③ 盖住，只留外面那 ~1.2px -->
+                                        <g fill="#f2a33c" stroke="#f2a33c" stroke-width="2.4" stroke-linejoin="round">
+                                            <rect x="12.6" y="2" width="6" height="20" rx="3"/>
+                                            <rect x="10.4" y="19.5" width="18.6" height="13.5" rx="6.4"/>
+                                            <rect x="6.2" y="23" width="5.4" height="7" rx="2.7"/>
+                                            <rect x="18.8" y="17.3" width="5.4" height="8" rx="2.6"/>
+                                            <rect x="23.6" y="18.4" width="5.2" height="7" rx="2.5"/>
+                                        </g>
+                                        <!-- ③ 手掌本体：整组同一个填充、都不描边 ⇒ 形状交界处不会露出白缝。
+                                             ⚠️ 比例是造型成败的关键（我在真机截图上返工过两轮）：
+                                                食指(12.6~18.6, 2~22) 要又细又长、露出掌顶 17.5；
+                                                手掌(10.4~29, 19.5~33) 要明显更矮更宽压在下面；
+                                                拇指(6.2~11.6, 23~30) 只能是掌侧**靠下**的一小块；
+                                                掌顶右侧两颗小凸 = 蜷起的三根指节。
+                                                把拳头画胖、食指画短，整只手立刻读成「👍」（v1/v2 就这么翻车的）。 -->
+                                        <g fill="#ffd79a">
+                                            <rect x="12.6" y="2" width="6" height="20" rx="3"/>
+                                            <rect x="10.4" y="19.5" width="18.6" height="13.5" rx="6.4"/>
+                                            <rect x="6.2" y="23" width="5.4" height="7" rx="2.7"/>
+                                            <rect x="18.8" y="17.3" width="5.4" height="8" rx="2.6"/>
+                                            <rect x="23.6" y="18.4" width="5.2" height="7" rx="2.5"/>
+                                        </g>
+                                        <!-- 指甲 + 蜷起那三根手指的折痕 -->
+                                        <ellipse cx="15.6" cy="5.4" rx="2" ry="2.3" fill="#ffe9c2"/>
+                                        <path d="M16.4 24.4h8M17 28h7" stroke="#eda64f" stroke-width="1.3"
+                                              stroke-linecap="round" fill="none"/>
+                                    </g>
+                                    <!-- 指尖那颗小星星（站点强调蓝）：强调「就点这里」 -->
+                                    <path d="M24.4 6.2 L24.9 8.8 L27.5 9.3 L24.9 9.8 L24.4 12.4 L23.9 9.8 L21.3 9.3 L23.9 8.8 Z"
+                                          fill="#2f9ceb" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>
+                                </svg>
+                            </span>
                         </button>
                     </template>
                 </div>
@@ -2592,7 +2737,46 @@ function wordMatchApp() {
     /* 配对成功后两张卡保持「闪绿」的时长；到点摘掉 is-ok，自动过渡回「已完成」的灰。
        CSS 里的闪烁动画固定 .5s，这里默认也是 500ms；测试用 ?wmOkFlash= 拉长以便截图/断言。 */
     var OK_FLASH = pace('wmOkFlash', 500);
-    var AUTO_SPEAK_MAX = AUTO_STEP >= 1000 ? 2200 : 300;
+    /* 自动学习「听读音」这一步要念两条：先英文，再中文释义。
+       ?wmZh=0 可只念英文；?wmZhRate= 调中文语速（百分比，默认 88 —— 中文比英文略慢一点，
+       听清楚比听快重要），夹在 0.5~2 之间。 */
+    var EN_SPEAK_RATE = 0.85;
+    var ZH_SPEAK_ON = query.get('wmZh') !== '0';
+    var ZH_SPEAK_RATE = Math.min(2, Math.max(0.5, pace('wmZhRate', 88) / 100));
+
+    /* 自动学习的「小手」引导：一只卡通小手浮在**即将被自动点选**的那张卡右下角，
+       提示「下一个点这里」。?wmHand=0 关掉（不想看动画时用；也让测试能对照
+       「有小手 / 没有小手」两种情况跑同一段断言）。 */
+    var AUTO_HAND_ON = query.get('wmHand') !== '0';
+
+    /* 单条朗读的兜底上限（ms）：onend 迟迟不触发（引擎卡住 / 没装对应语言的语音）时，
+       到点就往下走，绝不把自动学习卡死在这里。
+       正常节奏按文本长度估时（中文按字算更慢）；快节奏（测试用 wmStep<1000）统一压到 300ms。 */
+    function speakCapMs(text, lang) {
+        if (AUTO_STEP < 1000) return 300;
+        var n = String(text == null ? '' : text).length;
+        var ms = (lang === 'zh-CN') ? 1000 + n * 320 : 800 + n * 260;
+        return Math.max(1500, Math.min(6000, ms));
+    }
+
+    /* 中文释义 → 朗读文本。词库里的释义是「给人看的」，直接丢给 TTS 会念出一堆噪音：
+         `n. 物体；对象 vi. 反对` 会把词性缩写按英文字母念出来，`在…上` / `哥/弟` 也别扭。
+       所以：① 剥掉词性标记 —— 用白名单匹配，**别写成 [A-Za-z]+\.**
+              （那样「J.K.罗琳」会被啃成「K.罗琳」）；
+             ② 省略号与项目符号换成停顿；
+             ③ 收尾清掉多余空白和残留的分隔符。
+       ⚠️ 只在朗读这一路用，卡片与状态条上显示的仍是原始释义。 */
+    var ZH_POS_RE = /(^|[\s；;，,、])(?:n|v|vt|vi|adj|adv|prep|pron|conj|num|int|art|aux|abbr|interj|pl)\.\s*/gi;
+    function zhSpeechText(raw) {
+        if (raw == null) return '';
+        var s = String(raw).replace(ZH_POS_RE, '$1');
+        s = s.replace(/[…]+|\.{3,}/g, ' ').replace(/[•·]+/g, ' ');
+        s = s.replace(/\s+/g, ' ').trim();
+        s = s.replace(/^[；;，,、\s]+/, '').replace(/[；;，,、\s]+$/, '');
+        /* 清完一个汉字都不剩（纯英文 / 纯符号的释义）就别念了，免得念出一串噪音 */
+        return /[\u4e00-\u9fa5]/.test(s) ? s : '';
+    }
+
     /* 跨册提示里的秒数按实际节奏算，改节奏时文案不会说谎 */
     var BOOK_GAP_SEC = Math.max(1, Math.round(AUTO_BOOK_GAP / 1000));
 
@@ -2634,6 +2818,9 @@ function wordMatchApp() {
         autoTip: '',
         autoTag: '',
         autoStage: '',
+        /* 即将被自动点选的那张卡的 uid —— 小手（.wm-hand）只挂在它身上。
+           每个「点选前」的小步骤开始时设上，点完立刻清掉（见 autoLoop）。 */
+        autoSpot: '',
         autoCountdown: 0,
         autoTimer: null,
         autoSeq: 0,
@@ -3266,6 +3453,7 @@ function wordMatchApp() {
             this.autoSeq++;
             var token = this.autoSeq;
             this.autoStage = 'start';
+            this.autoSpot = '';                      // 小手等真的开始点选时才出现
             this.setAutoTip('开始学习', '先看英文，再找中文');
             this.autoCountdown = 0;
             this.measureTop();
@@ -3301,20 +3489,31 @@ function wordMatchApp() {
                     if (!zhCard) break;
 
                     this.autoStage = 'pick-en';
+                    this.autoSpot = enCard.uid;      // 小手指向「即将点选的英文卡」
                     this.setAutoTip('看英文', enCard.text);
                     if (!(await this.autoSleep(AUTO_STEP, token))) return;
 
                     this.pick(enCard, true);                       // 选中英文
-                    this.autoStage = 'listen';                     // 点英文后立即朗读，念完再往下走
-                    this.setAutoTip('听读音', enCard.text);
-                    await this.speakThenWait(enCard.text, token);
+                    this.autoSpot = '';                            // 点完了，收回小手
+                    /* 点英文后立即朗读：**先英文、再中文释义**，两条连着念，念完才往下走。
+                       朗读时长是叠加在原有节奏之上的 —— 它不占用后面「找中文」的间隔
+                       和「记一记」的思考，所以念完之后照样等原来的时间才进下一个单词。 */
+                    var readItems = this.autoReadItems(enCard);
+                    this.autoStage = 'listen';
+                    /* 状态条显示的就是「正在念什么」：英文 + 实际朗读用的中文（不含词性缩写），
+                       免得条上写着一串 n. / vi. 而耳朵里听到的却是干净的中文。 */
+                    this.setAutoTip('听读音',
+                        readItems.length > 1 ? (enCard.text + ' · ' + readItems[1].text) : enCard.text);
+                    await this.speakAllThenWait(readItems, token);
                     if (!this.autoMode || this.autoSeq !== token) return;
 
                     this.autoStage = 'pick-zh';
+                    this.autoSpot = zhCard.uid;      // 小手指向「即将点选的中文卡」
                     this.setAutoTip('找出中文', enCard.text);
                     if (!(await this.autoSleep(AUTO_STEP, token))) return;
 
                     this.pick(zhCard, true);          // 配对成功
+                    this.autoSpot = '';               // 点完了，收回小手
                     if (this.matchedCount >= lv.pairs.length) break;   // 本关收尾交给下面的过关节奏
 
                     this.autoStage = 'think';
@@ -3400,9 +3599,51 @@ function wordMatchApp() {
             });
         },
 
-        /* 朗读（等它念完再开始计时思考，念不出来也会按上限兜底） */
-        speakThenWait: function (text, token) {
+        /* 自动学习「听读音」这一步依次要念的内容：英文（原语速）+ 中文释义（已清掉词性标记）。
+           中文被关掉、清完不剩汉字、或释义为空时只留英文一条。 */
+        autoReadItems: function (enCard) {
+            var items = [{ text: enCard.text, lang: 'en-US', rate: EN_SPEAK_RATE }];
+            if (ZH_SPEAK_ON) {
+                var zh = zhSpeechText(enCard.mean);
+                if (zh) items.push({ text: zh, lang: 'zh-CN', rate: ZH_SPEAK_RATE });
+            }
+            return items;
+        },
+
+        /* 把「中文释义 → 朗读文本」的清洗规则挂到实例上：
+           探针要能逐条验证它（词性缩写 / 省略号 / 「J.K.罗琳」这种别被啃掉），
+           而这里保持与朗读路径**同一实现**，不会各写一份跑偏。 */
+        zhSpeechText: zhSpeechText,
+
+        /* 朗读（等它念完再开始计时思考）：items = [{text, lang, rate}…]，按顺序念完。
+           ⚠️ 这里是「尽力而为」：浏览器不支持语音、某个词没装对应语言的语音包、onerror、
+           引擎卡住不回调 —— 一律只跳过这一条，既不抛错也不阻塞，整条链**必定 resolve**。 */
+        speakAllThenWait: function (items, token) {
             var self = this;
+            return new Promise(function (resolve) {
+                var list = (items || []).filter(function (it) { return it && it.text; });
+                /* 静音 / 不支持语音：沿用原来的固定等待。
+                   ⚠️ **不按条数翻倍** —— 否则每个单词的耗时随「要不要念中文」漂移，
+                   整册时长与测试节奏都会跟着变，而这条路径本来就没有真的发声。 */
+                if (!self.soundOn || !window.speechSynthesis || !list.length) {
+                    self.autoSleep(600, token).then(function () { resolve(); });
+                    return;
+                }
+                var i = 0;
+                var next = function () {
+                    /* 退出 / 切关 / 暂停把链打断时立刻收尾：后面那条不再念，也不越权往下走 */
+                    if (!self.autoMode || self.autoSeq !== token) { resolve(); return; }
+                    if (i >= list.length) { resolve(); return; }
+                    self.speakOne(list[i++]).then(next);
+                };
+                /* cancel 只在整链开始前调一次：挪进 speakOne 会把上一条掐掉 */
+                try { window.speechSynthesis.cancel(); } catch (e) { /* 忽略 */ }
+                next();
+            });
+        },
+
+        /* 单条朗读：onend / onerror / 超时兜底，谁先到算谁念完；永不 reject。 */
+        speakOne: function (item) {
             return new Promise(function (resolve) {
                 var done = false;
                 var finish = function () {
@@ -3411,19 +3652,13 @@ function wordMatchApp() {
                     clearTimeout(cap);
                     resolve();
                 };
-                var cap = setTimeout(finish, AUTO_SPEAK_MAX);
-                if (!self.soundOn || !window.speechSynthesis) {
-                    clearTimeout(cap);
-                    self.autoSleep(600, token).then(finish);
-                    return;
-                }
+                var cap = setTimeout(finish, speakCapMs(item.text, item.lang));
                 try {
-                    var u = new SpeechSynthesisUtterance(text);
-                    u.lang = 'en-US';
-                    u.rate = 0.85;
+                    var u = new SpeechSynthesisUtterance(item.text);
+                    u.lang = item.lang;
+                    u.rate = item.rate;
                     u.onend = finish;
                     u.onerror = finish;
-                    window.speechSynthesis.cancel();
                     window.speechSynthesis.speak(u);
                 } catch (e) { finish(); }
             });
@@ -3442,6 +3677,7 @@ function wordMatchApp() {
                 this.autoStage = '';
                 this.autoTag = '';
                 this.autoTip = '';
+                this.autoSpot = '';
                 this.autoCountdown = 0;
                 return;
             }
@@ -3453,6 +3689,7 @@ function wordMatchApp() {
             this.autoStage = '';
             this.autoTag = '';
             this.autoTip = '';
+            this.autoSpot = '';
             this.autoCountdown = 0;
             this.loadLevel();          // 回到练习模式的干净状态
             this.measureTop();
@@ -3931,6 +4168,16 @@ function wordMatchApp() {
         },
 
         /* ==================== 视图辅助 ==================== */
+        /* 自动学习里「即将被自动点选」的那张卡 —— 卡通小手只挂在它身上。
+           三种情况下不显示：
+             · 已经点完了（autoSpot 清空，正在朗读 / 思考 / 过场）；
+             · 暂停中（暂停 = 什么都不点，这时还指着卡片是误导）；
+             · ?wmHand=0（整体关掉）。 */
+        isAutoSpot: function (card) {
+            return AUTO_HAND_ON && this.autoMode && !this.autoPaused
+                && !!this.autoSpot && this.autoSpot === card.uid;
+        },
+
         cardClass: function (card) {
             return {
                 'is-sel': !!this.sel && this.sel.uid === card.uid,
@@ -4093,7 +4340,8 @@ function wordMatchApp() {
             this.pick(card);
         },
 
-        /* 选中英文卡片时的朗读：自动学习模式交给 autoLoop 的 speakThenWait 控制节奏 */
+        /* 选中英文卡片时的朗读：自动学习模式交给 autoLoop 的 speakAllThenWait 控制节奏
+           （那里会连念英文 + 中文释义，手动模式这里只念英文） */
         speakOnPick: function (card) {
             if (this.autoMode || !card || card.side !== 'L') return;
             this.speak(card.text);

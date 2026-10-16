@@ -1682,6 +1682,54 @@ class PageRenderingIntegrationTest {
         assertStaticPage(response, "tts-export", "__TTS_EXPORT_DATA__");
     }
 
+    /**
+     * 「使用 ffmpeg 压缩音频」旁的问号说明必须**真的可点击**。
+     *
+     * 曾经那里只有 data-bs-toggle 的 tooltip 写法，而全站没有一处 new bootstrap.Tooltip()
+     * —— Bootstrap 5 不会按该 data 属性自动初始化 tooltip，于是点击毫无反应（用户反馈的 BUG）。
+     * 现改为 Alpine 驱动的点击展开说明卡，这条断言把关键接线钉住，避免以后又退回去。
+     */
+    @Test
+    void ttsExport_ffmpegHint_isClickable() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/tts-export"), String.class);
+        assertThat(response.getStatusCode()).as("/tts-export 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("问号必须是可点击的展开触发器（不是死的 tooltip data 属性）")
+                .contains("ffmpeg-hint-trigger")                    // 触发器
+                .contains("ffmpeg-hint-pop")                        // 说明卡
+                .contains("id=\"ffmpegHintPop\"")
+                .contains("x-cloak")                                // 首屏不闪
+                .contains("aria-expanded")                          // 无障碍状态
+                .contains("@click=\"ffmpegHintOpen = !ffmpegHintOpen\"")
+                .contains("@click.outside")                         // 点别处收起
+                .contains("x-show=\"ffmpegHintOpen\"")
+                .contains("ffmpegHintOpen: false")                  // 状态必须声明，否则 Alpine 驱动不了切换
+                .contains("仅 MP3 格式生效")                          // 口径：只有 mp3 会走 ffmpeg 压缩
+                .doesNotContain("data-bs-toggle=\"tooltip\"");       // 全站无 Tooltip 初始化，该属性是死写法
+    }
+
+    /**
+     * ffmpeg 可用性必须**每次打开页面都真探测一次**，不能沿用服务启动时那份结论。
+     *
+     * 曾经的 BUG：探测结果被永久缓存，用户 brew install ffmpeg 之后页面一直显示「不可用」，
+     * 只能重启后台服务才能恢复。现在探测入口抽成 refreshFfmpegStatus()（init 时调一次），
+     * 并在说明卡里提供「重新检测」按钮，装好后不刷新页面也能立刻用上。
+     */
+    @Test
+    void ttsExport_rechecksFfmpegOnEveryPageLoad() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/tts-export"), String.class);
+        assertThat(response.getStatusCode()).as("/tts-export 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("页面必须提供可重复触发的 ffmpeg 重新探测入口")
+                .contains("async refreshFfmpegStatus()")             // 统一入口（init 与「重新检测」共用）
+                .contains("await this.refreshFfmpegStatus()")        // 打开页面就探测一次
+                .contains("@click=\"refreshFfmpegStatus()\"")        // 说明卡里的「重新检测」按钮
+                .contains("ffmpegChecking")                          // 探测中标志（防连点、给用户反馈）
+                .contains("重新检测")
+                .contains("bi-arrow-clockwise")                      // 按钮图标
+                .doesNotContain("// Check ffmpeg");                  // 旧的 init 内联探测写法不得回潮
+    }
+
     @Test
     void ttsExport_withProjectId_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(
@@ -2133,6 +2181,34 @@ class PageRenderingIntegrationTest {
                 .contains("wm-auto-text")              // 详情，过长省略
                 .contains("flex-wrap: nowrap")
                 .doesNotContain("white-space: normal");// 原先窄屏把提示放成两行 -> 状态条被撑高
+        /* 2026-10-16：自动学习「听读音」这一步改成先念英文、再念中文释义。
+           逐条规则（剥词性缩写 / 省略号 / 「J.K.罗琳」别被啃）与「朗读失败不阻塞」
+           由 scripts/probe_wm_auto_zh.mjs 在真浏览器里核；这里只把结构钉进服务端吐出的页面。 */
+        assertThat(response.getBody())
+                .as("自动学习要连读英文 + 中文释义：清洗、成链、失败兜底一个都不能少")
+                .contains("zhSpeechText")              // 中文释义 -> 朗读文本（剥词性缩写）
+                .contains("autoReadItems")             // 一个单词要念哪几条
+                .contains("speakAllThenWait")          // 按顺序念完，onend/onerror/超时兜底
+                .contains("speakOne")                  // 单条永不 reject
+                .contains("speakCapMs")                // 超时上限（引擎不回调也不能卡死）
+                .contains("ZH_POS_RE")                 // POS 白名单（不是 [A-Za-z]+\.）
+                .contains("'zh-CN'")
+                .contains("wmZh")                      // ?wmZh=0 可只念英文
+                .contains("wmZhRate")                  // 中文语速可调
+                .contains("已开启：点到英文即朗读，自动学习会连读中英文")
+                .doesNotContain("AUTO_SPEAK_MAX");     // 已退役：改成按文本长度的 speakCapMs
+        /* 2026-10-16：自动学习时在「即将被点选」的那张卡右下角浮一只卡通小手做引导。
+           细则（位置/暂停收起/开关/320x568 不越界/不吃点击）由
+           scripts/probe_wm_auto_hand.mjs 在真浏览器里核；这里只钉结构。 */
+        assertThat(response.getBody())
+                .as("自动学习的小手引导：状态、判据、样式与开关都要在页面里")
+                .contains("wm-hand")                   // 小手容器
+                .contains("isAutoSpot")                // 只在「即将点选」的那张卡上显示
+                .contains("autoSpot")                  // 即将被点选卡的 uid（点完立刻清空）
+                .contains("wm-hand-tap")               // 点头动画
+                .contains("wmHand")                    // ?wmHand=0 可整体关掉
+                .contains("AUTO_HAND_ON")
+                .contains("pointer-events: none");     // 不吃点击（卡片是 <button>，别缩小点击区）
     }
 
     @Test

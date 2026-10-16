@@ -11,6 +11,63 @@
     <link rel="stylesheet" href="/css/app.css">
     <style>
         [x-cloak] { display: none !important; }
+
+        /* 「使用 ffmpeg 压缩音频」旁的问号说明。
+           原先这里只写了 data-bs-toggle 的 tooltip 写法，但全站没有任何一处
+           new bootstrap.Tooltip() —— Bootstrap 5 不会根据该 data 属性自动初始化 tooltip，
+           所以它从来没生效过：点击毫无反应，只剩浏览器原生 title 悬停提示
+           （慢、样式不可控，移动端连悬停都没有）。
+           改为 Alpine 控制的「点击展开」说明卡：
+             · 图标是纯图标触发器，不是动作按钮，故不套 .btn / .btn-sm 规范（同 btn-close 的例外）；
+             · 说明卡走正常文档流（不是绝对定位浮层），任何屏宽都不会被弹窗边缘裁掉。 */
+        .ffmpeg-hint-trigger {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.15rem;
+            height: 1.15rem;
+            margin-left: .35rem;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            background: none;
+            color: var(--bs-secondary-color, #6c757d);
+            line-height: 1;
+            vertical-align: -.1em;
+            cursor: pointer;
+        }
+        .ffmpeg-hint-trigger:hover { color: var(--bs-primary, #0d6efd); }
+        .ffmpeg-hint-trigger:focus-visible {
+            outline: 2px solid var(--bs-primary, #0d6efd);
+            outline-offset: 2px;
+        }
+        .ffmpeg-hint-trigger .bi { font-size: 1rem; }
+
+        .ffmpeg-hint-pop {
+            margin-top: .45rem;
+            padding: .5rem .7rem;
+            font-size: .8125rem;
+            line-height: 1.65;
+            color: var(--bs-body-color, #212529);
+            background: var(--bs-tertiary-bg, #f8f9fa);
+            border: 1px solid var(--bs-border-color, #dee2e6);
+            border-left: 3px solid var(--bs-primary, #0d6efd);
+            border-radius: .375rem;
+        }
+        .ffmpeg-hint-pop code {
+            padding: 0 .25rem;
+            font-size: .95em;
+            color: inherit;
+            background: rgba(13, 110, 253, .1);
+            border-radius: .2rem;
+        }
+        @media (prefers-reduced-motion: no-preference) {
+            .ffmpeg-hint-pop { animation: ffmpeg-hint-in .16s ease-out; }
+        }
+        @keyframes ffmpeg-hint-in {
+            from { opacity: 0; transform: translateY(-3px); }
+            to   { opacity: 1; transform: none; }
+        }
     </style>
 </head>
 <body class="sc-page" data-nav="projects">
@@ -47,6 +104,9 @@ window.__TTS_EXPORT_DATA__ = (function () {
     <!-- Task List -->
     <div class="card">
         <div class="card-body p-0">
+            <!-- 这张 8 列的宽表在 375px 手机上会把**整页**撑出横向滚动条（实测 597px > 375px）。
+                 用 Bootstrap 的 table-responsive 让它只在卡片内部横向滚动，页面本身不再溢出。 -->
+            <div class="table-responsive">
             <table class="table table-hover mb-0" x-show="tasks.length > 0">
                 <thead class="table-light">
                     <tr>
@@ -217,6 +277,7 @@ window.__TTS_EXPORT_DATA__ = (function () {
                     </tbody>
                 </template>
             </table>
+            </div>
             <div class="text-center text-muted py-5" x-show="tasks.length === 0">
                 <i class="bi bi-inbox" style="font-size: 2rem;"></i>
                 <p class="mt-2">暂无导出任务，点击右上角"新增导出任务"开始</p>
@@ -411,7 +472,7 @@ window.__TTS_EXPORT_DATA__ = (function () {
 
                     <!-- Step 4: Advanced Options -->
                     <div x-show="wizardStep === 3">
-                        <div class="mb-3">
+                        <div class="mb-3" @click.outside="ffmpegHintOpen = false">
                             <div class="form-check form-switch">
                                 <input class="form-check-input" type="checkbox" id="useFfmpeg"
                                        x-model="wizard.useFfmpeg" :disabled="!ffmpegAvailable">
@@ -420,9 +481,36 @@ window.__TTS_EXPORT_DATA__ = (function () {
                                     <span class="badge" :class="ffmpegAvailable ? 'bg-success' : 'bg-warning'"
                                           x-text="ffmpegAvailable ? '可用' : '不可用'"></span>
                                 </label>
-                                <span class="ms-1" data-bs-toggle="tooltip" title="ffmpeg 用于音频压缩。Mac: brew install ffmpeg，Linux: apt install ffmpeg">
-                                    <i class="bi bi-question-circle text-muted"></i>
-                                </span>
+                                <button type="button" class="ffmpeg-hint-trigger"
+                                        :aria-expanded="ffmpegHintOpen ? 'true' : 'false'"
+                                        aria-controls="ffmpegHintPop"
+                                        aria-label="ffmpeg 压缩说明"
+                                        title="ffmpeg 压缩说明（点击展开）"
+                                        @click="ffmpegHintOpen = !ffmpegHintOpen">
+                                    <i class="bi bi-question-circle" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <div class="ffmpeg-hint-pop" id="ffmpegHintPop" x-show="ffmpegHintOpen" x-cloak>
+                                ffmpeg 用于把导出的音频压缩得更小，比特率见下方。<br>
+                                <strong>仅 MP3 格式生效</strong>，其他格式走内置合并、不做压缩。<br>
+                                安装：macOS <code>brew install ffmpeg</code>；Linux <code>apt install ffmpeg</code>。
+                                未安装时本开关不可用（右侧徽标显示「不可用」）。<br>
+                                装好之后点下面的「重新检测」——<strong>不用重启服务，也不用刷新页面</strong>。
+                                <!-- ⚠️ x-show 不能直接挂在本层：Bootstrap 的 d-flex 是
+                                     display:flex !important，会压过 Alpine 写的内联 display:none，
+                                     导致「可用之后按钮仍然显形」。所以 d-flex 下沉一层。 -->
+                                <div class="mt-2" x-show="!ffmpegAvailable">
+                                    <div class="d-flex flex-wrap align-items-center gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                id="ffmpegRecheck"
+                                                :disabled="ffmpegChecking"
+                                                @click="refreshFfmpegStatus()"
+                                                title="重新探测一次 ffmpeg">
+                                            <i class="bi bi-arrow-clockwise"></i>重新检测
+                                        </button>
+                                        <span class="text-muted" x-show="ffmpegChecking" x-cloak>检测中…</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="mb-3" x-show="wizard.useFfmpeg">
@@ -509,7 +597,9 @@ function ttsExportApp() {
         expandedVolumes: {},
         wizardVoices: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
         ttsConfigs: [],
-        ffmpegAvailable: false,
+        ffmpegAvailable: false,     // 后端探测到的 ffmpeg 可用性（每次打开页面都真探测，见 refreshFfmpegStatus）
+        ffmpegChecking: false,      // 正在探测中（避免「重新检测」被连点）
+        ffmpegHintOpen: false,      // 「使用 ffmpeg 压缩音频」旁的问号说明是否展开（点击切换）
         wizard: {
             projectId: '',
             selectedChapters: [],
@@ -531,20 +621,34 @@ function ttsExportApp() {
             // Pre-load TTS configs
             await this.loadTtsConfigs();
             this.applyDefaultTtsConfig();
-            // Check ffmpeg
-            try {
-                const res = await fetch('/api/tts-export/ffmpeg-status');
-                if (res.ok) {
-                    const data = await res.json();
-                    this.ffmpegAvailable = data.available;
-                    this.wizard.useFfmpeg = data.available;
-                }
-            } catch (e) {}
+            // 探测 ffmpeg（后端每次都会真起一次 `ffmpeg -version`，不读缓存）
+            await this.refreshFfmpegStatus();
             // If preselected project, load chapters and auto-open wizard
             if (preselectedProjectId) {
                 await this.loadChaptersForProject(preselectedProjectId);
                 this.openWizard();
             }
+        },
+
+        /**
+         * 问后端「ffmpeg 能不能用」，并同步到界面。
+         * <p>
+         * 打开页面时会调一次（见 init）；用户装完 ffmpeg 后点说明卡里的「重新检测」再调一次，
+         * 不用刷新页面，更不用重启后台服务。
+         */
+        async refreshFfmpegStatus() {
+            if (this.ffmpegChecking) return this.ffmpegAvailable;
+            this.ffmpegChecking = true;
+            try {
+                const res = await fetch('/api/tts-export/ffmpeg-status');
+                if (res.ok) {
+                    const data = await res.json();
+                    this.ffmpegAvailable = data.available === true;
+                    this.wizard.useFfmpeg = this.ffmpegAvailable;
+                }
+            } catch (e) { /* 探测失败就保持原状态，不打扰用户 */ }
+            finally { this.ffmpegChecking = false; }
+            return this.ffmpegAvailable;
         },
 
         async loadTasks() {

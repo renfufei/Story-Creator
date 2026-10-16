@@ -13,37 +13,106 @@ import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 @Service
 public class Mp3ProcessingService {
 
     private static final Logger log = LoggerFactory.getLogger(Mp3ProcessingService.class);
 
+    /**
+     * 「没探测到 ffmpeg」这个结论最多缓存多久。过了这段时间再问就重新探测一次。
+     * <p>
+     * 为什么要过期：ffmpeg 是**运行期可以由用户装上**的外部命令。原实现把这个结论
+     * 永久缓存（Boolean 只算一次），于是「服务启动时没装 → 用户装了 → 页面永远显示不可用，
+     * 必须重启服务」。
+     * <p>
+     * 为什么还要缓存一小会儿：导出热路径（每合一段音频都会问一次）不能被一次失败的
+     * fork 拖成每条一次进程创建。
+     */
+    static final long DEFAULT_NEGATIVE_TTL_MS = 10_000;
+
+    /** 单次探测的等待上限：ffmpeg 卡住时不能把请求线程一起拖住。 */
+    private static final long PROBE_TIMEOUT_SECONDS = 5;
+
     enum AudioFormat { MP3, WAV, UNKNOWN }
 
-    private volatile Boolean ffmpegAvailable;
+    /** 探测动作本身。默认真的起一次 `ffmpeg -version`；测试可注入可控实现。 */
+    private final BooleanSupplier ffmpegProbe;
 
-    public boolean isFfmpegAvailable() {
-        if (ffmpegAvailable == null) {
-            synchronized (this) {
-                if (ffmpegAvailable == null) {
-                    ffmpegAvailable = checkFfmpeg();
-                }
-            }
-        }
-        return ffmpegAvailable;
+    /** 负结果缓存时长（便于测试注入一个很短的值）。 */
+    private final long negativeTtlMs;
+
+    private volatile Boolean ffmpegAvailable;
+    private volatile long ffmpegCheckedAt;
+
+    public Mp3ProcessingService() {
+        this(Mp3ProcessingService::probeByRunningFfmpeg, DEFAULT_NEGATIVE_TTL_MS);
     }
 
-    private boolean checkFfmpeg() {
+    Mp3ProcessingService(BooleanSupplier ffmpegProbe, long negativeTtlMs) {
+        this.ffmpegProbe = ffmpegProbe;
+        this.negativeTtlMs = negativeTtlMs;
+    }
+
+    /**
+     * 带缓存的探测：**正值长期有效，负值只缓存 {@link #DEFAULT_NEGATIVE_TTL_MS} 毫秒**。
+     * 也就是说「没装」不会被永久记住 —— 装好之后下一次询问就能发现。
+     */
+    public boolean isFfmpegAvailable() {
+        Boolean cached = ffmpegAvailable;
+        if (cached != null
+                && (cached || System.currentTimeMillis() - ffmpegCheckedAt <= negativeTtlMs)) {
+            return cached;
+        }
+        return refreshFfmpegAvailability();
+    }
+
+    /**
+     * 忽略缓存，立刻重新探测一次并刷新缓存。
+     * <p>
+     * `/api/tts-export/ffmpeg-status` 走这条路 —— 页面每次打开都是一次**真实探测**，
+     * 用户装好 ffmpeg 后刷新页面就能看到「可用」，不必重启服务。
+     */
+    public synchronized boolean refreshFfmpegAvailability() {
+        boolean available = ffmpegProbe.getAsBoolean();
+        Boolean previous = ffmpegAvailable;
+        ffmpegAvailable = available;
+        ffmpegCheckedAt = System.currentTimeMillis();
+        // 只在「第一次探测」或「结果变了」时打日志 —— 现在会周期性重探，每次都打会刷屏
+        if (previous == null) {
+            log.info("ffmpeg 探测：{}", available ? "可用" : "不可用（未安装，或服务进程 PATH 里找不到 ffmpeg）");
+        } else if (previous != available) {
+            log.info("ffmpeg 探测结果变化：{} -> {}", previous ? "可用" : "不可用", available ? "可用" : "不可用");
+        }
+        return available;
+    }
+
+    /** 真的起一次 `ffmpeg -version`。任何失败都当作「不可用」，绝不抛异常。 */
+    private static boolean probeByRunningFfmpeg() {
+        Process process = null;
         try {
-            Process process = new ProcessBuilder("ffmpeg", "-version")
+            process = new ProcessBuilder("ffmpeg", "-version")
                     .redirectErrorStream(true)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)   // 输出没用；不丢掉会写满管道把进程卡死
                     .start();
-            int exitCode = process.waitFor();
-            return exitCode == 0;
-        } catch (Exception e) {
-            log.info("ffmpeg not available: {}", e.getMessage());
+            if (!process.waitFor(PROBE_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                log.warn("ffmpeg -version {} 秒未返回，按「不可用」处理", PROBE_TIMEOUT_SECONDS);
+                return false;
+            }
+            return process.exitValue() == 0;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             return false;
+        } catch (Exception e) {
+            // 最常见的原因是没装，或服务进程的 PATH 里没有 ffmpeg（例如从 IDE 直接启动）
+            log.debug("ffmpeg 探测失败：{}", e.getMessage());
+            return false;
+        } finally {
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+            }
         }
     }
 

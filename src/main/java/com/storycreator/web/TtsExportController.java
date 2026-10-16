@@ -284,10 +284,17 @@ public class TtsExportController {
         return Map.of("voices", voices);
     }
 
+    /**
+     * 问一次「ffmpeg 能不能用」。
+     * <p>
+     * 这里故意用**强制重新探测**而不是读缓存：典型使用路径是「页面开着 → 去
+     * brew install ffmpeg → 回来刷新页面」，若读缓存就还是旧结论。改之前负结果被永久
+     * 缓存，用户只能重启后端服务才能恢复。
+     */
     @GetMapping("/api/tts-export/ffmpeg-status")
     @ResponseBody
     public Map<String, Object> ffmpegStatus() {
-        return Map.of("available", mp3ProcessingService.isFfmpegAvailable());
+        return Map.of("available", mp3ProcessingService.refreshFfmpegAvailability());
     }
 
     @GetMapping("/api/tts-export/projects/{projectId}/completed-files")

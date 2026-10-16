@@ -23,7 +23,9 @@
  *  S7b 本册最后一关：「下一关」变「下一册」+ 打完弹通关窗、点「继续看看」后仍能继续
  *  S8 错题本弹窗（列表 / 朗读 / 去练 / 删除 / 清空）
  *  S9 自动学习（真实节奏的 1s 间隔与 2s 思考；快速节奏跑完整关 + 4s 过关节奏 +
- *     暂停/继续/退出 + 学习进度与练习进度互不共享 + 点英文即朗读）
+ *     暂停/继续/退出 + 学习进度与练习进度互不共享 + 点英文即朗读；
+ *     2026-10-16 起「听读音」还连念中文释义，本段只钉「中文被念了 + 每词 2 条」，
+ *     清洗规则与失败兜底在 scripts/probe_wm_auto_zh.mjs）
  *  另：朗读时机（点英文那一下）与过关提示「贴单词区上方、不遮挡卡片」单独断言
  *  S9d 同义关：同一个中文对应多个词，选哪个都算对（按释义判定而非配对 key）
  *  S10 移动端布局（含新按钮/底部导航不溢出、重排后仍可点；
@@ -458,7 +460,9 @@ function wrongStore() {
 }
 
 /* 朗读探针：接管 speechSynthesis.speak —— 只记录被朗读的文本，**不真的发声**，
-   并在 120ms 后触发 u.onend 模拟「念完了」（否则自动学习要等 AUTO_SPEAK_MAX 上限才继续，拖慢用例）。
+   并在 120ms 后触发 u.onend 模拟「念完了」（否则自动学习要等朗读上限才继续，拖慢用例）。
+   ⚠️ 自动学习从 2026-10-16 起每个单词念两条（先英文、再中文释义），
+   所以自动学习段里 __spoken 的长度是 2×单词数，别按「一条词一条朗读」的老口径断言。
    返回 false 表示本机不支持语音。
    两点与之前不同：
    1. 冒烟默认静音（脚本开头写 word_match_sound_v1=0），这里临时打开，
@@ -2116,6 +2120,10 @@ async function main() {
     let sawGapTip = false, sawGapFlash = false, sawNextWordTip = false, sawListenTip = 0;
     // 硬判据：英文卡片刚被选中（还没配对）时，该单词必须已经进入朗读
     let lastSelWord = null, spokenOnPick = 0, speakOrderOk = true;
+    /* 2026-10-16 新增：「小手」引导（自动学习时浮在即将点选的那张卡右下角）。
+       这里只钉住四件事，细则（位置/暂停/开关/320x568 不越界）由
+       scripts/probe_wm_auto_hand.mjs 逐条守。 */
+    let handSeen = 0, handEn = 0, handZh = 0, handMisplaced = 0, handStray = 0, handPrev = null;
     const t0 = Date.now();
     while (Date.now() - t0 < 20000) {
         const s = await state();
@@ -2134,6 +2142,40 @@ async function main() {
         } else if (!enSel) {
             lastSelWord = null;          // 配对成功后清零，下一个单词重新校验
         }
+        /* 可见小手 + 它挂在哪张卡：卡 → 列 → 该列下标 → leftCards/rightCards 的 uid，
+           再和 autoSpot 对一下（挂错卡 = 指错地方，比「没手」更坏）。 */
+        const hs = await evalJs(`(() => {
+            const d = Alpine.$data(document.querySelector('.wm-root'));
+            const vis = Array.from(document.querySelectorAll('.wm-hand'))
+                .filter(h => h.getClientRects().length > 0);
+            const out = { n: vis.length, stage: d.autoStage, col: '', ok: true };
+            if (vis.length !== 1) return { ...out, ok: vis.length === 0 };
+            const card = vis[0].closest('.wm-card');
+            const colEl = card.closest('.wm-col');
+            out.col = colEl.className.indexOf('wm-col-en') >= 0 ? 'en' : 'zh';
+            const list = out.col === 'en' ? d.leftCards : d.rightCards;
+            /* ⚠️ 别用 colEl.children 取下标：Alpine 的 x-for 会把 <template> 留在列里
+               （拍在克隆出来的卡片**前面**），children[0] 是 template ⇒ 下标整体错一位，
+               结果就是「挂错卡」100% 假阳性（首轮实测 29/29 全错）。按 .wm-card 定位。 */
+            const idx = Array.prototype.indexOf.call(colEl.querySelectorAll('.wm-card'), card);
+            const uid = list[idx] ? list[idx].uid : '';
+            out.ok = uid !== '' && uid === d.autoSpot;
+            return out;
+        })()`);
+        if (hs.n === 1) {
+            handSeen++;
+            if (hs.col === 'en' && hs.stage === 'pick-en') handEn++;
+            if (hs.col === 'zh' && hs.stage === 'pick-zh') handZh++;
+            if (!hs.ok) handMisplaced++;
+        } else if (hs.n > 1) {
+            handMisplaced++;
+        }
+        /* 「点完就收回」的负向断言：要**同一个阶段连续两拍**都还挂着小手才算违规 ——
+           Alpine 的 x-show 是异步刷的，阶段刚切换那一拍可能读到上一帧的 DOM。
+           （正向断言不受此影响：那一拍读到的是「还没出现」，只是漏采一次。） */
+        if (handPrev && handPrev.stage === hs.stage && hs.n === 1
+            && hs.stage !== 'pick-en' && hs.stage !== 'pick-zh') handStray++;
+        handPrev = { stage: hs.stage, n: hs.n };
         if (/^2\//.test(s.counter || '')) break;
         await sleep(70);
     }
@@ -2144,8 +2186,37 @@ async function main() {
         !canSpeakAuto || (spokenOnPick >= 3 && speakOrderOk),
         canSpeakAuto ? `命中${spokenOnPick}个单词 全部早于配对=${speakOrderOk}` : '本机无 speechSynthesis，跳过');
     check('自动学习有「听读音」步骤提示', sawListenTip >= 1, `出现${sawListenTip}次`);
+    /* 2026-10-16：自动学习「听读音」这一步改成念两条 —— 先英文、再中文释义。
+       这里只钉住「中文确实被念了」与「每个单词念够 2 条」；
+       清洗规则（剥词性缩写 / 省略号 / J.K.罗琳 别被啃）由
+       scripts/probe_wm_auto_zh.mjs 逐条守。 */
+    const spAuto = await spokenTexts();
+    check('自动学习会连读中文释义（朗读文本里出现汉字）',
+        !canSpeakAuto || spAuto.some(t => /[\u4e00-\u9fa5]/.test(t)),
+        canSpeakAuto ? JSON.stringify(spAuto.slice(0, 6)) : '本机无 speechSynthesis，跳过');
+    check('自动学习每个单词念两条（英文 + 中文），条数不少于 2×命中单词数',
+        !canSpeakAuto || (spokenOnPick > 0 && spAuto.length >= 2 * spokenOnPick),
+        canSpeakAuto ? `朗读${spAuto.length}条 / 命中${spokenOnPick}个单词` : '本机无 speechSynthesis，跳过');
     check('本关完成时提示「即将进入下一关」', sawGapTip && sawGapFlash,
         `tip=${sawGapTip} flash=${sawGapFlash}`);
+    /* 2026-10-16 新增：自动学习的小手引导（细则见 scripts/probe_wm_auto_hand.mjs） */
+    check('自动学习时「即将点选」的卡片上出现了小手引导', handEn >= 1 && handZh >= 1,
+        `英文步 ${handEn} 次 / 中文步 ${handZh} 次`);
+    check('小手只挂在「即将被点选」的那张卡上（不挂错卡、也不会同时出现两只）',
+        handSeen > 0 && handMisplaced === 0, `看到 ${handSeen} 次，错位 ${handMisplaced} 次`);
+    check('点完之后小手就收回（朗读/思考/过场阶段不该有）', handStray === 0,
+        `同阶段连续两拍仍挂着 ${handStray} 次`);
+    const handClean = await evalJs(`(() => {
+        const hs = Array.from(document.querySelectorAll('.wm-hand'));
+        const peOk = hs.every(h => getComputedStyle(h).pointerEvents === 'none');
+        const txtOk = Array.from(document.querySelectorAll('.wm-card')).every(c => {
+            const t = c.querySelector('.wm-card-text');
+            return !t || c.innerText.trim() === t.innerText.trim();
+        });
+        return { n: hs.length, peOk: peOk, txtOk: txtOk };
+    })()`);
+    check('小手是纯 SVG、不吃点击，也没污染卡片文案',
+        handClean.n > 0 && handClean.peOk && handClean.txtOk, JSON.stringify(handClean));
     await speakProbeTeardown();          // 自动学习的朗读也验完了，恢复静音
     await clickSel('.wm-auto-bar .wm-auto-btn', 0);        // 暂停，冻结现场
     await sleep(200);
@@ -3742,7 +3813,7 @@ async function main() {
                  scope: d.themeScope ? d.themeScope.indexes.slice() : null,
                  bar: !!bar && bar.getClientRects().length > 0 };
     })()`);
-    const canSpeakB = await speakProbeSetup();   // 静音路径下 speakThenWait 固定等 600ms/词，接管后 120ms
+    const canSpeakB = await speakProbeSetup();   // 静音路径下 speakAllThenWait 固定等 600ms/词（不按条数翻倍），接管后每条 120ms
     await sleep(500);
     await shot('35-theme-scope-auto');
     check('S14b 分类练习里点【自动学习】从该分类第一关起（不被拽回本册第 1 关，也不落在刚站的那关）',
