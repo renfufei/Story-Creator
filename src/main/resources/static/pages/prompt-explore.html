@@ -42,7 +42,7 @@ window.__PROMPT_EXPLORE_DATA__ = (function () {
     <div x-data="exploreApp()" x-init="init()">
         <!-- Section A: Header + Template Info -->
         <div class="d-flex align-items-center gap-3 mb-3">
-            <a href="/prompts" class="btn btn-outline-secondary btn-sm">
+            <a href="/prompts" class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-arrow-left"></i> 返回
             </a>
             <h4 class="mb-0" x-text="templateName || '提示词探索'">模板名称</h4>
@@ -55,7 +55,7 @@ window.__PROMPT_EXPLORE_DATA__ = (function () {
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span>模板原文</span>
                 <button class="btn btn-sm btn-outline-secondary" @click="showTemplate = !showTemplate"
-                        x-text="showTemplate ? '收起' : '展开'">展开</button>
+                        x-text="showTemplate ? '收起' : '展开'"><i class="bi bi-chevron-down"></i> 展开</button>
             </div>
             <div class="card-body" x-show="showTemplate" x-transition>
                 <div class="mb-2">
@@ -183,7 +183,7 @@ window.__PROMPT_EXPLORE_DATA__ = (function () {
 
                     <!-- Resolve button -->
                     <div class="col-md-2">
-                        <button class="btn btn-success btn-sm w-100" @click="resolvePrompt()" :disabled="resolving || !projectId">
+                        <button class="btn btn-sm btn-primary w-100" @click="resolvePrompt()" :disabled="resolving || !projectId">
                             <span x-show="!resolving"><i class="bi bi-compass"></i> 探索提示词</span>
                             <span x-show="resolving" x-cloak><span class="spinner-border spinner-border-sm"></span> 解析中...</span>
                         </button>
@@ -206,7 +206,7 @@ window.__PROMPT_EXPLORE_DATA__ = (function () {
                     <div class="d-flex justify-content-between align-items-center mb-1">
                         <label class="form-label fw-bold mb-0">User Prompt</label>
                         <button class="btn btn-sm btn-outline-secondary" @click="editingPrompt = !editingPrompt"
-                                x-text="editingPrompt ? '只读' : '编辑'">编辑</button>
+                                x-text="editingPrompt ? '只读' : '编辑'"><i class="bi bi-pencil"></i> 编辑</button>
                     </div>
                     <pre x-show="!editingPrompt" class="bg-light p-2 rounded" style="max-height:400px;overflow-y:auto;white-space:pre-wrap;font-size:0.85rem;" x-text="renderedPrompt"></pre>
                     <textarea x-show="editingPrompt" class="form-control" rows="12" x-model="renderedPrompt" style="font-size:0.85rem;"></textarea>
@@ -233,7 +233,7 @@ window.__PROMPT_EXPLORE_DATA__ = (function () {
                     </div>
 
                     <div class="col-md-2">
-                        <button class="btn btn-primary btn-sm w-100" @click="callAi()" :disabled="calling || !selectedConfigId">
+                        <button class="btn btn-sm btn-primary w-100" @click="callAi()" :disabled="calling || !selectedConfigId">
                             <span x-show="!calling"><i class="bi bi-play-fill"></i> 实际调用</span>
                             <span x-show="calling"><span class="spinner-border spinner-border-sm"></span> 调用中...</span>
                         </button>

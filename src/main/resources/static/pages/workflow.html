@@ -24,7 +24,7 @@
             <a :href="'/projects/' + projectId + '/side-stories'" class="btn btn-sm btn-outline-warning">
                 <i class="bi bi-journal-bookmark"></i> 番外
             </a>
-            <a :href="'/projects/' + projectId + '/inspirations'" class="btn btn-sm btn-outline-dark" target="_blank">
+            <a :href="'/projects/' + projectId + '/inspirations'" class="btn btn-sm btn-outline-secondary" target="_blank">
                 <i class="bi bi-lightbulb"></i> 灵感
             </a>
             <a :href="'/projects/' + projectId + '/expansion'" class="btn btn-sm btn-outline-danger">
@@ -105,12 +105,12 @@
                 </div>
             </div>
             <div x-show="!fullAutoRunning" class="mt-2" style="font-size:0.85rem;">
-                <div class="d-flex align-items-center mb-2">
-                    <button class="btn btn-sm p-0 me-1 border-0 text-muted" style="line-height:1;"
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <button class="btn btn-sm p-0 border-0 text-muted" style="line-height:1;"
                             @click="autoRunConfigExpanded = !autoRunConfigExpanded; localStorage.setItem('autoRunConfigExpanded', String(autoRunConfigExpanded))">
                         <i class="bi" :class="autoRunConfigExpanded ? 'bi-caret-down-fill' : 'bi-caret-right-fill'"></i>
                     </button>
-                    <span class="text-muted me-1">当前策略:</span>
+                    <span class="text-muted">当前策略:</span>
                     <span class="badge bg-primary" x-text="currentStrategyLabel()"></span>
                 </div>
                 <div x-show="autoRunConfigExpanded">
@@ -177,7 +177,7 @@
                         </template>
                     </select>
                     <button type="submit" class="btn btn-sm btn-outline-secondary" title="保存步骤模型">
-                        <i class="bi bi-check"></i>
+                        <i class="bi bi-check-lg"></i>
                     </button>
                 </form>
                 <!-- 全部自动生成 button hidden for CHAPTER_WRITING -->
@@ -206,17 +206,17 @@
                         <span x-show="stepGuidance && !editingGuidance" class="ms-1 text-success"><i class="bi bi-check-circle-fill"></i></span>
                     </small>
                     <div x-show="!editingGuidance" class="btn-group">
-                        <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                        <button class="btn btn-sm btn-outline-secondary"
                                 @click="editingGuidance = true; stepGuidanceEdit = stepGuidance"
                                 :disabled="fullAutoRunning">
                             <i class="bi bi-pencil"></i> 配置
                         </button>
-                        <button class="btn btn-sm btn-outline-success py-0 px-1"
+                        <button class="btn btn-sm btn-outline-success"
                                 @click="saveGuidanceAsShared()"
                                 :disabled="fullAutoRunning || !stepGuidance">
                             <i class="bi bi-box-arrow-up"></i> 存为通用
                         </button>
-                        <button class="btn btn-sm btn-outline-primary py-0 px-1"
+                        <button class="btn btn-sm btn-outline-primary"
                                 @click="openReuseModal()"
                                 :disabled="fullAutoRunning">
                             <i class="bi bi-journal-arrow-down"></i> 复用指导
@@ -233,8 +233,8 @@
                     <textarea class="form-control form-control-sm" rows="3" x-model="stepGuidanceEdit"
                               placeholder="输入创作指导信息，例如：文风要求、情节偏好、禁忌内容等..."></textarea>
                     <div class="d-flex justify-content-end gap-1 mt-1">
-                        <button class="btn btn-sm btn-outline-secondary" @click="editingGuidance = false">取消</button>
-                        <button class="btn btn-sm btn-primary" @click="saveGuidance()">保存配置</button>
+                        <button class="btn btn-sm btn-outline-secondary" @click="editingGuidance = false"><i class="bi bi-x-lg"></i> 取消</button>
+                        <button class="btn btn-sm btn-primary" @click="saveGuidance()"><i class="bi bi-check-lg"></i> 保存配置</button>
                     </div>
                 </div>
             </div>
@@ -247,20 +247,20 @@
                         <span x-show="selectedMaterialIds.length > 0" class="ms-1 badge bg-success" x-text="'已选 ' + selectedMaterialIds.length + ' 项'"></span>
                     </small>
                     <div class="btn-group">
-                        <button class="btn btn-sm btn-outline-secondary py-0 px-1"
+                        <button class="btn btn-sm btn-outline-secondary"
                                 @click="openDistillModal()"
                                 :disabled="fullAutoRunning">
                             <i class="bi bi-funnel"></i> 蒸馏素材
                         </button>
-                        <button class="btn btn-sm btn-outline-primary py-0 px-1"
+                        <button class="btn btn-sm btn-outline-primary"
                                 @click="openMaterialRefModal()"
                                 :disabled="fullAutoRunning">
                             <i class="bi bi-bookmark-plus"></i> 引用素材
                         </button>
-                        <button class="btn btn-sm btn-outline-danger py-0 px-1"
+                        <button class="btn btn-sm btn-outline-danger"
                                 x-show="selectedMaterialIds.length > 0"
                                 @click="clearMaterialSelection()">
-                            <i class="bi bi-x"></i> 清除
+                            <i class="bi bi-x-lg"></i> 清除
                         </button>
                     </div>
                 </div>
@@ -302,7 +302,7 @@
                         <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center py-2">
                                 <strong><i class="bi bi-book"></i> 故事总纲</strong>
-                                <button x-show="!generating && outlineSummary" class="btn btn-sm btn-outline-primary py-0 px-1"
+                                <button x-show="!generating && outlineSummary" class="btn btn-sm btn-outline-primary"
                                         @click="editOutlineSummary()" :disabled="fullAutoRunning">
                                     <i class="bi bi-pencil"></i> 编辑
                                 </button>
@@ -315,8 +315,8 @@
                                 <div x-show="editingSummary">
                                     <textarea class="form-control" rows="6" x-model="outlineSummaryEdit"></textarea>
                                     <div class="d-flex justify-content-end gap-1 mt-2">
-                                        <button class="btn btn-sm btn-outline-secondary" @click="editingSummary = false">取消</button>
-                                        <button class="btn btn-sm btn-primary" @click="saveOutlineSummary()">保存</button>
+                                        <button class="btn btn-sm btn-outline-secondary" @click="editingSummary = false"><i class="bi bi-x-lg"></i> 取消</button>
+                                        <button class="btn btn-sm btn-primary" @click="saveOutlineSummary()"><i class="bi bi-check-lg"></i> 保存</button>
                                     </div>
                                 </div>
                             </div>
@@ -344,7 +344,7 @@
                                         <div class="mb-3 p-2 bg-light rounded border">
                                             <div class="d-flex justify-content-between align-items-center mb-1">
                                                 <small class="fw-bold text-muted"><i class="bi bi-diagram-3"></i> 本卷故事弧线</small>
-                                                <button x-show="!generating && vol.arcSummary" class="btn btn-sm btn-outline-primary py-0 px-1"
+                                                <button x-show="!generating && vol.arcSummary" class="btn btn-sm btn-outline-primary"
                                                         @click="editVolumeArc(vol)" :disabled="fullAutoRunning">
                                                     <i class="bi bi-pencil"></i>
                                                 </button>
@@ -356,8 +356,8 @@
                                             <div x-show="vol.editingArc">
                                                 <textarea class="form-control form-control-sm" rows="4" x-model="vol.arcSummaryEdit"></textarea>
                                                 <div class="d-flex justify-content-end gap-1 mt-1">
-                                                    <button class="btn btn-sm btn-outline-secondary" @click="vol.editingArc = false">取消</button>
-                                                    <button class="btn btn-sm btn-primary" @click="saveVolumeArc(vol)">保存</button>
+                                                    <button class="btn btn-sm btn-outline-secondary" @click="vol.editingArc = false"><i class="bi bi-x-lg"></i> 取消</button>
+                                                    <button class="btn btn-sm btn-primary" @click="saveVolumeArc(vol)"><i class="bi bi-check-lg"></i> 保存</button>
                                                 </div>
                                             </div>
                                         </div>
@@ -378,21 +378,21 @@
                                                             <span x-show="ch.status === 'FAILED'" class="text-danger fw-normal"> - 生成失败</span>
                                                         </div>
                                                         <div x-show="!generating && (ch.status === 'COMPLETED' || ch.status === 'REFINED') && !ch.editing" class="d-flex gap-1 flex-shrink-0">
-                                                            <button x-show="ch.originalSummary" class="btn btn-sm btn-outline-info py-0 px-2"
+                                                            <button x-show="ch.originalSummary" class="btn btn-sm btn-outline-info"
                                                                     @click="ch.showCompare = !ch.showCompare">
                                                                 <i class="bi bi-arrows-expand"></i> 对比
                                                             </button>
-                                                            <button class="btn btn-sm btn-outline-primary py-0 px-2"
+                                                            <button class="btn btn-sm btn-outline-primary"
                                                                     @click="editChapterOutline(ch)" :disabled="fullAutoRunning">
                                                                 <i class="bi bi-pencil"></i> 编辑
                                                             </button>
-                                                            <button class="btn btn-sm btn-outline-warning py-0 px-2"
+                                                            <button class="btn btn-sm btn-outline-warning"
                                                                     @click="regenerateChapterOutline(ch)" :disabled="fullAutoRunning || ch.regenerating">
                                                                 <i class="bi bi-arrow-clockwise" :class="ch.regenerating ? 'spin' : ''"></i> 重新生成
                                                             </button>
                                                         </div>
                                                         <div x-show="!generating && ch.status === 'FAILED' && !ch.editing" class="flex-shrink-0">
-                                                            <button class="btn btn-sm btn-outline-danger py-0 px-2"
+                                                            <button class="btn btn-sm btn-outline-danger"
                                                                     @click="regenerateChapterOutline(ch)" :disabled="fullAutoRunning || ch.regenerating"
                                                                     title="重新生成">
                                                                 <i class="bi bi-arrow-clockwise" :class="ch.regenerating ? 'spin' : ''"></i> 重试
@@ -415,8 +415,8 @@
                                                         </div>
                                                         <textarea class="form-control form-control-sm" rows="3" x-model="ch.summaryEdit" placeholder="章节大纲"></textarea>
                                                         <div class="d-flex justify-content-end gap-1 mt-1">
-                                                            <button class="btn btn-sm btn-outline-secondary" @click="ch.editing = false">取消</button>
-                                                            <button class="btn btn-sm btn-primary" @click="saveChapterOutline(ch)">保存</button>
+                                                            <button class="btn btn-sm btn-outline-secondary" @click="ch.editing = false"><i class="bi bi-x-lg"></i> 取消</button>
+                                                            <button class="btn btn-sm btn-primary" @click="saveChapterOutline(ch)"><i class="bi bi-check-lg"></i> 保存</button>
                                                         </div>
                                                     </div>
                                                     <div x-show="ch.showCompare && ch.originalSummary" x-transition class="mt-2">
@@ -488,19 +488,19 @@
                                     <span x-show="generateElapsed" class="ms-3"><i class="bi bi-clock"></i> 耗时 <span x-text="generateElapsed"></span></span>
                                 </small>
                                 <div class="d-flex gap-2">
-                                    <button x-show="currentStep === 'WORLD_BUILDING'" type="button" class="btn btn-outline-info btn-sm"
+                                    <button x-show="currentStep === 'WORLD_BUILDING'" type="button" class="btn btn-sm btn-outline-info"
                                             @click="regenerateWorldFacets()" :disabled="fullAutoRunning">
                                         <i class="bi bi-diagram-3"></i> 展开分面
                                     </button>
-                                    <button type="button" class="btn btn-outline-primary btn-sm" @click="editing = true"
+                                    <button type="button" class="btn btn-sm btn-outline-primary" @click="editing = true"
                                             :disabled="fullAutoRunning">
                                         <i class="bi bi-pencil"></i> 编辑
                                     </button>
-                                    <button x-show="isCurrentStep" type="button" class="btn btn-success btn-sm"
+                                    <button x-show="isCurrentStep" type="button" class="btn btn-sm btn-primary"
                                             @click="confirmStep()" :disabled="fullAutoRunning || stepConfirmed">
                                         <i class="bi bi-check-lg"></i> <span x-text="stepConfirmed ? '已确认' : '确认'"></span>
                                     </button>
-                                    <button x-show="isCurrentStep && hasNextStep" type="button" class="btn btn-primary btn-sm"
+                                    <button x-show="isCurrentStep && hasNextStep" type="button" class="btn btn-sm btn-primary"
                                             @click="advanceStep()" :disabled="fullAutoRunning">
                                         <i class="bi bi-arrow-right"></i> 进入下一步
                                     </button>
@@ -518,10 +518,10 @@
                                 <div class="d-flex justify-content-between align-items-center mt-2">
                                     <small class="text-muted">字数: <strong x-text="editableContent.length"></strong></small>
                                     <div class="d-flex gap-2">
-                                        <button type="button" class="btn btn-outline-secondary btn-sm" @click="editing = false">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" @click="editing = false">
                                             <i class="bi bi-x-lg"></i> 取消
                                         </button>
-                                        <button type="submit" class="btn btn-primary btn-sm">
+                                        <button type="submit" class="btn btn-sm btn-primary">
                                             <i class="bi bi-save"></i> 保存编辑
                                         </button>
                                     </div>
@@ -565,8 +565,8 @@
                 <div class="d-flex gap-2 align-items-center">
                     <input type="text" class="form-control form-control-sm" x-model="newCharacterName"
                            placeholder="输入角色姓名" style="max-width: 200px;">
-                    <button class="btn btn-sm btn-primary" @click="addCharacter()">确认添加</button>
-                    <button class="btn btn-sm btn-outline-secondary" @click="showAddCharacter = false; newCharacterName = ''">取消</button>
+                    <button class="btn btn-sm btn-primary" @click="addCharacter()"><i class="bi bi-check-lg"></i> 确认添加</button>
+                    <button class="btn btn-sm btn-outline-secondary" @click="showAddCharacter = false; newCharacterName = ''"><i class="bi bi-x-lg"></i> 取消</button>
                 </div>
             </div>
 
@@ -610,15 +610,15 @@
                                     }" x-text="ch.characterType === 'VOLUME_RECURRING' ? '第'+ch.startVolume+'卷引入' : ch.characterType === 'VOLUME_TEMP' ? '第'+ch.startVolume+'卷临时' : '核心'" style="font-size: 0.65rem;" x-show="ch.characterType"></span>
                                 </span>
                                 <div class="d-flex gap-1">
-                                    <button class="btn btn-sm btn-outline-info py-0 px-1" title="生成图片"
+                                    <button class="btn btn-sm btn-outline-info" title="生成图片"
                                             @click="openImageModal(ch)" :disabled="fullAutoRunning">
                                         <i class="bi bi-image"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-primary py-0 px-1"
+                                    <button class="btn btn-sm btn-outline-primary"
                                             @click="editCharacter(ch)" :disabled="fullAutoRunning">
                                         <i class="bi bi-pencil"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-danger py-0 px-1"
+                                    <button class="btn btn-sm btn-outline-danger"
                                             @click="deleteCharacter(ch.id)" :disabled="fullAutoRunning">
                                         <i class="bi bi-trash"></i>
                                     </button>
@@ -683,8 +683,8 @@
                                         <input type="text" class="form-control form-control-sm" x-model="editForm.relationships">
                                     </div>
                                     <div class="d-flex gap-1 justify-content-end">
-                                        <button class="btn btn-sm btn-outline-secondary" @click="editingCharacterId = null">取消</button>
-                                        <button class="btn btn-sm btn-primary" @click="saveCharacter()">保存</button>
+                                        <button class="btn btn-sm btn-outline-secondary" @click="editingCharacterId = null"><i class="bi bi-x-lg"></i> 取消</button>
+                                        <button class="btn btn-sm btn-primary" @click="saveCharacter()"><i class="bi bi-check-lg"></i> 保存</button>
                                     </div>
                                 </div>
                             </div>
@@ -696,12 +696,12 @@
             <!-- Character overview panel -->
             <div x-show="characterOverview && !generating" class="mt-3">
                 <div class="card border-info">
-                    <div class="card-header py-1 bg-info bg-opacity-10 d-flex justify-content-between align-items-center">
+                    <div class="card-header py-1 bg-info bg-opacity-10 d-flex justify-content-between align-items-center gap-2">
                         <div @click="showOverview = !showOverview" style="cursor: pointer;" class="flex-grow-1">
                             <small class="fw-bold">角色总览</small>
                             <i class="bi" :class="showOverview ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
                         </div>
-                        <button class="btn btn-sm btn-outline-primary py-0 px-1 ms-2" x-show="showOverview && !editingOverview"
+                        <button class="btn btn-sm btn-outline-primary" x-show="showOverview && !editingOverview"
                                 @click.stop="editingOverview = true; editOverviewContent = characterOverview" :disabled="fullAutoRunning">
                             <i class="bi bi-pencil"></i>
                         </button>
@@ -711,8 +711,8 @@
                         <textarea class="form-control form-control-sm" rows="10" x-model="editOverviewContent"
                                   style="font-size: 0.85rem; white-space: pre-wrap;"></textarea>
                         <div class="d-flex gap-1 justify-content-end mt-2">
-                            <button class="btn btn-sm btn-outline-secondary" @click="editingOverview = false">取消</button>
-                            <button class="btn btn-sm btn-primary" @click="saveCharacterOverview()">保存</button>
+                            <button class="btn btn-sm btn-outline-secondary" @click="editingOverview = false"><i class="bi bi-x-lg"></i> 取消</button>
+                            <button class="btn btn-sm btn-primary" @click="saveCharacterOverview()"><i class="bi bi-check-lg"></i> 保存</button>
                         </div>
                     </div>
                 </div>
@@ -780,7 +780,7 @@
                             <input type="number" class="form-control form-control-sm" style="width: 70px;" x-model.number="imageWidth" min="256" max="4096" step="64">
                             <span class="small text-muted">&times;</span>
                             <input type="number" class="form-control form-control-sm" style="width: 70px;" x-model.number="imageHeight" min="256" max="4096" step="64">
-                            <button class="btn btn-sm btn-outline-secondary py-0 px-1" @click="let t = imageWidth; imageWidth = imageHeight; imageHeight = t;" title="互换宽高">
+                            <button class="btn btn-sm btn-outline-secondary" @click="let t = imageWidth; imageWidth = imageHeight; imageHeight = t;" title="互换宽高">
                                 <i class="bi bi-arrow-repeat"></i>
                             </button>
                             <span class="text-muted">|</span>
@@ -826,7 +826,7 @@
                                             'bg-danger': img.status === 'ERROR'
                                         }" x-text="img.status === 'PROMPT_PENDING' ? '待生成提示词' : img.status === 'PROMPT_READY' ? '提示词就绪' : img.status === 'IMAGE_GENERATING' ? '图片生成中' : img.status === 'READY' ? '完成' : img.status === 'ERROR' ? '错误' : img.status" style="font-size: 0.7rem;"></span>
                                     </div>
-                                    <button class="btn btn-sm btn-outline-danger py-0 px-1" @click="deleteImage(img.id)">
+                                    <button class="btn btn-sm btn-outline-danger" @click="deleteImage(img.id)">
                                         <i class="bi bi-trash" style="font-size: 0.75rem;"></i>
                                     </button>
                                 </div>
@@ -837,13 +837,13 @@
                                             <div class="d-flex justify-content-between align-items-center mb-1">
                                                 <small class="fw-bold text-muted">步骤1: 提示词</small>
                                                 <div class="d-flex gap-1">
-                                                    <button class="btn btn-sm btn-outline-primary py-0 px-2"
+                                                    <button class="btn btn-sm btn-outline-primary"
                                                             @click="generatePromptForCard(img.id)"
                                                             :disabled="promptGenerating[img.id]">
                                                         <span x-show="!promptGenerating[img.id]"><i class="bi bi-arrow-repeat"></i> 重新生成提示词</span>
                                                         <span x-show="promptGenerating[img.id]"><span class="spinner-border spinner-border-sm"></span></span>
                                                     </button>
-                                                    <button class="btn btn-sm btn-outline-success py-0 px-2"
+                                                    <button class="btn btn-sm btn-outline-success"
                                                             @click="savePrompt(img.id)"
                                                             :disabled="!editingPrompts[img.id]">
                                                         <i class="bi bi-check-lg"></i> 保存
@@ -860,7 +860,7 @@
                                         <div class="col-md-6">
                                             <div class="d-flex justify-content-between align-items-center mb-1">
                                                 <small class="fw-bold text-muted">步骤2: 图片</small>
-                                                <button class="btn btn-sm btn-outline-primary py-0 px-2"
+                                                <button class="btn btn-sm btn-outline-primary"
                                                         @click="generateImageForCard(img.id)"
                                                         :disabled="imgGenerating[img.id] || (!editingPrompts[img.id] && !img.imagePrompt)">
                                                     <span x-show="!imgGenerating[img.id]"><i class="bi bi-image"></i> 重新生成图片</span>
@@ -1186,11 +1186,11 @@
 
             <!-- Confirm button -->
             <div x-show="!generating && proofreadLoaded && proofreadCompletedCount() > 0" class="mt-3 text-end d-flex gap-2 justify-content-end">
-                <button x-show="isCurrentStep" type="button" class="btn btn-success"
+                <button x-show="isCurrentStep" type="button" class="btn btn-sm btn-primary"
                         @click="confirmStep()" :disabled="fullAutoRunning || stepConfirmed">
                     <i class="bi bi-check-lg"></i> <span x-text="stepConfirmed ? '已确认' : '确认'"></span>
                 </button>
-                <button x-show="isCurrentStep && hasNextStep" type="button" class="btn btn-primary"
+                <button x-show="isCurrentStep && hasNextStep" type="button" class="btn btn-sm btn-primary"
                         @click="advanceStep()" :disabled="fullAutoRunning">
                     <i class="bi bi-arrow-right"></i> 进入下一步
                 </button>
@@ -1289,7 +1289,7 @@
                                                             <div class="d-flex justify-content-between align-items-center mt-2">
                                                                 <small class="text-muted">字数: <strong x-text="inlinePreviewContent.length"></strong></small>
                                                                 <div class="d-flex gap-1">
-                                                                    <button type="button" class="btn btn-outline-primary btn-sm" @click="startInlineEdit()"
+                                                                    <button type="button" class="btn btn-sm btn-outline-primary" @click="startInlineEdit()"
                                                                             :disabled="fullAutoRunning">
                                                                         <i class="bi bi-pencil"></i> 编辑
                                                                     </button>
@@ -1303,10 +1303,10 @@
                                                             <div class="d-flex justify-content-between align-items-center mt-2">
                                                                 <small class="text-muted">字数: <strong x-text="inlinePreviewEditContent.length"></strong></small>
                                                                 <div class="d-flex gap-2">
-                                                                    <button type="button" class="btn btn-outline-secondary btn-sm" @click="inlinePreviewEditing = false">
+                                                                    <button type="button" class="btn btn-sm btn-outline-secondary" @click="inlinePreviewEditing = false">
                                                                         <i class="bi bi-x-lg"></i> 取消
                                                                     </button>
-                                                                    <button type="button" class="btn btn-primary btn-sm" @click="saveInlineEdit()">
+                                                                    <button type="button" class="btn btn-sm btn-primary" @click="saveInlineEdit()">
                                                                         <i class="bi bi-save"></i> 保存
                                                                     </button>
                                                                 </div>
@@ -1323,7 +1323,7 @@
                                                                     原稿 <strong x-text="(polishPreviews[ch.chapterNumber]?.draft || '').length"></strong>字
                                                                     → 润色后 <strong x-text="(polishPreviews[ch.chapterNumber]?.content || '').length"></strong>字
                                                                 </small>
-                                                                <button type="button" class="btn btn-outline-primary btn-sm"
+                                                                <button type="button" class="btn btn-sm btn-outline-primary"
                                                                         @click="polishEditingChapter = ch.chapterNumber; polishEditContent = polishPreviews[ch.chapterNumber]?.content || ''"
                                                                         :disabled="fullAutoRunning">
                                                                     <i class="bi bi-pencil"></i> 编辑润色稿
@@ -1349,10 +1349,10 @@
                                                             <div class="d-flex justify-content-between align-items-center mt-2">
                                                                 <small class="text-muted">字数: <strong x-text="polishEditContent.length"></strong></small>
                                                                 <div class="d-flex gap-2">
-                                                                    <button type="button" class="btn btn-outline-secondary btn-sm" @click="polishEditingChapter = null">
+                                                                    <button type="button" class="btn btn-sm btn-outline-secondary" @click="polishEditingChapter = null">
                                                                         <i class="bi bi-x-lg"></i> 取消
                                                                     </button>
-                                                                    <button type="button" class="btn btn-primary btn-sm" @click="savePolishEdit(ch.chapterNumber)">
+                                                                    <button type="button" class="btn btn-sm btn-primary" @click="savePolishEdit(ch.chapterNumber)">
                                                                         <i class="bi bi-save"></i> 保存
                                                                     </button>
                                                                 </div>
@@ -1461,7 +1461,7 @@
                                     <div class="d-flex justify-content-between align-items-center mt-2">
                                         <small class="text-muted">字数: <strong x-text="inlinePreviewContent.length"></strong></small>
                                         <div class="d-flex gap-1">
-                                            <button type="button" class="btn btn-outline-primary btn-sm" @click="startInlineEdit()"
+                                            <button type="button" class="btn btn-sm btn-outline-primary" @click="startInlineEdit()"
                                                     :disabled="fullAutoRunning">
                                                 <i class="bi bi-pencil"></i> 编辑
                                             </button>
@@ -1475,10 +1475,10 @@
                                     <div class="d-flex justify-content-between align-items-center mt-2">
                                         <small class="text-muted">字数: <strong x-text="inlinePreviewEditContent.length"></strong></small>
                                         <div class="d-flex gap-2">
-                                            <button type="button" class="btn btn-outline-secondary btn-sm" @click="inlinePreviewEditing = false">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" @click="inlinePreviewEditing = false">
                                                 <i class="bi bi-x-lg"></i> 取消
                                             </button>
-                                            <button type="button" class="btn btn-primary btn-sm" @click="saveInlineEdit()">
+                                            <button type="button" class="btn btn-sm btn-primary" @click="saveInlineEdit()">
                                                 <i class="bi bi-save"></i> 保存
                                             </button>
                                         </div>
@@ -1496,7 +1496,7 @@
                                             原稿 <strong x-text="(polishPreviews[ch.chapterNumber]?.draft || '').length"></strong>字
                                             → 润色后 <strong x-text="(polishPreviews[ch.chapterNumber]?.content || '').length"></strong>字
                                         </small>
-                                        <button type="button" class="btn btn-outline-primary btn-sm"
+                                        <button type="button" class="btn btn-sm btn-outline-primary"
                                                 @click="polishEditingChapter = ch.chapterNumber; polishEditContent = polishPreviews[ch.chapterNumber]?.content || ''"
                                                 :disabled="fullAutoRunning">
                                             <i class="bi bi-pencil"></i> 编辑润色稿
@@ -1522,10 +1522,10 @@
                                     <div class="d-flex justify-content-between align-items-center mt-2">
                                         <small class="text-muted">字数: <strong x-text="polishEditContent.length"></strong></small>
                                         <div class="d-flex gap-2">
-                                            <button type="button" class="btn btn-outline-secondary btn-sm" @click="polishEditingChapter = null">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" @click="polishEditingChapter = null">
                                                 <i class="bi bi-x-lg"></i> 取消
                                             </button>
-                                            <button type="button" class="btn btn-primary btn-sm" @click="savePolishEdit(ch.chapterNumber)">
+                                            <button type="button" class="btn btn-sm btn-primary" @click="savePolishEdit(ch.chapterNumber)">
                                                 <i class="bi bi-save"></i> 保存
                                             </button>
                                         </div>
@@ -1577,7 +1577,7 @@
 
             <!-- Generate next chapter (only for CHAPTER_WRITING) -->
             <template x-if="currentStep === 'CHAPTER_WRITING'">
-                <button class="btn btn-outline-primary mt-3" @click="generateNextChapter()"
+                <button class="btn btn-sm btn-outline-primary mt-3" @click="generateNextChapter()"
                         :disabled="generating || autoGenerating || fullAutoRunning">
                     <i class="bi bi-plus-lg"></i> 自动生成下一章
                 </button>
@@ -1618,7 +1618,7 @@
         <!-- Advance Step (仅在「当前步」且非最后一步显示；OUTLINE_GENERATION / CHAPTER_WRITING 步骤隐藏) -->
         <div class="mt-3 text-end"
              x-show="!generating && !fullAutoRunning && isCurrentStep && hasNextStep && currentStep !== 'OUTLINE_GENERATION' && currentStep !== 'CHAPTER_WRITING'">
-            <button type="button" class="btn btn-outline-primary" @click="advanceStep()">
+            <button type="button" class="btn btn-sm btn-outline-primary" @click="advanceStep()">
                 <i class="bi bi-arrow-right"></i> 跳过当前步骤，进入下一步
             </button>
         </div>
@@ -1659,8 +1659,8 @@
                     </template>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary btn-sm" @click="saveWorkflowState()"
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal"><i class="bi bi-x-lg"></i> 取消</button>
+                    <button type="button" class="btn btn-sm btn-primary" @click="saveWorkflowState()"
                             :disabled="fullAutoRunning">
                         <i class="bi bi-save"></i> 保存
                     </button>
@@ -1685,8 +1685,8 @@
                               placeholder="请输入对本章的修改意见，AI润色时会参考这些意见..."></textarea>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" @click="savePolishNote()">保存意见</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal"><i class="bi bi-x-lg"></i> 取消</button>
+                    <button type="button" class="btn btn-sm btn-primary" @click="savePolishNote()"><i class="bi bi-check-lg"></i> 保存意见</button>
                 </div>
             </div>
         </div>
@@ -1715,13 +1715,13 @@
                                 <tr>
                                     <td><input type="text" class="form-control form-control-sm" x-model="pair.oldText" placeholder="查找..." :disabled="globalReplacing"></td>
                                     <td><input type="text" class="form-control form-control-sm" x-model="pair.newText" placeholder="替换为..." :disabled="globalReplacing"></td>
-                                    <td><button class="btn btn-sm btn-outline-danger" @click="replacePairs.splice(idx, 1)" :disabled="globalReplacing || replacePairs.length <= 1"><i class="bi bi-x"></i></button></td>
+                                    <td><button class="btn btn-sm btn-outline-danger" @click="replacePairs.splice(idx, 1)" :disabled="globalReplacing || replacePairs.length <= 1"><i class="bi bi-x-lg"></i></button></td>
                                 </tr>
                             </template>
                         </tbody>
                     </table>
                     <button class="btn btn-sm btn-outline-secondary" @click="replacePairs.push({oldText:'',newText:''})" :disabled="globalReplacing">
-                        <i class="bi bi-plus"></i> 增加一行
+                        <i class="bi bi-plus-lg"></i> 增加一行
                     </button>
 
                     <div x-show="globalReplaceLog.length > 0" class="mt-3">
@@ -1734,8 +1734,8 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" :disabled="globalReplacing">取消</button>
-                    <button type="button" class="btn btn-primary" @click="executeGlobalReplace()" :disabled="globalReplacing">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" :disabled="globalReplacing"><i class="bi bi-x-lg"></i> 取消</button>
+                    <button type="button" class="btn btn-sm btn-primary" @click="executeGlobalReplace()" :disabled="globalReplacing">
                         <span x-show="!globalReplacing">执行替换</span>
                         <span x-show="globalReplacing"><span class="spinner-border spinner-border-sm"></span> 替换中...</span>
                     </button>
@@ -1805,8 +1805,8 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" @click="applyReuseGuidance()"
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal"><i class="bi bi-x-lg"></i> 取消</button>
+                    <button type="button" class="btn btn-sm btn-primary" @click="applyReuseGuidance()"
                             :disabled="!selectedGuidanceId">
                         <i class="bi bi-check-lg"></i> 使用选中指导
                     </button>
@@ -1883,8 +1883,8 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">关闭</button>
-                    <button type="button" class="btn btn-primary btn-sm" @click="executeDistill()"
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal"><i class="bi bi-x-lg"></i> 关闭</button>
+                    <button type="button" class="btn btn-sm btn-primary" @click="executeDistill()"
                             :disabled="distillLoading || !canExecuteDistill">
                         <i class="bi bi-funnel"></i> 开始蒸馏
                     </button>
@@ -1943,8 +1943,8 @@
                 </div>
                 <div class="modal-footer">
                     <span class="me-auto small text-muted" x-text="'已选 ' + selectedMaterialIds.length + ' 项素材'"></span>
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">关闭</button>
-                    <button type="button" class="btn btn-primary btn-sm" data-bs-dismiss="modal">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal"><i class="bi bi-x-lg"></i> 关闭</button>
+                    <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal">
                         <i class="bi bi-check-lg"></i> 确认选择
                     </button>
                 </div>

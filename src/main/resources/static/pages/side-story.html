@@ -52,8 +52,8 @@
         <div class="d-flex gap-2 align-items-center">
             <!-- Auto Run Controls -->
             <template x-if="autoRun.status === 'IDLE' || autoRun.status === 'COMPLETED' || autoRun.status === 'FAILED' || autoRun.status === 'STOPPED'">
-                <button class="btn btn-sm btn-success" @click="startAutoRun()">
-                    <i class="bi bi-play-fill me-1"></i>开始自动创作
+                <button class="btn btn-sm btn-primary" @click="startAutoRun()">
+                    <i class="bi bi-play-fill"></i>开始自动创作
                 </button>
             </template>
             <template x-if="autoRun.status === 'RUNNING' || autoRun.status === 'STOPPING'">
@@ -68,7 +68,7 @@
                     </button>
                     <button class="btn btn-sm btn-outline-danger" @click="stopAutoRun()"
                             :disabled="autoRun.status === 'STOPPING'">
-                        <i class="bi bi-stop-fill me-1"></i>停止
+                        <i class="bi bi-stop-fill"></i>停止
                     </button>
                 </div>
             </template>
@@ -185,8 +185,8 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-secondary" @click="showInfoModal = false">取消</button>
-                    <button class="btn btn-primary" @click="saveInfo()">保存</button>
+                    <button class="btn btn-sm btn-outline-secondary" @click="showInfoModal = false"><i class="bi bi-x-lg"></i> 取消</button>
+                    <button class="btn btn-sm btn-primary" @click="saveInfo()"><i class="bi bi-check-lg"></i> 保存</button>
                 </div>
             </div>
         </div>
@@ -211,8 +211,8 @@
                 <textarea class="form-control mb-2" rows="5" x-model="guidanceEdit"
                           placeholder="描述你对这篇番外的创作方向、意图、风格偏好等..."></textarea>
                 <div class="d-flex justify-content-end gap-2">
-                    <button class="btn btn-sm btn-outline-secondary" @click="cancelGuidanceEdit()">取消</button>
-                    <button class="btn btn-sm btn-primary" @click="saveGuidance()">保存</button>
+                    <button class="btn btn-sm btn-outline-secondary" @click="cancelGuidanceEdit()"><i class="bi bi-x-lg"></i> 取消</button>
+                    <button class="btn btn-sm btn-primary" @click="saveGuidance()"><i class="bi bi-check-lg"></i> 保存</button>
                 </div>
             </div>
         </div>
@@ -281,8 +281,8 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-secondary" @click="showCharModal = false">取消</button>
-                    <button class="btn btn-primary" @click="saveCharacters()">保存</button>
+                    <button class="btn btn-sm btn-outline-secondary" @click="showCharModal = false"><i class="bi bi-x-lg"></i> 取消</button>
+                    <button class="btn btn-sm btn-primary" @click="saveCharacters()"><i class="bi bi-check-lg"></i> 保存</button>
                 </div>
             </div>
         </div>
@@ -303,7 +303,7 @@
                     <span class="spinner-border spinner-border-sm me-1" x-show="generating.outline"></span>
                     生成故事线
                 </button>
-                <button class="btn btn-sm btn-outline-danger" @click="stopGeneration('OUTLINE', 0)" x-show="generating.outline">
+                <button class="btn btn-sm btn-outline-danger" @click="stopGeneration('OUTLINE', 0)" x-show="generating.outline"><i class="bi bi-stop-fill"></i> 
                     停止
                 </button>
             </div>
@@ -328,8 +328,8 @@
                 <textarea class="form-control mb-2" rows="10" x-model="outlineEdit"
                           placeholder="番外故事线..."></textarea>
                 <div class="d-flex justify-content-end gap-2">
-                    <button class="btn btn-sm btn-outline-secondary" @click="cancelOutlineEdit()">取消</button>
-                    <button class="btn btn-sm btn-primary" @click="saveOutline()">保存</button>
+                    <button class="btn btn-sm btn-outline-secondary" @click="cancelOutlineEdit()"><i class="bi bi-x-lg"></i> 取消</button>
+                    <button class="btn btn-sm btn-primary" @click="saveOutline()"><i class="bi bi-check-lg"></i> 保存</button>
                 </div>
             </div>
             <!-- Stream display -->
@@ -348,7 +348,7 @@
                     <i class="bi bi-sliders"></i>
                 </button>
                 <button class="btn btn-sm btn-outline-primary" @click="addChapters()">
-                    <i class="bi bi-plus"></i> 添加章节
+                    <i class="bi bi-plus-lg"></i> 添加章节
                 </button>
             </div>
         </div>
@@ -405,7 +405,7 @@
                                         </button>
                                         <button class="btn btn-sm btn-outline-danger"
                                                 @click="stopGeneration('CHAPTER_OUTLINE', ch.chapterNumber)"
-                                                x-show="generating.chapterOutline && generatingChapterNum === ch.chapterNumber">
+                                                x-show="generating.chapterOutline && generatingChapterNum === ch.chapterNumber"><i class="bi bi-stop-fill"></i> 
                                             停止
                                         </button>
                                     </div>
@@ -419,8 +419,8 @@
                                 <div x-show="editingChapterOutline === ch.chapterNumber">
                                     <textarea class="form-control mb-2" rows="4" x-model="chapterOutlineEditContent"></textarea>
                                     <div class="d-flex justify-content-end gap-2">
-                                        <button class="btn btn-sm btn-outline-secondary" @click="editingChapterOutline = null">取消</button>
-                                        <button class="btn btn-sm btn-primary" @click="saveChapterOutline(ch.chapterNumber)">保存</button>
+                                        <button class="btn btn-sm btn-outline-secondary" @click="editingChapterOutline = null"><i class="bi bi-x-lg"></i> 取消</button>
+                                        <button class="btn btn-sm btn-primary" @click="saveChapterOutline(ch.chapterNumber)"><i class="bi bi-check-lg"></i> 保存</button>
                                     </div>
                                 </div>
                                 <!-- Stream -->
@@ -449,7 +449,7 @@
                                         </button>
                                         <button class="btn btn-sm btn-outline-danger"
                                                 @click="stopGeneration('WRITING', ch.chapterNumber)"
-                                                x-show="generating.writing && generatingChapterNum === ch.chapterNumber">
+                                                x-show="generating.writing && generatingChapterNum === ch.chapterNumber"><i class="bi bi-stop-fill"></i> 
                                             停止
                                         </button>
                                     </div>
@@ -465,8 +465,8 @@
                                     <div class="d-flex justify-content-between align-items-center">
                                         <small class="text-muted" x-text="chapterContentEditContent.length + ' 字'"></small>
                                         <div class="d-flex gap-2">
-                                            <button class="btn btn-sm btn-outline-secondary" @click="editingChapterContent = null">取消</button>
-                                            <button class="btn btn-sm btn-primary" @click="saveChapterContent(ch.chapterNumber)">保存</button>
+                                            <button class="btn btn-sm btn-outline-secondary" @click="editingChapterContent = null"><i class="bi bi-x-lg"></i> 取消</button>
+                                            <button class="btn btn-sm btn-primary" @click="saveChapterContent(ch.chapterNumber)"><i class="bi bi-check-lg"></i> 保存</button>
                                         </div>
                                     </div>
                                 </div>
@@ -489,7 +489,7 @@
                                         </button>
                                         <button class="btn btn-sm btn-outline-danger"
                                                 @click="stopGeneration('POLISH', ch.chapterNumber)"
-                                                x-show="generating.polish && generatingChapterNum === ch.chapterNumber">
+                                                x-show="generating.polish && generatingChapterNum === ch.chapterNumber"><i class="bi bi-stop-fill"></i> 
                                             停止
                                         </button>
                                     </div>

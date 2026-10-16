@@ -31,15 +31,15 @@ window.__MATERIALS_DATA__ = (function () {
 <main class="sc-main container py-4" id="main">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
         <h2 class="mb-0">素材库</h2>
-        <div>
-            <a href="/settings" class="btn btn-outline-secondary btn-sm me-2">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <a href="/settings" class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-arrow-left"></i> 返回设置
             </a>
-            <button type="button" class="btn btn-outline-success btn-sm me-2" data-bs-toggle="modal" data-bs-target="#distillModal">
+            <button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#distillModal">
                 <i class="bi bi-funnel"></i> 蒸馏素材
             </button>
-            <button type="button" class="btn btn-primary btn-sm" id="btnNew">
-                <i class="bi bi-plus"></i> 新建素材
+            <button type="button" class="btn btn-sm btn-primary" id="btnNew">
+                <i class="bi bi-plus-lg"></i> 新建素材
             </button>
         </div>
     </div>
@@ -66,8 +66,8 @@ window.__MATERIALS_DATA__ = (function () {
                     <label class="form-label small mb-1">素材内容</label>
                     <textarea class="form-control form-control-sm" name="content" rows="5" placeholder="素材内容..."></textarea>
                 </div>
-                <button type="submit" class="btn btn-sm btn-primary">创建</button>
-                <button type="button" class="btn btn-sm btn-secondary" id="btnCancelAdd">取消</button>
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg"></i> 创建</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCancelAdd"><i class="bi bi-x-lg"></i> 取消</button>
             </form>
         </div>
     </div>
@@ -121,7 +121,7 @@ window.__MATERIALS_DATA__ = (function () {
                         </div>
                     </div>
                     <div class="mt-3">
-                        <button type="button" class="btn btn-success btn-sm" id="dRun" disabled>
+                        <button type="button" class="btn btn-sm btn-primary" id="dRun" disabled>
                             <span id="dSpinner" class="spinner-border spinner-border-sm me-1" style="display:none;"></span>蒸馏
                         </button>
                     </div>
@@ -137,7 +137,7 @@ window.__MATERIALS_DATA__ = (function () {
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal"><i class="bi bi-x-lg"></i> 关闭</button>
                 </div>
             </div>
         </div>
@@ -186,14 +186,14 @@ window.__MATERIALS_DATA__ = (function () {
                 '<td class="text-muted small text-truncate" style="max-width:200px;">' + SC.escape(it.preview) + '</td>' +
                 '<td class="text-muted small text-truncate" style="max-width:160px;">' + SC.escape(it.sourceHint) + '</td>' +
                 '<td class="small text-muted">' + SC.escape(SC.fmt.datetime(it.updatedAt)) + '</td>' +
-                '<td>' +
-                    '<a href="/settings/materials/' + it.id + '/edit" class="btn btn-sm btn-outline-primary me-1" title="编辑">' +
+                '<td><div class="d-flex gap-1">' +
+                    '<a href="/settings/materials/' + it.id + '/edit" class="btn btn-sm btn-outline-primary" title="编辑">' +
                         '<i class="bi bi-pencil"></i></a>' +
                     '<form action="/settings/materials/' + it.id + '/delete" method="post" class="d-inline" ' +
                         'data-confirm="确定删除此素材？">' +
                         '<button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>' +
                     '</form>' +
-                '</td>' +
+                '</div></td>' +
                 '</tr>';
         }).join('');
 

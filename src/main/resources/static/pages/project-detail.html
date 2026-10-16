@@ -61,16 +61,16 @@
             '  </div>' +
             '  <div class="d-flex flex-wrap gap-2">' +
             (p.txtImportJobId
-                ? '    <a href="' + BASE + '/reverse/progress" class="btn btn-outline-primary"><i class="bi bi-arrow-up-right-circle"></i> 逆向工程</a>'
+                ? '    <a href="' + BASE + '/reverse/progress" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-up-right-circle"></i> 逆向工程</a>'
                 : '') +
-            '    <a href="' + BASE + '/volumes/manage" class="btn btn-outline-secondary"><i class="bi bi-collection"></i> 分卷管理</a>' +
-            '    <a href="' + BASE + '/workflow/world-building" class="btn btn-primary"><i class="bi bi-pencil-square"></i> 继续创作</a>' +
-            '    <a href="' + BASE + '/side-stories" class="btn btn-outline-warning"><i class="bi bi-journal-bookmark"></i> 番外</a>' +
-            '    <a href="' + BASE + '/inspirations" class="btn btn-outline-dark" target="_blank"><i class="bi bi-lightbulb"></i> 灵感</a>' +
-            '    <a href="' + BASE + '/read" class="btn btn-outline-success" target="_blank"><i class="bi bi-book"></i> 全文阅读</a>' +
-            '    <a href="' + BASE + '/inspect" class="btn btn-outline-info" target="_blank"><i class="bi bi-eye"></i> 创作透视</a>' +
+            '    <a href="' + BASE + '/volumes/manage" class="btn btn-sm btn-outline-secondary"><i class="bi bi-collection"></i> 分卷管理</a>' +
+            '    <a href="' + BASE + '/workflow/world-building" class="btn btn-sm btn-primary"><i class="bi bi-pencil-square"></i> 继续创作</a>' +
+            '    <a href="' + BASE + '/side-stories" class="btn btn-sm btn-outline-secondary"><i class="bi bi-journal-bookmark"></i> 番外</a>' +
+            '    <a href="' + BASE + '/inspirations" class="btn btn-sm btn-outline-secondary" target="_blank"><i class="bi bi-lightbulb"></i> 灵感</a>' +
+            '    <a href="' + BASE + '/read" class="btn btn-sm btn-outline-secondary" target="_blank"><i class="bi bi-book"></i> 全文阅读</a>' +
+            '    <a href="' + BASE + '/inspect" class="btn btn-sm btn-outline-secondary" target="_blank"><i class="bi bi-eye"></i> 创作透视</a>' +
             '    <div class="dropdown">' +
-            '      <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">' +
+            '      <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">' +
             '        <i class="bi bi-download"></i> 导出</button>' +
             '      <ul class="dropdown-menu dropdown-menu-end">' +
             '        <li><a class="dropdown-item" href="' + BASE + '/export?format=markdown"><i class="bi bi-filetype-md me-2"></i>Markdown (.md)</a></li>' +
@@ -83,8 +83,8 @@
             '        <li><a class="dropdown-item" href="/tts-export?projectId=' + projectId + '"><i class="bi bi-music-note-beamed me-2"></i>导出MP3</a></li>' +
             '      </ul>' +
             '    </div>' +
-            '    <a href="' + BASE + '/edit" class="btn btn-outline-secondary"><i class="bi bi-gear"></i> 编辑</a>' +
-            '    <button type="button" class="btn btn-outline-danger" id="btnDelete"><i class="bi bi-trash"></i> 删除</button>' +
+            '    <a href="' + BASE + '/edit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-gear"></i> 编辑</a>' +
+            '    <button type="button" class="btn btn-sm btn-outline-danger" id="btnDelete"><i class="bi bi-trash"></i> 删除</button>' +
             '  </div>' +
             '</div>';
     }

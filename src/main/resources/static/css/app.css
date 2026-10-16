@@ -799,3 +799,55 @@ a.list-group-item.sc-anchor-link:focus .bi {
 a.sc-link.text-decoration-none:hover {
     text-decoration: underline;
 }
+
+/* ==================== 全站按钮统一基线（2026-10-16） ====================
+   规范见 .workbuddy/memory/topics/frontend-static.md「按钮规范（v1）」。
+   本节只提供「基线」——不覆盖配色语义，配色仍走 Bootstrap 的 btn-* 类。
+
+   1) class 顺序：btn → btn-sm → 变体（btn-primary、btn-outline-secondary…）→ 状态/功能类（dropdown-toggle、active）→ 布局工具类
+   2) 尺寸：全站统一 btn-sm（页头、工具栏、表格行内、弹窗一致），不再出现 btn 与 btn-sm 混排
+   3) 配色语义：
+        主操作(新建/保存/确认/提交)     → btn-primary（实心）
+        次操作(取消/返回/关闭/筛选/重置) → btn-outline-secondary
+        编辑/查看/详情                  → btn-outline-primary
+        删除/清空/移除                  → btn-outline-danger
+        正向(导入/导出/下载/设为默认)    → btn-outline-success
+        说明/预览                       → btn-outline-info
+        重做/覆盖/回滚                  → btn-outline-warning
+      ⚠️ 不再使用实心 btn-secondary / btn-success / btn-dark 与 btn-outline-dark
+   4) 工具行：容器用 "d-flex flex-wrap align-items-center gap-2"，按钮自身不写 me 或 ms 间距类
+   5) 图标：.btn 内 .bi 的留白由基线统一，按钮内不再手写 me-1
+   6) 表格/行内的迷你钮：不再用 py-0 px-1 压高度，统一回 btn-sm
+   -------------------------------------------------------------------- */
+
+.btn-sm {
+    min-height: 1.875rem;   /* 30px：保证同一行内所有 btn-sm 等高 */
+    padding: .25rem .625rem;
+    font-size: .8125rem;    /* 13px */
+    line-height: 1.55;
+}
+
+/* input-group 内的按钮要跟随同一尺寸 —— Bootstrap 的
+   ".input-group-sm > .btn"（特异性 0,2,0）会直接指定 font-size，
+   压过上面的 .btn-sm，所以这里用同等特异性 + 后置顺序覆盖回来。 */
+.input-group > .btn-sm,
+.input-group-sm > .btn {
+    min-height: 1.875rem;
+    padding: .25rem .625rem;
+    font-size: .8125rem;
+    line-height: 1.55;
+}
+
+/* 按钮内图标与文字的统一留白；整钮只有图标时不加右间距（配 px-2 做方形图标钮）。 */
+.btn > .bi:not(:only-child) {
+    margin-right: .35rem;
+}
+
+.btn > .bi:only-child {
+    margin-right: 0;
+}
+
+/* 按钮内图标与文字垂直居中（inline-block 下 .bi 常比文字基线偏高/偏低） */
+.btn > .bi {
+    line-height: 1;
+}

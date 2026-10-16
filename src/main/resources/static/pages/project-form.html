@@ -20,12 +20,12 @@
 
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div class="d-flex align-items-center gap-2">
-                    <a id="backLink" href="/projects" class="btn btn-outline-secondary btn-sm">
+                    <a id="backLink" href="/projects" class="btn btn-sm btn-outline-secondary">
                         <i class="bi bi-arrow-left"></i> 返回
                     </a>
                     <h2 class="mb-0" id="pageTitle">新建创作项目</h2>
                 </div>
-                <button type="button" class="btn btn-outline-info btn-sm" id="btnRef" hidden>
+                <button type="button" class="btn btn-sm btn-outline-info" id="btnRef" hidden>
                     <i class="bi bi-clipboard-data"></i> 参考已有项目
                 </button>
             </div>
@@ -53,8 +53,8 @@
                 </table>
             </div>
             <div class="d-flex justify-content-end gap-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="refCancel">取消</button>
-                <button type="button" class="btn btn-sm btn-primary" id="refApply">确认</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="refCancel"><i class="bi bi-x-lg"></i> 取消</button>
+                <button type="button" class="btn btn-sm btn-primary" id="refApply"><i class="bi bi-check-lg"></i> 确认</button>
             </div>
         </div>
     </div>
@@ -153,11 +153,11 @@
             (isEdit ? fieldSelect('projectStatus', '项目状态', optionsHtml(meta.projectStatuses, form.projectStatus, null)) : '') +
             stepConfigSection(steps) +
             '<div class="d-flex gap-2">' +
-            '  <button type="submit" class="btn btn-primary" id="btnSubmit"><i class="bi bi-check-lg"></i> ' +
+            '  <button type="submit" class="btn btn-sm btn-primary" id="btnSubmit"><i class="bi bi-check-lg"></i> ' +
             (isEdit ? '保存修改' : '创建并开始创作') + '</button>' +
-            '  <a class="btn btn-outline-secondary" href="' + (isEdit ? '/projects/' + projectId : '/') + '"><i class="bi bi-x-lg"></i> 取消</a>' +
+            '  <a class="btn btn-sm btn-outline-secondary" href="' + (isEdit ? '/projects/' + projectId : '/') + '"><i class="bi bi-x-lg"></i> 取消</a>' +
             (isEdit && form.projectStatus === 'ABANDONED'
-                ? '<button type="button" class="btn btn-danger ms-auto" id="btnDelete"><i class="bi bi-trash"></i> 删除项目</button>'
+                ? '<button type="button" class="btn btn-sm btn-outline-danger ms-auto" id="btnDelete"><i class="bi bi-trash"></i> 删除项目</button>'
                 : '') +
             '</div>' +
             '</form>';

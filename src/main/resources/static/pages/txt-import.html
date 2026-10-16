@@ -35,7 +35,7 @@ window.__TXT_IMPORT_DATA__ = (function () {
 <div x-data="txtImport()" x-init="init()">
     <div class="d-flex align-items-center gap-3 mb-4">
         <h2 class="mb-0"><i class="bi bi-file-earmark-text"></i> TXT导入</h2>
-        <a href="/import" class="btn btn-outline-secondary btn-sm">
+        <a href="/import" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-file-earmark-zip"></i> 备份导入
         </a>
     </div>
@@ -112,7 +112,7 @@ window.__TXT_IMPORT_DATA__ = (function () {
                 </div>
 
                 <div>
-                    <button class="btn btn-primary" @click="uploadAndSplit()" :disabled="!file || uploading">
+                    <button class="btn btn-sm btn-primary" @click="uploadAndSplit()" :disabled="!file || uploading">
                         <span x-show="uploading" class="spinner-border spinner-border-sm me-1"></span>
                         上传并分割
                     </button>
@@ -139,10 +139,10 @@ window.__TXT_IMPORT_DATA__ = (function () {
             </div>
             <div class="card-body">
                 <div class="mb-3 d-flex gap-2">
-                    <button class="btn btn-outline-secondary btn-sm" @click="step = 1">
+                    <button class="btn btn-sm btn-outline-secondary" @click="step = 1">
                         <i class="bi bi-arrow-left"></i> 返回
                     </button>
-                    <button class="btn btn-outline-primary btn-sm" @click="resplit()">
+                    <button class="btn btn-sm btn-outline-primary" @click="resplit()">
                         <i class="bi bi-arrow-clockwise"></i> 重新分割
                     </button>
                 </div>
@@ -170,7 +170,7 @@ window.__TXT_IMPORT_DATA__ = (function () {
                                     <td><small x-text="formatWordCount(ch.wordCount)"></small></td>
                                     <td><small class="text-muted" x-text="ch.preview" style="font-size:12px"></small></td>
                                     <td>
-                                        <button class="btn btn-outline-secondary btn-sm"
+                                        <button class="btn btn-sm btn-outline-secondary"
                                                 @click="mergeNext(ch.number)"
                                                 x-show="ch.number < chapters.length"
                                                 title="合并下一章">
@@ -184,7 +184,7 @@ window.__TXT_IMPORT_DATA__ = (function () {
                 </div>
 
                 <div class="mt-3">
-                    <button class="btn btn-primary" @click="saveAndGoToOptions()" :disabled="saving">
+                    <button class="btn btn-sm btn-primary" @click="saveAndGoToOptions()" :disabled="saving">
                         <span x-show="saving" class="spinner-border spinner-border-sm me-1"></span>
                         保存并进入逆向工程 <i class="bi bi-arrow-right"></i>
                     </button>

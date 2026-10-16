@@ -263,7 +263,7 @@
     <aside class="reader-sidebar"
            :class="{ 'collapsed': !sidebarOpen, 'show-mobile': sidebarOpen }">
         <div class="mb-3 mt-4">
-            <a :href="'/projects/' + projectId" class="btn btn-sm w-100 btn-side">
+            <a :href="'/projects/' + projectId" class="btn btn-sm btn-side w-100">
                 <i class="bi bi-arrow-left"></i> 返回项目
             </a>
         </div>
@@ -272,7 +272,7 @@
              x-text="'作者：' + author"></div>
         <hr>
         <!-- 全部折叠/展开 -->
-        <button class="btn btn-sm w-100 mb-2 btn-side" x-show="hasCollapsibleGroups" x-cloak
+        <button class="btn btn-sm btn-side w-100 mb-2" x-show="hasCollapsibleGroups" x-cloak
                 @click="toggleAllGroups()">
             <i class="bi" :class="allGroupsExpanded ? 'bi-chevron-contract' : 'bi-chevron-expand'"></i>
             <span x-text="allGroupsExpanded ? '全部折叠' : '全部展开'"></span>
@@ -413,7 +413,7 @@
                 </div>
 
                 <!-- Export button -->
-                <a class="btn btn-sm btn-outline-dark ms-auto"
+                <a class="btn btn-sm btn-outline-secondary ms-auto"
                    :href="'/tts-export?projectId=' + projectId">
                     <i class="bi bi-download"></i> 导出MP3
                 </a>
@@ -423,8 +423,10 @@
             <div x-show="playlistResumeOffer" x-cloak class="alert alert-info alert-dismissible mt-2 mb-0 py-2 small">
                 <i class="bi bi-arrow-clockwise"></i>
                 上次全文收听到第 <strong x-text="playlistResumeChapter"></strong> 章
-                <button @click="acceptResume()" class="btn btn-sm btn-primary ms-2">继续</button>
-                <button @click="dismissResume()" class="btn btn-sm btn-secondary ms-1">取消</button>
+                <span class="d-inline-flex align-items-center gap-2 ms-2">
+                    <button @click="acceptResume()" class="btn btn-sm btn-primary"><i class="bi bi-play-fill"></i> 继续</button>
+                    <button @click="dismissResume()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-lg"></i> 取消</button>
+                </span>
             </div>
 
             <!-- Full Listen Controls -->
@@ -442,17 +444,17 @@
                     </span>
                     <span class="small text-muted" x-text="'第' + (playlist.chapters[playlist.currentIndex] || '') + '章 (' + (playlist.currentIndex + 1) + '/' + playlist.chapters.length + ')'"></span>
                     <div class="btn-group btn-group-sm ms-auto">
-                        <button class="btn btn-outline-secondary" @click="playlistPrev()" :disabled="playlist.currentIndex <= 0">
+                        <button class="btn btn-sm btn-outline-secondary" @click="playlistPrev()" :disabled="playlist.currentIndex <= 0">
                             <i class="bi bi-skip-backward-fill"></i>
                         </button>
-                        <button class="btn btn-outline-primary" @click="playlist.paused ? playlistResume() : playlistPause()">
+                        <button class="btn btn-sm btn-outline-primary" @click="playlist.paused ? playlistResume() : playlistPause()">
                             <i :class="playlist.paused ? 'bi bi-play-fill' : 'bi bi-pause-fill'"></i>
                             <span x-text="playlist.paused ? '继续' : '暂停'"></span>
                         </button>
-                        <button class="btn btn-outline-secondary" @click="playlistNext()" :disabled="playlist.currentIndex >= playlist.chapters.length - 1">
+                        <button class="btn btn-sm btn-outline-secondary" @click="playlistNext()" :disabled="playlist.currentIndex >= playlist.chapters.length - 1">
                             <i class="bi bi-skip-forward-fill"></i>
                         </button>
-                        <button class="btn btn-outline-danger" @click="stopFullListen()">
+                        <button class="btn btn-sm btn-outline-danger" @click="stopFullListen()">
                             <i class="bi bi-stop-fill"></i> 停止
                         </button>
                     </div>
@@ -472,7 +474,7 @@
                     <span x-show="tts.configs.length > 0" x-cloak
                           x-data="{ cn: chapter.number }">
                         <button class="btn btn-sm tts-chapter-btn"
-                                :class="tts.playing === cn ? 'btn-danger' : 'btn-outline-secondary'"
+                                :class="tts.playing === cn ? 'btn-outline-danger' : 'btn-outline-secondary'"
                                 @click="toggleChapter(cn)"
                                 :disabled="tts.loading === cn">
                             <span x-show="tts.loading === cn">
@@ -486,7 +488,7 @@
                     <!-- Expansion mark button -->
                     <span>
                         <button class="btn btn-sm"
-                                :class="chapter.expansionStatus != null ? 'btn-warning' : 'btn-outline-warning'"
+                                :class="chapter.expansionStatus != null ? 'btn-outline-warning' : 'btn-outline-secondary'"
                                 :data-chapter="chapter.number"
                                 :title="chapter.expansionStatus != null ? '已标记扩写' : '标记为扩写备选'"
                                 @click="toggleExpansionMark($event.currentTarget)">

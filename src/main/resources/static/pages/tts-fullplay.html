@@ -32,7 +32,7 @@ window.__TTS_FULLPLAY_TASK_ID__ = (function () {
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3><i class="bi bi-play-circle"></i> 全文收听</h3>
-        <a href="/tts-export" class="btn btn-outline-secondary btn-sm">
+        <a href="/tts-export" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> 返回导出管理
         </a>
     </div>
@@ -41,8 +41,10 @@ window.__TTS_FULLPLAY_TASK_ID__ = (function () {
     <div x-show="resumeOffer" x-cloak class="alert alert-info alert-dismissible mb-3">
         <i class="bi bi-arrow-clockwise"></i>
         上次播放到第 <strong x-text="resumeChapterDisplay"></strong> 章
-        <button @click="acceptResume()" class="btn btn-sm btn-primary ms-2">继续播放</button>
-        <button @click="dismissResume()" class="btn btn-sm btn-secondary ms-1">从头开始</button>
+        <span class="d-inline-flex align-items-center gap-2 ms-2">
+            <button @click="acceptResume()" class="btn btn-sm btn-primary"><i class="bi bi-play-fill"></i> 继续播放</button>
+            <button @click="dismissResume()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-counterclockwise"></i> 从头开始</button>
+        </span>
     </div>
 
     <!-- Loading -->
@@ -112,20 +114,20 @@ window.__TTS_FULLPLAY_TASK_ID__ = (function () {
 
                     <!-- Controls -->
                     <div class="d-flex justify-content-center gap-3">
-                        <button class="btn btn-outline-secondary" @click="playPrev()" :disabled="currentIndex <= 0">
+                        <button class="btn btn-sm btn-outline-secondary" @click="playPrev()" :disabled="currentIndex <= 0">
                             <i class="bi bi-skip-backward-fill"></i> 上一章
                         </button>
-                        <button class="btn btn-primary btn-lg" @click="togglePlayPause()" x-show="currentIndex >= 0">
+                        <button class="btn btn-lg btn-primary" @click="togglePlayPause()" x-show="currentIndex >= 0">
                             <i :class="paused ? 'bi bi-play-fill' : 'bi bi-pause-fill'"></i>
                             <span x-text="paused ? '继续' : '暂停'"></span>
                         </button>
-                        <button class="btn btn-success btn-lg" @click="playIndex(0)" x-show="currentIndex === -1">
+                        <button class="btn btn-lg btn-primary" @click="playIndex(0)" x-show="currentIndex === -1">
                             <i class="bi bi-play-fill"></i> 开始播放
                         </button>
-                        <button class="btn btn-outline-secondary" @click="playNext()" :disabled="currentIndex >= playableChapters.length - 1">
+                        <button class="btn btn-sm btn-outline-secondary" @click="playNext()" :disabled="currentIndex >= playableChapters.length - 1">
                             <i class="bi bi-skip-forward-fill"></i> 下一章
                         </button>
-                        <button class="btn btn-outline-danger" @click="stopPlay()" x-show="currentIndex >= 0">
+                        <button class="btn btn-sm btn-outline-danger" @click="stopPlay()" x-show="currentIndex >= 0">
                             <i class="bi bi-stop-fill"></i> 停止
                         </button>
                     </div>

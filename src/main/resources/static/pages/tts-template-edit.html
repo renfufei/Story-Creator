@@ -48,7 +48,7 @@ window.__TTS_TEMPLATE_EDIT_DATA__ = (function () {
             <h2 class="mb-0" id="pageTitle">编辑模板</h2>
             <small class="text-muted" id="pageDesc"></small>
         </div>
-        <a href="/settings/tts-templates" class="btn btn-outline-secondary btn-sm">
+        <a href="/settings/tts-templates" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> 返回列表
         </a>
     </div>
@@ -67,7 +67,7 @@ window.__TTS_TEMPLATE_EDIT_DATA__ = (function () {
                     <input type="text" class="form-control form-control-sm" name="description" id="tplDesc">
                 </div>
                 <div class="col-auto">
-                    <button type="submit" class="btn btn-sm btn-primary">保存</button>
+                    <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check-lg"></i> 保存</button>
                 </div>
             </form>
         </div>
@@ -78,7 +78,7 @@ window.__TTS_TEMPLATE_EDIT_DATA__ = (function () {
         <div class="card-header d-flex justify-content-between align-items-center">
             <strong><i class="bi bi-list-ol"></i> 替换规则</strong>
             <button class="btn btn-sm btn-outline-primary" @click="showAdd = true">
-                <i class="bi bi-plus"></i> 添加规则
+                <i class="bi bi-plus-lg"></i> 添加规则
             </button>
         </div>
         <div class="card-body">
@@ -108,8 +108,8 @@ window.__TTS_TEMPLATE_EDIT_DATA__ = (function () {
                             <input type="checkbox" class="form-check-input" name="isRegex" value="true" id="newIsRegex">
                             <label class="form-check-label small" for="newIsRegex">正则表达式</label>
                         </div>
-                        <button type="submit" class="btn btn-sm btn-primary">添加</button>
-                        <button type="button" class="btn btn-sm btn-secondary" @click="showAdd = false">取消</button>
+                        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg"></i> 添加</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @click="showAdd = false"><i class="bi bi-x-lg"></i> 取消</button>
                     </div>
                 </form>
             </div>

@@ -21,13 +21,13 @@
         <div class="d-flex gap-2">
             <!-- 语音导出与导入项目都从导航栏下线后收在这里（2026-10-09）：
                  导航栏只留一级入口，这两个二级入口随「故事创作」模块走。 -->
-            <a href="/tts-export" class="btn btn-outline-secondary">
+            <a href="/tts-export" class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-megaphone"></i> 语音导出
             </a>
-            <a href="/import/txt" class="btn btn-outline-secondary">
+            <a href="/import/txt" class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-upload"></i> 导入项目
             </a>
-            <a href="/projects/new" class="btn btn-primary">
+            <a href="/projects/new" class="btn btn-sm btn-primary">
                 <i class="bi bi-plus-lg"></i> 新建项目
             </a>
         </div>
@@ -109,7 +109,7 @@
             return '<div class="sc-empty">' +
                 '<i class="bi bi-journal-text"></i>' +
                 '<p class="mt-3">还没有创作项目，开始你的第一部小说吧！</p>' +
-                '<a href="/projects/new" class="btn btn-primary btn-lg mt-2"><i class="bi bi-plus-lg"></i> 创建新项目</a>' +
+                '<a href="/projects/new" class="btn btn-lg btn-primary mt-2"><i class="bi bi-plus-lg"></i> 创建新项目</a>' +
                 '</div>';
         }
         if (matched === 0) {

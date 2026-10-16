@@ -44,12 +44,12 @@
             <h2 class="mb-0">番外篇</h2>
             <small class="text-muted" x-text="projectTitle">项目名</small>
         </div>
-        <div>
-            <a :href="'/projects/' + projectId + '/workflow/world-building'" class="btn btn-outline-secondary btn-sm me-2">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <a :href="'/projects/' + projectId + '/workflow/world-building'" class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-arrow-left"></i> 返回创作
             </a>
-            <button class="btn btn-primary btn-sm" @click="showWizard = true; wizardStep = 1">
-                <i class="bi bi-plus"></i> 新建番外
+            <button class="btn btn-sm btn-primary" @click="showWizard = true; wizardStep = 1">
+                <i class="bi bi-plus-lg"></i> 新建番外
             </button>
         </div>
     </div>
@@ -216,9 +216,9 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-secondary" @click="wizardStep > 1 ? wizardStep-- : showWizard = false"
+                    <button class="btn btn-sm btn-outline-secondary" @click="wizardStep > 1 ? wizardStep-- : showWizard = false"
                             x-text="wizardStep > 1 ? '上一步' : '取消'"></button>
-                    <button class="btn btn-primary" @click="wizardStep < 4 ? wizardStep++ : submitCreate()"
+                    <button class="btn btn-sm btn-primary" @click="wizardStep < 4 ? wizardStep++ : submitCreate()"
                             :disabled="wizardStep === 1 && !form.title.trim()"
                             x-text="wizardStep < 4 ? '下一步' : '确认创建'"></button>
                 </div>

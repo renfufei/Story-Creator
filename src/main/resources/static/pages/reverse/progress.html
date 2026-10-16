@@ -40,8 +40,8 @@ window.__REVERSE_DATA__ = (function () {
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 class="mb-0"><i class="bi bi-arrow-up-right-circle"></i> 逆向工程 · 执行监控</h2>
         <div class="d-flex gap-2">
-            <a class="btn btn-outline-secondary btn-sm" href="/import/txt"><i class="bi bi-file-earmark-text"></i> 导入 &amp; 分割</a>
-            <a class="btn btn-outline-secondary btn-sm" x-show="projectId" :href="'/projects/' + projectId"><i class="bi bi-folder"></i> 项目详情</a>
+            <a class="btn btn-sm btn-outline-secondary" href="/import/txt"><i class="bi bi-file-earmark-text"></i> 导入 &amp; 分割</a>
+            <a class="btn btn-sm btn-outline-secondary" x-show="projectId" :href="'/projects/' + projectId"><i class="bi bi-folder"></i> 项目详情</a>
         </div>
     </div>
     <div class="text-muted small mb-4" x-show="jobTitle">
@@ -109,12 +109,12 @@ window.__REVERSE_DATA__ = (function () {
                             上次执行被中断，点击上方「继续执行」可接着完成剩余部分（已完成进度保留）
                         </span>
                     </div>
-                    <div>
-                        <a class="btn btn-outline-primary btn-sm me-2" x-show="!active"
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <a class="btn btn-sm btn-outline-primary" x-show="!active"
                            :href="'/projects/' + projectId + '/reverse/options'">
                             <i class="bi bi-arrow-left"></i> 逆向选项
                         </a>
-                        <a :href="'/projects/' + projectId + '/workflow/world-building'" class="btn btn-success btn-sm">
+                        <a :href="'/projects/' + projectId + '/workflow/world-building'" class="btn btn-sm btn-primary">
                             <i class="bi bi-arrow-right"></i> 进入项目创作
                         </a>
                     </div>

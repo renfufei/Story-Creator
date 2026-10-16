@@ -39,7 +39,7 @@ window.__TTS_EXPORT_DATA__ = (function () {
 
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3><i class="bi bi-music-note-beamed"></i> TTS 语音导出管理</h3>
-        <button class="btn btn-primary" @click="openWizard()">
+        <button class="btn btn-sm btn-primary" @click="openWizard()">
             <i class="bi bi-plus-lg"></i> 新增导出任务
         </button>
     </div>
@@ -84,26 +84,26 @@ window.__TTS_EXPORT_DATA__ = (function () {
                             <td>
                                 <div class="btn-group btn-group-sm">
                                     <!-- Start/Resume -->
-                                    <button class="btn btn-outline-success" x-show="task.status === 'PENDING' || task.status === 'PAUSED' || task.status === 'FAILED'"
+                                    <button class="btn btn-sm btn-outline-success" x-show="task.status === 'PENDING' || task.status === 'PAUSED' || task.status === 'FAILED'"
                                             @click="startTask(task.id)" :title="task.status === 'PAUSED' ? '继续' : '开始'">
                                         <i class="bi bi-play-fill"></i> <span x-text="task.status === 'PAUSED' ? '继续' : '开始'"></span>
                                     </button>
                                     <!-- Pause -->
-                                    <button class="btn btn-outline-warning" x-show="task.status === 'RUNNING'"
+                                    <button class="btn btn-sm btn-outline-warning" x-show="task.status === 'RUNNING'"
                                             @click="pauseTask(task.id)" title="暂停">
                                         <i class="bi bi-pause-fill"></i> 暂停
                                     </button>
                                     <!-- Stop -->
-                                    <button class="btn btn-outline-danger" x-show="task.status === 'RUNNING' || task.status === 'PAUSED'"
+                                    <button class="btn btn-sm btn-outline-danger" x-show="task.status === 'RUNNING' || task.status === 'PAUSED'"
                                             @click="stopTask(task.id)" title="停止">
                                         <i class="bi bi-stop-fill"></i> 停止
                                     </button>
                                     <!-- Details -->
-                                    <button class="btn btn-outline-info" @click="toggleDetails(task.id)" title="详情">
+                                    <button class="btn btn-sm btn-outline-info" @click="toggleDetails(task.id)" title="详情">
                                         <i class="bi bi-list-ul"></i> 详情
                                     </button>
                                     <!-- Delete -->
-                                    <button class="btn btn-outline-danger" @click="deleteTask(task.id)" title="删除">
+                                    <button class="btn btn-sm btn-outline-danger" @click="deleteTask(task.id)" title="删除">
                                         <i class="bi bi-trash"></i> 删除
                                     </button>
                                 </div>
@@ -127,10 +127,10 @@ window.__TTS_EXPORT_DATA__ = (function () {
                                                x-show="expandedChapters.some(ch => ch.status === 'COMPLETED')">
                                                 <i class="bi bi-play-circle"></i> 全文收听
                                             </a>
-                                            <button class="btn btn-sm btn-outline-dark" @click="toggleProgress(task.id)" title="实时进度">
+                                            <button class="btn btn-sm btn-outline-secondary" @click="toggleProgress(task.id)" title="实时进度">
                                                 <i class="bi bi-terminal"></i> 进度
                                             </button>
-                                            <button class="btn btn-sm btn-outline-secondary" @click="expandedTaskId = null">关闭</button>
+                                            <button class="btn btn-sm btn-outline-secondary" @click="expandedTaskId = null"><i class="bi bi-x-lg"></i> 关闭</button>
                                         </div>
                                     </div>
                                     <!-- Edit Chapters Mode -->
@@ -138,8 +138,8 @@ window.__TTS_EXPORT_DATA__ = (function () {
                                         <div class="d-flex justify-content-between align-items-center mb-2">
                                             <strong>编辑章节列表</strong>
                                             <div class="d-flex gap-2">
-                                                <button class="btn btn-sm btn-outline-primary" @click="editSelectAllChapters()">全选</button>
-                                                <button class="btn btn-sm btn-outline-secondary" @click="editDeselectAllChapters()">取消全选</button>
+                                                <button class="btn btn-sm btn-outline-secondary" @click="editSelectAllChapters()"><i class="bi bi-check2-square"></i> 全选</button>
+                                                <button class="btn btn-sm btn-outline-secondary" @click="editDeselectAllChapters()"><i class="bi bi-square"></i> 取消全选</button>
                                             </div>
                                         </div>
                                         <div style="max-height: 200px; overflow-y: auto;" class="border rounded p-2 mb-2">
@@ -156,8 +156,8 @@ window.__TTS_EXPORT_DATA__ = (function () {
                                         <div class="d-flex justify-content-between align-items-center">
                                             <small class="text-muted">已选 <span x-text="editSelectedChapters.length"></span> 章</small>
                                             <div class="d-flex gap-2">
-                                                <button class="btn btn-sm btn-secondary" @click="cancelEditChapters()">取消</button>
-                                                <button class="btn btn-sm btn-success" @click="saveEditChapters(task.id)"
+                                                <button class="btn btn-sm btn-outline-secondary" @click="cancelEditChapters()"><i class="bi bi-x-lg"></i> 取消</button>
+                                                <button class="btn btn-sm btn-primary" @click="saveEditChapters(task.id)"
                                                         :disabled="editSelectedChapters.length === 0">
                                                     <i class="bi bi-check-lg"></i> 保存
                                                 </button>
@@ -288,10 +288,10 @@ window.__TTS_EXPORT_DATA__ = (function () {
                     <div x-show="wizardStep === 1">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label class="form-label fw-bold mb-0">选择章节</label>
-                            <div class="d-flex gap-1">
-                                <button class="btn btn-sm btn-outline-primary" @click="selectAllChapters()">全选</button>
-                                <button class="btn btn-sm btn-outline-secondary" @click="deselectAllChapters()">取消全选</button>
-                                <button class="btn btn-sm btn-outline-dark" x-show="hasVolumeInfo" @click="toggleAllVolumes()">
+                            <div class="d-flex flex-wrap gap-2">
+                                <button class="btn btn-sm btn-outline-secondary" @click="selectAllChapters()"><i class="bi bi-check2-square"></i> 全选</button>
+                                <button class="btn btn-sm btn-outline-secondary" @click="deselectAllChapters()"><i class="bi bi-square"></i> 取消全选</button>
+                                <button class="btn btn-sm btn-outline-secondary" x-show="hasVolumeInfo" @click="toggleAllVolumes()">
                                     <i class="bi" :class="allVolumesExpanded ? 'bi-chevron-contract' : 'bi-chevron-expand'"></i>
                                     <span x-text="allVolumesExpanded ? '全部折叠' : '全部展开'"></span>
                                 </button>
@@ -461,12 +461,12 @@ window.__TTS_EXPORT_DATA__ = (function () {
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-secondary" x-show="wizardStep > 0" @click="wizardStep--">上一步</button>
-                    <button class="btn btn-primary" x-show="wizardStep < 3" @click="nextWizardStep()"
-                            :disabled="!canAdvanceWizard()">
+                    <button class="btn btn-sm btn-outline-secondary" x-show="wizardStep > 0" @click="wizardStep--"><i class="bi bi-arrow-left"></i> 上一步</button>
+                    <button class="btn btn-sm btn-primary" x-show="wizardStep < 3" @click="nextWizardStep()"
+                            :disabled="!canAdvanceWizard()"><i class="bi bi-arrow-right"></i> 
                         下一步
                     </button>
-                    <button class="btn btn-success" x-show="wizardStep === 3" @click="submitWizard()"
+                    <button class="btn btn-sm btn-primary" x-show="wizardStep === 3" @click="submitWizard()"
                             :disabled="wizard.selectedChapters.length === 0">
                         <i class="bi bi-check-lg"></i> 创建任务
                     </button>

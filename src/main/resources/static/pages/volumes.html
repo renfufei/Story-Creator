@@ -49,8 +49,8 @@
             <div class="text-muted small" x-show="projectTitle" x-cloak x-text="'《' + projectTitle + '》'"></div>
         </div>
         <div class="d-flex gap-2">
-            <a class="btn btn-outline-secondary btn-sm" :href="'/projects/' + projectId"><i class="bi bi-folder"></i> 项目详情</a>
-            <a class="btn btn-outline-success btn-sm" :href="'/projects/' + projectId + '/read'" target="_blank"><i class="bi bi-book"></i> 全文阅读</a>
+            <a class="btn btn-sm btn-outline-secondary" :href="'/projects/' + projectId"><i class="bi bi-folder"></i> 项目详情</a>
+            <a class="btn btn-sm btn-outline-secondary" :href="'/projects/' + projectId + '/read'" target="_blank"><i class="bi bi-book"></i> 全文阅读</a>
         </div>
     </div>
 
@@ -83,7 +83,7 @@
                         <input type="number" class="form-control" style="max-width:5rem" min="1" max="200"
                                x-model.number="rebuildCount">
                         <span class="input-group-text">章重建</span>
-                        <button class="btn btn-outline-primary" @click="rebuild()" :disabled="busy">
+                        <button class="btn btn-sm btn-outline-primary" @click="rebuild()" :disabled="busy">
                             <i class="bi bi-arrow-repeat"></i> 重建绑定
                         </button>
                     </div>
@@ -110,7 +110,7 @@
             <button class="btn btn-sm btn-primary" @click="moveSelected()" :disabled="busy">
                 <i class="bi bi-arrow-right-circle"></i> 移动到该卷
             </button>
-            <button class="btn btn-sm btn-outline-secondary" @click="clearSelection()">取消选择</button>
+            <button class="btn btn-sm btn-outline-secondary" @click="clearSelection()"><i class="bi bi-x-lg"></i> 取消选择</button>
         </div>
     </div>
 
@@ -170,7 +170,7 @@
                 <div class="border-top pt-2 d-flex flex-wrap align-items-center gap-2">
                     <div class="input-group input-group-sm" style="max-width:15rem">
                         <input type="number" class="form-control" min="1" max="200" :id="'adj-' + v.id" value="5">
-                        <button class="btn btn-outline-primary" @click="takeFromNext(index, parseInt(document.getElementById('adj-' + v.id).value))"
+                        <button class="btn btn-sm btn-outline-primary" @click="takeFromNext(index, parseInt(document.getElementById('adj-' + v.id).value))"
                                 :disabled="busy || !nextVolume(index)">
                             <i class="bi bi-arrow-down-left-circle"></i> 从下一卷并入
                         </button>
