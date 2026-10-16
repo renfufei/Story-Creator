@@ -14,6 +14,8 @@ import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.tts.Mp3ProcessingService;
 import com.storycreator.tts.TtsExportService;
 import com.storycreator.tts.TtsExportStatus;
+import com.storycreator.volume.VolumeChapterGroup;
+import com.storycreator.volume.VolumeService;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -40,6 +42,7 @@ public class TtsExportController {
     private TtsProviderRegistry ttsProviderRegistry;
     private AiModelConfigRepository configRepository;
     private Mp3ProcessingService mp3ProcessingService;
+    private VolumeService volumeService;
     private final ExecutorService sseExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     @Autowired
@@ -70,6 +73,11 @@ public class TtsExportController {
     @Autowired
     public void setMp3ProcessingService(Mp3ProcessingService mp3ProcessingService) {
         this.mp3ProcessingService = mp3ProcessingService;
+    }
+
+    @Autowired
+    public void setVolumeService(VolumeService volumeService) {
+        this.volumeService = volumeService;
     }
 
 
@@ -217,16 +225,39 @@ public class TtsExportController {
                 .body(resource);
     }
 
+    /**
+     * 项目章节列表（供向导「选择章节」与详情「编辑章节」共用）。
+     *
+     * <p>额外带上分卷归属（{@code volumeNumber} / {@code volumeTitle}），与分卷管理页同源
+     * （{@link VolumeService#resolveGroups}）；项目没有分卷记录时这两个字段缺省，
+     * 前端回落到平铺列表 —— 与改造前行为一致。</p>
+     */
     @GetMapping("/api/tts-export/projects/{projectId}/chapters")
     @ResponseBody
     public List<Map<String, Object>> getProjectChapters(@PathVariable Long projectId) {
         List<ChapterEntity> chapters = chapterRepository.findByProjectIdOrderByChapterNumber(projectId);
+
+        // 卷号 -> 卷标题；章号 -> 卷号。项目没有分卷记录时两张表都为空。
+        Map<Integer, String> titleByVolume = new HashMap<>();
+        Map<Integer, Integer> volumeByChapter = new HashMap<>();
+        for (VolumeChapterGroup g : volumeService.resolveGroups(projectId)) {
+            titleByVolume.put(g.volumeNumber(), g.title() != null ? g.title() : "");
+            for (int n : g.chapterNumbers()) {
+                volumeByChapter.put(n, g.volumeNumber());
+            }
+        }
+
         return chapters.stream()
                 .filter(ch -> ch.getContent() != null && !ch.getContent().isBlank())
                 .map(ch -> {
                     Map<String, Object> m = new HashMap<>();
                     m.put("chapterNumber", ch.getChapterNumber());
                     m.put("title", ch.getTitle());
+                    Integer vol = volumeByChapter.get(ch.getChapterNumber());
+                    if (vol != null) {
+                        m.put("volumeNumber", vol);
+                        m.put("volumeTitle", titleByVolume.getOrDefault(vol, ""));
+                    }
                     return m;
                 })
                 .toList();

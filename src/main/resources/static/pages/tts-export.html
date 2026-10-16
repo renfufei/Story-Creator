@@ -246,37 +246,114 @@ window.__TTS_EXPORT_DATA__ = (function () {
                         </template>
                     </div>
 
-                    <!-- Step 1: Select Project -->
+                    <!-- Step 1: Select Project —— 可滑动列表选择（替代原下拉框） -->
                     <div x-show="wizardStep === 0">
-                        <label class="form-label fw-bold">选择项目</label>
-                        <select class="form-select" x-model="wizard.projectId" @change="onProjectSelected()">
-                            <option value="">-- 请选择 --</option>
-                            <template x-for="p in projects" :key="p.id">
-                                <option :value="String(p.id)" x-text="p.title + ' | ' + p.chapterCount + '章 | ' + (p.wordCount >= 10000 ? (p.wordCount / 10000).toFixed(1) + '万字' : p.wordCount + '字')"></option>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-bold mb-0" for="projectPickerFilter">选择项目</label>
+                            <small class="text-muted">
+                                共 <span x-text="projects.length"></span> 个<template x-if="projectFilter.trim()"><span> · 命中 <span x-text="filteredProjects.length"></span> 个</span></template>
+                            </small>
+                        </div>
+                        <input type="search" id="projectPickerFilter" class="form-control form-control-sm mb-2" x-show="projects.length > 8"
+                               placeholder="按标题筛选项目…" x-model="projectFilter">
+                        <div class="list-group list-group-flush border rounded project-picker" style="max-height: 320px; overflow-y: auto;">
+                            <template x-for="p in filteredProjects" :key="p.id">
+                                <button type="button"
+                                        class="list-group-item list-group-item-action py-2 project-picker-item"
+                                        :class="{ 'active': wizard.projectId === p.id }"
+                                        :data-project-id="p.id"
+                                        @click="selectProject(p.id)">
+                                    <div class="d-flex justify-content-between align-items-center gap-2">
+                                        <span class="fw-semibold text-truncate" x-text="p.title"></span>
+                                        <i class="bi bi-check-circle-fill" x-show="wizard.projectId === p.id"></i>
+                                    </div>
+                                    <small :class="wizard.projectId === p.id ? 'text-white-50' : 'text-muted'">
+                                        <span x-text="p.chapterCount + ' 章'"></span>
+                                        · <span x-text="fmtWordCount(p.wordCount)"></span>
+                                    </small>
+                                </button>
                             </template>
-                        </select>
+                            <div class="list-group-item text-center text-muted py-4" x-show="filteredProjects.length === 0">
+                                <i class="bi bi-inbox d-block mb-1" style="font-size: 1.5rem;"></i>
+                                没有匹配的项目
+                            </div>
+                        </div>
+                        <small class="text-muted d-block mt-2">
+                            <template x-if="wizard.projectId"><span>已选：<span class="fw-semibold" x-text="selectedProjectTitle || ('项目#' + wizard.projectId)"></span></span></template>
+                            <template x-if="!wizard.projectId"><span>点击列表中的项目进行选择</span></template>
+                        </small>
                     </div>
 
                     <!-- Step 2: Select Chapters -->
                     <div x-show="wizardStep === 1">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label class="form-label fw-bold mb-0">选择章节</label>
-                            <div>
+                            <div class="d-flex gap-1">
                                 <button class="btn btn-sm btn-outline-primary" @click="selectAllChapters()">全选</button>
                                 <button class="btn btn-sm btn-outline-secondary" @click="deselectAllChapters()">取消全选</button>
+                                <button class="btn btn-sm btn-outline-dark" x-show="hasVolumeInfo" @click="toggleAllVolumes()">
+                                    <i class="bi" :class="allVolumesExpanded ? 'bi-chevron-contract' : 'bi-chevron-expand'"></i>
+                                    <span x-text="allVolumesExpanded ? '全部折叠' : '全部展开'"></span>
+                                </button>
                             </div>
                         </div>
-                        <div style="max-height: 300px; overflow-y: auto;" class="border rounded p-2">
-                            <template x-for="ch in wizardChapters" :key="ch.chapterNumber">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox"
-                                           :id="'ch-' + ch.chapterNumber" :value="ch.chapterNumber"
-                                           x-model="wizard.selectedChapters">
-                                    <label class="form-check-label" :for="'ch-' + ch.chapterNumber"
-                                           x-text="'第' + ch.chapterNumber + '章 ' + (ch.title || '')"></label>
-                                </div>
-                            </template>
-                        </div>
+
+                        <!-- 有分卷信息：按卷分组，可整卷统一勾选 / 取消，可折叠（默认只展开第一卷） -->
+                        <template x-if="hasVolumeInfo">
+                            <div style="max-height: 320px; overflow-y: auto;" class="border rounded">
+                                <template x-for="vol in wizardVolumeGroups" :key="vol.volume">
+                                    <div class="volume-group border-bottom" :data-volume="vol.volume">
+                                        <div class="d-flex align-items-center gap-2 px-2 py-2 bg-light">
+                                            <button type="button" class="btn btn-sm btn-link p-0 text-dark" style="text-decoration:none;"
+                                                    @click="toggleVolume(vol.volume)">
+                                                <i class="bi" :class="isVolumeExpanded(vol.volume) ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
+                                            </button>
+                                            <input type="checkbox" class="form-check-input mt-0"
+                                                   :checked="isVolumeSelected(vol.volume)"
+                                                   x-effect="$el.indeterminate = volumeIndeterminate(vol.volume)"
+                                                   @change="toggleVolumeSelect(vol.volume, $event.target.checked)"
+                                                   :title="'统一勾选 / 取消「' + vol.label + '」内的章节'">
+                                            <span class="fw-bold" role="button" style="cursor:pointer;"
+                                                  @click="toggleVolume(vol.volume)" x-text="vol.label"></span>
+                                            <span class="text-muted small" x-text="'（' + vol.chapters.length + ' 章）'"></span>
+                                            <span class="text-muted small ms-auto"
+                                                  x-text="volumeSelectedCount(vol.volume) + '/' + vol.chapters.length + ' 已选'"></span>
+                                        </div>
+                                        <div x-show="isVolumeExpanded(vol.volume)" class="volume-chapters px-3 py-1">
+                                            <div class="row g-0">
+                                                <template x-for="ch in vol.chapters" :key="ch.chapterNumber">
+                                                    <div class="col-md-6">
+                                                        <div class="form-check">
+                                                            <input class="form-check-input" type="checkbox"
+                                                                   :id="'ch-' + ch.chapterNumber" :value="ch.chapterNumber"
+                                                                   x-model="wizard.selectedChapters">
+                                                            <label class="form-check-label" :for="'ch-' + ch.chapterNumber"
+                                                                   x-text="'第' + ch.chapterNumber + '章 ' + (ch.title || '')"></label>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- 兜底：项目没有分卷记录时，回落为平铺列表（与改造前一致） -->
+                        <template x-if="!hasVolumeInfo">
+                            <div style="max-height: 320px; overflow-y: auto;" class="border rounded p-2">
+                                <template x-for="ch in wizardChapters" :key="ch.chapterNumber">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox"
+                                               :id="'ch-' + ch.chapterNumber" :value="ch.chapterNumber"
+                                               x-model="wizard.selectedChapters">
+                                        <label class="form-check-label" :for="'ch-' + ch.chapterNumber"
+                                               x-text="'第' + ch.chapterNumber + '章 ' + (ch.title || '')"></label>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
                         <small class="text-muted mt-1 d-block">已选 <span x-text="wizard.selectedChapters.length"></span> 章</small>
                     </div>
 
@@ -428,6 +505,8 @@ function ttsExportApp() {
         // Wizard state
         wizardStep: 0,
         wizardChapters: [],
+        projectFilter: '',
+        expandedVolumes: {},
         wizardVoices: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
         ttsConfigs: [],
         ffmpegAvailable: false,
@@ -518,16 +597,50 @@ function ttsExportApp() {
         openWizard() {
             this.wizardStep = 0;
             this.wizard.selectedChapters = [];
+            this.projectFilter = '';   // 每次打开清空筛选，避免预选项被过滤掉
             const modalEl = document.getElementById('wizardModal');
             const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
             modal.show();
-            // Set projectId after modal is fully shown so x-for options are rendered
+            // 弹层完全显示后再设置 projectId，保证列表高亮与滚动定位可见
             if (preselectedProjectId) {
                 const setProject = () => {
                     this.wizard.projectId = String(preselectedProjectId);
+                    this.scrollToSelectedProject();
                 };
                 modalEl.addEventListener('shown.bs.modal', setProject, { once: true });
             }
+        },
+
+        // ---------- 项目选择：可滑动列表（替代原下拉框） ----------
+        get filteredProjects() {
+            const kw = (this.projectFilter || '').trim().toLowerCase();
+            if (!kw) return this.projects;
+            return this.projects.filter(p => String(p.title || '').toLowerCase().includes(kw));
+        },
+        get selectedProjectTitle() {
+            const p = this.projects.find(x => x.id === this.wizard.projectId);
+            return p ? (p.title || '') : '';
+        },
+        fmtWordCount(n) {
+            const v = Number(n) || 0;
+            return v >= 10000 ? (v / 10000).toFixed(1) + '万字' : v + '字';
+        },
+        async selectProject(id) {
+            const sid = String(id);
+            if (this.wizard.projectId === sid) return;   // 重复点击不重新加载章节
+            this.wizard.projectId = sid;
+            await this.onProjectSelected();
+        },
+        // 让选中项在滚动区可见（预选项目可能落在列表下方）
+        scrollToSelectedProject() {
+            this.$nextTick(() => {
+                const box = this.$el.querySelector('.project-picker');
+                const el = this.$el.querySelector('.project-picker-item.active');
+                if (box && el) {
+                    const top = el.offsetTop - box.offsetTop;
+                    box.scrollTop = Math.max(0, top - box.clientHeight / 2 + el.clientHeight / 2);
+                }
+            });
         },
 
         async onProjectSelected() {
@@ -544,6 +657,8 @@ function ttsExportApp() {
                 const res = await fetch(`/api/tts-export/projects/${projectId}/chapters`);
                 if (res.ok) this.wizardChapters = await res.json();
             } catch (e) { this.wizardChapters = []; }
+            // 默认只展开第一卷
+            this.initVolumeExpansion();
         },
 
         applyDefaultTtsConfig() {
@@ -576,6 +691,83 @@ function ttsExportApp() {
         },
         deselectAllChapters() {
             this.wizard.selectedChapters = [];
+        },
+
+        // ---------- 分卷分组：整卷统一勾选 / 取消 + 折叠 ----------
+        // 依据后端下发的 volumeNumber / volumeTitle 分组；无分卷信息时 hasVolumeInfo=false，界面回落平铺。
+        get hasVolumeInfo() {
+            return this.wizardChapters.some(ch => ch.volumeNumber !== undefined && ch.volumeNumber !== null);
+        },
+        get wizardVolumeGroups() {
+            const map = new Map();
+            const out = [];
+            for (const ch of this.wizardChapters) {
+                const v = (ch.volumeNumber === undefined || ch.volumeNumber === null) ? 0 : ch.volumeNumber;
+                let g = map.get(v);
+                if (!g) {
+                    g = { volume: v, label: '', chapters: [] };
+                    map.set(v, g);
+                    out.push(g);
+                }
+                g.chapters.push(ch);
+            }
+            for (const g of out) {
+                const titled = g.chapters.find(c => c.volumeTitle && String(c.volumeTitle).trim());
+                g.label = titled ? String(titled.volumeTitle).trim() : ('第' + g.volume + '卷');
+            }
+            return out;
+        },
+        // 默认展开；只有显式折叠过的卷才收起
+        isVolumeExpanded(vol) {
+            return this.expandedVolumes[vol] === undefined ? true : this.expandedVolumes[vol];
+        },
+        toggleVolume(vol) {
+            this.expandedVolumes[vol] = !this.isVolumeExpanded(vol);
+        },
+        get allVolumesExpanded() {
+            const vols = this.wizardVolumeGroups;
+            return vols.length > 0 && vols.every(v => this.isVolumeExpanded(v.volume));
+        },
+        toggleAllVolumes() {
+            const expand = !this.allVolumesExpanded;
+            this.wizardVolumeGroups.forEach(v => { this.expandedVolumes[v.volume] = expand; });
+        },
+        // 默认只展开第一卷（其余收起）
+        initVolumeExpansion() {
+            const next = {};
+            this.wizardVolumeGroups.forEach((v, i) => { next[v.volume] = (i === 0); });
+            this.expandedVolumes = next;
+        },
+        _volumeGroup(vol) {
+            return this.wizardVolumeGroups.find(v => v.volume === vol);
+        },
+        isVolumeSelected(vol) {
+            const g = this._volumeGroup(vol);
+            return !!g && g.chapters.length > 0
+                && g.chapters.every(ch => this.wizard.selectedChapters.includes(ch.chapterNumber));
+        },
+        volumeIndeterminate(vol) {
+            const g = this._volumeGroup(vol);
+            if (!g || g.chapters.length === 0) return false;
+            const count = g.chapters.filter(ch => this.wizard.selectedChapters.includes(ch.chapterNumber)).length;
+            return count > 0 && count < g.chapters.length;
+        },
+        volumeSelectedCount(vol) {
+            const g = this._volumeGroup(vol);
+            if (!g) return 0;
+            return g.chapters.filter(ch => this.wizard.selectedChapters.includes(ch.chapterNumber)).length;
+        },
+        // 级联：整卷勾选 / 取消
+        toggleVolumeSelect(vol, checked) {
+            const g = this._volumeGroup(vol);
+            if (!g) return;
+            const nums = g.chapters.map(ch => ch.chapterNumber);
+            if (checked) {
+                this.wizard.selectedChapters = Array.from(new Set([...this.wizard.selectedChapters, ...nums]));
+            } else {
+                const drop = new Set(nums);
+                this.wizard.selectedChapters = this.wizard.selectedChapters.filter(n => !drop.has(n));
+            }
         },
 
         canAdvanceWizard() {

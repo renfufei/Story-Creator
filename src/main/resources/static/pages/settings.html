@@ -203,9 +203,19 @@
                         <small class="text-muted" id="extraHintText" style="display:none;">合并到API请求体</small>
                         <small class="text-muted" id="extraHintTts" style="display:none;">voice: 默认测试音色; voices: 可用音色列表(逗号分隔); systemPrompt: 文本前缀(VoxCPM格式含括号); noVoice: true则不发送voice参数</small>
                         <small class="text-muted" id="extraHintImage" style="display:none;">OpenAI: quality/style; SD WebUI: steps/cfg_scale/sampler_name/negative_prompt; 输出格式: return_base64/response_format</small>
-                        <div class="mt-1">
-                            <span class="badge bg-secondary" role="button" style="cursor:pointer" id="thinkBadge" onclick="addDisableThinking()">+ 禁用思考 (vLLM)</span>
-                            <span class="badge bg-secondary" role="button" style="cursor:pointer" id="voxcpBadge" onclick="applyVoxCPM()">VoxCPM风格</span>
+                        <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="thinkBadge" onclick="addDisableThinking()">
+                                <i class="bi bi-slash-circle"></i> 禁用思考 (vLLM)
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="voxcpBadge" onclick="applyVoxCPM()">
+                                <i class="bi bi-stars"></i> VoxCPM风格
+                            </button>
+                            <span id="probeRow" style="display:none;">
+                                <button type="button" class="btn btn-sm btn-outline-info" id="probeBtn" onclick="probeVoices()">
+                                    <i class="bi bi-mic"></i> 探测可用音色
+                                </button>
+                                <span class="small ms-2" id="probeMsg"></span>
+                            </span>
                         </div>
                     </div>
 
@@ -213,13 +223,6 @@
                         <label class="form-label">调用前延迟 (秒)</label>
                         <input type="number" class="form-control form-control-sm" id="inputDelay" min="0" max="600" style="max-width: 120px;">
                         <small class="text-muted">每次调用该模型前暂停的秒数，用于降低服务区压力；0 表示不延迟</small>
-                    </div>
-
-                    <div class="form-check" id="probeRow" style="display:none;">
-                        <button type="button" class="btn btn-sm btn-outline-info" id="probeBtn" onclick="probeVoices()">
-                            <i class="bi bi-mic"></i> 探测可用音色
-                        </button>
-                        <span class="small ms-2" id="probeMsg"></span>
                     </div>
 
                     <div class="form-check">
@@ -259,6 +262,17 @@
                         <option value="wav">wav</option>
                         <option value="pcm">pcm</option>
                     </select>
+                </div>
+                <div id="testTtsToolsArea" class="mb-2" style="display:none;">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="testVoxcpBtn" onclick="testApplyVoxCPM()">
+                            <i class="bi bi-stars"></i> VoxCPM风格
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-info" id="testProbeBtn" onclick="testProbeVoices()">
+                            <i class="bi bi-mic"></i> 探测可用音色
+                        </button>
+                        <span class="small" id="testTtsToolsMsg"></span>
+                    </div>
                 </div>
                 <div id="testParamsArea">
                     <label class="form-label fw-semibold">测试参数</label>
@@ -607,6 +621,8 @@
         document.getElementById('testResultContent').textContent = '';
         document.getElementById('testAudioArea').style.display = 'none';
         document.getElementById('testImageArea').style.display = 'none';
+        document.getElementById('testTtsToolsArea').style.display = 'none';
+        testSetToolsMsg('', '');
         _testAudioData = null;
         stopTestAudio();
 
@@ -638,6 +654,7 @@
             }
             document.getElementById('testFormatSelect').value = defaultFormat;
             document.getElementById('testFormatSelectArea').style.display = 'block';
+            document.getElementById('testTtsToolsArea').style.display = 'block';
             document.getElementById('testParamsInput').value = JSON.stringify({ input: '测试语音合成。', voice: defaultVoice, speed: 1.0, format: defaultFormat }, null, 2);
         } else if (_testType === 'image') {
             document.getElementById('testVoiceSelectArea').style.display = 'none';
@@ -652,6 +669,61 @@
         document.getElementById('testStartBtn').innerHTML = '<i class="bi bi-play-fill"></i> 开始测试';
         _testModal = new bootstrap.Modal(document.getElementById('testModal'));
         _testModal.show();
+    }
+
+    /* —— 测试弹窗内的两个工具：与配置弹窗同源逻辑，但只作用于本次测试参数（不写库） —— */
+    function testSetToolsMsg(text, cls) {
+        var msg = document.getElementById('testTtsToolsMsg');
+        msg.textContent = text || '';
+        msg.className = 'small ' + (cls || '');
+    }
+
+    function testApplyVoxCPM() {
+        var ta = document.getElementById('testParamsInput');
+        var obj = {};
+        try { obj = JSON.parse(ta.value || '{}'); } catch (e) { obj = {}; }
+        obj.systemPrompt = obj.systemPrompt || '(A young woman, gentle and sweet voice)';
+        obj.noVoice = true;
+        ta.value = JSON.stringify(obj, null, 2);
+        testSetToolsMsg('已应用 VoxCPM 风格（systemPrompt + noVoice）', 'text-success');
+    }
+
+    async function testProbeVoices() {
+        if (!_testConfigId) return;
+        var btn = document.getElementById('testProbeBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 探测中...';
+        testSetToolsMsg('', '');
+        try {
+            var data = await SC.api.post('/api/settings/ai-models/' + _testConfigId + '/probe-voices', {});
+            if (data.success && data.voices) {
+                var list = String(data.voices).split(',').map(function (v) { return v.trim(); }).filter(Boolean);
+                var vs = document.getElementById('testVoiceSelect');
+                var cur = vs.value;
+                vs.innerHTML = '';
+                list.forEach(function (v) {
+                    var o = document.createElement('option');
+                    o.value = v; o.textContent = v;
+                    vs.appendChild(o);
+                });
+                if (list.indexOf(cur) >= 0) vs.value = cur;
+                document.getElementById('testVoiceSelectArea').style.display = 'block';
+                var ta = document.getElementById('testParamsInput');
+                try {
+                    var p = JSON.parse(ta.value);
+                    p.voice = vs.value;
+                    ta.value = JSON.stringify(p, null, 2);
+                } catch (e) {}
+                testSetToolsMsg('已回填 ' + list.length + ' 个音色', 'text-success');
+            } else {
+                testSetToolsMsg(data.message || '探测失败', 'text-danger');
+            }
+        } catch (e) {
+            testSetToolsMsg('请求失败: ' + e.message, 'text-danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-mic"></i> 探测可用音色';
+        }
     }
 
     function onTestVoiceChange() {
@@ -759,6 +831,18 @@
         var play = document.getElementById('testAudioPlayBtn');
         if (play) play.innerHTML = '<i class="bi bi-volume-up"></i> 播放语音';
     }
+
+    /* 弹窗/表单里的内联 on* 处理器在【全局作用域】求值，
+       而上面这些函数都在本 IIFE 内 —— 不显式挂到 window 就会 ReferenceError（点了没反应）。
+       注意：弹窗 #testModal 在 #main 之外，下面的 #main 事件委托覆盖不到它。 */
+    window.executeTest = executeTest;
+    window.onTestVoiceChange = onTestVoiceChange;
+    window.onTestFormatChange = onTestFormatChange;
+    window.playTestAudio = playTestAudio;
+    window.stopTestAudio = stopTestAudio;
+    window.probeVoices = probeVoices;
+    window.testApplyVoxCPM = testApplyVoxCPM;
+    window.testProbeVoices = testProbeVoices;
 
     /* ===================== 推荐/辅助 ===================== */
     window.setTextRecommended = function () { document.getElementById('inputModelId').value = 'Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-8bit'; };

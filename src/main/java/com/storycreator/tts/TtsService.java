@@ -314,34 +314,11 @@ public class TtsService {
     }
 
     private String applySystemPrompt(String input, String extraParams) {
-        if (extraParams == null || extraParams.isBlank()) {
-            return input;
-        }
-        try {
-            JsonNode node = objectMapper.readTree(extraParams);
-            JsonNode systemPromptNode = node.get("systemPrompt");
-            if (systemPromptNode != null && !systemPromptNode.asText().isBlank()) {
-                return systemPromptNode.asText() + input;
-            }
-        } catch (Exception e) {
-            log.warn("Failed to parse extraParams for systemPrompt: {}", e.getMessage());
-        }
-        return input;
+        return TtsExtraParams.applySystemPrompt(input, extraParams);
     }
 
     private String resolveVoice(String voice, String extraParams) {
-        if (extraParams != null && !extraParams.isBlank()) {
-            try {
-                JsonNode node = objectMapper.readTree(extraParams);
-                JsonNode noVoiceNode = node.get("noVoice");
-                if (noVoiceNode != null && noVoiceNode.asBoolean()) {
-                    return null;
-                }
-            } catch (Exception e) {
-                log.warn("Failed to parse extraParams for noVoice: {}", e.getMessage());
-            }
-        }
-        return voice != null ? voice : "alloy";
+        return TtsExtraParams.resolveVoice(voice, extraParams);
     }
 
     private String cleanText(String text, Long configId) {

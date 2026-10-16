@@ -14,6 +14,7 @@ import com.storycreator.core.port.tts.TtsRequest;
 import com.storycreator.core.service.GlobalSettingService;
 import com.storycreator.persistence.entity.AiModelConfigEntity;
 import com.storycreator.persistence.repository.AiModelConfigRepository;
+import com.storycreator.tts.TtsExtraParams;
 import com.storycreator.tts.template.TtsReplacementBuiltinLoader;
 import com.storycreator.tts.template.TtsReplacementTemplateService;
 import org.slf4j.Logger;
@@ -313,7 +314,8 @@ public class SettingsApiController {
                 return ResponseEntity.ok(Map.of("success", false, "message", "无法解析TTS配置"));
             }
 
-            String voice = extractVoiceFromExtraParams(config.getExtraParams());
+            String extraParams = config.getExtraParams();
+            String voice = TtsExtraParams.extractVoice(extraParams);
             String input = "测试。";
             double speed = 1.0;
             String format = "mp3";
@@ -323,12 +325,14 @@ public class SettingsApiController {
                 if (body.containsKey("voice")) voice = (String) body.get("voice");
                 if (body.containsKey("speed")) speed = ((Number) body.get("speed")).doubleValue();
                 if (body.containsKey("format")) format = (String) body.get("format");
+                // 弹窗里的「VoxCPM 风格」等覆盖项也要参与解析，否则测试与正式导出行为不一致
+                extraParams = TtsExtraParams.mergeOverrides(extraParams, body);
             }
 
             TtsRequest request = TtsRequest.builder()
                     .model(config.getModelId())
-                    .input(input)
-                    .voice(voice)
+                    .input(TtsExtraParams.applySystemPrompt(input, extraParams))
+                    .voice(TtsExtraParams.resolveVoice(voice, extraParams))
                     .responseFormat(format)
                     .speed(speed)
                     .baseUrl(config.getBaseUrl())
@@ -488,17 +492,5 @@ public class SettingsApiController {
             return raw.replaceAll("[\"']", "").trim();
         }
         return null;
-    }
-
-    private String extractVoiceFromExtraParams(String extraParams) {
-        if (extraParams != null && !extraParams.isBlank()) {
-            try {
-                var node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(extraParams);
-                if (node.has("voice")) {
-                    return node.get("voice").asText();
-                }
-            } catch (Exception ignored) {}
-        }
-        return "alloy";
     }
 }
