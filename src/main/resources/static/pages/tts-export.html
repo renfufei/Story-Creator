@@ -68,6 +68,29 @@
             from { opacity: 0; transform: translateY(-3px); }
             to   { opacity: 1; transform: none; }
         }
+
+        /* 任务详情面板：走主题变量而不是写死 bg-light，深浅色主题都跟手 */
+        .tts-detail { background: var(--bs-tertiary-bg, #f8f9fa); }
+
+        /* 按钮内部的换行由外层 flex-wrap 决定；按钮自己一旦允许折行，
+           窄屏上「折叠」「删除」会被压成「折/叠」「删/除」竖排，行高被撑到几百像素。 */
+        .tts-detail .btn { white-space: nowrap; }
+
+        /* 实时进度日志：等宽、可滚动、细滚动条（内容按级别着色，见 logLineClass） */
+        .tts-progress-log {
+            max-height: 160px;
+            overflow-y: auto;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: .8125rem;
+            line-height: 1.65;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+        .tts-progress-log::-webkit-scrollbar { width: 8px; height: 8px; }
+        .tts-progress-log::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, .22);
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body class="sc-page" data-nav="projects">
@@ -94,9 +117,12 @@ window.__TTS_EXPORT_DATA__ = (function () {
 <main class="sc-main container py-4">
 <div x-data="ttsExportApp()">
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3><i class="bi bi-music-note-beamed"></i> TTS 语音导出管理</h3>
-        <button class="btn btn-sm btn-primary" @click="openWizard()">
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+        <div>
+            <h3 class="mb-1"><i class="bi bi-music-note-beamed"></i> TTS 语音导出管理</h3>
+            <p class="text-muted small mb-0">按章节把正文批量合成语音，可暂停续传、逐章下载。</p>
+        </div>
+        <button class="btn btn-sm btn-primary text-nowrap" @click="openWizard()">
             <i class="bi bi-plus-lg"></i> 新增导出任务
         </button>
     </div>
@@ -107,41 +133,49 @@ window.__TTS_EXPORT_DATA__ = (function () {
             <!-- 这张 8 列的宽表在 375px 手机上会把**整页**撑出横向滚动条（实测 597px > 375px）。
                  用 Bootstrap 的 table-responsive 让它只在卡片内部横向滚动，页面本身不再溢出。 -->
             <div class="table-responsive">
-            <table class="table table-hover mb-0" x-show="tasks.length > 0">
+            <table class="table table-hover align-middle mb-0" x-show="tasks.length > 0">
                 <thead class="table-light">
                     <tr>
-                        <th>#</th>
+                        <th class="text-nowrap">#</th>
                         <th>项目</th>
-                        <th>章节数</th>
-                        <th>语音</th>
-                        <th>速度</th>
-                        <th>状态</th>
-                        <th>进度</th>
-                        <th>操作</th>
+                        <th class="text-nowrap">章节数</th>
+                        <th class="text-nowrap">语音</th>
+                        <th class="text-nowrap">速度</th>
+                        <th class="text-nowrap">状态</th>
+                        <th style="min-width: 150px;">进度</th>
+                        <th class="text-nowrap">操作</th>
                     </tr>
                 </thead>
                 <template x-for="task in tasks" :key="task.id">
                     <tbody>
                         <tr>
                             <td x-text="task.id"></td>
-                            <td x-text="task.projectName || ('项目#' + task.projectId)"></td>
+                            <td class="text-truncate" style="max-width: 240px;"
+                                :title="task.projectName || ('项目#' + task.projectId)"
+                                x-text="task.projectName || ('项目#' + task.projectId)"></td>
                             <td x-text="task.progressTotalChapters"></td>
                             <td x-text="task.voice"></td>
                             <td x-text="task.speed + 'x'"></td>
                             <td>
-                                <span class="badge" :class="statusClass(task.status)" x-text="statusLabel(task.status)"></span>
+                                <span class="badge" :class="statusClass(task.status)"
+                                      :title="task.errorMessage || statusLabel(task.status)"
+                                      x-text="statusLabel(task.status)"></span>
                             </td>
                             <td>
                                 <div class="d-flex align-items-center gap-2">
-                                    <div class="progress flex-grow-1" style="height: 20px; min-width: 100px;">
-                                        <div class="progress-bar" :class="task.status === 'RUNNING' ? 'progress-bar-striped progress-bar-animated' : ''"
+                                    <div class="progress flex-grow-1" style="height: 8px; min-width: 80px;"
+                                         role="progressbar" aria-valuemin="0" aria-valuemax="100"
+                                         :aria-valuenow="progressPercent(task)"
+                                         :aria-label="'任务 #' + task.id + ' 导出进度'">
+                                        <div class="progress-bar" :class="progressBarClass(task)"
                                              :style="'width: ' + progressPercent(task) + '%'">
                                         </div>
                                     </div>
-                                    <small class="text-muted text-nowrap" x-text="task.progressChapter + '/' + task.progressTotalChapters"></small>
+                                    <small class="text-muted text-nowrap" style="min-width: 3.4rem; text-align: right;"
+                                           x-text="task.progressTotalChapters ? (task.progressChapter + '/' + task.progressTotalChapters) : '—'"></small>
                                 </div>
                             </td>
-                            <td>
+                            <td class="text-nowrap">
                                 <div class="btn-group btn-group-sm">
                                     <!-- Start/Resume -->
                                     <button class="btn btn-sm btn-outline-success" x-show="task.status === 'PENDING' || task.status === 'PAUSED' || task.status === 'FAILED'"
@@ -158,9 +192,16 @@ window.__TTS_EXPORT_DATA__ = (function () {
                                             @click="stopTask(task.id)" title="停止">
                                         <i class="bi bi-stop-fill"></i> 停止
                                     </button>
-                                    <!-- Details -->
-                                    <button class="btn btn-sm btn-outline-info" @click="toggleDetails(task.id)" title="详情">
-                                        <i class="bi bi-list-ul"></i> 详情
+                                    <!-- 详情 / 折叠：同一个按钮切换，展开时高亮并改文案，
+                                         否则用户只能回到面板里找收起入口 -->
+                                    <button class="btn btn-sm"
+                                            :class="expandedTaskId === task.id ? 'btn-secondary' : 'btn-outline-info'"
+                                            :aria-expanded="expandedTaskId === task.id ? 'true' : 'false'"
+                                            :title="expandedTaskId === task.id ? '折叠章节详情' : '展开章节详情'"
+                                            :data-task-id="task.id" data-action="details"
+                                            @click="toggleDetails(task.id)">
+                                        <i class="bi" :class="expandedTaskId === task.id ? 'bi-chevron-up' : 'bi-list-ul'"></i>
+                                        <span x-text="expandedTaskId === task.id ? '折叠' : '详情'"></span>
                                     </button>
                                     <!-- Delete -->
                                     <button class="btn btn-sm btn-outline-danger" @click="deleteTask(task.id)" title="删除">
@@ -172,37 +213,62 @@ window.__TTS_EXPORT_DATA__ = (function () {
                         <!-- Inline Chapter Details -->
                         <tr x-show="expandedTaskId === task.id" x-cloak>
                             <td colspan="8" class="p-0">
-                                <div class="bg-light px-3 py-2">
-                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <strong>任务 #<span x-text="task.id"></span> — 章节详情</strong>
-                                        <div class="d-flex gap-2">
+                                <div class="tts-detail px-3 py-2" :data-detail-for="task.id">
+                                    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                                        <div>
+                                            <div class="fw-bold">任务 #<span x-text="task.id"></span> · 章节详情</div>
+                                            <div class="small text-muted">
+                                                <span x-text="detailMeta(task)"></span>
+                                                <span class="ms-1">已完成
+                                                    <span class="fw-semibold text-body" x-text="detailCompletedCount"></span>/<span x-text="expandedChapters.length"></span>
+                                                </span>
+                                                <span class="text-danger ms-1" x-show="detailFailedCount > 0">
+                                                    · <span x-text="detailFailedCount"></span> 章失败
+                                                </span>
+                                                <span class="ms-1" x-show="detailTotalSize > 0">· 合计 <span x-text="formatSize(detailTotalSize)"></span></span>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex flex-wrap gap-2">
                                             <button class="btn btn-sm btn-outline-primary"
+                                                    :data-task-id="task.id" data-action="select-chapters"
                                                     x-show="task.status !== 'RUNNING' && editingChaptersTaskId !== task.id"
                                                     @click="openEditChapters(task)">
-                                                <i class="bi bi-pencil-square"></i> 编辑章节
+                                                <i class="bi bi-ui-checks"></i> 选择章节
                                             </button>
                                             <a class="btn btn-sm btn-outline-success"
                                                :href="'/tts-fullplay?taskId=' + task.id"
-                                               target="_blank"
+                                               target="_blank" rel="noopener"
                                                x-show="expandedChapters.some(ch => ch.status === 'COMPLETED')">
                                                 <i class="bi bi-play-circle"></i> 全文收听
                                             </a>
-                                            <button class="btn btn-sm btn-outline-secondary" @click="toggleProgress(task.id)" title="实时进度">
-                                                <i class="bi bi-terminal"></i> 进度
+                                            <button class="btn btn-sm"
+                                                    :class="showProgressTaskId === task.id ? 'btn-secondary' : 'btn-outline-secondary'"
+                                                    :aria-pressed="showProgressTaskId === task.id ? 'true' : 'false'"
+                                                    :title="showProgressTaskId === task.id ? '收起实时进度' : '展开实时进度'"
+                                                    :data-task-id="task.id" data-action="progress"
+                                                    @click="toggleProgress(task.id)">
+                                                <i class="bi bi-terminal"></i> 实时进度
                                             </button>
-                                            <button class="btn btn-sm btn-outline-secondary" @click="expandedTaskId = null"><i class="bi bi-x-lg"></i> 关闭</button>
+                                            <button class="btn btn-sm btn-outline-secondary"
+                                                    :data-task-id="task.id" data-action="collapse"
+                                                    @click="toggleDetails(task.id)" title="折叠章节详情">
+                                                <i class="bi bi-chevron-up"></i> 折叠
+                                            </button>
                                         </div>
                                     </div>
                                     <!-- Edit Chapters Mode -->
                                     <div x-show="editingChaptersTaskId === task.id" class="mb-3 border rounded p-3 bg-white">
-                                        <div class="d-flex justify-content-between align-items-center mb-2">
-                                            <strong>编辑章节列表</strong>
+                                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                                            <div>
+                                                <div class="fw-bold">选择章节</div>
+                                                <small class="text-muted">勾选本次要生成语音的章节，没勾的会被移出任务。</small>
+                                            </div>
                                             <div class="d-flex gap-2">
                                                 <button class="btn btn-sm btn-outline-secondary" @click="editSelectAllChapters()"><i class="bi bi-check2-square"></i> 全选</button>
                                                 <button class="btn btn-sm btn-outline-secondary" @click="editDeselectAllChapters()"><i class="bi bi-square"></i> 取消全选</button>
                                             </div>
                                         </div>
-                                        <div style="max-height: 200px; overflow-y: auto;" class="border rounded p-2 mb-2">
+                                        <div style="max-height: 220px; overflow-y: auto;" class="border rounded p-2 mb-2">
                                             <template x-for="ch in editableChapters" :key="ch.chapterNumber">
                                                 <div class="form-check">
                                                     <input class="form-check-input" type="checkbox"
@@ -213,13 +279,13 @@ window.__TTS_EXPORT_DATA__ = (function () {
                                                 </div>
                                             </template>
                                         </div>
-                                        <div class="d-flex justify-content-between align-items-center">
-                                            <small class="text-muted">已选 <span x-text="editSelectedChapters.length"></span> 章</small>
+                                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                                            <small class="text-muted">已选 <span class="fw-semibold text-body" x-text="editSelectedChapters.length"></span> 章 / 共 <span x-text="editableChapters.length"></span> 章</small>
                                             <div class="d-flex gap-2">
-                                                <button class="btn btn-sm btn-outline-secondary" @click="cancelEditChapters()"><i class="bi bi-x-lg"></i> 取消</button>
-                                                <button class="btn btn-sm btn-primary" @click="saveEditChapters(task.id)"
+                                                <button class="btn btn-sm btn-outline-secondary" data-action="cancel-select" @click="cancelEditChapters()"><i class="bi bi-x-lg"></i> 取消修改</button>
+                                                <button class="btn btn-sm btn-primary" data-action="save-select" @click="saveEditChapters(task.id)"
                                                         :disabled="editSelectedChapters.length === 0">
-                                                    <i class="bi bi-check-lg"></i> 保存
+                                                    <i class="bi bi-check-lg"></i> 保存选择
                                                 </button>
                                             </div>
                                         </div>
@@ -227,21 +293,21 @@ window.__TTS_EXPORT_DATA__ = (function () {
                                     <!-- Progress Log (inside details) -->
                                     <div x-show="showProgressTaskId === task.id" class="mb-2">
                                         <div class="bg-dark text-light px-3 py-2 rounded">
-                                            <div class="mb-2">
-                                                <strong><i class="bi bi-terminal"></i> 实时进度 — 任务 #<span x-text="task.id"></span></strong>
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <strong class="small"><i class="bi bi-terminal"></i> 实时进度 · 任务 #<span x-text="task.id"></span></strong>
+                                                <span class="badge" :class="statusClass(task.status)" x-text="statusLabel(task.status)"></span>
                                             </div>
-                                            <div :id="'progress-log-' + task.id"
-                                                 style="max-height: 150px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; line-height: 1.6;">
+                                            <div :id="'progress-log-' + task.id" class="tts-progress-log">
                                                 <template x-for="(line, idx) in (progressLogs[task.id] || [])" :key="idx">
-                                                    <div x-text="line" :class="line.includes('[跳过') || line.includes('失败') ? 'text-warning' : 'text-success'"></div>
+                                                    <div x-text="line" :class="logLineClass(line)"></div>
                                                 </template>
                                                 <div x-show="!progressLogs[task.id] || progressLogs[task.id].length === 0"
-                                                     class="text-muted">等待进度消息...</div>
+                                                     class="text-secondary">等待进度消息…</div>
                                             </div>
                                         </div>
                                     </div>
                                     <div style="max-height: 300px; overflow-y: auto;">
-                                        <table class="table table-sm table-bordered mb-0 bg-white">
+                                        <table class="tts-chapter-table table table-sm table-bordered align-middle mb-0 bg-white">
                                             <thead class="table-light sticky-top">
                                                 <tr>
                                                     <th>章节</th>
@@ -253,18 +319,19 @@ window.__TTS_EXPORT_DATA__ = (function () {
                                             <tbody>
                                                 <template x-for="ch in expandedChapters" :key="ch.chapterNumber">
                                                     <tr>
-                                                        <td x-text="'第' + ch.chapterNumber + '章'"></td>
+                                                        <td class="text-nowrap" x-text="'第' + ch.chapterNumber + '章'"></td>
                                                         <td>
                                                             <span class="badge" :class="chapterStatusClass(ch.status)" x-text="chapterStatusLabel(ch.status)"></span>
                                                             <small class="text-danger" x-show="ch.errorMessage" x-text="ch.errorMessage"></small>
                                                         </td>
-                                                        <td x-text="ch.fileSize ? formatSize(ch.fileSize) : '-'"></td>
-                                                        <td>
+                                                        <td class="text-nowrap" x-text="ch.fileSize ? formatSize(ch.fileSize) : '-'"></td>
+                                                        <td class="text-nowrap">
                                                             <a class="btn btn-sm btn-outline-primary" x-show="ch.status === 'COMPLETED'"
                                                                :href="'/api/tts-export/tasks/' + expandedTaskId + '/chapters/' + ch.chapterNumber + '/file'"
-                                                               target="_blank">
+                                                               target="_blank" rel="noopener">
                                                                 <i class="bi bi-download"></i> 下载
                                                             </a>
+                                                            <span class="text-muted" x-show="ch.status !== 'COMPLETED'">—</span>
                                                         </td>
                                                     </tr>
                                                 </template>
@@ -280,7 +347,10 @@ window.__TTS_EXPORT_DATA__ = (function () {
             </div>
             <div class="text-center text-muted py-5" x-show="tasks.length === 0">
                 <i class="bi bi-inbox" style="font-size: 2rem;"></i>
-                <p class="mt-2">暂无导出任务，点击右上角"新增导出任务"开始</p>
+                <p class="mt-2 mb-3">还没有导出任务</p>
+                <button class="btn btn-sm btn-primary" @click="openWizard()">
+                    <i class="bi bi-plus-lg"></i> 新增导出任务
+                </button>
             </div>
         </div>
     </div>
@@ -296,13 +366,16 @@ window.__TTS_EXPORT_DATA__ = (function () {
                 </div>
                 <div class="modal-body">
                     <!-- Step indicators -->
-                    <div class="d-flex justify-content-center mb-4">
-                        <template x-for="(label, idx) in ['选择项目', '选择章节', 'TTS配置', '高级选项']" :key="idx">
+                    <div class="d-flex flex-wrap justify-content-center align-items-center gap-1 mb-4">
+                        <template x-for="(label, idx) in ['选择项目', '选择章节', 'TTS 配置', '高级选项']" :key="idx">
                             <div class="d-flex align-items-center">
                                 <span class="badge rounded-pill"
-                                      :class="wizardStep > idx ? 'bg-success' : (wizardStep === idx ? 'bg-primary' : 'bg-secondary')"
-                                      x-text="idx + 1"></span>
-                                <small class="ms-1 me-3" :class="wizardStep === idx ? 'fw-bold' : 'text-muted'" x-text="label"></small>
+                                      :class="wizardStep > idx ? 'bg-success' : (wizardStep === idx ? 'bg-primary' : 'bg-secondary-subtle text-secondary-emphasis')">
+                                    <i class="bi bi-check-lg" x-show="wizardStep > idx"></i>
+                                    <span x-show="wizardStep <= idx" x-text="idx + 1"></span>
+                                </span>
+                                <small class="ms-1" :class="wizardStep === idx ? 'fw-bold text-body' : 'text-muted'" x-text="label"></small>
+                                <i class="bi bi-chevron-right text-muted ms-2" x-show="idx < 3" style="font-size: .7rem;"></i>
                             </div>
                         </template>
                     </div>
@@ -447,13 +520,15 @@ window.__TTS_EXPORT_DATA__ = (function () {
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label fw-bold">段落分割</label>
+                                <label class="form-label fw-bold">段落分割（字数）</label>
                                 <div class="d-flex align-items-center gap-2">
-                                    <input type="number" class="form-control form-control-sm" style="width: 70px;"
-                                           min="1" max="500" x-model.number="wizard.minLen">
-                                    <span class="text-muted">-</span>
-                                    <input type="number" class="form-control form-control-sm" style="width: 70px;"
-                                           min="10" max="4000" x-model.number="wizard.maxLen">
+                                    <span class="text-muted small text-nowrap">最短</span>
+                                    <input type="number" class="form-control form-control-sm" style="width: 74px;"
+                                           min="1" max="500" x-model.number="wizard.minLen" aria-label="最短字数">
+                                    <span class="text-muted">–</span>
+                                    <span class="text-muted small text-nowrap">最长</span>
+                                    <input type="number" class="form-control form-control-sm" style="width: 74px;"
+                                           min="10" max="4000" x-model.number="wizard.maxLen" aria-label="最长字数">
                                     <span class="text-muted small">字</span>
                                 </div>
                             </div>
@@ -549,10 +624,15 @@ window.__TTS_EXPORT_DATA__ = (function () {
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-sm btn-outline-secondary" x-show="wizardStep > 0" @click="wizardStep--"><i class="bi bi-arrow-left"></i> 上一步</button>
+                    <button class="btn btn-sm btn-outline-secondary me-auto" data-bs-dismiss="modal">
+                        <i class="bi bi-x-lg"></i> 取消
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" data-wizard-back x-show="wizardStep > 0" @click="wizardStep--">
+                        <i class="bi bi-arrow-left"></i> 上一步
+                    </button>
                     <button class="btn btn-sm btn-primary" x-show="wizardStep < 3" @click="nextWizardStep()"
-                            :disabled="!canAdvanceWizard()"><i class="bi bi-arrow-right"></i> 
-                        下一步
+                            :disabled="!canAdvanceWizard()">
+                        <i class="bi bi-arrow-right"></i> 下一步
                     </button>
                     <button class="btn btn-sm btn-primary" x-show="wizardStep === 3" @click="submitWizard()"
                             :disabled="wizard.selectedChapters.length === 0">
@@ -1073,10 +1153,23 @@ function ttsExportApp() {
             if (el) el.scrollTop = el.scrollHeight;
         },
 
+        /**
+         * 展开 / 折叠任务详情。
+         * <p>
+         * 折叠时必须顺手关掉实时进度的 SSE —— 否则面板都收了，连接还挂在后台空转；
+         * 从任务 A 切到任务 B 时同理，先把 A 的进度流与勾选态收干净，避免串台。
+         */
         async toggleDetails(id) {
             if (this.expandedTaskId === id) {
+                this.closeProgress(id);
                 this.expandedTaskId = null;
                 return;
+            }
+            if (this.showProgressTaskId !== null && this.showProgressTaskId !== id) {
+                this.closeProgress(this.showProgressTaskId);
+            }
+            if (this.editingChaptersTaskId !== null && this.editingChaptersTaskId !== id) {
+                this.editingChaptersTaskId = null;
             }
             await this.loadDetails(id);
         },
@@ -1115,6 +1208,43 @@ function ttsExportApp() {
         progressPercent(task) {
             if (task.progressTotalChapters === 0) return 0;
             return Math.round((task.progressChapter / task.progressTotalChapters) * 100);
+        },
+        /** 进度条配色：只有进行中才滚动，终态用成功/失败/暂停色，别让「已完成」还是默认蓝 */
+        progressBarClass(task) {
+            if (task.status === 'RUNNING' || task.status === 'PENDING') {
+                return 'progress-bar-striped progress-bar-animated';
+            }
+            if (task.status === 'COMPLETED') return 'bg-success';
+            if (task.status === 'FAILED') return 'bg-danger';
+            if (task.status === 'PAUSED') return 'bg-warning';
+            return '';
+        },
+        /** 详情面板标题下的摘要：项目 · 语音 · 速度 · 格式（缺字段就跳过，不打印 undefined） */
+        detailMeta(task) {
+            const parts = [];
+            if (task.projectName) parts.push(task.projectName);
+            if (task.voice) parts.push('语音 ' + task.voice);
+            if (task.speed) parts.push(task.speed + 'x');
+            if (task.audioFormat) parts.push(String(task.audioFormat).toUpperCase());
+            if (task.useFfmpeg && task.bitrate) parts.push('ffmpeg ' + task.bitrate);
+            return parts.join(' · ');
+        },
+        get detailCompletedCount() {
+            return this.expandedChapters.filter(ch => ch.status === 'COMPLETED').length;
+        },
+        get detailFailedCount() {
+            return this.expandedChapters.filter(ch => ch.status === 'FAILED').length;
+        },
+        get detailTotalSize() {
+            return this.expandedChapters.reduce((n, ch) => n + (Number(ch.fileSize) || 0), 0);
+        },
+        /** 日志逐行着色：失败红、跳过/警告黄、完成绿、其余浅灰（整屏全绿反而看不出重点） */
+        logLineClass(line) {
+            const s = String(line || '');
+            if (/失败|错误|异常|ERROR|FAIL/i.test(s)) return 'text-danger';
+            if (/跳过|警告|截断|WARN/i.test(s)) return 'text-warning';
+            if (/完成|成功|COMPLET|SUCCESS|✓/i.test(s)) return 'text-success';
+            return 'text-light';
         },
         formatSize(bytes) {
             if (!bytes) return '-';

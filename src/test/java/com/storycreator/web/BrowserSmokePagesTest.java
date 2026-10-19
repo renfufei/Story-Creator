@@ -63,6 +63,13 @@ class BrowserSmokePagesTest extends BrowserSmokeSupport {
                 // 文案挑 x-text 渲染出来的占位文案【选择关卡练习】（静态 HTML 里没有，
                 // 脚本没跑完 / 词库没取到就不会出现），顺带把「页头下拉默认值」这条要求钉进冒烟
                 new PageCase("/learn/word-match", "#wm-home-input", "选择关卡练习", true),
+                // 成语填空：哨兵挑 .ic-board（棋盘容器，静态骨架里就有），
+                // 文案挑 x-text 渲染出来的关卡号【第 1 关】—— 词库没取到 / 脚本没跑完都不会出现
+                new PageCase("/learn/idiom-fill", ".ic-board", "第 1 关", true),
+                // 近义词 / 反义词匹配：同一张页两个路由，哨兵挑 .wr-board，
+                // 文案挑 x-text 渲染的【第 1 关】—— 词库没取到 / 脚本没跑完都不会出现
+                new PageCase("/learn/synonym-match", ".wr-board", "第 1 关", true),
+                new PageCase("/learn/antonym-match", ".wr-board", "第 1 关", true),
                 // 俄罗斯方块：整页自包含的沉浸式全屏页（body 自带 flex + overflow:hidden，
                 // 引 Bootstrap / 挂 #site-nav 都会破版）⇒ requireNav=false。
                 // 哨兵挑 .piece-hitarea：它由 init→newGame→dealPieces→renderPieces 动态生成，
@@ -147,12 +154,12 @@ class BrowserSmokePagesTest extends BrowserSmokeSupport {
     /**
      * 教学首页的三张模块卡必须共用一套规格：色块同尺寸同圆角、按钮同款式同高度且底边对齐。
      *
-     * <p>这三张卡一度是三种画风（细描边字形 / 实心字形 / 自绘 SVG）、三种按钮色
+     * <p>这些卡一度是三种画风（细描边字形 / 实心字形 / 自绘 SVG）、三种按钮色
      * （{@code btn-primary} / {@code btn-success} / {@code btn-warning}）、三种描述行数，
      * 按钮还各自停在不同的高度上。文案层面的断言抓不到这类"看着不整齐"，只能真的量几何。
      */
     @Test
-    @DisplayName("教学首页：三张模块卡共用一套规格（色块等高、按钮同款同高贴底）")
+    @DisplayName("教学首页：四张模块卡共用一套规格（色块等高、按钮同款同高贴底）")
     void learnCardWallUsesOneSpec() {
         smoke("/learn", ".sc-learn-icon", "教学模块", true, page -> {
             String spec = page.evaluate("(() => {"
@@ -168,6 +175,17 @@ class BrowserSmokePagesTest extends BrowserSmokeSupport {
                     + "const widths = rects.map(r => Math.round(r.width));"
                     + "const bottoms = rects.map(r => Math.round(r.bottom));"
                     + "const classes = btns.map(b => b.className.trim());"
+                    // 6 张卡排成两行：底边只能「同一行内」对齐，跨行必然不同（458 vs 804）。
+                    // 所以按卡片顶边分组，每组内再验底边唯一。
+                    + "const tops = cards.map(c => Math.round(c.getBoundingClientRect().top));"
+                    + "const rowMap = new Map();"
+                    + "cards.forEach((c, i) => {"
+                    + "    const k = tops[i];"
+                    + "    if (!rowMap.has(k)) rowMap.set(k, []);"
+                    + "    rowMap.get(k).push(bottoms[i]);"
+                    + "});"
+                    // 行内用 "/"、行间用 ";" —— 大字段本身用 "|" 和 "," 分隔，不能再撞
+                    + "const rows = Array.from(rowMap.values()).map(a => a.join('/')).join(';');"
                     // 齿轮必须是不占位的浮层：绝对定位 + z-index + 落在卡片右上角
                     + "const gears = cards.map(c => {"
                     + "    const g = c.querySelector('.sc-learn-extra');"
@@ -193,49 +211,61 @@ class BrowserSmokePagesTest extends BrowserSmokeSupport {
                     + "    return Array.from(byLine.values()).map(w => Math.round(w)).join('+');"
                     + "});"
                     + "return [cards.length, chips.join(','), radius.join(','),"
-                    + "        heights.join(','), bottoms.join(','), classes.join(','),"
+                    + "        heights.join(','), rows, classes.join(','),"
                     + "        widths.join(','), gears.join(';'), descs.join(',')].join('|');"
                     + "})()");
 
             String[] parts = spec.split("\\|", -1);
             assertThat(parts).as("卡片墙读数应齐 9 段：%s", spec).hasSize(9);
-            assertThat(parts[0]).as("应有 3 张模块卡").isEqualTo("3");
+            assertThat(parts[0]).as("应有 6 张模块卡（2026-10-18 加入成语填空、近义词、反义词）")
+                    .isEqualTo("6");
             assertThat(distinct(parts[1]))
-                    .as("三张卡的图标色块应同宽同高（实测 %s）", parts[1]).hasSize(1);
+                    .as("六张卡的图标色块应同宽同高（实测 %s）", parts[1]).hasSize(1);
             assertThat(distinct(parts[2]))
-                    .as("三张卡的图标色块应同圆角（实测 %s）", parts[2]).hasSize(1);
+                    .as("六张卡的图标色块应同圆角（实测 %s）", parts[2]).hasSize(1);
             assertThat(distinct(parts[3]))
-                    .as("三个按钮应同高（实测 %s）", parts[3]).hasSize(1);
-            assertThat(distinct(parts[4]))
-                    .as("三个按钮应底边对齐、不再一张高一张低（实测 %s）", parts[4]).hasSize(1);
+                    .as("六个按钮应同高（实测 %s）", parts[3]).hasSize(1);
+            // 六卡两行：按行分组后，每行内的按钮底边必须齐平
+            String[] cardRows = parts[4].split(";", -1);
+            assertThat(cardRows).as("六张卡应排成两行（实测 %s）", parts[4]).hasSize(2);
+            for (int r = 0; r < cardRows.length; r++) {
+                Set<String> rowBottoms = new LinkedHashSet<>(Arrays.asList(cardRows[r].split("/", -1)));
+                assertThat(rowBottoms)
+                        .as("第 %d 行的按钮应底边对齐、不再一张高一张低（实测 %s）", r + 1, cardRows[r])
+                        .hasSize(1);
+            }
             assertThat(distinct(parts[5]))
                     .as("按钮应同一款式，不再混用 btn-primary/btn-success/btn-warning（实测 %s）", parts[5])
                     .containsExactly("btn");
             assertThat(distinct(parts[6]))
-                    .as("三个按钮应同宽 —— 齿轮是脱流浮层，不该把卡1 的按钮挤窄（实测 %s）", parts[6])
+                    .as("六个按钮应同宽 —— 齿轮是脱流浮层，不该把卡1 的按钮挤窄（实测 %s）", parts[6])
                     .hasSize(1);
 
             String[] gears = parts[7].split(";", -1);
-            assertThat(gears).as("三张卡都要报齿轮读数：%s", parts[7]).hasSize(3);
+            assertThat(gears).as("六张卡都要报齿轮读数：%s", parts[7]).hasSize(6);
             assertThat(gears[0])
                     .as("卡1 的音频设置齿轮应是绝对定位 + z-index 的浮层、且落在卡片右上角（实测 %s）", gears[0])
                     .matches("absolute@\\d+:topRight");
-            assertThat(gears[1]).as("卡2 不该有齿轮（实测 %s）", gears[1]).isEqualTo("none");
-            assertThat(gears[2]).as("卡3 不该有齿轮（实测 %s）", gears[2]).isEqualTo("none");
+            for (int i = 1; i < 6; i++) {
+                assertThat(gears[i]).as("卡%d 不该有齿轮（实测 %s）", i + 1, gears[i]).isEqualTo("none");
+            }
 
-            // 说明文字：恰好两行，且两行长度均衡（text-wrap: balance 挣来的，
-            // 默认 auto 会"第一行塞满、第二行只剩两三个字"，那行孤字最显丑）
+            // 说明文字：2~4 行；只有落在两行时才校验「两行长度均衡」（text-wrap: balance 挣来的）。
+            // 2026-10-18 六卡改成 xl-4（一行三张）后每张卡比四卡时更宽，文案普遍回到 2 行；
+            // 行数不固定，但「六卡等高 + 按钮同底边」已经把参差感兜住了，这里只守上下限与孤字。
             String[] descLines = parts[8].split(",", -1);
-            assertThat(descLines).as("三张卡都要报说明文字的行宽：%s", parts[8]).hasSize(3);
+            assertThat(descLines).as("六张卡都要报说明文字的行宽：%s", parts[8]).hasSize(6);
             for (int i = 0; i < descLines.length; i++) {
                 String[] widths = descLines[i].split("\\+", -1);
-                assertThat(widths).as("第 %d 张卡的说明应恰好两行（实测 %s）", i + 1, descLines[i])
-                        .hasSize(2);
-                int first = Integer.parseInt(widths[0]);
-                int second = Integer.parseInt(widths[1]);
-                assertThat(Math.min(first, second) * 10)
-                        .as("第 %d 张卡的两行应长度均衡（短行 ≥ 长行 70%%，实测 %s）", i + 1, descLines[i])
-                        .isGreaterThanOrEqualTo(Math.max(first, second) * 7);
+                assertThat(widths.length).as("第 %d 张卡的说明应在 2~4 行（实测 %s）", i + 1, descLines[i])
+                        .isBetween(2, 4);
+                if (widths.length == 2) {
+                    int first = Integer.parseInt(widths[0]);
+                    int second = Integer.parseInt(widths[1]);
+                    assertThat(Math.min(first, second) * 10)
+                            .as("第 %d 张卡的两行应长度均衡（短行 ≥ 长行 70%%，实测 %s）", i + 1, descLines[i])
+                            .isGreaterThanOrEqualTo(Math.max(first, second) * 7);
+                }
             }
         });
     }

@@ -2,6 +2,7 @@ package com.storycreator.web;
 
 import com.storycreator.api.InspirationApiController;
 import com.storycreator.core.domain.Genre;
+import com.storycreator.core.domain.GuidanceLibraryStep;
 import com.storycreator.core.domain.MaterialCategory;
 import com.storycreator.core.domain.ModelType;
 import com.storycreator.core.domain.StepStatus;
@@ -26,6 +27,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -704,6 +706,71 @@ class PageRenderingIntegrationTest {
         ResponseEntity<String> missing = restTemplate.getForEntity(
                 url("/projects/999999/expansion/data"), String.class);
         assertThat(missing.getStatusCode()).as("未知项目 expansion/data 应 404").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void expansion_guidanceCardOffersReuseAndSaveAsShared() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/expansion"), String.class);
+        assertStaticPage(response, "expansion", "expansionPage()");
+        assertThat(response.getBody())
+                .as("扩写指导应与其他创作页一致：配置 / 存为通用 / 复用指导")
+                .contains("存为通用")
+                .contains("复用指导")
+                .contains("/settings/guidances/save-from-project")
+                .contains("/settings/guidances/list-json")
+                .contains("reuseGuidanceModal")
+                .as("存为通用要落到指导库的「情节拓展」分类")
+                .contains("EXPANSION");
+    }
+
+    @Test
+    void guidanceLibrary_offersExpansionCategory() {
+        ResponseEntity<String> data = restTemplate.getForEntity(url("/settings/guidances/data"), String.class);
+        assertThat(data.getStatusCode()).as("指导库引导数据应 200").isEqualTo(HttpStatus.OK);
+        assertThat(data.getBody())
+                .as("指导库步骤选项应包含「情节拓展」，否则扩写指导无处归类")
+                .contains("\"EXPANSION\"")
+                .contains("情节拓展");
+    }
+
+    @Test
+    void saveGuidanceFromProject_expansionCopiesExpansionGuidance() {
+        ProjectEntity project = projectRepository.findById(projectId).orElseThrow();
+        String original = project.getExpansionGuidance();
+        String marker = "__probe_expansion_guidance__";
+        project.setExpansionGuidance(marker);
+        projectRepository.save(project);
+
+        Long createdId = null;
+        try {
+            MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+            form.add("projectId", String.valueOf(projectId));
+            form.add("step", "EXPANSION");
+            ResponseEntity<String> resp = restTemplate.postForEntity(
+                    url("/settings/guidances/save-from-project"), form, String.class);
+            assertThat(resp.getStatusCode()).as("扩写指导应能存为通用").isEqualTo(HttpStatus.OK);
+            assertThat(resp.getBody()).as("默认名应带「情节拓展」").contains("情节拓展");
+
+            createdId = guidanceLibraryRepository.findByStepOrderByUpdatedAtDesc(GuidanceLibraryStep.EXPANSION)
+                    .stream()
+                    .filter(g -> marker.equals(g.getGuidance()))
+                    .map(GuidanceLibraryEntity::getId)
+                    .findFirst()
+                    .orElse(null);
+            assertThat(createdId).as("指导库应出现一条情节拓展分类的指导").isNotNull();
+
+            ResponseEntity<String> list = restTemplate.getForEntity(
+                    url("/settings/guidances/list-json?step=EXPANSION"), String.class);
+            assertThat(list.getBody()).as("按 EXPANSION 过滤应能查到刚存的指导").contains(marker);
+        } finally {
+            if (createdId != null) {
+                guidanceLibraryRepository.deleteById(createdId);
+            }
+            ProjectEntity restore = projectRepository.findById(projectId).orElseThrow();
+            restore.setExpansionGuidance(original);
+            projectRepository.save(restore);
+        }
     }
 
     // ==================== Volume Manager (分卷管理) ====================
@@ -1479,7 +1546,7 @@ class PageRenderingIntegrationTest {
     private Long createGuidance(String name, WorkflowStep step, String guidance) {
         GuidanceLibraryEntity entity = new GuidanceLibraryEntity();
         entity.setName(name);
-        entity.setStep(step);
+        entity.setStep(GuidanceLibraryStep.of(step));
         entity.setGuidance(guidance);
         return transactionTemplate.execute(status -> guidanceLibraryRepository.save(entity).getId());
     }
@@ -1680,6 +1747,34 @@ class PageRenderingIntegrationTest {
     void ttsExport_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/tts-export"), String.class);
         assertStaticPage(response, "tts-export", "__TTS_EXPORT_DATA__");
+    }
+
+    /**
+     * 任务详情面板的措辞与收起方式（2026-10-19 用户反馈）。
+     *
+     * <p>原来的三处文案都不达意：
+     * <ul>
+     *   <li>「关闭」听起来像关闭任务 / 关闭页面，实际只是收起这块详情 ⇒ 改为「折叠」；</li>
+     *   <li>「编辑章节」与向导第 2 步「选择章节」其实是同一件事 ⇒ 统一口径；</li>
+     *   <li>「进度」太泛，实际是 SSE 实时日志 ⇒ 改为「实时进度」，和表格里的进度条区分开。</li>
+     * </ul>
+     * 顺带钉住：行内那颗「详情」按钮展开后要变成「折叠」并高亮 —— 否则用户只能回面板里找收起入口，
+     * 或者根本不知道再点一下会收起。
+     */
+    @Test
+    void ttsExport_detailPanel_wordingAndToggle() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/tts-export"), String.class);
+        assertThat(response.getStatusCode()).as("/tts-export 应返回 200").isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody())
+                .as("详情面板：三处文案与折叠/展开的切换状态")
+                .contains("<i class=\"bi bi-chevron-up\"></i> 折叠")      // 面板里的收起按钮
+                .contains("<i class=\"bi bi-terminal\"></i> 实时进度")    // 原来的「进度」
+                .contains("<i class=\"bi bi-ui-checks\"></i> 选择章节")   // 原来的「编辑章节」
+                .contains("expandedTaskId === task.id ? '折叠' : '详情'") // 行内按钮跟着状态换文案
+                .contains("saveEditChapters(task.id)")                   // 保存动作仍在（改名不误删）
+                .contains("保存选择")
+                .doesNotContain("编辑章节")
+                .doesNotContain("bi-x-lg\"></i> 关闭");
     }
 
     /**
@@ -1884,8 +1979,9 @@ class PageRenderingIntegrationTest {
                 .contains("英语单词匹配")
                 .contains("/learn/word-match")
                 .contains("/learn/block-blast")
-                // 三张卡共用一套规格（见 app.css 第 9 节）：同款图标色块、同款底部动作区。
+                // 模块卡共用一套规格（见 app.css 第 9 节）：同款图标色块、同款底部动作区。
                 // 曾经是三种按钮色（btn-primary/success/warning）+ 一堆行内 display-1，故正反两面都钉住。
+                // 2026-10-18 加入第四张卡【成语填空】后仍是这一套，断言不用动。
                 .contains("sc-learn-card")
                 .contains("sc-learn-icon")
                 .contains("sc-learn-actions")
@@ -2126,6 +2222,223 @@ class PageRenderingIntegrationTest {
     }
 
     @Test
+    void learnIdiomFill_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/learn/idiom-fill"), String.class);
+        assertStaticPage(response, "learn-idiom-fill", "idiomApp()");
+        assertThat(response.getBody())
+                .as("成语填空页应含引导数据钩子与三学段入口")
+                .contains("__IDIOM_FILL_DATA__")
+                .contains("/learn/idiom-fill/data")
+                .contains("idiom_fill_v1")
+                .contains("ic-stage")
+                .contains("ic-board")
+                .contains("ic-item")
+                .contains("ic-tile");
+        assertThat(response.getBody())
+                .as("★ 同一关拆出来的字必须两两不同：选位不能用「先到先得的贪心」，"
+                        + "否则前面几条把字用光后会出现两个一样的字块，玩家无从判断该填哪格。"
+                        + "页面里必须留下增广路匹配的实现")
+                .contains("assignDistinctPositions")
+                .contains("augment(")
+                .contains("Object.create(null)");
+        assertThat(response.getBody())
+                .as("缺口位置与成语顺序要「每次进关重新随机」：刷新一次就换一个字缺、换一种排列"
+                        + "（2026-10-18 用户反馈：种子写死后每次刷新缺的字和顺序都一模一样）")
+                .contains("this.shuffle(lv.items, Math.random)")
+                .contains("assignDistinctPositions(charLists, Math.random)")
+                .doesNotContain("mulberry32")
+                .doesNotContain("hashStr");
+        assertThat(response.getBody())
+                .as("答题反馈：答对变绿 + 显示释义 + 朗读；答错抖动 + 记失误")
+                .contains("is-done")
+                .contains("is-wrong")
+                .contains("showTip")
+                .contains("showFlash")
+                .contains("mistakes")
+                .contains("speak(it.idiom)");
+        assertThat(response.getBody())
+                .as("朗读失败不能阻塞玩法：没有 speechSynthesis / 没有中文音色时静默返回")
+                .contains("window.speechSynthesis")
+                .contains("u.onerror");
+        assertThat(response.getBody())
+                .as("完成页要给出本关成语与释义（学的落点），并可直接进入下一关 / 下一学段")
+                .contains("本关完成")
+                .contains("ic-done-list")
+                .contains("nextLevel()")
+                .contains("下一学段");
+    }
+
+    @Test
+    void learnIndex_linksIdiomFill() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/learn"), String.class);
+        assertThat(response.getBody())
+                .as("教学首页应有成语填空卡（六卡统一 col-12 col-sm-6 col-xl-4，"
+                        + "不能留 col-md-4，否则 768~991 会提前变三列、文字挤成四行）")
+                .contains("/learn/idiom-fill")
+                .contains("成语填空")
+                .contains("data-accent=\"amber\"")
+                // 只看真实的 class 属性：注释里提了一句「别改回 col-md-4」，
+                // 直接 doesNotContain("col-md-4") 会把那句注释也判成违例
+                .doesNotContain("class=\"col-md-4\"");
+    }
+
+    // ==================== 近义词 / 反义词匹配 ====================
+
+    @Test
+    void learnSynonymMatch_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/learn/synonym-match"), String.class);
+        assertStaticPage(response, "learn-word-relation", "relationApp()");
+        assertThat(response.getBody())
+                .as("近义词匹配页应含引导数据钩子、词库端点与三学段骨架")
+                .contains("__RELATION_DATA__")
+                .contains("/learn/word-relation/data")
+                .contains("word_relation_v1_")
+                .contains("wr-stage")
+                .contains("wr-board")
+                .contains("wr-item")
+                .contains("wr-tile");
+        assertThat(response.getBody())
+                .as("模式由路径判断：两个路由 forward 到同一张静态页，地址栏里没有 ?mode=")
+                .contains("/\\/learn\\/antonym-match/")
+                .contains("mode-antonym");
+        assertThat(response.getBody())
+                .as("右列候选顺序要「每次进关重新随机」：刷新一次位置就换一遍，别让人背位置"
+                        + "（2026-10-18 从固定种子改过来）")
+                .contains("this.tiles = this.shuffle(tileList)")
+                .doesNotContain("mulberry32");
+        assertThat(response.getBody())
+                .as("配对反馈：左边就地补出答案与辨析、答错抖动、完成页列出全部辨析")
+                .contains("showTip")
+                .contains("showFlash")
+                .contains("wr-done-list")
+                .contains("nextLevel()")
+                .contains("下一学段");
+        assertThat(response.getBody())
+                .as("朗读失败不能阻塞玩法")
+                .contains("window.speechSynthesis")
+                .contains("u.onerror");
+    }
+
+    @Test
+    void learnAntonymMatch_usesSamePageWithOwnAccent() {
+        ResponseEntity<String> page = restTemplate.getForEntity(
+                url("/learn/antonym-match"), String.class);
+        assertStaticPage(page, "learn-word-relation", "relationApp()");
+        assertThat(page.getBody())
+                .as("反义词用玫红强调色（--wr-accent 在 .mode-antonym 下被覆盖）")
+                .contains(".wr-root.mode-antonym")
+                .contains("#e11d48");
+    }
+
+    @Test
+    void learnPages_shareSettingsPanelWithExportAndGithub() {
+        // 三个新页面统一挂同一套「设置」弹层：错题本 / 重做本关 / 朗读 / 导出 / 源码 / 重置进度。
+        // 逻辑与样式共用（js/learn-tools.js + app.css 的 .lt-* 段），结构各页一份静态标记。
+        for (String path : List.of("/learn/idiom-fill", "/learn/synonym-match", "/learn/antonym-match")) {
+            String body = restTemplate.getForEntity(url(path), String.class).getBody();
+            assertThat(body)
+                    .as("%s 应有设置弹层骨架", path)
+                    .contains("class=\"lt-set-wrap\"")
+                    .contains("lt-set-btn")
+                    .contains("lt-set-pop")
+                    .contains("/js/learn-tools.js")
+                    .contains("runExport()")
+                    .contains("exportOptions:")
+                    .contains("wrongCount")
+                    .contains("lt-wrong-list");
+            assertThat(body)
+                    .as("%s 的设置里应有错题本 / 导出 / 源码 / 重置进度 四个条目", path)
+                    .contains("错题本")
+                    .contains("导出")
+                    .contains("源码")
+                    .contains("重置进度");
+            assertThat(body)
+                    .as("%s 的源码应指向 GitHub 项目仓库（用 <a> 而不是按钮，"
+                            + "中键/右键新标签页等原生行为才照常可用）", path)
+                    .contains(":href=\"githubUrl\"")
+                    .contains("target=\"_blank\"")
+                    .contains("github.com/renfufei/Story-Creator");
+        }
+    }
+
+    @Test
+    void learnToolsScript_isServedAndExportsStandalonePage() {
+        ResponseEntity<String> js = restTemplate.getForEntity(url("/js/learn-tools.js"), String.class);
+        assertThat(js.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(js.getBody())
+                .as("导出逻辑只有一份：取回本页 → 内联 CSS/JS/图标字体 → 词库就地写死")
+                .contains("exportPage")
+                .contains("__LEARN_STANDALONE__")
+                .contains("data-standalone")
+                .contains("bootstrap-icons")
+                .contains("wrongBook")
+                // 自检必须在：产物里只要还残留外链资源就报错，避免导出一个断网打不开的壳
+                .contains("导出后仍有外链脚本")
+                .contains("导出后仍有外链样式");
+    }
+
+    @Test
+    void learnWordRelationData_servesBothModes() {
+        ResponseEntity<String> synonym = restTemplate.getForEntity(
+                url("/learn/word-relation/data?mode=synonym"), String.class);
+        assertThat(synonym.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(synonym.getBody())
+                .as("近义词词库：小学 / 初中 / 高中，含辨析")
+                .contains("\"mode\":\"synonym\"")
+                .contains("\"label\":\"近义词\"")
+                .contains("小学")
+                .contains("初中")
+                .contains("高中")
+                .contains("\"word\":\"高兴\"")
+                .contains("\"match\":\"快乐\"")
+                .as("语义组只在服务端校验用，不下发前端")
+                .doesNotContain("\"group\"");
+
+        ResponseEntity<String> antonym = restTemplate.getForEntity(
+                url("/learn/word-relation/data?mode=antonym"), String.class);
+        assertThat(antonym.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(antonym.getBody())
+                .as("反义词词库是另一份数据，不能和近义词混在一起")
+                .contains("\"mode\":\"antonym\"")
+                .contains("\"label\":\"反义词\"")
+                .contains("\"word\":\"大\"")
+                .contains("\"match\":\"小\"")
+                .doesNotContain("\"match\":\"快乐\"");
+
+        // 缺省模式 = 近义词（页面漏带参数时不会 500）
+        ResponseEntity<String> fallback = restTemplate.getForEntity(
+                url("/learn/word-relation/data"), String.class);
+        assertThat(fallback.getBody()).contains("\"mode\":\"synonym\"");
+    }
+
+    @Test
+    void learnWordRelationData_rejectsUnknownMode() {
+        ResponseEntity<String> bad = restTemplate.getForEntity(
+                url("/learn/word-relation/data?mode=whatever"), String.class);
+        assertThat(bad.getStatusCode())
+                .as("未知模式必须 400，而不是静默退回近义词（否则反义词页面会拿到近义词库）")
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void learnIndex_linksRelationMatches() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/learn"), String.class);
+        assertThat(response.getBody())
+                .as("教学首页应有近义词 / 反义词两张卡，且六卡统一 col-12 col-sm-6 col-xl-4")
+                .contains("/learn/synonym-match")
+                .contains("/learn/antonym-match")
+                .contains("近义词匹配")
+                .contains("反义词匹配")
+                .contains("data-accent=\"teal\"")
+                .contains("data-accent=\"rose\"")
+                .contains("col-12 col-sm-6 col-xl-4")
+                .doesNotContain("class=\"col-md-4\"")
+                .doesNotContain("class=\"col-12 col-sm-6 col-xl-3\"");
+    }
+
+    @Test
     void learnWordMatchCet_isSeparateSourceFromPep() {
         ResponseEntity<String> data = restTemplate.getForEntity(
                 url("/learn/word-match/data"), String.class);
@@ -2321,6 +2634,27 @@ class PageRenderingIntegrationTest {
                     .contains("/css/style.css")
                     .contains("/css/app.css");
         }
+    }
+
+    // ==================== 单词匹配：导出小程序源码 ====================
+
+    @Test
+    void wordMatchMiniprogramZip_isDownloadableProject() {
+        ResponseEntity<byte[]> response = restTemplate.getForEntity(
+                url("/learn/word-match/miniprogram.zip"), byte[].class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getHeaders().getContentType()).isNotNull();
+        assertThat(response.getHeaders().getContentType().toString()).contains("zip");
+        assertThat(response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
+                .contains("attachment")
+                .contains("word-pair-miniprogram.zip");
+
+        byte[] body = response.getBody();
+        assertThat(body).isNotNull();
+        // zip 魔数："PK" —— 导出失败时这里会是错误页或空 body
+        assertThat(new String(body, 0, 2, StandardCharsets.ISO_8859_1)).isEqualTo("PK");
+        assertThat(body.length).as("含 752KB 词库，压完仍有上百 KB").isGreaterThan(100_000);
     }
 
     // ==================== Helpers ====================

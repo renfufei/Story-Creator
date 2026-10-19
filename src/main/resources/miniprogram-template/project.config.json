@@ -1,0 +1,18 @@
+{
+  "miniprogramRoot": "./",
+  "compileType": "miniprogram",
+  "appid": "",
+  "projectname": "word-pair",
+  "libVersion": "latest",
+  "setting": {
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "urlCheck": false,
+    "autoAudits": false,
+    "checkInvalidKey": true,
+    "uglifyFileName": false
+  },
+  "condition": {}
+}

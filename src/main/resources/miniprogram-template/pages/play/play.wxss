@@ -1,0 +1,956 @@
+/* 单词匹配 · 页面样式
+   ---------------------------------------------------------------------------
+   移植自 src/main/resources/static/pages/learn-word-match.html 的 <style> 块，三处系统性改动：
+
+   ① **以网页版的移动端规则为基础**（原 @media (max-width: 767.98px) 那一整段）。
+      小程序只有手机，桌面那套（.wm-stage max-width:640px、居中卡片、hover、focus-visible）
+      全部删掉，不留死代码。
+   ② **px → rpx（×2）**。原设计稿基准 375px 宽，375pt 屏上 750rpx = 375px，所以 1px = 2rpx。
+      原「窄屏压到 46px」的卡片 = 92rpx，仍在 44px 触控红线（88rpx）之上。
+   ③ **CSS 变量全部内联成字面值**。原 .wm-root 上那 20 个 --wm-* 变量在这里展开写进各规则，
+      代价是颜色不再集中在一处，换来的是不依赖 WXSS 对自定义属性的支持程度 ——
+      这条链路上没有编译器可以帮我兜底，稳健优先。
+
+   另外几处刻意的取舍（都写在对应位置）：
+   · 删掉 clamp()/min()/max-content/100dvh/backdrop-filter，改用固定值或 vh/百分比；
+   · 删掉 :hover / :focus-visible / user-select / cursor / touch-action，按下反馈走 hover-class；
+   · 删掉 @media (prefers-reduced-motion)，小程序没有这个媒体特性；
+   · 删掉 body[data-standalone] 那条（那是单页导出件专用的）。
+   --------------------------------------------------------------------------- */
+
+/* ==================== 根容器：撑满视口，页面本身不滚动 ==================== */
+.wm-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: #ffffff;
+  color: #2b3138;
+}
+
+/* ==================== 工具栏 ==================== */
+.wm-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  flex-wrap: wrap;
+  padding: 12rpx 20rpx 6rpx;
+}
+
+.wm-toolbar-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+/* 窄屏副标题（原页面的学段副标题）在原页面就是 display:none，
+   模板里没有这个节点，因此不再需要对应规则。 */
+
+.wm-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  flex-wrap: wrap;
+}
+
+.wm-book-btn {
+  max-width: 260rpx;
+}
+
+.wm-book-btn-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-caret {
+  font-size: 20rpx;
+  opacity: .55;
+  flex: 0 0 auto;
+}
+
+/* 错题数量小胶囊 */
+.wm-count {
+  display: inline-block;
+  min-width: 30rpx;
+  padding: 0 8rpx;
+  margin-left: 6rpx;
+  border-radius: 999rpx;
+  background: #e5484d;
+  color: #ffffff;
+  font-size: 20rpx;
+  font-weight: 700;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.wm-set-btn.is-open {
+  border-color: #35a3f3;
+  color: #0f6cbd;
+  background: #eef7fe;
+}
+
+/* ==================== 舞台 ==================== */
+.wm-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  padding: 4rpx 20rpx 12rpx;
+  overflow-y: auto;
+  /* 底部给浮动的「上一关 / 下一关」胶囊留位 */
+  padding-bottom: calc(24rpx + 96rpx + env(safe-area-inset-bottom));
+}
+
+.wm-fallback {
+  padding: 120rpx 0;
+  text-align: center;
+  color: #86909c;
+  font-size: 28rpx;
+}
+
+.wm-fallback-icon {
+  display: block;
+  font-size: 58rpx;
+  margin-bottom: 12rpx;
+}
+
+/* ==================== HUD：不占纵向空间，浮在舞台顶边 ==================== */
+.wm-hud {
+  flex: 0 0 auto;
+  position: relative;
+  height: 0;
+  z-index: 4;
+}
+
+/* 细进度条贴舞台顶边 */
+.wm-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6rpx;
+  display: flex;
+  gap: 4rpx;
+}
+
+.wm-seg {
+  flex: 1 1 0;
+  height: 6rpx;
+  background: #ebedf0;
+  transition: background-color .25s ease;
+}
+
+.wm-seg.is-done { background: #34c77b; }
+.wm-seg.is-current { background: #35a3f3; }
+.wm-progress.is-auto .wm-seg.is-done { background: #f5c46b; }
+.wm-progress.is-auto .wm-seg.is-current { background: #f0a020; }
+
+/* 关卡多于一屏能看清的密度时（大学那两册有 1251 / 942 关），
+   逐关画一个小格只会得到一堆 0.5px 的碎点，反而看不出进度。
+   这时换成一条按比例填充的横条 —— 精确数字由右侧「第 N/M 关」计数器负责。 */
+.wm-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6rpx;
+  background: #ebedf0;
+}
+
+.wm-bar-fill {
+  height: 6rpx;
+  background: #35a3f3;
+  transition: width .25s ease;
+}
+
+.wm-bar-fill.is-done { background: #34c77b; }
+.wm-bar.is-auto .wm-bar-fill { background: #f0a020; }
+.wm-bar.is-auto .wm-bar-fill.is-done { background: #f5c46b; }
+
+.wm-counter {
+  position: absolute;
+  top: 2rpx;
+  right: 4rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #86909c;
+  background: rgba(255, 255, 255, .88);
+  padding: 0 8rpx;
+  border-radius: 999rpx;
+}
+
+.wm-counter-num { color: #35a3f3; }
+.wm-counter.is-auto .wm-counter-num { color: #f0a020; }
+
+/* ==================== 标题行（过关提示的定位基准） ==================== */
+.wm-titlebar {
+  flex: 0 0 auto;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  flex-wrap: nowrap;
+  padding: 8rpx 16rpx;
+  background: #f7f9fb;
+  border: 2rpx solid #e5e8ec;
+  border-radius: 20rpx;
+  min-height: 72rpx;
+}
+
+/* 过关提示出现时把标题 / 主题标签藏起来。
+   用 visibility 而不是 display：display:none 会让这一行塌成 0 高，
+   绝对定位的提示就失去居中基准了。 */
+.wm-titlebar.is-flashing .wm-title,
+.wm-titlebar.is-flashing .wm-theme,
+.wm-titlebar.is-flashing .wm-auto-badge {
+  visibility: hidden;
+}
+
+.wm-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 32rpx;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-theme {
+  flex: 0 0 auto;
+  font-size: 22rpx;
+  color: #0f6cbd;
+  background: #eaf4fe;
+  border-radius: 999rpx;
+  padding: 4rpx 16rpx;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.wm-auto-badge {
+  flex: 0 0 auto;
+  font-size: 22rpx;
+  color: #8a5a00;
+  background: #fff3d9;
+  border: 2rpx solid #ffe0a8;
+  border-radius: 999rpx;
+  padding: 4rpx 16rpx;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* 过关提示：绝对定位覆盖标题行，不占额外高度、不产生位移。
+   不用 width:max-content（WXSS 支持度不稳），靠 nowrap + 绝对定位自身收缩即可。 */
+.wm-flash {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  background: rgba(29, 41, 55, .94);
+  color: #ffffff;
+  border-radius: 999rpx;
+  padding: 8rpx 28rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+  white-space: nowrap;
+  max-width: 92%;
+  animation: wm-pop .24s ease;
+}
+
+.wm-flash-emoji {
+  font-size: 38rpx;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.wm-flash-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes wm-pop {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.9); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* ==================== 自动练习状态条（恒定只有一行） ==================== */
+.wm-auto-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12rpx;
+  min-height: 84rpx;
+  background: #fff5e0;
+  border: 2rpx solid #ffe0a8;
+  border-radius: 20rpx;
+  padding: 12rpx 16rpx;
+  color: #8a5a00;
+  font-size: 26rpx;
+}
+
+.wm-auto-bar.is-paused {
+  background: #f4f6f8;
+  border-color: #e5e8ec;
+  color: #86909c;
+}
+
+.wm-auto-tip {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.wm-auto-tag {
+  flex: 0 0 auto;
+  background: #ffffff;
+  border: 2rpx solid #ffe0a8;
+  border-radius: 999rpx;
+  padding: 2rpx 14rpx;
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.wm-auto-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-auto-count {
+  flex: 0 0 auto;
+  min-width: 60rpx;
+  text-align: center;
+  font-weight: 700;
+  background: #ffffff;
+  border: 2rpx solid #ffe0a8;
+  border-radius: 999rpx;
+  padding: 2rpx 12rpx;
+}
+
+.wm-auto-sec { font-size: 20rpx; font-weight: 600; opacity: .7; }
+
+.wm-auto-btn {
+  flex: 0 0 auto;
+  border: 2rpx solid #f0c476;
+  background: #ffffff;
+  color: #8a5a00;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+  padding: 6rpx 16rpx;
+  line-height: 1.5;
+}
+
+.wm-auto-btn.is-exit { border-color: #f2b8b5; color: #b42318; }
+
+/* ==================== 信息栏（说明文字 + 关卡导航） ==================== */
+.wm-infobar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: #f7f9fb;
+  border: 2rpx solid #e5e8ec;
+  border-radius: 20rpx;
+  padding: 8rpx 16rpx;
+}
+
+/* 说明文字：窄屏只剩一行，长文案横向滑动，不折行把区域撑高 */
+.wm-footer {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  font-size: 24rpx;
+  color: #86909c;
+}
+
+.wm-footer-item {
+  white-space: nowrap;
+}
+
+/* 强调文字的四种颜色。原页面这里是一条 `.wm-footer b` —— HTML 里有 <b> 可用，
+   WXML 没有这个标签，统一改成显式 class（见 app.wxss 的 .wm-em 系列定义）。 */
+.wm-footer .wm-em { color: #2b3138; }
+
+/* 「本册已完成 N/M 关」在顶部进度条 + 计数器里已有，这里不重复占位 */
+.wm-footer-done { display: none; }
+
+/* 上一关 / 下一关：浮动胶囊，不占纵向空间，也不会被 7 行单词挤走 */
+.wm-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(16rpx + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20rpx;
+  z-index: 1150;            /* 低于设置面板(1250)与弹窗(1300) */
+  pointer-events: none;     /* 只有按钮可点，别挡住卡片 */
+}
+
+/* 原页面 .wm-nav 中间还有个「第 N 关 / 共 M 关」，窄屏规则是 display:none（与顶部重复），
+   这里直接不入模板，省掉一条死规则。 */
+
+.wm-nav-btn {
+  pointer-events: auto;
+  min-height: 76rpx;
+  min-width: 200rpx;
+  padding: 0 28rpx;
+  border-radius: 999rpx;
+  border-color: #cfd6dd;
+  color: #5b6673;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 8rpx 24rpx rgba(31, 45, 61, .16);
+}
+
+.wm-nav-btn-primary {
+  border-color: #0d6efd;
+  background: #0d6efd;
+  color: #ffffff;
+}
+
+/* ==================== 棋盘 ==================== */
+/* 用 flex 两列而不是 grid：flex 在各类机型的 WebView 上表现完全一致，
+   grid 在小程序里的支持度参差，没必要为两个等宽列冒这个险。 */
+.wm-board {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 0 24rpx;
+  background: #fbfcfe;
+  border: 2rpx solid #e5e8ec;
+  border-radius: 28rpx;
+  padding: 16rpx 20rpx;
+}
+
+.wm-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  justify-content: center;
+}
+
+.wm-card {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 92rpx;          /* = 原 46px，仍在 44px 触控红线之上 */
+  max-height: 176rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16rpx 24rpx;
+  border: 3rpx solid #e5e8ec;
+  border-radius: 26rpx;
+  background: #ffffff;
+  color: #2b3138;
+  font-size: 30rpx;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  overflow-wrap: anywhere;
+  box-shadow: 0 2rpx 4rpx rgba(31, 45, 61, .04);
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease;
+}
+
+.wm-card-text { pointer-events: none; }
+
+/* 英文侧右侧留出朗读按钮的位置，中文侧左侧对称留白 —— 两列卡片视觉居中一致 */
+.wm-col-en .wm-card { padding-right: 56rpx; }
+.wm-col-zh .wm-card { padding-left: 56rpx; }
+
+/* 选中 */
+.wm-card.is-sel {
+  background: #d8edfd;
+  border-color: #35a3f3;
+  color: #0f6cbd;
+}
+
+/* 已完成（置灰） */
+.wm-card.is-done {
+  background: #f1f3f5;
+  border-color: #e8ebee;
+  color: #b4bbc4;
+  box-shadow: none;
+}
+
+/* 配对成功：两张卡一起闪绿（约 .5s）。
+   judge() 里 done 是**立刻**置上的，所以这一条同时命中「已配对」与「正在闪绿」。
+   ⚠️ 必须排在 .is-done 之后：两条选择器同为 (0,2,0)，只能靠源码顺序胜出。 */
+.wm-card.is-ok {
+  background: #ddf7e6;
+  border-color: #34c77b;
+  color: #12784a;
+  animation: wm-ok-blink .5s ease-out;
+}
+
+/* 闪两下：0/45/100 停在浅绿，20/70 压到深一档并轻微放大，做出「弹一下」的手感。
+   中间帧只动 background-color —— 边框与文字保持稳定态，闪烁的只有底色。 */
+@keyframes wm-ok-blink {
+  0%   { background-color: #ddf7e6; transform: scale(1); }
+  20%  { background-color: #bdeecf; transform: scale(1.04); }
+  45%  { background-color: #ddf7e6; transform: scale(1); }
+  70%  { background-color: #bdeecf; transform: scale(1.022); }
+  100% { background-color: #ddf7e6; transform: scale(1); }
+}
+
+/* 不匹配：**后选中**的那张标红并抖一下（先选中的保留，方便直接换一个候选者） */
+.wm-card.is-wrong {
+  background: #ffe6e6;
+  border-color: #f96868;
+  color: #d92d20;
+  animation: wm-shake .42s ease;
+}
+
+@keyframes wm-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-10rpx); }
+  40% { transform: translateX(10rpx); }
+  60% { transform: translateX(-6rpx); }
+  80% { transform: translateX(6rpx); }
+}
+
+/* 自动练习中不接受手动点击，也不给「按下去」的观感。
+   ⚠️ :not(.is-ok) 不能省：否则会抢回正在闪绿那张卡的缩放。 */
+.wm-board.is-auto .wm-card.is-ok { animation-name: wm-ok-blink; }
+
+/* ==================== 弹层通用 ==================== */
+.wm-modal-backdrop {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 1300;
+  background: rgba(23, 32, 44, .45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32rpx;
+}
+
+.wm-modal {
+  width: 100%;
+  max-height: 84vh;
+  background: #ffffff;
+  border-radius: 36rpx;
+  padding: 36rpx 30rpx;
+  text-align: center;
+  overflow-y: auto;
+  color: #2b3138;
+}
+
+.wm-modal.is-wide {
+  max-width: none;
+  text-align: left;
+}
+
+.wm-modal-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  margin-bottom: 10rpx;
+}
+
+.wm-modal-desc {
+  color: #86909c;
+  font-size: 28rpx;
+  margin-bottom: 20rpx;
+  line-height: 1.5;
+}
+
+/* 本册完成弹窗右上角的关闭叉（替代原来的「继续看看」按钮） */
+.wm-modal.is-finish { position: relative; }
+
+.wm-modal-close {
+  position: absolute;
+  top: 16rpx;
+  right: 20rpx;
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #86909c;
+  font-size: 32rpx;
+  line-height: 1;
+}
+
+.wm-modal-emoji {
+  font-size: 84rpx;
+  line-height: 1;
+  margin-bottom: 8rpx;
+}
+
+.wm-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 26rpx;
+}
+
+.wm-modal-actions .wm-btn {
+  min-height: 72rpx;
+  padding: 0 28rpx;
+}
+
+.wm-modal-actions-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-top: 26rpx;
+}
+
+.wm-modal-actions-col .wm-btn {
+  min-height: 76rpx;
+}
+
+/* 弹层头部（标题 + 右侧计数） */
+.wm-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.wm-head-title {
+  font-size: 34rpx;
+  font-weight: 700;
+}
+
+.wm-head-total {
+  font-size: 24rpx;
+  color: #d92d20;
+  background: #ffe6e6;
+  border-radius: 999rpx;
+  padding: 4rpx 20rpx;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.wm-head-total.is-neutral {
+  color: #5b6673;
+  background: #eef2f6;
+}
+
+/* ==================== 册次选择（按学段折叠，手风琴：同时只开一个学段） ==================== */
+.wm-book-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+  margin-top: 20rpx;
+  max-height: 66vh;
+  overflow-y: auto;
+}
+
+.wm-book-group {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.wm-book-group-head {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  width: 100%;
+  background: #f4f7fa;
+  border: 3rpx solid #e5e8ec;
+  border-radius: 24rpx;
+  padding: 18rpx 24rpx;
+  color: #2b3138;
+  font-weight: 700;
+  font-size: 28rpx;
+}
+
+.wm-book-group-head.is-open {
+  background: #eaf4fe;
+  border-color: #35a3f3;
+}
+
+.wm-book-group-caret {
+  flex: 0 0 auto;
+  color: #35a3f3;
+  font-size: 26rpx;
+  transition: transform .18s ease;
+}
+
+/* 折叠时朝右、展开时朝下 */
+.wm-book-group-head.is-open .wm-book-group-caret { transform: rotate(90deg); }
+
+.wm-book-group-name { flex: 0 0 auto; }
+
+.wm-book-group-sub {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 400;
+  font-size: 23rpx;
+  color: #86909c;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-book-group-cur { color: #35a3f3; font-weight: 700; }
+
+/* 展开的册次列表自己内部滚动，别把后面的学段标题顶出可视区 */
+.wm-book-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  max-height: 44vh;
+  overflow-y: auto;
+  padding-right: 4rpx;
+}
+
+.wm-book-item {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  width: 100%;
+  background: #fafbfc;
+  border: 3rpx solid #e5e8ec;
+  border-radius: 24rpx;
+  padding: 18rpx 24rpx;
+  color: #2b3138;
+}
+
+.wm-book-item.is-active {
+  background: #eaf4fe;
+  border-color: #35a3f3;
+}
+
+.wm-book-label {
+  flex: 0 0 auto;
+  min-width: 128rpx;
+  font-weight: 700;
+  font-size: 28rpx;
+}
+
+.wm-book-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 23rpx;
+  color: #86909c;
+  line-height: 1.5;
+}
+
+/* 原页面是 `.wm-book-prog b { color: var(--wm-ok) }` —— WXML 无 <b>，改成显式 class。
+   模板里 手动练习 计数用的是 .wm-em-ok、自动练习 计数用的是 .wm-em-auto（见 app.wxss）。 */
+.wm-book-prog .wm-em-ok { color: #34c77b; }
+.wm-book-prog.is-auto .wm-em-auto { color: #d99000; }
+
+.wm-book-check {
+  flex: 0 0 auto;
+  color: #35a3f3;
+  font-size: 28rpx;
+}
+
+/* ==================== 设置面板（底部弹出的长条面板） ==================== */
+.wm-sheet-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 1240;
+  background: rgba(23, 32, 44, .28);
+}
+
+.wm-set-pop {
+  position: fixed;
+  left: 16rpx;
+  right: 16rpx;
+  bottom: calc(16rpx + env(safe-area-inset-bottom));
+  z-index: 1250;
+  max-height: 72vh;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 2rpx solid #e5e8ec;
+  border-radius: 32rpx;
+  padding: 12rpx;
+  box-shadow: 0 28rpx 68rpx rgba(31, 45, 61, .18);
+}
+
+.wm-set-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 6rpx 16rpx 14rpx;
+  border-bottom: 2rpx solid #e5e8ec;
+  margin-bottom: 10rpx;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #86909c;
+}
+
+.wm-set-item {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  width: 100%;
+  background: transparent;
+  border-radius: 20rpx;
+  padding: 16rpx 16rpx;
+  text-align: left;
+  color: #2b3138;
+}
+
+/* 图标做成小圆角方块：比裸图标更像「条目」，也更容易扫读 */
+.wm-set-icon {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 18rpx;
+  font-size: 30rpx;
+  background: #eef4fb;
+  color: #0f6cbd;
+}
+
+.wm-set-item.is-danger .wm-set-icon { background: #fdecec; color: #d92d20; }
+
+.wm-set-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.wm-set-title {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 29rpx;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.wm-set-item.is-danger .wm-set-title { color: #d92d20; }
+
+.wm-set-desc {
+  font-size: 24rpx;
+  line-height: 1.35;
+  color: #86909c;
+}
+
+.wm-set-arrow {
+  flex: 0 0 auto;
+  color: #c2c8d0;
+  font-size: 26rpx;
+}
+
+.wm-set-switch {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 4rpx 16rpx;
+  border-radius: 999rpx;
+  font-size: 23rpx;
+  font-weight: 700;
+  background: #eef0f3;
+  color: #86909c;
+}
+
+.wm-set-switch.is-on { background: #e6f7ef; color: #1a8d5a; }
+
+/* ==================== 错题本 ==================== */
+.wm-wrong-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin: 22rpx 0;
+  max-height: 56vh;
+  overflow-y: auto;
+}
+
+.wm-wrong-item {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  border: 2rpx solid #e5e8ec;
+  border-left: 6rpx solid #f96868;
+  border-radius: 20rpx;
+  padding: 16rpx 20rpx;
+  background: #fffdfd;
+}
+
+.wm-wrong-main { flex: 1 1 auto; min-width: 0; }
+
+.wm-wrong-en {
+  font-weight: 700;
+  font-size: 32rpx;
+}
+
+.wm-wrong-zh { font-size: 26rpx; color: #5a6472; line-height: 1.5; }
+.wm-wrong-zh .wm-em-ok { color: #34c77b; }
+.wm-wrong-miss { color: #d92d20; }
+.wm-wrong-src { font-size: 23rpx; color: #86909c; margin-top: 4rpx; line-height: 1.45; }
+
+.wm-wrong-acts {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.wm-wrong-acts .wm-btn {
+  min-height: 60rpx;
+  padding: 0 20rpx;
+  font-size: 24rpx;
+}
+
+.wm-wrong-empty {
+  text-align: center;
+  color: #86909c;
+  font-size: 28rpx;
+  padding: 60rpx 0;
+}
+
+.wm-wrong-empty-icon {
+  display: block;
+  font-size: 58rpx;
+  margin-bottom: 12rpx;
+  color: #34c77b;
+}
+
+/* ==================== 超小屏（如 iPhone SE 一代 320x568）：再压一档 ====================
+   7 对单词 = 7 行，卡片降到 88rpx（44px 触控下限），各区域间隙各收一点。 */
+@media screen and (max-height: 620px) {
+  .wm-stage { gap: 8rpx; padding: 4rpx 16rpx 12rpx; padding-bottom: calc(24rpx + 88rpx + env(safe-area-inset-bottom)); }
+  .wm-card { min-height: 88rpx; font-size: 28rpx; }
+  .wm-nav { bottom: calc(12rpx + env(safe-area-inset-bottom)); }
+  .wm-board { padding: 12rpx 16rpx; gap: 0 20rpx; }
+  .wm-col { gap: 16rpx; }
+}

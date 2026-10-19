@@ -1,0 +1,1766 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>成语填空 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+    <style>
+        [x-cloak] { display: none !important; }
+
+        /* ==================== 成语填空 ====================
+           交互形态参考「英语单词匹配」：左列题目、右列题板，点一边再点另一边即配对。
+           差别在于左边不是「英文词」而是「缺一个字的成语」，右边是「从成语里拆出来的字」，
+           所以左边每张卡要做成四格等宽的**字格**，缺口格用虚线方框画出来 ——
+           四格必须等宽，否则「画蛇添足」和「画蛇添█」两种状态宽度不同，
+           一行一行的卡片右边缘会参差不齐。
+
+           配色沿用站内教学模块的约定：只有强调色（琥珀）是本页独有的，
+           绿=答对、红=答错，与单词匹配完全一致，用户不用重新学一套语义。 */
+        .ic-root {
+            --ic-ink: #2b3138;
+            --ic-muted: #8a929c;
+            --ic-line: #e6e9ee;
+            --ic-surface: #ffffff;
+            --ic-sunken: #f7f9fb;
+            --ic-accent: #d97706;      /* 琥珀：本模块的主题色 */
+            --ic-accent-deep: #b45309;
+            --ic-accent-soft: #fff8ef;
+            --ic-accent-line: #f6d9b4;
+            --ic-ok: #2f9e63;
+            --ic-ok-bg: #eaf7f0;
+            --ic-ok-line: #a9dcc2;
+            --ic-ok-ink: #1c6b45;
+            --ic-wrong: #d92d20;
+            --ic-wrong-bg: #fdeceb;
+            --ic-wrong-line: #f4b9b4;
+            --ic-radius: .8rem;
+            /* 设置弹层（.lt-* 在 app.css，三页共用）的主题色注入点 */
+            --lt-accent: #d97706;
+            --lt-accent-deep: #b45309;
+            --lt-accent-soft: #fff8ef;
+        }
+
+        .ic-toolbar {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: .75rem;
+            flex-wrap: wrap;
+            margin-bottom: .75rem;
+        }
+
+        .ic-toolbar-title {
+            display: flex;
+            align-items: center;
+            gap: .55rem;
+            min-width: 0;
+        }
+
+        .ic-toolbar-sub {
+            font-size: .8rem;
+            color: var(--ic-muted);
+            margin-top: .15rem;
+        }
+
+        .ic-toolbar-actions {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            flex-wrap: wrap;
+        }
+
+        /* ---------- 学段页签：三段等宽分段控件，段内还有一条细进度 ---------- */
+        .ic-stages {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: .5rem;
+            padding: .35rem;
+            background: var(--ic-sunken);
+            border: 1px solid var(--ic-line);
+            border-radius: .75rem;
+            margin-bottom: .85rem;
+        }
+
+        .ic-stage {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: .45rem;
+            padding: .5rem .6rem .65rem;
+            border: 1px solid transparent;
+            border-radius: .55rem;
+            background: transparent;
+            color: var(--ic-ink);
+            font-size: .95rem;
+            line-height: 1.1;
+            transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+        }
+
+        .ic-stage:hover { background: #fff; border-color: var(--ic-line); }
+
+        .ic-stage.is-on {
+            background: #fff;
+            border-color: var(--ic-accent-line);
+            color: var(--ic-accent-deep);
+            box-shadow: 0 1px 2px rgba(24, 39, 61, .06);
+        }
+
+        .ic-stage-label { font-weight: 600; }
+
+        .ic-stage-grade {
+            font-size: .72rem;
+            color: var(--ic-muted);
+        }
+
+        .ic-stage.is-on .ic-stage-grade { color: var(--ic-accent-deep); opacity: .75; }
+
+        .ic-stage-num {
+            font-size: .72rem;
+            color: var(--ic-muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* 细进度条贴在页签底边：段内 0~10 关走过多少一眼可见 */
+        .ic-stage-bar {
+            position: absolute;
+            left: .55rem;
+            right: .55rem;
+            bottom: .22rem;
+            height: 2px;
+            border-radius: 2px;
+            background: #e9edf2;
+            overflow: hidden;
+        }
+
+        .ic-stage-bar > i {
+            display: block;
+            height: 100%;
+            background: var(--ic-ok);
+            border-radius: 2px;
+            transition: width .25s ease;
+        }
+
+        .ic-stage.is-on .ic-stage-bar > i { background: var(--ic-accent); }
+
+        /* ---------- HUD：本关已填 / 关卡进度 / 用时 ---------- */
+        .ic-hud {
+            display: flex;
+            align-items: center;
+            gap: .7rem;
+            margin-bottom: .55rem;
+            font-size: .8rem;
+            color: var(--ic-muted);
+        }
+
+        .ic-hud b { color: var(--ic-ink); font-variant-numeric: tabular-nums; }
+
+        .ic-progress {
+            flex: 1 1 auto;
+            display: flex;
+            gap: 3px;
+            min-width: 0;
+        }
+
+        .ic-seg {
+            flex: 1 1 0;
+            height: 5px;
+            border-radius: 3px;
+            background: #e9edf2;
+            transition: background-color .2s ease;
+        }
+
+        .ic-seg.is-done { background: var(--ic-ok); }
+        .ic-seg.is-now { background: var(--ic-accent); }
+
+        .ic-hud-right {
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            flex: 0 0 auto;
+        }
+
+        .ic-clock { font-variant-numeric: tabular-nums; }
+
+        .ic-counter b { font-size: .95rem; }
+
+        /* ---------- 标题行（主题 + 过关/答错提示浮层） ---------- */
+        .ic-titlebar {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: .55rem;
+            margin-bottom: .6rem;
+            min-height: 1.9rem;
+        }
+
+        .ic-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--ic-ink);
+        }
+
+        .ic-theme-badge {
+            font-size: .72rem;
+            padding: .12rem .45rem;
+            border-radius: 999px;
+            background: var(--ic-accent-soft);
+            border: 1px solid var(--ic-accent-line);
+            color: var(--ic-accent-deep);
+        }
+
+        /* 过关 / 答错提示：绝对定位浮在标题行右侧（不占高度、不推动下方棋盘）。
+           ⚠️ 别写成 inset:0 铺满整行 —— 那会把左边的主题名（寓言故事）盖掉 0.9 秒。 */
+        .ic-flash {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: .35rem;
+            padding: .18rem .7rem;
+            border-radius: 999px;
+            font-size: .85rem;
+            font-weight: 600;
+            animation: ic-flash-in .18s ease;
+        }
+
+        .ic-flash.is-ok { background: var(--ic-ok-bg); color: var(--ic-ok-ink); }
+        .ic-flash.is-bad { background: var(--ic-wrong-bg); color: var(--ic-wrong); }
+        .ic-flash.is-win { background: var(--ic-accent-soft); color: var(--ic-accent-deep); }
+
+        @keyframes ic-flash-in {
+            from { opacity: 0; transform: translateY(-3px); }
+            to { opacity: 1; transform: none; }
+        }
+
+        /* ---------- 棋盘：左列成语、右列字块 ---------- */
+        .ic-board {
+            position: relative;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(14.5rem, 16rem);
+            gap: .9rem;
+            align-items: start;
+        }
+
+        .ic-col-idiom {
+            display: flex;
+            flex-direction: column;
+            gap: .55rem;
+            min-width: 0;
+        }
+
+        .ic-item {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            padding: .5rem .65rem;
+            background: var(--ic-surface);
+            border: 1px solid var(--ic-line);
+            border-radius: var(--ic-radius);
+            transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
+        }
+
+        .ic-item.is-sel {
+            border-color: var(--ic-accent);
+            background: var(--ic-accent-soft);
+            box-shadow: 0 0 0 3px rgba(217, 119, 6, .12);
+        }
+
+        /* 整条卡都能点（点哪儿都算选中这条的缺口）：给个手型提示可点性；
+           已完成的条目点不动，保持默认箭头 */
+        .ic-item:not(.is-done) { cursor: pointer; }
+
+        .ic-item.is-done {
+            border-color: var(--ic-ok-line);
+            background: var(--ic-ok-bg);
+        }
+
+        .ic-item.is-wrong {
+            border-color: var(--ic-wrong-line);
+            background: var(--ic-wrong-bg);
+            animation: ic-shake .34s ease;
+        }
+
+        @keyframes ic-shake {
+            0%, 100% { transform: translateX(0); }
+            22% { transform: translateX(-5px); }
+            46% { transform: translateX(4px); }
+            70% { transform: translateX(-2px); }
+        }
+
+        .ic-slots {
+            /* 四格固定宽度、整组靠左：**别用 flex:1 把四格撑满整行** ——
+               那样「守株待兔」四个字会散到 500px 开外，读起来不像一个词。 */
+            flex: 0 0 auto;
+            display: flex;
+            gap: .35rem;
+            min-width: 0;
+        }
+
+        /* 四格等宽：缺口格与实字格必须同宽同高，否则每行宽度不同、右边缘参差 */
+        .ic-slot {
+            flex: 0 0 2.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.75rem;
+            height: 2.75rem;
+            padding: 0;
+            border: 1px solid transparent;
+            border-radius: .5rem;
+            background: var(--ic-sunken);
+            color: var(--ic-ink);
+            font-size: 1.5rem;
+            font-weight: 600;
+            line-height: 1;
+            font-family: "Songti SC", "STSong", "Noto Serif SC", serif;
+        }
+
+        button.ic-slot { cursor: pointer; }
+
+        /* 缺口格：虚线方框 + 中心小圆点（提示"这里要填一个字"）。
+           ⚠️ 别改成实心色块：那会跟已填格抢注意力，玩家反而看不出哪儿是空的。 */
+        .ic-slot.is-blank {
+            border: 1.5px dashed var(--ic-accent-line);
+            background: #fff;
+        }
+
+        .ic-slot.is-blank::after {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--ic-accent);
+            opacity: .3;
+        }
+
+        .ic-slot.is-blank.is-sel {
+            border-style: solid;
+            border-color: var(--ic-accent);
+            background: var(--ic-accent-soft);
+        }
+
+        .ic-slot.is-blank.is-filled {
+            border: 1px solid var(--ic-ok-line);
+            background: #fff;
+            color: var(--ic-ok-ink);
+            animation: ic-pop .26s ease;
+        }
+
+        .ic-slot.is-blank.is-filled::after { display: none; }
+
+        @keyframes ic-pop {
+            0% { transform: scale(.72); opacity: .3; }
+            60% { transform: scale(1.08); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .ic-item.is-done .ic-slot:not(.is-blank) { background: transparent; color: var(--ic-ok-ink); }
+
+        .ic-item-tools {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: .15rem;
+        }
+
+        /* 填对之后，释义直接铺在这一行右侧的空白里（一行或省略号，不改变行高）——
+           卡片原本右半边空着，正好用来「填完就能看到意思」 */
+        .ic-item-mean {
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            padding-left: .35rem;
+            font-size: .8rem;
+            line-height: 1.4;
+            color: var(--ic-muted);
+            text-align: left;
+        }
+
+        .ic-item.is-done .ic-item-mean { color: var(--ic-ok-ink); }
+
+        .ic-speak,
+        .ic-tick {
+            width: 1.85rem;
+            height: 1.85rem;
+            border: 0;
+            border-radius: .45rem;
+            background: transparent;
+            color: var(--ic-muted);
+            font-size: .95rem;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ic-speak:hover { background: var(--ic-sunken); color: var(--ic-accent-deep); }
+
+        .ic-tick { color: var(--ic-ok); font-size: 1rem; }
+
+        /* ---------- 右列字块 ---------- */
+        .ic-col-char {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: .5rem;
+            padding: .55rem;
+            background: var(--ic-sunken);
+            border: 1px solid var(--ic-line);
+            border-radius: var(--ic-radius);
+        }
+
+        .ic-tile {
+            aspect-ratio: 1 / 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            border: 1px solid #dfe4ea;
+            border-radius: .6rem;
+            background: #fff;
+            color: var(--ic-ink);
+            font-size: 1.7rem;
+            font-weight: 600;
+            line-height: 1;
+            font-family: "Songti SC", "STSong", "Noto Serif SC", serif;
+            box-shadow: 0 1px 2px rgba(24, 39, 61, .05);
+            transition: transform .12s ease, border-color .15s ease, background-color .15s ease, color .15s ease;
+            /* 触控下限：Bootstrap 的 btn 是 38px，这里给到 44px 以上才有手感 */
+            min-height: 2.9rem;
+        }
+
+        .ic-tile:hover { border-color: var(--ic-accent); transform: translateY(-1px); }
+
+        .ic-tile:active { transform: translateY(0) scale(.97); }
+
+        .ic-tile.is-sel {
+            background: var(--ic-accent);
+            border-color: var(--ic-accent);
+            color: #fff;
+            box-shadow: 0 3px 10px rgba(217, 119, 6, .28);
+        }
+
+        .ic-tile.is-used {
+            background: var(--ic-ok-bg);
+            border-color: var(--ic-ok-line);
+            color: var(--ic-ok-line);
+            box-shadow: none;
+            cursor: default;
+            transform: none;
+        }
+
+        .ic-tile.is-wrong {
+            border-color: var(--ic-wrong-line);
+            background: var(--ic-wrong-bg);
+            color: var(--ic-wrong);
+            animation: ic-shake .34s ease;
+        }
+
+        .ic-col-char-empty {
+            grid-column: 1 / -1;
+            padding: .8rem .5rem;
+            text-align: center;
+            font-size: .82rem;
+            color: var(--ic-ok-ink);
+        }
+
+        /* ---------- 提示条：固定一行高度，内容变高变矮都不推动棋盘 ---------- */
+        .ic-tip {
+            display: flex;
+            align-items: flex-start;
+            gap: .45rem;
+            margin-top: .75rem;
+            padding: .55rem .75rem;
+            min-height: 2.5rem;
+            border: 1px solid var(--ic-line);
+            border-radius: .6rem;
+            background: var(--ic-sunken);
+            color: var(--ic-muted);
+            font-size: .82rem;
+            line-height: 1.5;
+        }
+
+        .ic-tip.is-ok { background: var(--ic-ok-bg); border-color: var(--ic-ok-line); color: var(--ic-ok-ink); }
+        .ic-tip.is-bad { background: var(--ic-wrong-bg); border-color: var(--ic-wrong-line); color: var(--ic-wrong); }
+
+        .ic-tip .bi { flex: 0 0 auto; margin-top: .12rem; }
+
+        .ic-tip-text { min-width: 0; }
+
+        .ic-tip-src { color: var(--ic-muted); }
+
+        /* ---------- 完成页（盖在棋盘上，不动页面高度） ---------- */
+        .ic-done {
+            position: absolute;
+            inset: 0;
+            z-index: 4;
+            display: flex;
+            flex-direction: column;
+            gap: .6rem;
+            padding: .9rem;
+            /* 必须完全不透明：半透明会让下面棋盘的释义文字透上来，跟完成页的列表叠成一片 */
+            background: #fff;
+            border: 1px solid var(--ic-ok-line);
+            border-radius: var(--ic-radius);
+            box-shadow: 0 8px 24px rgba(24, 39, 61, .1);
+            /* ★ 整体不滚：滚动交给下面的 .ic-done-list，按钮区必须始终露在外面 */
+            overflow: hidden;
+        }
+
+        .ic-done-head {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            flex-wrap: wrap;
+        }
+
+        .ic-done-title {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--ic-ok-ink);
+        }
+
+        .ic-done-stat { font-size: .8rem; color: var(--ic-muted); }
+
+        .ic-done-list {
+            display: flex;
+            flex-direction: column;
+            gap: .35rem;
+            margin: 0;
+            padding: 0 .15rem 0 0;   /* 给滚动条留位置，释义不贴条 */
+            list-style: none;
+            /* ★ 只有「文本区」滚动：flex:1 + min-height:0 才真的会收缩并长出滚动条。
+               少了 min-height:0，flex 子项默认 min-height:auto 会撑开父级，按钮又被挤出去。 */
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+        }
+
+        .ic-done-list li {
+            display: flex;
+            gap: .5rem;
+            font-size: .84rem;
+            line-height: 1.5;
+            padding: .3rem .45rem;
+            border-radius: .45rem;
+            background: var(--ic-sunken);
+        }
+
+        .ic-done-word {
+            flex: 0 0 auto;
+            font-weight: 600;
+            color: var(--ic-ink);
+            font-family: "Songti SC", "STSong", "Noto Serif SC", serif;
+            letter-spacing: .04em;
+        }
+
+        .ic-done-mean { color: var(--ic-muted); min-width: 0; }
+
+        .ic-done-actions {
+            display: flex;
+            gap: .5rem;
+            flex: 0 0 auto;   /* 不参与滚动：列表滚到哪儿，按钮都钉在面板底部 */
+            padding-top: .3rem;
+        }
+
+        .ic-done-actions .btn { flex: 1 1 auto; }
+
+        /* ---------- 关卡选择弹层 ---------- */
+        .ic-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 1050;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            background: rgba(24, 39, 61, .42);
+        }
+
+        .ic-modal {
+            width: 100%;
+            max-width: 34rem;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            background: #fff;
+            border-radius: .9rem;
+            box-shadow: 0 18px 48px rgba(24, 39, 61, .24);
+            overflow: hidden;
+        }
+
+        .ic-modal-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem;
+            padding: .85rem 1rem;
+            border-bottom: 1px solid var(--ic-line);
+        }
+
+        .ic-modal-head h5 {
+            margin: 0;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: .4rem;
+        }
+
+        .ic-modal-body {
+            padding: .85rem 1rem;
+            overflow: auto;
+        }
+
+        .ic-modal-foot {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem;
+            padding: .7rem 1rem;
+            border-top: 1px solid var(--ic-line);
+            font-size: .78rem;
+            color: var(--ic-muted);
+        }
+
+        .ic-level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(6.4rem, 1fr));
+            gap: .45rem;
+        }
+
+        .ic-level {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: .1rem;
+            padding: .45rem .55rem;
+            border: 1px solid var(--ic-line);
+            border-radius: .5rem;
+            background: #fff;
+            text-align: left;
+            transition: border-color .15s ease, background-color .15s ease;
+        }
+
+        .ic-level:hover { border-color: var(--ic-accent-line); background: var(--ic-accent-soft); }
+
+        .ic-level.is-now { border-color: var(--ic-accent); background: var(--ic-accent-soft); }
+
+        .ic-level.is-done { border-color: var(--ic-ok-line); background: var(--ic-ok-bg); }
+
+        .ic-level-no {
+            font-size: .74rem;
+            color: var(--ic-muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .ic-level-theme {
+            font-size: .84rem;
+            font-weight: 600;
+            color: var(--ic-ink);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 100%;
+        }
+
+        .ic-level-tag { font-size: .7rem; color: var(--ic-ok-ink); }
+
+        /* ---------- 音效按钮的开关态 ---------- */
+        .ic-sound-off { opacity: .6; }
+
+        /* ---------- 移动端：上下堆叠，字块栏钉在视口底部 ----------
+           单列之后「字块」会掉到成语列表下面：6 条成语 + 工具栏，一屏放不下，
+           玩家得来回滚动才能点字 ⇒ 字块栏 position:fixed 钉在屏幕底部（答题盘），
+           成语列表在它后面滚。用 fixed 而不是 sticky：sticky 会把整块字盘**顶进正文中间**
+           （截图上它正好盖住第 5、6 条成语），既挡内容又让人以为页面坏了。
+
+           同时把提示条（释义）挪到标题下面（order 调整）—— 否则它被答题盘压住，
+           「填完就能看到意思」这件事在手机上就不成立了。 */
+        @media (max-width: 767.98px) {
+            .ic-play {
+                display: flex;
+                flex-direction: column;
+                padding-bottom: 5.5rem;   /* 给固定的答题盘留出空间，最后一条成语才滚得出来 */
+            }
+
+            .ic-titlebar { order: 0; }
+
+            .ic-tip {
+                order: 1;
+                margin: 0 0 .6rem;
+            }
+
+            .ic-board { order: 2; grid-template-columns: minmax(0, 1fr); gap: .7rem; }
+
+            .ic-col-char {
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                z-index: 20;
+                grid-template-columns: repeat(6, minmax(0, 1fr));
+                gap: .4rem;
+                padding: .5rem .75rem calc(.5rem + env(safe-area-inset-bottom, 0px));
+                background: #fff;
+                border: 0;
+                border-top: 1px solid var(--ic-line);
+                border-radius: 0;
+                box-shadow: 0 -6px 18px rgba(24, 39, 61, .1);
+            }
+
+            /* 通关面板出现时收起答题盘，别让一排字块浮在「本关完成」上面 */
+            .ic-play.is-finished .ic-col-char { display: none; }
+
+            .ic-tile { font-size: 1.35rem; min-height: 2.6rem; border-radius: .5rem; }
+
+            .ic-slot { height: 2.35rem; }
+
+            .ic-item { padding: .42rem .5rem; }
+
+            .ic-item-mean { display: none; }   /* 窄屏放不下一行释义，靠标题下的提示条 */
+
+            /* 手机屏幕就这么高：标题区每省下 10px，成语列表就能多露一条 */
+            .ic-root .sc-page-title { font-size: 1.2rem; }
+            .ic-toolbar-sub { display: none; }
+            .ic-toolbar { margin-bottom: .5rem; }
+            .ic-stages { margin-bottom: .55rem; }
+
+            .ic-stage-grade { display: none; }
+        }
+
+        /* 320px 这一档：只收间隙与内边距，一个字都不藏 */
+        @media (max-width: 360px) {
+            .ic-stages { gap: .3rem; padding: .25rem; }
+            .ic-stage { padding: .45rem .3rem .6rem; gap: .3rem; }
+            .ic-stage-num { font-size: .68rem; }
+            .ic-board { gap: .5rem; }
+            .ic-col-char { gap: .35rem; padding: .4rem; }
+            .ic-col-idiom { gap: .45rem; }
+            .ic-slot { font-size: 1.15rem; height: 2.15rem; }
+            .ic-tile { font-size: 1.2rem; }
+            .ic-item-tools { display: none; }
+        }
+    </style>
+</head>
+<body class="sc-page" data-nav="learn">
+
+<script>
+/* 引导数据：同步 XHR，确保下方 Alpine 组件读取时已就绪（与单词匹配同一做法）。
+   一次性下发三学段共 180 条成语（gzip ≈ 20KB），切学段 / 切关卡零请求。 */
+window.__IDIOM_FILL_DATA__ = (function () {
+    var d = { stages: [], levels: {} };
+    try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/learn/idiom-fill/data', false);
+        xhr.send();
+        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
+    } catch (e) { console.error('__IDIOM_FILL_DATA__ load failed', e); }
+    return d;
+})();
+</script>
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+
+<div class="ic-root" x-data="idiomApp()" x-init="init()">
+
+    <!-- ==================== 工具栏 ====================
+         朗读 / 重做 / 错题本 / 导出 / 源码 / 重置进度 统一收进「设置」弹层
+         （与【英语单词匹配】同一个交互口径）；工具栏只留「关卡」与「设置」，
+         窄屏不会因为多一个按钮折行。 -->
+    <div class="ic-toolbar">
+        <div class="ic-toolbar-title">
+            <a href="/learn" class="btn btn-sm btn-outline-secondary lt-back" title="返回教学模块">
+                <i class="bi bi-arrow-left"></i>
+                <span class="d-none d-sm-inline ms-1">返回</span>
+            </a>
+            <div>
+                <h2 class="sc-page-title mb-0"><i class="bi bi-brush"></i> 成语填空</h2>
+                <div class="ic-toolbar-sub">人教版 小学 / 初中 / 高中 · 每关随机拆掉一个字，从右边把它补回来</div>
+            </div>
+        </div>
+        <div class="ic-toolbar-actions">
+            <button type="button" class="btn btn-sm btn-outline-primary" @click="openPicker()"
+                    title="选择关卡：看本学段全部关卡与主题">
+                <i class="bi bi-list-ol"></i>
+                <span x-text="'第 ' + (levelIndex + 1) + ' 关'"></span>
+            </button>
+
+            <div class="lt-set-wrap" @click.outside="settingsOpen = false"
+                 @keydown.escape.window="settingsOpen = false">
+                <button type="button" class="btn btn-sm btn-outline-secondary lt-set-btn"
+                        @click="settingsOpen = !settingsOpen" :class="{ 'is-open': settingsOpen }"
+                        title="设置：错题本 / 重做本关 / 朗读 / 导出 / 源码 / 重置进度"
+                        aria-haspopup="true" :aria-expanded="settingsOpen ? 'true' : 'false'">
+                    <i class="bi bi-gear"></i>
+                    <span class="d-none d-sm-inline ms-1">设置</span>
+                    <span class="lt-count" x-show="wrongCount > 0" x-cloak x-text="wrongCount"></span>
+                </button>
+
+                <div class="lt-set-pop" x-show="settingsOpen" x-cloak aria-label="设置">
+                    <div class="lt-set-head">
+                        <span><i class="bi bi-sliders"></i> 设置</span>
+                        <span>保存在本机浏览器</span>
+                    </div>
+
+                    <button type="button" class="lt-set-item" @click="settingsOpen = false; openWrongBook()"
+                            title="查看填错过的成语">
+                        <i class="bi bi-journal-bookmark lt-set-icon"></i>
+                        <span class="lt-set-main">
+                            <span class="lt-set-title">错题本
+                                <span class="lt-count" x-show="wrongCount > 0" x-cloak
+                                      x-text="wrongCount"></span>
+                            </span>
+                            <span class="lt-set-desc"
+                                  x-text="wrongCount > 0 ? ('填错 ' + wrongCount + ' 条，答对也不会自动移除') : '还没有错题，填错的成语自动记在这里'"></span>
+                        </span>
+                        <i class="bi bi-chevron-right lt-set-arrow"></i>
+                    </button>
+
+                    <button type="button" class="lt-set-item" @click="settingsOpen = false; restartLevel()"
+                            title="重新打乱本关的字块">
+                        <i class="bi bi-arrow-repeat lt-set-icon"></i>
+                        <span class="lt-set-main">
+                            <span class="lt-set-title">重做本关</span>
+                            <span class="lt-set-desc">重新打乱第 <span x-text="levelIndex + 1"></span>
+                                关的字块顺序，进度不变</span>
+                        </span>
+                        <i class="bi bi-chevron-right lt-set-arrow"></i>
+                    </button>
+
+                    <button type="button" class="lt-set-item" @click="toggleSound()"
+                            :title="soundOn ? '关闭朗读' : '开启朗读'">
+                        <i class="bi lt-set-icon" :class="soundOn ? 'bi-volume-up' : 'bi-volume-mute'"></i>
+                        <span class="lt-set-main">
+                            <span class="lt-set-title">音效与朗读</span>
+                            <span class="lt-set-desc"
+                                  x-text="soundOn ? '已开启：填对后朗读这条成语' : '已关闭：不朗读'"></span>
+                        </span>
+                        <span class="lt-set-switch" :class="{ 'is-on': soundOn }">
+                            <i class="bi" :class="soundOn ? 'bi-toggle-on' : 'bi-toggle-off'"></i>
+                            <span x-text="soundOn ? '开' : '关'"></span>
+                        </span>
+                    </button>
+
+                    <button type="button" class="lt-set-item is-export" @click="runExport()"
+                            :disabled="exporting" title="导出为单页 HTML：不依赖本站，离线也能玩">
+                        <i class="bi lt-set-icon" :class="exporting ? 'bi-hourglass-split' : 'bi-download'"></i>
+                        <span class="lt-set-main">
+                            <span class="lt-set-title" x-text="exporting ? '打包中…' : '导出'"></span>
+                            <span class="lt-set-desc">打包成一页 HTML（含全部 180 条成语），发给同学也能直接玩</span>
+                        </span>
+                        <i class="bi bi-chevron-right lt-set-arrow"></i>
+                    </button>
+
+                    <!-- 外链条目用 <a>（不是 button）：能直接在新标签页打开，
+                         也让「中键/右键新标签页」这类原生行为照常可用 -->
+                    <a class="lt-set-item is-source" :href="githubUrl"
+                       target="_blank" rel="noopener noreferrer" @click="settingsOpen = false"
+                       title="在新标签页打开项目源码仓库（GitHub）">
+                        <i class="bi bi-github lt-set-icon"></i>
+                        <span class="lt-set-main">
+                            <span class="lt-set-title">源码</span>
+                            <span class="lt-set-desc">在 GitHub 上查看这个项目</span>
+                        </span>
+                        <i class="bi bi-box-arrow-up-right lt-set-arrow"></i>
+                    </a>
+
+                    <button type="button" class="lt-set-item is-danger"
+                            @click="settingsOpen = false; resetAll()" title="重置全部学段的进度">
+                        <i class="bi bi-eraser lt-set-icon"></i>
+                        <span class="lt-set-main">
+                            <span class="lt-set-title">重置进度</span>
+                            <span class="lt-set-desc">清空全部学段的通关记录，错题本另存</span>
+                        </span>
+                        <i class="bi bi-chevron-right lt-set-arrow"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 学段页签 ==================== -->
+    <div class="ic-stages" role="tablist" aria-label="选择学段">
+        <template x-for="s in stages" :key="s.id">
+            <button type="button" class="ic-stage" role="tab"
+                    :class="{ 'is-on': s.id === stageId }"
+                    :aria-selected="s.id === stageId ? 'true' : 'false'"
+                    @click="pickStage(s.id)"
+                    :title="s.source">
+                <span class="ic-stage-label" x-text="s.label"></span>
+                <span class="ic-stage-grade" x-text="s.gradeLabel"></span>
+                <span class="ic-stage-num" x-text="stageDone(s.id) + '/' + s.levelCount"></span>
+                <span class="ic-stage-bar"><i :style="'width:' + stagePct(s.id) + '%'"></i></span>
+            </button>
+        </template>
+    </div>
+
+    <!-- ==================== HUD ==================== -->
+    <div class="ic-hud" x-show="levels.length" x-cloak>
+        <span>本关 <b x-text="filledCount"></b>/<span x-text="items.length"></span></span>
+        <div class="ic-progress" role="progressbar" :aria-valuenow="levelIndex + 1"
+             aria-valuemin="1" :aria-valuemax="levelCount || 1">
+            <template x-for="i in levelCount" :key="'seg' + i">
+                <span class="ic-seg" :class="segClass(i - 1)"></span>
+            </template>
+        </div>
+        <div class="ic-hud-right">
+            <span class="ic-clock"><i class="bi bi-stopwatch"></i> <span x-text="clock"></span></span>
+            <span class="ic-counter"><b x-text="levelIndex + 1"></b>/<span x-text="levelCount"></span></span>
+        </div>
+    </div>
+
+    <!-- 词库真的没拿到时才报错（不做「空棋盘」静默） -->
+    <div class="text-center text-muted py-5" x-show="ready && !levels.length" x-cloak>
+        <i class="bi bi-exclamation-circle fs-1 d-block mb-2"></i>
+        成语库加载失败，请刷新页面重试。
+    </div>
+
+    <!-- ==================== 标题行 + 棋盘 ==================== -->
+    <div class="ic-play" :class="{ 'is-finished': finished }" x-show="levels.length" x-cloak>
+
+        <div class="ic-titlebar">
+            <h3 class="ic-title" x-text="currentLevel ? currentLevel.theme : ''"></h3>
+            <span class="ic-theme-badge" x-text="'共 ' + items.length + ' 题'"></span>
+            <div class="ic-flash" x-show="!!flash" x-cloak
+                 :class="flashKind === 'ok' ? 'is-ok' : (flashKind === 'bad' ? 'is-bad' : 'is-win')">
+                <i class="bi" :class="flashKind === 'ok' ? 'bi-check-circle-fill'
+                        : (flashKind === 'bad' ? 'bi-x-circle-fill' : 'bi-stars')"></i>
+                <span x-text="flash"></span>
+            </div>
+        </div>
+
+        <div class="ic-board">
+
+            <!-- 左列：成语（每张卡四格，其中一格是缺口） -->
+            <div class="ic-col-idiom">
+                <template x-for="it in items" :key="it.uid">
+                    <div class="ic-item" :class="{ 'is-done': it.done, 'is-sel': isSelItem(it), 'is-wrong': it.wrong }"
+                         @click="pickItem(it)">
+                        <div class="ic-slots">
+                            <template x-for="(c, idx) in it.chars" :key="it.uid + '-' + idx">
+                                <button type="button" class="ic-slot"
+                                        :class="{ 'is-blank': c.blank, 'is-filled': c.blank && c.filled, 'is-sel': isSelSlot(it, idx) }"
+                                        :disabled="it.done"
+                                        @click.stop="c.blank ? pickBlank(it, idx) : pickItem(it)"
+                                        :aria-label="c.blank
+                                            ? (c.filled ? ('第 ' + (idx + 1) + ' 个字已填：' + c.ch) : ('第 ' + (idx + 1) + ' 个字，待填'))
+                                            : ('第 ' + (idx + 1) + ' 个字：' + c.ch)">
+                                    <span x-text="c.blank && !c.filled ? '' : c.ch"></span>
+                                </button>
+                            </template>
+                        </div>
+                        <!-- 填对后右侧浮出释义：卡片右半边本来就空着，正好当「即时讲解」。
+                             ⚠️ 用 x-text 给空串、不用 x-show：这个 span 是 flex:1 的占位，
+                             隐藏掉会让右边的小喇叭/对勾在「填对那一刻」突然跳到最右边。 -->
+                        <span class="ic-item-mean" x-text="it.done ? it.meaning : ''"></span>
+                        <div class="ic-item-tools">
+                            <button type="button" class="ic-speak" @click.stop="speakItem(it)"
+                                    :title="'朗读「' + it.idiom + '」'" aria-label="朗读">
+                                <i class="bi bi-volume-up-fill"></i>
+                            </button>
+                            <i class="bi bi-check-lg ic-tick" x-show="it.done" x-cloak aria-hidden="true"></i>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- 右列：从成语里拆出来的字（全部填完就空） -->
+            <div class="ic-col-char">
+                <template x-for="t in tiles" :key="t.uid">
+                    <button type="button" class="ic-tile"
+                            :class="{ 'is-sel': selTile && selTile.uid === t.uid, 'is-used': t.used, 'is-wrong': t.wrong }"
+                            :disabled="t.used"
+                            @click="pickTile(t)"
+                            :aria-label="t.used ? ('「' + t.ch + '」已用过') : ('选择「' + t.ch + '」')"
+                            x-text="t.ch"></button>
+                </template>
+                <div class="ic-col-char-empty" x-show="!remaining" x-cloak>
+                    <i class="bi bi-hand-thumbs-up"></i> 字都用上了
+                </div>
+            </div>
+
+            <!-- 完成页：盖住棋盘（不动页面高度，避免滚动跳位） -->
+            <div class="ic-done" x-show="finished" x-cloak>
+                <div class="ic-done-head">
+                    <span class="ic-done-title"><i class="bi bi-stars"></i> 本关完成</span>
+                    <span class="ic-done-stat" x-text="'用时 ' + clock + ' · 失误 ' + mistakes + ' 次'"></span>
+                </div>
+                <ul class="ic-done-list">
+                    <template x-for="it in items" :key="'dn' + it.uid">
+                        <li>
+                            <span class="ic-done-word" x-text="it.idiom"></span>
+                            <span class="ic-done-mean" x-text="it.meaning"></span>
+                        </li>
+                    </template>
+                </ul>
+                <div class="ic-done-actions">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @click="restartLevel()">
+                        <i class="bi bi-arrow-repeat"></i> 再练一遍
+                    </button>
+                    <button type="button" class="btn btn-sm btn-primary" @click="nextLevel()"
+                            :disabled="!hasNext">
+                        <span x-text="nextLabel"></span> <i class="bi bi-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 提示条：释义 / 指令共用一条，高度恒定 -->
+        <div class="ic-tip" :class="tipKind === 'ok' ? 'is-ok' : (tipKind === 'bad' ? 'is-bad' : '')">
+            <i class="bi" :class="tipKind === 'ok' ? 'bi-lightbulb'
+                    : (tipKind === 'bad' ? 'bi-emoji-frown' : 'bi-info-circle')"></i>
+            <span class="ic-tip-text">
+                <span x-text="tipText"></span>
+                <span class="ic-tip-src" x-show="!!tipSource" x-cloak x-text="' —— ' + tipSource"></span>
+            </span>
+        </div>
+    </div>
+
+    <!-- ==================== 关卡选择 ==================== -->
+    <div class="ic-modal-backdrop" x-show="pickerOpen" x-cloak @click.self="pickerOpen = false"
+         @keydown.escape.window="pickerOpen = false">
+        <div class="ic-modal">
+            <div class="ic-modal-head">
+                <h5><i class="bi bi-list-ol"></i> <span x-text="stageLabel + ' · 选择关卡'"></span></h5>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @click="pickerOpen = false">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="ic-modal-body">
+                <div class="ic-level-grid">
+                    <template x-for="(lv, i) in levels" :key="'lv' + i">
+                        <button type="button" class="ic-level"
+                                :class="{ 'is-now': i === levelIndex, 'is-done': isLevelDone(stageId, i) }"
+                                @click="gotoLevel(i)">
+                            <span class="ic-level-no" x-text="'第 ' + (i + 1) + ' 关 · ' + lv.items.length + ' 题'"></span>
+                            <span class="ic-level-theme" x-text="lv.theme"></span>
+                            <span class="ic-level-tag" x-show="isLevelDone(stageId, i)" x-cloak>已通过 ✓</span>
+                        </button>
+                    </template>
+                </div>
+            </div>
+            <div class="ic-modal-foot">
+                <span x-text="stageSource"></span>
+                <button type="button" class="btn btn-sm btn-outline-danger" @click="resetStage()">
+                    <i class="bi bi-eraser"></i> 清空本学段进度
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 错题本 ====================
+         只记「填错过一次的成语」，答对不会自动移除 —— 它的用途是期末回看，
+         不是「待办清单」。同一成语按 idiom 去重，只留最近一次。 -->
+    <div class="ic-modal-backdrop" x-show="wrongOpen" x-cloak @click.self="closeWrongBook()"
+         @keydown.escape.window="!wrongOpen || closeWrongBook()">
+        <div class="ic-modal">
+            <div class="ic-modal-head">
+                <h5>
+                    <i class="bi bi-journal-bookmark"></i>
+                    <span x-text="'错题本 · ' + wrongCount + ' 条'"></span>
+                </h5>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @click="closeWrongBook()">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="ic-modal-body">
+                <div class="lt-wrong-list" x-show="wrongCount > 0">
+                    <template x-for="(w, i) in wrongItems" :key="w.k">
+                        <div class="lt-wrong-item">
+                            <span class="lt-wrong-ix" x-text="i + 1"></span>
+                            <span class="lt-wrong-main">
+                                <span class="lt-wrong-label" x-text="w.label"></span>
+                                <span class="lt-wrong-sub" x-text="w.sub"></span>
+                            </span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    @click="speak(w.label)" title="朗读这个成语">
+                                <i class="bi bi-volume-up"></i>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+                <div class="lt-wrong-empty" x-show="wrongCount === 0">
+                    <i class="bi bi-emoji-smile"></i>
+                    还没有错题。填错的成语会自动记在这里，方便回头复习。
+                </div>
+            </div>
+            <div class="ic-modal-foot">
+                <span x-text="wrongCount > 0 ? '同一成语只留一份，最多记 200 条' : ''"></span>
+                <button type="button" class="btn btn-sm btn-outline-danger"
+                        @click="clearWrong()" :disabled="wrongCount === 0">
+                    <i class="bi bi-eraser"></i> 清空错题本
+                </button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script src="/js/learn-tools.js"></script>
+<script>
+/* ==================== 成语填空 ====================
+   核心规则（与英语单词匹配同构）：
+     1. 一关 6 条成语（4~8 条自适应），每条随机拆掉**一个字**；
+     2. 拆下来的字打乱后放在右列；
+     3. 点右边一个字 → 再点左边成语里的缺口（顺序反过来也行），
+        字对上就填进去、卡片变绿，字不对就抖一下、记一次失误。
+
+   ★ 同一关里拆出来的字必须互不相同 —— 否则出现两个一样的字块，
+     玩家没法判断哪个该填哪儿（校验按「字相同」通过，两块都能塞进去）。
+     选缺口时按「该字在本关还没被用过」优先，全用过了才允许重复。
+
+   ★ 缺口位置与成语顺序都是**每次进关 / 每次刷新重新随机**（真随机，不按种子固定）：
+     刷新一次就换一个字缺、换一种排列，玩家没法靠记住「上一次哪个字缺、
+     第几条在第几位」蒙过去；重做本关同样整关重洗。
+
+   进度存 localStorage：{ 学段id: { done: [关卡序号], current: 当前关 } }。 */
+function idiomApp() {
+    return {
+        /* ---------- 数据 ---------- */
+        stages: [],
+        levelsByStage: {},
+        stageId: '',
+        levelIndex: 0,
+
+        /* ---------- 当前关卡的运行态 ---------- */
+        items: [],        // [{uid, idiom, meaning, source, chars:[{ch,blank,filled}], done, wrong}]
+        tiles: [],        // [{uid, ch, itemUid, used, wrong}]
+        selTile: null,
+        selBlank: null,   // {uid, idx}
+        finished: false,
+        mistakes: 0,
+        seconds: 0,
+        timerId: null,
+        flash: '',
+        flashKind: 'ok',
+        flashTimer: null,
+        tipText: '',
+        tipSource: '',
+        tipKind: '',
+        tipTimer: null,
+
+        /* ---------- 其它 UI ---------- */
+        soundOn: true,
+        pickerOpen: false,
+        progress: {},
+        ready: false,     // 引导数据装载完成（没装载完就报错会闪一下「加载失败」）
+
+        /* ---------- 设置弹层 / 错题本 / 导出 ---------- */
+        settingsOpen: false,
+        wrongOpen: false,
+        wrongItems: [],   // [{k, label, sub, ts}]，来自 LearnTools.wrongBook
+        wrongStore: null,
+        exporting: false,
+        githubUrl: (window.LearnTools && LearnTools.github)
+            || 'https://github.com/renfufei/Story-Creator',
+
+        /* ==================== 生命周期 ==================== */
+
+        init: function () {
+            var data = window.__IDIOM_FILL_DATA__ || {};
+            this.stages = data.stages || [];
+            this.levelsByStage = data.levels || {};
+            this.progress = this.readProgress();
+            this.soundOn = this.readSound();
+            // 错题本：与进度分开存，重置进度不清错题（那是两件事）
+            if (window.LearnTools) {
+                this.wrongStore = LearnTools.wrongBook('idiom_fill_wrong_v1');
+                this.wrongItems = this.wrongStore.all();
+            }
+            this.ready = true;
+
+            if (!this.stages.length) return;
+
+            var first = this.stages[0].id;
+            // 恢复上次停在哪儿：优先「上一次打开的学段」，其次「第一个还没练完的学段」
+            var last = this.readLastStage();
+            if (last && this.levelsByStage[last] && this.levelsByStage[last].length) {
+                first = last;
+            } else {
+                for (var i = 0; i < this.stages.length; i++) {
+                    var s = this.stages[i];
+                    if (this.stageDone(s.id) < s.levelCount) { first = s.id; break; }
+                }
+            }
+            this.stageId = first;
+            var saved = (this.progress[first] && this.progress[first].current) || 0;
+            this.loadLevel(saved > this.levelCount - 1 ? 0 : saved);
+        },
+
+        /* ==================== 派生状态（getter 风格） ==================== */
+
+        get levels() {
+            return this.levelsByStage[this.stageId] || [];
+        },
+
+        get levelCount() {
+            return this.levels.length;
+        },
+
+        get currentLevel() {
+            return this.levels[this.levelIndex] || null;
+        },
+
+        get stageInfo() {
+            for (var i = 0; i < this.stages.length; i++) {
+                if (this.stages[i].id === this.stageId) return this.stages[i];
+            }
+            return null;
+        },
+
+        get stageLabel() {
+            return this.stageInfo ? this.stageInfo.label : '';
+        },
+
+        get stageSource() {
+            return this.stageInfo ? this.stageInfo.source : '';
+        },
+
+        get filledCount() {
+            var n = 0;
+            this.items.forEach(function (it) { if (it.done) n++; });
+            return n;
+        },
+
+        get remaining() {
+            var n = 0;
+            this.tiles.forEach(function (t) { if (!t.used) n++; });
+            return n;
+        },
+
+        get wrongCount() {
+            return this.wrongItems.length;
+        },
+
+        /* 本关剩余的「可点字块」个数 = 还没填的缺口个数，两者的相等关系是关卡可解的前提 */
+        get hasNext() {
+            return this.levelIndex < this.levelCount - 1 || this.hasNextStage();
+        },
+
+        get nextLabel() {
+            if (this.levelIndex < this.levelCount - 1) return '下一关';
+            return this.hasNextStage() ? '下一学段' : '已全部练完';
+        },
+
+        get clock() {
+            return this.fmtClock(this.seconds);
+        },
+
+        fmtClock: function (sec) {
+            var m = Math.floor(sec / 60);
+            var s = sec % 60;
+            return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+        },
+
+        /* ==================== 关卡装载 ==================== */
+
+        loadLevel: function (index) {
+            var levels = this.levels;
+            if (!levels.length) return;
+            index = Math.max(0, Math.min(index, levels.length - 1));
+            this.levelIndex = index;
+
+            var lv = levels[index];
+
+            // ① 先打乱成语顺序：每次进关的排列都不一样，
+            //    免得玩家把「第几条在第几位」背下来
+            var rawList = this.shuffle(lv.items, Math.random);
+
+            // ② 拆字：每条随机挑一个字，且**本关内互不相同**
+            var charLists = rawList.map(function (raw) { return Array.from(raw.idiom); });
+            var posList = this.assignDistinctPositions(charLists, Math.random);
+            var plan = [];
+            rawList.forEach(function (raw, i) {
+                plan.push({ raw: raw, chars: charLists[i], pos: posList[i], ch: charLists[i][posList[i]] });
+            });
+
+            // ③ 装成运行态
+            this.items = plan.map(function (p, i) {
+                return {
+                    uid: 'i' + i,
+                    idiom: p.raw.idiom,
+                    meaning: p.raw.meaning || '',
+                    source: p.raw.source || '',
+                    done: false,
+                    wrong: false,
+                    chars: p.chars.map(function (c, idx) {
+                        return { ch: c, blank: idx === p.pos, filled: false };
+                    })
+                };
+            });
+
+            // ④ 字块：打乱后放右列（顺序与成语顺序无关，避免"照位置对号入座"）
+            var tileList = plan.map(function (p, i) {
+                return { uid: 't' + i, ch: p.ch, itemUid: 'i' + i, used: false, wrong: false };
+            });
+            this.tiles = this.shuffle(tileList, Math.random);
+
+            // ⑤ 复位本关状态
+            this.selTile = null;
+            this.selBlank = null;
+            this.finished = false;
+            this.mistakes = 0;
+            this.seconds = 0;
+            this.startTimer();
+            this.tipText = this.soundOn
+                ? '先点右边的字，再点成语里的空位；反过来点也行。点小喇叭可以听读音。'
+                : '先点右边的字，再点成语里的空位；反过来点也行。';
+            this.tipSource = '';
+            this.tipKind = '';
+            this.flash = '';
+
+            this.saveProgress();
+            this.writeLastStage();
+        },
+
+        /**
+         * 给一关里的每条成语各挑一个「拆字位置」，要求**所有位置上的字两两不同**。
+         *
+         * <p>为什么不能简单贪心：贪心先到先得，前面几条把字用光了，后面那条四个字全被占，
+         * 只能重复 —— 于是右列出现两个一样的字块，玩家根本不知道哪个该填哪儿
+         * （校验按「字相同」通过，两块塞哪个都对）。
+         *
+         * <p>所以这里用二分图匹配（Kuhn 增广路）：每条成语是一个左节点、四个字是候选右节点，
+         * 找一组互不冲突的选法。位置候选顺序每次进关都重新洗过，所以缺哪个字是随机的；
+         * 只有在**整关根本不存在**这种选法时（数据里出现四条同字成语），才退回首个候选。
+         *
+         * @param charLists 每条成语的四个字（数组按字序）
+         * @param rnd       随机数发生器（传 Math.random 即每次不同）
+         * @return 与 charLists 等长的位置下标数组
+         */
+        assignDistinctPositions: function (charLists, rnd) {
+            var n = charLists.length;
+            var self = this;
+            // 每条成语的候选位置顺序（洗过，保证"随机拆一个字"）
+            var orders = charLists.map(function () { return self.shuffle([0, 1, 2, 3], rnd); });
+            var owner = {};                       // 字 -> 占用它的成语下标
+            var pick = new Array(n).fill(-1);
+
+            function augment(i, visited) {
+                var order = orders[i];
+                for (var k = 0; k < order.length; k++) {
+                    var p = order[k];
+                    var ch = charLists[i][p];
+                    if (visited[ch]) continue;
+                    visited[ch] = true;
+                    if (owner[ch] === undefined || augment(owner[ch], visited)) {
+                        owner[ch] = i;
+                        pick[i] = p;
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            for (var i = 0; i < n; i++) {
+                if (!augment(i, Object.create(null))) {
+                    // 无解：退回该条的首个候选（会与别的条目重字，但不至于没题可做）
+                    pick[i] = orders[i][0];
+                    owner[charLists[i][pick[i]]] = i;
+                }
+            }
+            return pick;
+        },
+
+        startTimer: function () {
+            var self = this;
+            this.stopTimer();
+            this.timerId = setInterval(function () {
+                if (!self.finished) self.seconds++;
+            }, 1000);
+        },
+
+        stopTimer: function () {
+            if (this.timerId) {
+                clearInterval(this.timerId);
+                this.timerId = null;
+            }
+        },
+
+        /* ==================== 交互 ==================== */
+
+        pickStage: function (id) {
+            if (id === this.stageId) return;
+            if (!this.levelsByStage[id] || !this.levelsByStage[id].length) return;
+            this.stageId = id;
+            this.pickerOpen = false;
+            var saved = (this.progress[id] && this.progress[id].current) || 0;
+            this.loadLevel(Math.min(saved, this.levelCount - 1));
+        },
+
+        gotoLevel: function (index) {
+            this.pickerOpen = false;
+            this.loadLevel(index);
+        },
+
+        nextLevel: function () {
+            if (this.levelIndex < this.levelCount - 1) {
+                this.loadLevel(this.levelIndex + 1);
+                return;
+            }
+            var idx = this.nextStageIndex();
+            if (idx >= 0) {
+                this.stageId = this.stages[idx].id;
+                this.loadLevel(0);
+            }
+        },
+
+        restartLevel: function () {
+            // 重做 = 整关重洗：成语顺序、拆字位置、字块顺序全部重新随机，
+            // 上一遍记住的「哪个字缺、哪块在哪儿」一律作废。
+            this.loadLevel(this.levelIndex);
+            this.tipText = '本关已重新打乱：成语顺序、缺口位置、字块顺序都换了，再练一遍。';
+            this.tipKind = '';
+            this.tipSource = '';
+        },
+
+        pickTile: function (t) {
+            if (t.used) return;
+            t.wrong = false;
+            // 再点一次当前选中的字 = 取消选择（答错之后想换个空、或者不想填了）
+            if (this.selTile && this.selTile.uid === t.uid) {
+                this.selTile = null;
+                return;
+            }
+            this.selTile = t;
+            if (this.selBlank) this.tryFill();
+        },
+
+        /** 点整条成语（任意字格、卡片空白处）= 选中这条的缺口。
+            不必非得精准戳中那个空格 —— 手机上格子小，点哪儿都能选中这条。 */
+        pickItem: function (it) {
+            if (it.done) return;
+            for (var i = 0; i < it.chars.length; i++) {
+                if (it.chars[i].blank && !it.chars[i].filled) {
+                    this.pickBlank(it, i);
+                    return;
+                }
+            }
+        },
+
+        pickBlank: function (it, idx) {
+            if (it.done) return;
+            if (it.chars[idx].filled) return;
+            // 同理：再点一次同一个空 = 取消选中
+            if (this.selBlank && this.selBlank.uid === it.uid && this.selBlank.idx === idx) {
+                this.selBlank = null;
+                return;
+            }
+            this.selBlank = { uid: it.uid, idx: idx };
+            this.tipKind = '';
+            if (this.selTile) this.tryFill();
+        },
+
+        tryFill: function () {
+            var blankRef = this.selBlank;
+            var tile = this.selTile;
+            if (!blankRef || !tile) return;
+            var it = this.itemByUid(blankRef.uid);
+            if (!it) return;
+            var cell = it.chars[blankRef.idx];
+
+            if (cell.ch === tile.ch) {
+                cell.filled = true;
+                it.done = true;
+                it.wrong = false;
+                tile.used = true;
+                this.selTile = null;
+                this.selBlank = null;
+                this.showTip(it.meaning, it.source, 'ok');
+                this.speak(it.idiom);
+                this.showFlash(this.praise(), 'ok');
+                this.checkFinished();
+            } else {
+                this.mistakes++;
+                tile.wrong = true;
+                it.wrong = true;
+                this.selBlank = null;
+                this.showFlash('不对，再想想', 'bad');
+                this.showTip('这个字填不进这个空，换一个字或换一个空试试。', '', 'bad');
+                this.recordWrong(it);
+                var wrongItem = it;
+                var wrongTile = tile;
+                setTimeout(function () {
+                    wrongItem.wrong = false;
+                    wrongTile.wrong = false;
+                }, 420);
+            }
+        },
+
+        checkFinished: function () {
+            if (this.filledCount < this.items.length) return;
+            this.finished = true;
+            this.stopTimer();
+            this.showFlash('本关完成，太棒了！', 'win');
+            this.tipText = '本关全部填对了。下面是这 ' + this.items.length + ' 条成语的意思，读一遍再走。';
+            this.tipSource = '';
+            this.tipKind = '';
+            var d = this.progress[this.stageId] || (this.progress[this.stageId] = { done: [], current: 0 });
+            if (d.done.indexOf(this.levelIndex) < 0) d.done.push(this.levelIndex);
+            d.done.sort(function (a, b) { return a - b; });
+            this.saveProgress();
+        },
+
+        praise: function () {
+            var arr = ['对了！', '答对啦！', '漂亮！', '就是这个字！'];
+            return arr[Math.floor(Math.random() * arr.length)];
+        },
+
+        /* ==================== 提示 / 闪烁 ==================== */
+
+        showTip: function (text, source, kind) {
+            var self = this;
+            this.tipText = text || '';
+            this.tipSource = source || '';
+            this.tipKind = kind || '';
+            if (this.tipTimer) clearTimeout(this.tipTimer);
+            if (kind === 'bad') {
+                this.tipTimer = setTimeout(function () { self.tipKind = ''; }, 1800);
+            }
+        },
+
+        showFlash: function (text, kind) {
+            var self = this;
+            this.flash = text;
+            this.flashKind = kind || 'ok';
+            if (this.flashTimer) clearTimeout(this.flashTimer);
+            this.flashTimer = setTimeout(function () { self.flash = ''; }, kind === 'win' ? 1600 : 900);
+        },
+
+        /* ==================== 样式判定 ==================== */
+
+        isSelItem: function (it) {
+            return !!this.selBlank && this.selBlank.uid === it.uid;
+        },
+
+        isSelSlot: function (it, idx) {
+            return !!this.selBlank && this.selBlank.uid === it.uid && this.selBlank.idx === idx;
+        },
+
+        segClass: function (i) {
+            if (this.isLevelDone(this.stageId, i)) return 'is-done';
+            if (i === this.levelIndex) return 'is-now';
+            return '';
+        },
+
+        /* ==================== 进度 ==================== */
+
+        isLevelDone: function (stageId, idx) {
+            var d = this.progress[stageId];
+            return !!d && d.done.indexOf(idx) >= 0;
+        },
+
+        stageDone: function (stageId) {
+            var d = this.progress[stageId];
+            if (!d || !d.done) return 0;
+            var s = null;
+            for (var i = 0; i < this.stages.length; i++) if (this.stages[i].id === stageId) s = this.stages[i];
+            if (!s) return d.done.length;
+            return d.done.filter(function (i) { return i < s.levelCount; }).length;
+        },
+
+        stagePct: function (stageId) {
+            var s = null;
+            for (var i = 0; i < this.stages.length; i++) if (this.stages[i].id === stageId) s = this.stages[i];
+            if (!s || !s.levelCount) return 0;
+            return Math.round(this.stageDone(stageId) / s.levelCount * 100);
+        },
+
+        keyName: 'idiom_fill_v1',
+
+        readProgress: function () {
+            try {
+                var raw = localStorage.getItem(this.keyName);
+                var obj = raw ? JSON.parse(raw) : {};
+                return obj && typeof obj === 'object' ? obj : {};
+            } catch (e) { return {}; }
+        },
+
+        saveProgress: function () {
+            if (!this.progress[this.stageId]) this.progress[this.stageId] = { done: [], current: 0 };
+            this.progress[this.stageId].current = this.levelIndex;
+            try { localStorage.setItem(this.keyName, JSON.stringify(this.progress)); } catch (e) { /* 隐身模式忽略 */ }
+        },
+
+        resetStage: function () {
+            delete this.progress[this.stageId];
+            try { localStorage.setItem(this.keyName, JSON.stringify(this.progress)); } catch (e) { /* ignore */ }
+            this.pickerOpen = false;
+            this.loadLevel(0);
+            this.showFlash('已清空本学段进度', 'win');
+        },
+
+        /* ==================== 错题本 ====================
+           记录口径：只要在某个空上填错了一个字，就把这条成语记下（按成语去重）。
+           不做「答对自动移除」—— 它服务的是「回头复习」，不是待办清单。 */
+
+        recordWrong: function (it) {
+            if (!this.wrongStore || !it) return;
+            this.wrongStore.add('idiom|' + it.idiom, it.idiom, it.meaning);
+            this.wrongItems = this.wrongStore.all();
+        },
+
+        openWrongBook: function () {
+            if (this.wrongStore) this.wrongItems = this.wrongStore.all();
+            this.wrongOpen = true;
+        },
+
+        closeWrongBook: function () {
+            this.wrongOpen = false;
+        },
+
+        clearWrong: function () {
+            if (this.wrongStore) this.wrongStore.clear();
+            this.wrongItems = [];
+        },
+
+        /* ==================== 导出 / 重置 ==================== */
+
+        /* 导出参数单独抽出来：探针直接拿这份参数复算产物，
+           避免「按钮用的参数」和「被测的参数」各写一套、慢慢漂移。 */
+        exportOptions: function () {
+            return {
+                dataVar: '__IDIOM_FILL_DATA__',
+                payload: window.__IDIOM_FILL_DATA__ || { stages: [], levels: {} },
+                title: '成语填空 · 人教版 小学 / 初中 / 高中',
+                prefix: 'idiom-fill'
+            };
+        },
+
+        runExport: function () {
+            var self = this;
+            if (this.exporting) return;
+            if (!window.LearnTools) {
+                SC.toast.error('导出脚本没加载，请刷新页面重试');
+                return;
+            }
+            this.exporting = true;
+            LearnTools.exportPage(this.exportOptions()).then(function (res) {
+                var bytes = LearnTools.download(res.html, res.filename);
+                self.exporting = false;
+                self.settingsOpen = false;
+                SC.toast.success('已导出 ' + Math.round(bytes / 1024)
+                    + ' KB，双击文件即可离线玩', 5000);
+            }).catch(function (e) {
+                console.error('[export] failed', e);
+                self.exporting = false;
+                SC.toast.error('导出失败：' + ((e && e.message) || e));
+            });
+        },
+
+        resetAll: function () {
+            var self = this;
+            SC.confirm({
+                title: '重置进度',
+                message: '将清空「成语填空」全部学段的通关记录。\n错题本不受影响，需要单独清空。',
+                confirmText: '重置',
+                danger: true
+            }).then(function (ok) {
+                if (!ok) return;
+                self.progress = {};
+                try { localStorage.removeItem(self.keyName); } catch (e) { /* ignore */ }
+                try { localStorage.removeItem('idiom_fill_last_stage'); } catch (e) { /* ignore */ }
+                self.stageId = self.stages.length ? self.stages[0].id : self.stageId;
+                self.loadLevel(0);
+                self.showFlash('已重置全部进度', 'win');
+                SC.toast.success('已重置全部进度');
+            });
+        },
+
+        readLastStage: function () {
+            try { return localStorage.getItem('idiom_fill_last_stage') || ''; } catch (e) { return ''; }
+        },
+
+        writeLastStage: function () {
+            try { localStorage.setItem('idiom_fill_last_stage', this.stageId); } catch (e) { /* ignore */ }
+        },
+
+        hasNextStage: function () {
+            return this.nextStageIndex() >= 0;
+        },
+
+        nextStageIndex: function () {
+            for (var i = 0; i < this.stages.length; i++) {
+                if (this.stages[i].id === this.stageId) {
+                    return i + 1 < this.stages.length ? i + 1 : -1;
+                }
+            }
+            return -1;
+        },
+
+        /* ==================== 朗读 ==================== */
+
+        readSound: function () {
+            try { return localStorage.getItem('idiom_fill_sound') !== '0'; } catch (e) { return true; }
+        },
+
+        toggleSound: function () {
+            this.soundOn = !this.soundOn;
+            try { localStorage.setItem('idiom_fill_sound', this.soundOn ? '1' : '0'); } catch (e) { /* ignore */ }
+            if (!this.soundOn && window.speechSynthesis) {
+                try { window.speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+            }
+        },
+
+        speakItem: function (it) {
+            this.speak(it.idiom);
+        },
+
+        /**
+         * 朗读。**永不抛错、永不阻塞流程**：浏览器不支持、没有中文语音、被自动播放策略拦住，
+         * 都只是静默失败 —— 这个页面是学习工具，读不出来不该变成报错弹窗。
+         */
+        speak: function (text) {
+            if (!this.soundOn || !text || !window.speechSynthesis) return;
+            try {
+                window.speechSynthesis.cancel();
+                var u = new SpeechSynthesisUtterance(text);
+                u.lang = 'zh-CN';
+                u.rate = 0.92;
+                u.onerror = function () { /* 静默 */ };
+                window.speechSynthesis.speak(u);
+            } catch (e) { /* 静默 */ }
+        },
+
+        /* ==================== 工具 ==================== */
+
+        itemByUid: function (uid) {
+            for (var i = 0; i < this.items.length; i++) if (this.items[i].uid === uid) return this.items[i];
+            return null;
+        },
+
+        /** Fisher-Yates 洗牌；rnd 省略时用 Math.random（每关重新洗，结果不固定） */
+        shuffle: function (arr, rnd) {
+            var a = arr.slice();
+            var r = typeof rnd === 'function' ? rnd : Math.random;
+            for (var i = a.length - 1; i > 0; i--) {
+                var j = Math.floor(r() * (i + 1));
+                var t = a[i]; a[i] = a[j]; a[j] = t;
+            }
+            return a;
+        }
+    };
+}
+</script>
+<script src="/vendor/alpinejs/cdn.min.js" defer></script>
+</body>
+</html>

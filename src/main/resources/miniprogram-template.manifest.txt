@@ -1,0 +1,21 @@
+# 导出到 zip 的模板文件清单（相对 miniprogram-template/）。
+# 新增/删除模板文件后必须同步本清单：MiniprogramExporterTest#manifestMatchesTemplateDirectory 会校验一致性。
+app.js
+app.json
+app.wxss
+pages/index/index.js
+pages/index/index.json
+pages/index/index.wxml
+pages/index/index.wxss
+pages/play/play.js
+pages/play/play.json
+pages/play/play.wxml
+pages/play/play.wxss
+project.config.json
+README.md
+sitemap.json
+utils/bank.js
+utils/search.js
+utils/sound.js
+utils/store.js
+utils/ui.js

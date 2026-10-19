@@ -1323,6 +1323,20 @@
         .wm-wrong-total { color: var(--wm-wrong-ink); background: var(--wm-wrong-bg); }
         .wm-count-total { color: var(--wm-count-ink); background: var(--wm-count-bg); }
 
+        /* 导出小程序弹窗：把「包内容」和「下载后三步」分成两块，
+           标题小字 + 列表，比一串四点列表好扫读 */
+        .wm-mp-block { margin-top: .85rem; }
+        .wm-mp-block-title {
+            font-size: .78rem;
+            font-weight: 700;
+            color: var(--wm-muted, #6b7280);
+            letter-spacing: .02em;
+            margin-bottom: .3rem;
+        }
+        .wm-mp-block ul,
+        .wm-mp-block ol { margin-bottom: 0; }
+        .wm-mp-block li + li { margin-top: .25rem; }
+
         /* ---------- 错题本 ---------- */
         .wm-wrong-list {
             display: flex;
@@ -1805,7 +1819,7 @@ window.__WORD_MATCH_DATA__ = (function () {
                  @keydown.escape.window="settingsOpen = false">
                 <button type="button" class="btn btn-sm btn-outline-secondary wm-set-btn"
                         @click="settingsOpen = !settingsOpen" :class="{ 'is-open': settingsOpen }"
-                        title="设置：错题本 / 重做本关 / 朗读 / 导出 / 源码 / 重置进度"
+                        title="设置：错题本 / 重做本关 / 朗读 / 导出 HTML / 导出小程序 / 源码 / 重置进度"
                         aria-haspopup="true" :aria-expanded="settingsOpen ? 'true' : 'false'">
                     <i class="bi bi-gear"></i>
                     <span class="d-none d-sm-inline ms-1">设置</span>
@@ -1861,8 +1875,20 @@ window.__WORD_MATCH_DATA__ = (function () {
                             title="导出为单页 HTML：不依赖本站，离线也能玩">
                         <i class="bi bi-download wm-set-icon"></i>
                         <span class="wm-set-main">
-                            <span class="wm-set-title">导出</span>
+                            <span class="wm-set-title">导出 HTML</span>
                             <span class="wm-set-desc">打包成一页 HTML，发给同学也能直接玩</span>
+                        </span>
+                        <i class="bi bi-chevron-right wm-set-arrow"></i>
+                    </button>
+
+                    <!-- 导出小程序工程：模板 + 现场词库，服务端打包成 zip。
+                         同样标 is-export —— 单页导出件里没有后端，这个入口必须跟着消失。 -->
+                    <button type="button" class="wm-set-item is-export" @click="openMpExport()"
+                            title="导出小程序源码：可直接导入微信开发者工具的工程包">
+                        <i class="bi bi-box-seam wm-set-icon"></i>
+                        <span class="wm-set-main">
+                            <span class="wm-set-title">导出小程序</span>
+                            <span class="wm-set-desc">生成工程包（含完整词库），解压即可导入</span>
                         </span>
                         <i class="bi bi-chevron-right wm-set-arrow"></i>
                     </button>
@@ -2494,6 +2520,47 @@ window.__WORD_MATCH_DATA__ = (function () {
         </div>
     </div>
 
+    <!-- 导出小程序源码（服务端打包：模板 + 现场词库） -->
+    <div class="wm-modal-backdrop" x-show="mpExportOpen" x-cloak @click.self="mpExportOpen = false">
+        <div class="wm-modal is-wide" id="wm-mp-modal">
+            <div class="wm-modal-head">
+                <h5><i class="bi bi-box-seam"></i> 导出小程序源码</h5>
+                <span class="wm-count-total"
+                      x-text="books.length + ' 册 · ' + totalLevels + ' 关'"></span>
+            </div>
+            <p class="mb-0 mt-1">打包成可直接导入<b>微信开发者工具</b>的工程包，解压就能跑。</p>
+            <p class="mb-0 mt-1 small text-secondary">词库按导出这一刻现算，与网页版一致；运行时不依赖后端。</p>
+
+            <div class="wm-mp-block">
+                <div class="wm-mp-block-title">包里有什么</div>
+                <ul class="small text-secondary ps-3 mb-0">
+                    <li>页面代码（检索页 / 玩法页）与工具函数</li>
+                    <li>完整词库：<span x-text="totalLevels + ' 关 · ' + totalWords.toLocaleString('en-US') + ' 词'"></span></li>
+                    <li>项目配置与说明文件（<code>appid</code> 留空）</li>
+                </ul>
+            </div>
+
+            <div class="wm-mp-block">
+                <div class="wm-mp-block-title">下载后三步</div>
+                <ol class="small text-secondary ps-3 mb-0">
+                    <li>解压 zip，得到 <code>word-pair</code> 文件夹</li>
+                    <li>微信开发者工具 → 导入项目，选中它</li>
+                    <li>填自己的 AppID（或选测试号），即可预览与上传</li>
+                </ol>
+            </div>
+
+            <div class="d-flex gap-2 mt-3">
+                <a class="btn btn-primary btn-sm flex-fill" id="wm-mp-go"
+                   href="/learn/word-match/miniprogram.zip" download="word-pair-miniprogram.zip"
+                   @click="onMpDownload()">
+                    <i class="bi bi-download"></i> 下载小程序包
+                </a>
+                <button type="button" class="btn btn-outline-secondary btn-sm flex-fill" id="wm-mp-cancel"
+                        @click="mpExportOpen = false">取消</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 本册通关弹窗 -->
     <div class="wm-modal-backdrop" x-show="finishedAll" x-cloak @click.self="finishedAll = false">
         <div class="wm-modal is-finish">
@@ -2871,6 +2938,9 @@ function wordMatchApp() {
         exportOpen: false,
         exportSel: {},
         exporting: false,
+
+        /* 导出小程序源码（服务端打包，前端只负责下载） */
+        mpExportOpen: false,
 
         flash: '',
         flashEmoji: '',
@@ -3339,6 +3409,22 @@ function wordMatchApp() {
         closeExport: function () {
             if (this.exporting) return;          // 打包中不许关，避免半路丢状态
             this.exportOpen = false;
+        },
+
+        /* 导出小程序：前端没有打包能力（模板在服务端、词库要用后端的切关结果），
+           所以这里只负责把用户带到下载链接，进度条/打包态都不需要。 */
+        openMpExport: function () {
+            this.settingsOpen = false;
+            this.mpExportOpen = true;
+        },
+
+        /* 下载是浏览器原生行为（同源 attachment），这里只负责收弹窗 + 给一句后续指引：
+           「下载完了该干什么」在弹窗关掉后最容易忘。 */
+        onMpDownload: function () {
+            this.mpExportOpen = false;
+            if (typeof SC !== 'undefined' && SC.toast) {
+                SC.toast.success('已开始下载，解压后用「微信开发者工具」导入 word-pair 文件夹', 6000);
+            }
         },
 
         isExportSel: function (id) { return !!this.exportSel[id]; },
@@ -4660,6 +4746,12 @@ function buildStandaloneWordMatch(ids, startBookId) {
                   所以不影响「零资源外链」这条自检，也让产物能指向项目出处。 */
             var nav = doc.getElementById('site-nav');
             if (nav) nav.remove();
+
+            /* ①b 「导出小程序」的弹窗在单机件里没有意义：它的下载按钮指向站内接口
+                   （/learn/word-match/miniprogram.zip），留着会是一条打不开又会被
+                   「零资源外链」自检抓到的绝对路径。整块摘掉，连 DOM 一起。 */
+            var mpModal = doc.getElementById('wm-mp-modal');
+            if (mpModal && mpModal.parentElement) mpModal.parentElement.remove();
 
             /* ② 外链 CSS + 图标字体 → 一份内联 <style>（插在页面自带 <style> 之前） */
             var styleEl = doc.createElement('style');

@@ -173,18 +173,20 @@
             </span>
             <div class="d-flex gap-2 align-items-center">
                 <!-- Step-level model selector (hidden for OUTLINE_GENERATION and CHAPTER_WRITING) -->
-                <form :action="'/projects/' + projectId + '/step-model'" method="post" class="d-flex gap-1 align-items-center"
+                <form :action="'/projects/' + projectId + '/step-model'" method="post"
                       x-show="currentStep !== 'OUTLINE_GENERATION' && currentStep !== 'CHAPTER_WRITING'">
-                    <input type="hidden" name="step" :value="currentStep">
-                    <select class="form-select form-select-sm" name="modelConfigId" style="max-width:200px; font-size:0.8rem;">
-                        <option value="">默认模型</option>
-                        <template x-for="mc in modelConfigs" :key="mc.id">
-                            <option :value="mc.id" :selected="mc.id === stepModelConfigId" x-text="mc.displayName"></option>
-                        </template>
-                    </select>
-                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="保存步骤模型">
-                        <i class="bi bi-check-lg"></i>
-                    </button>
+                    <div class="d-flex gap-1 align-items-center">
+                        <input type="hidden" name="step" :value="currentStep">
+                        <select class="form-select form-select-sm" name="modelConfigId" style="max-width:200px; font-size:0.8rem;">
+                            <option value="">默认模型</option>
+                            <template x-for="mc in modelConfigs" :key="mc.id">
+                                <option :value="mc.id" :selected="mc.id === stepModelConfigId" x-text="mc.displayName"></option>
+                            </template>
+                        </select>
+                        <button type="submit" class="btn btn-sm btn-outline-secondary" title="保存步骤模型">
+                            <i class="bi bi-check-lg"></i>
+                        </button>
+                    </div>
                 </form>
                 <!-- 全部自动生成 button hidden for CHAPTER_WRITING -->
                 <template x-if="currentStep === 'POLISHING'">
@@ -383,19 +385,21 @@
                                                             <span x-show="ch.status === 'REFINED'" class="badge bg-primary ms-1">已精修</span>
                                                             <span x-show="ch.status === 'FAILED'" class="text-danger fw-normal"> - 生成失败</span>
                                                         </div>
-                                                        <div x-show="!generating && (ch.status === 'COMPLETED' || ch.status === 'REFINED') && !ch.editing" class="d-flex gap-1 flex-shrink-0">
-                                                            <button x-show="ch.originalSummary" class="btn btn-sm btn-outline-info"
-                                                                    @click="ch.showCompare = !ch.showCompare">
-                                                                <i class="bi bi-arrows-expand"></i> 对比
-                                                            </button>
-                                                            <button class="btn btn-sm btn-outline-primary"
-                                                                    @click="editChapterOutline(ch)" :disabled="fullAutoRunning">
-                                                                <i class="bi bi-pencil"></i> 编辑
-                                                            </button>
-                                                            <button class="btn btn-sm btn-outline-warning"
-                                                                    @click="regenerateChapterOutline(ch)" :disabled="fullAutoRunning || ch.regenerating">
-                                                                <i class="bi bi-arrow-clockwise" :class="ch.regenerating ? 'spin' : ''"></i> 重新生成
-                                                            </button>
+                                                        <div x-show="!generating && (ch.status === 'COMPLETED' || ch.status === 'REFINED') && !ch.editing" class="flex-shrink-0">
+                                                            <div class="d-flex gap-1">
+                                                                <button x-show="ch.originalSummary" class="btn btn-sm btn-outline-info"
+                                                                        @click="ch.showCompare = !ch.showCompare">
+                                                                    <i class="bi bi-arrows-expand"></i> 对比
+                                                                </button>
+                                                                <button class="btn btn-sm btn-outline-primary"
+                                                                        @click="editChapterOutline(ch)" :disabled="fullAutoRunning">
+                                                                    <i class="bi bi-pencil"></i> 编辑
+                                                                </button>
+                                                                <button class="btn btn-sm btn-outline-warning"
+                                                                        @click="regenerateChapterOutline(ch)" :disabled="fullAutoRunning || ch.regenerating">
+                                                                    <i class="bi bi-arrow-clockwise" :class="ch.regenerating ? 'spin' : ''"></i> 重新生成
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                         <div x-show="!generating && ch.status === 'FAILED' && !ch.editing" class="flex-shrink-0">
                                                             <button class="btn btn-sm btn-outline-danger"
@@ -866,7 +870,7 @@
                                     </div>
                                     <small class="text-muted d-block mt-1" style="white-space: pre-line; max-height: 60px; overflow: hidden;"
                                            x-text="item.content.substring(0, 120) + (item.content.length > 120 ? '...' : '')"></small>
-                                    <small x-show="item.sourceHint" class="text-info d-block" x-text="'来源: ' + item.sourceHint"></small>
+                                    <small x-show="item.sourceHint" class="text-info" x-text="'来源: ' + item.sourceHint"></small>
                                 </div>
                             </label>
                         </template>

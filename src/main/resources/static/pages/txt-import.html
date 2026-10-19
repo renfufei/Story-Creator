@@ -131,10 +131,12 @@ window.__TXT_IMPORT_DATA__ = (function () {
                     <span class="badge bg-secondary" x-text="formatWordCount(totalWordCount) + ' 字'"></span>
                 </div>
                 <!-- 第 1 步填写的项目名称：第 2 步只做预览，这里回显以免用户忘了自己在导入哪本书 -->
-                <div class="w-100 mt-1 small d-flex align-items-center flex-wrap gap-1" x-show="title" x-cloak>
-                    <i class="bi bi-book text-muted"></i>
-                    <span class="text-muted">项目名称：</span>
-                    <span class="fw-semibold" x-text="title"></span>
+                <div class="w-100 mt-1 small" x-show="title" x-cloak>
+                    <div class="d-flex align-items-center flex-wrap gap-1">
+                        <i class="bi bi-book text-muted"></i>
+                        <span class="text-muted">项目名称：</span>
+                        <span class="fw-semibold" x-text="title"></span>
+                    </div>
                 </div>
             </div>
             <div class="card-body">

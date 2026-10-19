@@ -184,7 +184,7 @@
                                            x-on:change="toggleChar(+$el.closest('[data-cid]').dataset.cid)">
                                     <label class="form-check-label" :for="'char-' + c.id" style="min-width:0;">
                                         <strong x-text="c.name || '未命名'">角色名</strong>
-                                        <small class="text-muted d-block text-truncate" x-show="c.role" x-text="c.role">角色定位</small>
+                                        <span class="d-block text-truncate"><small class="text-muted" x-show="c.role" x-text="c.role">角色定位</small></span>
                                     </label>
                                 </div>
                             </div></template>

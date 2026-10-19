@@ -625,8 +625,34 @@ a.list-group-item.sc-anchor-link:focus .bi {
     --accent-border: #ded3f4;
 }
 
-/* 第四种主题色：首页「设置」卡。中性石板灰 —— 设置属于配置类入口，
-   不像三个内容模块那样需要抢眼，但仍与其他卡共用同一套色块/按钮规格。 */
+/* 第四种强调色：琥珀。成语填空卡专用 —— 汉字/毛笔的意象，与蓝(乘法)、绿(单词)、
+   紫(俄罗斯方块) 三色都能分开；浅底压到 #fff8ef，保证白字按钮上的对比度达标。 */
+.sc-learn-card[data-accent="amber"] {
+    --accent: #d97706;
+    --accent-strong: #b45309;
+    --accent-soft: #fff8ef;
+    --accent-border: #f6d9b4;
+}
+
+/* 第六、七种强调色：青绿 / 玫红。近义词、反义词两张卡专用。
+   一对「相向靠拢 / 背向拉开」的语义，用冷暖相近但色相分开的两色最直观；
+   与已有的蓝、绿、琥珀、紫都能区分，且都与各卡内的 --wr-accent（页面强调色）一致。 */
+.sc-learn-card[data-accent="teal"] {
+    --accent: #0d9488;
+    --accent-strong: #0f766e;
+    --accent-soft: #effaf8;
+    --accent-border: #b7e6df;
+}
+
+.sc-learn-card[data-accent="rose"] {
+    --accent: #e11d48;
+    --accent-strong: #be123c;
+    --accent-soft: #fff1f4;
+    --accent-border: #f9c6d2;
+}
+
+/* 石板灰：首页「设置」卡专用。中性色 —— 设置属于配置类入口，
+   不像内容模块那样需要抢眼，但仍与其他卡共用同一套色块/按钮规格。 */
 .sc-learn-card[data-accent="slate"] {
     --accent: #64748b;
     --accent-strong: #475569;
@@ -851,3 +877,213 @@ a.sc-link.text-decoration-none:hover {
 .btn > .bi {
     line-height: 1;
 }
+
+/* ==================== 教学模块「设置」弹层（通用） ====================
+   成语填空 / 近义词匹配 / 反义词匹配 三页共用（行为在 js/learn-tools.js）。
+   与 .wm-set-* 同一套视觉语汇，但主题色改为由各页注入的三个变量
+   （--lt-accent / --lt-accent-soft / --lt-line），这样琥珀(成语)、
+   青绿(近义词)、玫红(反义词) 三页能共用一份结构样式而不把配色写死。
+   -------------------------------------------------------------------- */
+.lt-set-wrap { position: relative; }
+
+/* 打开时按钮保持高亮，让「弹层从哪冒出来的」一目了然 */
+.lt-set-btn.is-open {
+    border-color: var(--lt-accent, #94a3b8);
+    color: var(--lt-accent-deep, #475569);
+    background: var(--lt-accent-soft, #f1f5f9);
+}
+
+.lt-set-pop {
+    position: absolute;
+    z-index: 1200;
+    top: calc(100% + .45rem);
+    right: 0;
+    width: min(20rem, calc(100vw - 2rem));
+    background: #fff;
+    border: 1px solid #e6e9ee;
+    border-radius: 14px;
+    box-shadow: 0 14px 34px rgba(31, 45, 61, .18);
+    padding: .45rem;
+    text-align: left;
+    animation: lt-pop-soft .18s ease;
+}
+
+@keyframes lt-pop-soft {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.lt-set-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: .2rem .5rem .45rem;
+    border-bottom: 1px solid #e6e9ee;
+    margin-bottom: .35rem;
+    font-size: .74rem;
+    font-weight: 700;
+    color: #8a929c;
+}
+
+.lt-set-item {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    border-radius: 10px;
+    padding: .5rem .55rem;
+    text-align: left;
+    color: #2b3138;
+}
+
+.lt-set-item + .lt-set-item { margin-top: 2px; }
+.lt-set-item:hover { background: #f4f7fa; }
+
+/* 「源码」那一条是 <a>（要新标签页打开，保留中键/右键的原生行为），
+   把链接默认样式拉回和 <button> 条目一致的外观 */
+a.lt-set-item { text-decoration: none; }
+a.lt-set-item:hover,
+a.lt-set-item:focus { color: #2b3138; text-decoration: none; }
+
+/* 图标装进小圆角方块：比裸图标更像「条目」，也更容易扫读 */
+.lt-set-icon {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 9px;
+    font-size: .95rem;
+    background: var(--lt-accent-soft, #eef4fb);
+    color: var(--lt-accent-deep, #2563eb);
+}
+
+.lt-set-item.is-danger .lt-set-icon { background: #fdecec; color: #d92d20; }
+
+.lt-set-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+
+.lt-set-title {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .9rem;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.lt-set-item.is-danger .lt-set-title { color: #d92d20; }
+
+/* 说明最多两行：窄屏宁可换行也别把话截断（这里不是状态条，换行不会顶坏布局） */
+.lt-set-desc {
+    font-size: .74rem;
+    line-height: 1.35;
+    color: #8a929c;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.lt-set-arrow { flex: 0 0 auto; color: #c2c8d0; font-size: .78rem; }
+
+/* 右侧状态胶囊（朗读开关） */
+.lt-set-switch {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .12rem .5rem;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 700;
+    background: #eef0f3;
+    color: #8a929c;
+}
+
+.lt-set-switch.is-on { background: #e6f7ef; color: #1a8d5a; }
+
+/* 计数徽标（错题本） */
+.lt-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 .28rem;
+    border-radius: 999px;
+    background: #e2554a;
+    color: #fff;
+    font-size: .68rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+/* ---------- 错题本弹窗内的列表 ---------- */
+.lt-wrong-list {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+    max-height: min(56vh, 24rem);
+    overflow-y: auto;
+}
+
+.lt-wrong-item {
+    display: flex;
+    align-items: flex-start;
+    gap: .5rem;
+    padding: .45rem .6rem;
+    border-radius: .5rem;
+    background: #f7f9fb;
+    border: 1px solid #eef1f5;
+}
+
+.lt-wrong-ix {
+    flex: 0 0 auto;
+    min-width: 1.2rem;
+    height: 1.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid #e6e9ee;
+    font-size: .68rem;
+    font-weight: 700;
+    color: #8a929c;
+}
+
+.lt-wrong-main { flex: 1 1 auto; min-width: 0; }
+
+.lt-wrong-label {
+    font-weight: 600;
+    font-size: .88rem;
+    color: #2b3138;
+    letter-spacing: .01em;
+}
+
+.lt-wrong-sub {
+    display: block;
+    font-size: .76rem;
+    line-height: 1.45;
+    color: #8a929c;
+    margin-top: .1rem;
+}
+
+.lt-wrong-empty {
+    padding: 1.8rem 0;
+    text-align: center;
+    color: #8a929c;
+    font-size: .86rem;
+}
+
+.lt-wrong-empty i { display: block; font-size: 1.6rem; margin-bottom: .4rem; color: #c2c8d0; }
+
+/* ---------- 单页导出件（body[data-standalone]）----------
+   离线件里「返回教学页」「导出」「源码」都只在站内成立，一律收起。 */
+body[data-standalone] .lt-back,
+body[data-standalone] .lt-set-item.is-export,
+body[data-standalone] .lt-set-item.is-source { display: none !important; }

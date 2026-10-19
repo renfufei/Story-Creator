@@ -1,0 +1,104 @@
+/* 全局样式：页面默认 + 替代 Bootstrap 的那几个按钮/布局原语
+   ---------------------------------------------------------------------------
+   小程序用不了 Bootstrap（WXSS 不支持引入外部 CSS 库），而本项目真正用到它的地方
+   只有 .btn / .btn-sm / 几个 btn-* 配色 和 d-flex / gap / w-100 / flex-fill 这几个工具类。
+   与其引一个 UI 库把精调过的配色改掉，不如把用到的那几条手写出来。
+   --------------------------------------------------------------------------- */
+
+page {
+  background: #ffffff;
+  color: #2b3138;
+  font-size: 28rpx;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica,
+               "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+view, text, scroll-view, button, label, input {
+  box-sizing: border-box;
+}
+
+/* 全局按下反馈。小程序没有鼠标，:hover 不成立 —— 触摸反馈必须走 hover-class，
+   这也顺带避开网页版那边「移动端点完留下粘滞 :hover 导致文字与底色撞色」的整类问题。 */
+.wm-tap {
+  opacity: .68;
+}
+
+/* ---------- 按钮 ---------- */
+.wm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  padding: 10rpx 20rpx;
+  border: 2rpx solid transparent;
+  border-radius: 10rpx;
+  background: #ffffff;
+  color: #2b3138;
+  font-size: 26rpx;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* 主按钮（对应 Bootstrap .btn-primary） */
+.wm-btn-primary {
+  background: #0d6efd;
+  border-color: #0d6efd;
+  color: #ffffff;
+}
+
+/* 次要按钮：描边款（对应 .btn-outline-secondary） */
+.wm-btn-outline {
+  background: #ffffff;
+  border-color: #cfd6dd;
+  color: #5b6673;
+}
+
+.wm-btn-primary-outline {
+  background: #ffffff;
+  border-color: #35a3f3;
+  color: #0f6cbd;
+}
+
+.wm-btn-success {
+  background: #198754;
+  border-color: #198754;
+  color: #ffffff;
+}
+
+.wm-btn-danger-outline {
+  background: #ffffff;
+  border-color: #f2b8b5;
+  color: #b42318;
+}
+
+.wm-btn-warning-outline {
+  background: #ffffff;
+  border-color: #f0c476;
+  color: #8a5a00;
+}
+
+.wm-btn-disabled {
+  opacity: .45;
+}
+
+.wm-btn-block {
+  width: 100%;
+}
+
+/* ---------- 零散工具类 ----------
+   只保留模板里真正在用的。原页面从 Bootstrap 借的工具类大多没被移植过来用
+   （布局一律写在 .wm-* 组件自身的规则里），所以不要在这里预先堆一套 flex/gap 工具类 —— 
+   定义了没人引用的选择器只会让后来者以为它生效。 */
+.wm-mt-sm { margin-top: 10rpx; }   /* 对应 Bootstrap 的 mt-2，用在两处弹窗说明文字上 */
+
+/* ---------- 行内强调文字 ----------
+   网页版原页面一律用 <b> 做强调（.wm-counter b / .wm-footer b / .wm-book-prog b
+   / .wm-wrong-zh b ...）。WXML 里没有 <b> 这个标签，写成标签选择器等于永不命中，
+   所以统一换成显式 class。
+   注意 <b> 自带 font-weight:bold，换成 class 后必须自己补上字重，否则强调会消失。
+   默认不写 color —— 颜色交给各处的上下文规则（.wm-footer .wm-em 之类）决定。 */
+.wm-em        { font-weight: 700; }
+.wm-em-ok     { font-weight: 700; color: #34c77b; }  /* 对应 --wm-ok，练习计数/正确答案 */
+.wm-em-auto   { font-weight: 700; color: #d99000; }  /* 自动练习计数 */

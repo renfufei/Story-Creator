@@ -1,6 +1,6 @@
 package com.storycreator.persistence.repository;
 
-import com.storycreator.core.domain.WorkflowStep;
+import com.storycreator.core.domain.GuidanceLibraryStep;
 import com.storycreator.persistence.entity.GuidanceLibraryEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -10,5 +10,5 @@ public interface GuidanceLibraryRepository extends JpaRepository<GuidanceLibrary
 
     List<GuidanceLibraryEntity> findAllByOrderByUpdatedAtDesc();
 
-    List<GuidanceLibraryEntity> findByStepOrderByUpdatedAtDesc(WorkflowStep step);
+    List<GuidanceLibraryEntity> findByStepOrderByUpdatedAtDesc(GuidanceLibraryStep step);
 }

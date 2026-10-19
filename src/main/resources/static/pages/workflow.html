@@ -167,18 +167,20 @@
             </span>
             <div class="d-flex gap-2 align-items-center">
                 <!-- Step-level model selector (hidden for OUTLINE_GENERATION and CHAPTER_WRITING) -->
-                <form :action="'/projects/' + projectId + '/step-model'" method="post" class="d-flex gap-1 align-items-center"
+                <form :action="'/projects/' + projectId + '/step-model'" method="post"
                       x-show="currentStep !== 'OUTLINE_GENERATION' && currentStep !== 'CHAPTER_WRITING'">
-                    <input type="hidden" name="step" :value="currentStep">
-                    <select class="form-select form-select-sm" name="modelConfigId" style="max-width:200px; font-size:0.8rem;">
-                        <option value="">默认模型</option>
-                        <template x-for="mc in modelConfigs" :key="mc.id">
-                            <option :value="mc.id" :selected="mc.id === stepModelConfigId" x-text="mc.displayName"></option>
-                        </template>
-                    </select>
-                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="保存步骤模型">
-                        <i class="bi bi-check-lg"></i>
-                    </button>
+                    <div class="d-flex gap-1 align-items-center">
+                        <input type="hidden" name="step" :value="currentStep">
+                        <select class="form-select form-select-sm" name="modelConfigId" style="max-width:200px; font-size:0.8rem;">
+                            <option value="">默认模型</option>
+                            <template x-for="mc in modelConfigs" :key="mc.id">
+                                <option :value="mc.id" :selected="mc.id === stepModelConfigId" x-text="mc.displayName"></option>
+                            </template>
+                        </select>
+                        <button type="submit" class="btn btn-sm btn-outline-secondary" title="保存步骤模型">
+                            <i class="bi bi-check-lg"></i>
+                        </button>
+                    </div>
                 </form>
                 <!-- 全部自动生成 button hidden for CHAPTER_WRITING -->
                 <template x-if="currentStep === 'POLISHING'">
@@ -377,19 +379,21 @@
                                                             <span x-show="ch.status === 'REFINED'" class="badge bg-primary ms-1">已精修</span>
                                                             <span x-show="ch.status === 'FAILED'" class="text-danger fw-normal"> - 生成失败</span>
                                                         </div>
-                                                        <div x-show="!generating && (ch.status === 'COMPLETED' || ch.status === 'REFINED') && !ch.editing" class="d-flex gap-1 flex-shrink-0">
-                                                            <button x-show="ch.originalSummary" class="btn btn-sm btn-outline-info"
-                                                                    @click="ch.showCompare = !ch.showCompare">
-                                                                <i class="bi bi-arrows-expand"></i> 对比
-                                                            </button>
-                                                            <button class="btn btn-sm btn-outline-primary"
-                                                                    @click="editChapterOutline(ch)" :disabled="fullAutoRunning">
-                                                                <i class="bi bi-pencil"></i> 编辑
-                                                            </button>
-                                                            <button class="btn btn-sm btn-outline-warning"
-                                                                    @click="regenerateChapterOutline(ch)" :disabled="fullAutoRunning || ch.regenerating">
-                                                                <i class="bi bi-arrow-clockwise" :class="ch.regenerating ? 'spin' : ''"></i> 重新生成
-                                                            </button>
+                                                        <div x-show="!generating && (ch.status === 'COMPLETED' || ch.status === 'REFINED') && !ch.editing" class="flex-shrink-0">
+                                                            <div class="d-flex gap-1">
+                                                                <button x-show="ch.originalSummary" class="btn btn-sm btn-outline-info"
+                                                                        @click="ch.showCompare = !ch.showCompare">
+                                                                    <i class="bi bi-arrows-expand"></i> 对比
+                                                                </button>
+                                                                <button class="btn btn-sm btn-outline-primary"
+                                                                        @click="editChapterOutline(ch)" :disabled="fullAutoRunning">
+                                                                    <i class="bi bi-pencil"></i> 编辑
+                                                                </button>
+                                                                <button class="btn btn-sm btn-outline-warning"
+                                                                        @click="regenerateChapterOutline(ch)" :disabled="fullAutoRunning || ch.regenerating">
+                                                                    <i class="bi bi-arrow-clockwise" :class="ch.regenerating ? 'spin' : ''"></i> 重新生成
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                         <div x-show="!generating && ch.status === 'FAILED' && !ch.editing" class="flex-shrink-0">
                                                             <button class="btn btn-sm btn-outline-danger"
@@ -811,77 +815,81 @@
                     </div>
 
                     <!-- Image Cards (mini-workflow) -->
-                    <div class="d-flex flex-column gap-3" x-show="!imageLoading && characterImages.length > 0">
-                        <template x-for="img in characterImages" :key="img.id">
-                            <div class="card">
-                                <div class="card-header py-2 d-flex justify-content-between align-items-center">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="badge" :class="img.imageType === 'AVATAR' ? 'bg-info' : 'bg-primary'"
-                                              x-text="img.imageType === 'AVATAR' ? '头像' : '写真'" style="font-size: 0.7rem;"></span>
-                                        <span class="badge" :class="{
-                                            'bg-secondary': img.status === 'PROMPT_PENDING',
-                                            'bg-warning text-dark': img.status === 'PROMPT_READY',
-                                            'bg-info': img.status === 'IMAGE_GENERATING',
-                                            'bg-success': img.status === 'READY',
-                                            'bg-danger': img.status === 'ERROR'
-                                        }" x-text="img.status === 'PROMPT_PENDING' ? '待生成提示词' : img.status === 'PROMPT_READY' ? '提示词就绪' : img.status === 'IMAGE_GENERATING' ? '图片生成中' : img.status === 'READY' ? '完成' : img.status === 'ERROR' ? '错误' : img.status" style="font-size: 0.7rem;"></span>
+                    <div x-show="!imageLoading && characterImages.length > 0">
+                        <div class="d-flex flex-column gap-3">
+                            <template x-for="img in characterImages" :key="img.id">
+                                <div class="card">
+                                    <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="badge" :class="img.imageType === 'AVATAR' ? 'bg-info' : 'bg-primary'"
+                                                  x-text="img.imageType === 'AVATAR' ? '头像' : '写真'" style="font-size: 0.7rem;"></span>
+                                            <span class="badge" :class="{
+                                                'bg-secondary': img.status === 'PROMPT_PENDING',
+                                                'bg-warning text-dark': img.status === 'PROMPT_READY',
+                                                'bg-info': img.status === 'IMAGE_GENERATING',
+                                                'bg-success': img.status === 'READY',
+                                                'bg-danger': img.status === 'ERROR'
+                                            }" x-text="img.status === 'PROMPT_PENDING' ? '待生成提示词' : img.status === 'PROMPT_READY' ? '提示词就绪' : img.status === 'IMAGE_GENERATING' ? '图片生成中' : img.status === 'READY' ? '完成' : img.status === 'ERROR' ? '错误' : img.status" style="font-size: 0.7rem;"></span>
+                                        </div>
+                                        <button class="btn btn-sm btn-outline-danger" @click="deleteImage(img.id)">
+                                            <i class="bi bi-trash" style="font-size: 0.75rem;"></i>
+                                        </button>
                                     </div>
-                                    <button class="btn btn-sm btn-outline-danger" @click="deleteImage(img.id)">
-                                        <i class="bi bi-trash" style="font-size: 0.75rem;"></i>
-                                    </button>
-                                </div>
-                                <div class="card-body py-2">
-                                    <div class="row g-3">
-                                        <!-- Left: Prompt area -->
-                                        <div class="col-md-6">
-                                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <small class="fw-bold text-muted">步骤1: 提示词</small>
-                                                <div class="d-flex gap-1">
+                                    <div class="card-body py-2">
+                                        <div class="row g-3">
+                                            <!-- Left: Prompt area -->
+                                            <div class="col-md-6">
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <small class="fw-bold text-muted">步骤1: 提示词</small>
+                                                    <div class="d-flex gap-1">
+                                                        <button class="btn btn-sm btn-outline-primary"
+                                                                @click="generatePromptForCard(img.id)"
+                                                                :disabled="promptGenerating[img.id]">
+                                                            <span x-show="!promptGenerating[img.id]"><i class="bi bi-arrow-repeat"></i> 重新生成提示词</span>
+                                                            <span x-show="promptGenerating[img.id]"><span class="spinner-border spinner-border-sm"></span></span>
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-success"
+                                                                @click="savePrompt(img.id)"
+                                                                :disabled="!editingPrompts[img.id]">
+                                                            <i class="bi bi-check-lg"></i> 保存
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <textarea class="form-control form-control-sm" rows="6"
+                                                          :value="editingPrompts[img.id] || ''"
+                                                          @input="editingPrompts[img.id] = $event.target.value"
+                                                          placeholder="提示词将在此显示..."
+                                                          style="font-size: 0.8rem;"></textarea>
+                                            </div>
+                                            <!-- Right: Image area -->
+                                            <div class="col-md-6">
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <small class="fw-bold text-muted">步骤2: 图片</small>
                                                     <button class="btn btn-sm btn-outline-primary"
-                                                            @click="generatePromptForCard(img.id)"
-                                                            :disabled="promptGenerating[img.id]">
-                                                        <span x-show="!promptGenerating[img.id]"><i class="bi bi-arrow-repeat"></i> 重新生成提示词</span>
-                                                        <span x-show="promptGenerating[img.id]"><span class="spinner-border spinner-border-sm"></span></span>
-                                                    </button>
-                                                    <button class="btn btn-sm btn-outline-success"
-                                                            @click="savePrompt(img.id)"
-                                                            :disabled="!editingPrompts[img.id]">
-                                                        <i class="bi bi-check-lg"></i> 保存
+                                                            @click="generateImageForCard(img.id)"
+                                                            :disabled="imgGenerating[img.id] || (!editingPrompts[img.id] && !img.imagePrompt)">
+                                                        <span x-show="!imgGenerating[img.id]"><i class="bi bi-image"></i> 重新生成图片</span>
+                                                        <span x-show="imgGenerating[img.id]"><span class="spinner-border spinner-border-sm"></span> 生成中...</span>
                                                     </button>
                                                 </div>
-                                            </div>
-                                            <textarea class="form-control form-control-sm" rows="6"
-                                                      :value="editingPrompts[img.id] || ''"
-                                                      @input="editingPrompts[img.id] = $event.target.value"
-                                                      placeholder="提示词将在此显示..."
-                                                      style="font-size: 0.8rem;"></textarea>
-                                        </div>
-                                        <!-- Right: Image area -->
-                                        <div class="col-md-6">
-                                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <small class="fw-bold text-muted">步骤2: 图片</small>
-                                                <button class="btn btn-sm btn-outline-primary"
-                                                        @click="generateImageForCard(img.id)"
-                                                        :disabled="imgGenerating[img.id] || (!editingPrompts[img.id] && !img.imagePrompt)">
-                                                    <span x-show="!imgGenerating[img.id]"><i class="bi bi-image"></i> 重新生成图片</span>
-                                                    <span x-show="imgGenerating[img.id]"><span class="spinner-border spinner-border-sm"></span> 生成中...</span>
-                                                </button>
-                                            </div>
-                                            <template x-if="img.hasImage">
-                                                <div>
-                                                    <img :src="'/projects/' + projectId + '/images/' + img.id + '?t=' + (img._ts || '')"
-                                                         class="img-fluid rounded" style="max-height: 200px; cursor: pointer; object-fit: contain;"
-                                                         @click="window.open('/projects/' + projectId + '/images/' + img.id, '_blank')">
+                                                <template x-if="img.hasImage">
+                                                    <div>
+                                                        <img :src="'/projects/' + projectId + '/images/' + img.id + '?t=' + (img._ts || '')"
+                                                             class="img-fluid rounded" style="max-height: 200px; cursor: pointer; object-fit: contain;"
+                                                             @click="window.open('/projects/' + projectId + '/images/' + img.id, '_blank')">
+                                                    </div>
+                                                </template>
+                                                <div x-show="!img.hasImage" class="border rounded" style="height: 120px; background: #f8f9fa;">
+                                                    <div class="d-flex align-items-center justify-content-center h-100">
+                                                        <span class="text-muted small">未生成图片</span>
+                                                    </div>
                                                 </div>
-                                            </template>
-                                            <div x-show="!img.hasImage" class="border rounded d-flex align-items-center justify-content-center" style="height: 120px; background: #f8f9fa;">
-                                                <span class="text-muted small">未生成图片</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        </template>
+                            </template>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1185,15 +1193,17 @@
             </template>
 
             <!-- Confirm button -->
-            <div x-show="!generating && proofreadLoaded && proofreadCompletedCount() > 0" class="mt-3 text-end d-flex gap-2 justify-content-end">
-                <button x-show="isCurrentStep" type="button" class="btn btn-sm btn-primary"
-                        @click="confirmStep()" :disabled="fullAutoRunning || stepConfirmed">
-                    <i class="bi bi-check-lg"></i> <span x-text="stepConfirmed ? '已确认' : '确认'"></span>
-                </button>
-                <button x-show="isCurrentStep && hasNextStep" type="button" class="btn btn-sm btn-primary"
-                        @click="advanceStep()" :disabled="fullAutoRunning">
-                    <i class="bi bi-arrow-right"></i> 进入下一步
-                </button>
+            <div x-show="!generating && proofreadLoaded && proofreadCompletedCount() > 0" class="mt-3 text-end">
+                <div class="d-flex gap-2 justify-content-end">
+                    <button x-show="isCurrentStep" type="button" class="btn btn-sm btn-primary"
+                            @click="confirmStep()" :disabled="fullAutoRunning || stepConfirmed">
+                        <i class="bi bi-check-lg"></i> <span x-text="stepConfirmed ? '已确认' : '确认'"></span>
+                    </button>
+                    <button x-show="isCurrentStep && hasNextStep" type="button" class="btn btn-sm btn-primary"
+                            @click="advanceStep()" :disabled="fullAutoRunning">
+                        <i class="bi bi-arrow-right"></i> 进入下一步
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -1935,7 +1945,7 @@
                                     </div>
                                     <small class="text-muted d-block mt-1" style="white-space: pre-line; max-height: 60px; overflow: hidden;"
                                            x-text="item.content.substring(0, 120) + (item.content.length > 120 ? '...' : '')"></small>
-                                    <small x-show="item.sourceHint" class="text-info d-block" x-text="'来源: ' + item.sourceHint"></small>
+                                    <small x-show="item.sourceHint" class="text-info" x-text="'来源: ' + item.sourceHint"></small>
                                 </div>
                             </label>
                         </template>

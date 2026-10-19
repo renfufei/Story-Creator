@@ -459,7 +459,7 @@ async function main() {
     console.log('\n— Q9 步骤切换 —');
     await loadPage(1280, 940, false);
     check('点开说明卡（前置）', await ensureOpen());
-    await clickSelector('#wizardModal .modal-footer .btn');   // 「上一步」= 容器之外的真实按钮
+    await clickSelector('#wizardModal [data-wizard-back]');   // 「上一步」= 容器之外的真实按钮
     await sleep(340);
     const stepBack = await evalJs(`(() => {
         const p = document.querySelector('#ffmpegHintPop');

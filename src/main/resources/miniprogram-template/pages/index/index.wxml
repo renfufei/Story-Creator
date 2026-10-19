@@ -1,0 +1,99 @@
+<!-- 单词趣味配对 · 首页（词库检索）
+     ---------------------------------------------------------------------------
+     这一页是小程序的**主页面**，也是「工具 - 信息查询」类目要求的主界面形态：
+     打开即是一个常驻搜索框（不点任何按钮就能输入），而不是直接进配对棋盘。
+
+     两种交互并存，共用同一份结果（同一套匹配口径，见 utils/search.js）：
+       · 输入即出 —— 边敲边在**下拉**里列最多 5 个单词，点一行直接去看那一关；
+       · 点「搜索」/ 回车 —— 下拉收起，结果落到**下方列表**，每行带【查看】。
+
+     棋盘在 pages/play/play，从页尾入口进入；玩法页左上角的返回箭头可以退回本页。
+     --------------------------------------------------------------------------- -->
+
+<view class="ix-root" bindtap="closeDrop">
+
+    <!-- ==================== 页头：说明这一页是干什么的 ==================== -->
+    <view class="ix-hero">
+        <view class="ix-hero-title">单词趣味配对</view>
+        <view class="ix-hero-sub">输入英文单词或中文意思，查它在哪个词库、第几组</view>
+        <view class="ix-hero-stat">{{stats}}</view>
+    </view>
+
+    <!-- ==================== 搜索区（常驻，页面一打开就能输入） ====================
+         catchtap 拦住冒泡：搜索区里的任何点击都不该被根容器的 closeDrop 收走，
+         否则点输入框的瞬间下拉就被关掉了。 -->
+    <view class="ix-search-wrap" catchtap="noop">
+        <view class="ix-search">
+            <text class="ix-search-icon">🔍</text>
+            <input class="ix-search-input" value="{{q}}" placeholder="英文单词 / 中文意思"
+                   placeholder-class="ix-ph" confirm-type="search"
+                   bindinput="onInput" bindconfirm="onSearch" />
+            <view class="ix-search-clear" wx:if="{{q}}" hover-class="wm-tap" bindtap="onClear">✕</view>
+            <view class="ix-search-btn" hover-class="wm-tap" bindtap="onSearch">搜索</view>
+        </view>
+
+        <!-- 自动下拉：输入即出，最多 5 个单词（完全匹配时按其口径全部列出，可上下滚） -->
+        <view class="ix-drop" wx:if="{{dropOpen}}">
+            <scroll-view class="ix-drop-scroll" scroll-y wx:if="{{hits.length}}">
+                <view class="ix-hit" wx:for="{{hits}}" wx:key="uid" data-i="{{index}}"
+                      hover-class="wm-tap" bindtap="onPickDrop">
+                    <view class="ix-hit-main">
+                        <view class="ix-hit-en">{{item.en}}</view>
+                        <view class="ix-hit-zh">{{item.zh}}</view>
+                    </view>
+                    <view class="ix-hit-side">
+                        <view class="ix-hit-src">{{item.src}}</view>
+                        <view class="ix-hit-go">查看</view>
+                    </view>
+                </view>
+            </scroll-view>
+            <view class="ix-drop-none" wx:else>没有匹配的单词，换个说法或只输前几个字母试试</view>
+        </view>
+    </view>
+
+    <!-- ==================== 结果列表：点「搜索」/ 回车后出现在下方 ==================== -->
+    <view class="ix-sec" wx:if="{{searched}}">
+        <view class="ix-sec-head">
+            <view class="ix-sec-title">「{{resultQ}}」的查询结果</view>
+            <view class="ix-sec-tip">{{resultTip}}</view>
+        </view>
+
+        <view class="ix-row" wx:for="{{results}}" wx:key="uid" data-i="{{index}}"
+              hover-class="wm-tap" bindtap="onPickResult">
+            <view class="ix-row-main">
+                <view class="ix-row-en">{{item.en}}</view>
+                <view class="ix-row-zh">{{item.zh}}</view>
+                <view class="ix-row-src">{{item.src}}</view>
+            </view>
+            <view class="ix-row-go">查看</view>
+        </view>
+
+        <view class="ix-none" wx:if="{{!results.length}}">
+            没查到「{{resultQ}}」。试试只输单词的前几个字母，或换一个中文说法。
+        </view>
+    </view>
+
+    <!-- ==================== 还没搜索时给用法说明，别让主界面空着 ==================== -->
+    <view class="ix-sec" wx:else>
+        <view class="ix-sec-head">
+            <view class="ix-sec-title">怎么查</view>
+        </view>
+        <view class="ix-guide">
+            <view class="ix-guide-item">· 查英文：输入 <text class="ix-code">liberty</text>，完全匹配的排在最前</view>
+            <view class="ix-guide-item">· 查中文：输入 <text class="ix-code">自由</text>，会剥掉 n. / v. 这类词性前缀再比</view>
+            <view class="ix-guide-item">· 边敲边看：每敲一下，下拉里最多列 5 个单词，点一行直接去那一关</view>
+            <view class="ix-guide-item">· 查不到就减字：只输前几个字母（如 <text class="ix-code">libe</text>）更容易命中</view>
+        </view>
+    </view>
+
+    <!-- ==================== 进入配对玩法 ==================== -->
+    <view class="ix-entry" hover-class="wm-tap" bindtap="gotoPlay">
+        <view class="ix-entry-icon">🎯</view>
+        <view class="ix-entry-main">
+            <view class="ix-entry-title">趣味配对</view>
+            <view class="ix-entry-desc">英汉两列点选配对，支持自动练习与错题本</view>
+        </view>
+        <view class="ix-entry-go">进入 ›</view>
+    </view>
+
+</view>

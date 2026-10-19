@@ -3,6 +3,12 @@
 """
 把「单词匹配」的关卡数据从线上服务导出成微信小程序可直接 require() 的紧凑模块。
 
+⚠️ 2026-10-19 起，正式产出走服务端：网页「设置 → 导出小程序」或
+   scripts/learn/export_miniprogram.sh（GET /learn/word-match/miniprogram.zip），
+   由 MiniprogramExporter 用同一套压缩规则生成，并顺带把页面模板一起打进包。
+   本脚本保留为**离线/排障**用途（只产出 data/ 四个文件，不含页面代码），
+   两条路径的输出数据逐字节一致（文件头注释除外）。
+
 为什么不自己重新切关：
   切关算法（WordMatchBank.splitBalanced / CetWordBank 按主题切）的**唯一真相在后端**。
   在这里重写一份 = 两份实现迟早漂移，而漂移的表现是「同一册在小程序里关卡数和网页不一样」，

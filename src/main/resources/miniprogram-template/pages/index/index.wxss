@@ -1,0 +1,349 @@
+/* 单词趣味配对 · 首页（词库检索）样式
+   ---------------------------------------------------------------------------
+   配色沿用玩法页那一套（主色 #0d6efd、蓝字 #0f6cbd、次要文字 #5b6673、分隔 #dfe5ec），
+   但因为这一页是「查询工具」形态，改用灰底 + 白卡片，与棋盘的纯白底区分开。
+
+   尺寸一律 rpx（设计稿 375px 宽 ⇒ 750rpx，1px = 2rpx）。
+   按钮原语（.wm-btn / .wm-tap 等）在 app.wxss 里，是全局的，这里直接用。
+   --------------------------------------------------------------------------- */
+
+.ix-root {
+  min-height: 100vh;
+  padding: 24rpx 24rpx 60rpx;
+  background: #f7f9fb;
+}
+
+/* ==================== 页头 ==================== */
+.ix-hero {
+  padding: 10rpx 6rpx 28rpx;
+}
+
+.ix-hero-title {
+  font-size: 46rpx;
+  font-weight: 800;
+  color: #16202b;
+  line-height: 1.25;
+}
+
+.ix-hero-sub {
+  margin-top: 10rpx;
+  font-size: 26rpx;
+  color: #5b6673;
+  line-height: 1.5;
+}
+
+.ix-hero-stat {
+  display: inline-block;
+  margin-top: 16rpx;
+  padding: 6rpx 18rpx;
+  border-radius: 999rpx;
+  background: #e8f1fd;
+  color: #0f6cbd;
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+/* ==================== 搜索区 ====================
+   position: relative + z-index 是必须的：下拉面板是绝对定位的浮层，
+   没有定位上下文它会以整个页面为基准，滚到别处就跟着乱飘。 */
+.ix-search-wrap {
+  position: relative;
+  z-index: 5;
+}
+
+.ix-search {
+  display: flex;
+  align-items: center;
+  height: 100rpx;
+  padding: 0 12rpx 0 22rpx;
+  border: 2rpx solid #d6dee6;
+  border-radius: 16rpx;
+  background: #ffffff;
+}
+
+.ix-search-icon {
+  flex: 0 0 auto;
+  margin-right: 12rpx;
+  font-size: 30rpx;
+}
+
+/* min-width: 0 必须写：flex 子项默认 min-width:auto，输入框长了会把「搜索」按钮顶出屏幕 */
+.ix-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  font-size: 30rpx;
+  color: #16202b;
+}
+
+.ix-ph {
+  color: #98a2b3;
+}
+
+.ix-search-clear {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56rpx;
+  height: 56rpx;
+  margin-right: 8rpx;
+  border-radius: 50%;
+  background: #f1f3f6;
+  color: #98a2b3;
+  font-size: 26rpx;
+}
+
+.ix-search-btn {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 72rpx;
+  padding: 0 32rpx;
+  border-radius: 12rpx;
+  background: #0d6efd;
+  color: #ffffff;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+/* ==================== 自动下拉面板 ==================== */
+.ix-drop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 108rpx;
+  overflow: hidden;
+  border: 2rpx solid #dfe5ec;
+  border-radius: 16rpx;
+  background: #ffffff;
+  box-shadow: 0 12rpx 32rpx rgba(20, 32, 45, .14);
+}
+
+/* 完全匹配可能列出很多出处，所以面板自身可滚 —— 但高度有个上限，不会把整屏盖住。
+   740rpx 是**按实测行高**算的（别按"来源一行"估成 116rpx，那是 620rpx 的由来，第 5 行会被截掉大半）：
+     一行 = padding 36rpx + 分隔线 2rpx = 38rpx
+     左列 = 英文 30×1.35≈40 + 间距 4 + 中文 24×1.4≈34 = 78rpx
+     右列 = 来源 20×1.4≈28，但 .ix-hit-src 的 max-width 是 260rpx，
+            「四级 · 第 833 关 · 秩序与身心 · 8」这类文案会**折成 2 行** = 56rpx
+            + 间距 8 + 【查看】按钮 ≈42 = 106rpx   ← 行高由右列决定
+     ⇒ 行高 ≈ 144rpx，5 行 = 720rpx，留 20rpx 余量 → 740rpx。
+   面板底边 ≈ 584px（hero+搜索 320rpx + top 108rpx + 740rpx），375×667 的窄屏也放得下。
+   调小到 620rpx 时第 5 个单词只露出一半，「最多列 5 个」就变成"看着只有 4 个"。 */
+.ix-drop-scroll {
+  max-height: 740rpx;
+}
+
+.ix-hit {
+  display: flex;
+  align-items: center;
+  padding: 18rpx 20rpx;
+  border-bottom: 2rpx solid #f0f3f6;
+}
+
+.ix-hit-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ix-hit-en {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #16202b;
+  line-height: 1.35;
+}
+
+.ix-hit-zh {
+  margin-top: 4rpx;
+  font-size: 24rpx;
+  color: #5b6673;
+  line-height: 1.4;
+}
+
+.ix-hit-side {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-left: 16rpx;
+}
+
+.ix-hit-src {
+  max-width: 260rpx;
+  font-size: 20rpx;
+  color: #8b96a3;
+  text-align: right;
+  line-height: 1.4;
+}
+
+.ix-hit-go {
+  margin-top: 8rpx;
+  padding: 4rpx 18rpx;
+  border: 2rpx solid #35a3f3;
+  border-radius: 8rpx;
+  color: #0f6cbd;
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+.ix-drop-none {
+  padding: 28rpx 20rpx;
+  color: #98a2b3;
+  font-size: 24rpx;
+  text-align: center;
+}
+
+/* ==================== 结果区 / 用法说明 ==================== */
+.ix-sec {
+  margin-top: 28rpx;
+  padding: 22rpx 20rpx;
+  border-radius: 16rpx;
+  background: #ffffff;
+}
+
+.ix-sec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding-bottom: 16rpx;
+  border-bottom: 2rpx solid #f0f3f6;
+}
+
+.ix-sec-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #16202b;
+  line-height: 1.4;
+}
+
+.ix-sec-tip {
+  flex: 0 0 auto;
+  color: #8b96a3;
+  font-size: 22rpx;
+}
+
+.ix-guide {
+  padding-top: 14rpx;
+}
+
+.ix-guide-item {
+  padding: 8rpx 0;
+  color: #5b6673;
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
+.ix-code {
+  padding: 2rpx 10rpx;
+  border-radius: 6rpx;
+  background: #f1f3f6;
+  color: #0f6cbd;
+  font-size: 24rpx;
+}
+
+/* ==================== 结果行 ====================
+   整行可点（点哪都进那一关），右侧的【查看】只是视觉按钮、不单独绑事件 ——
+   绑了反而要处理「点按钮和点行各跳一次」的双触发。 */
+.ix-row {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 0;
+  border-bottom: 2rpx solid #f0f3f6;
+}
+
+.ix-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ix-row-en {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #16202b;
+  line-height: 1.35;
+}
+
+.ix-row-zh {
+  margin-top: 6rpx;
+  font-size: 26rpx;
+  color: #5b6673;
+  line-height: 1.45;
+}
+
+.ix-row-src {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #8b96a3;
+  line-height: 1.4;
+}
+
+.ix-row-go {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120rpx;
+  height: 64rpx;
+  margin-left: 20rpx;
+  border: 2rpx solid #35a3f3;
+  border-radius: 10rpx;
+  color: #0f6cbd;
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.ix-none {
+  padding: 26rpx 4rpx 6rpx;
+  color: #5b6673;
+  font-size: 25rpx;
+  line-height: 1.6;
+}
+
+/* ==================== 进入玩法 ==================== */
+.ix-entry {
+  display: flex;
+  align-items: center;
+  margin-top: 28rpx;
+  padding: 26rpx 24rpx;
+  border: 2rpx solid #35a3f3;
+  border-radius: 16rpx;
+  background: #eff6fe;
+}
+
+.ix-entry-icon {
+  flex: 0 0 auto;
+  margin-right: 20rpx;
+  font-size: 52rpx;
+  line-height: 1;
+}
+
+.ix-entry-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ix-entry-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #0f6cbd;
+  line-height: 1.35;
+}
+
+.ix-entry-desc {
+  margin-top: 6rpx;
+  font-size: 23rpx;
+  color: #5b6673;
+  line-height: 1.45;
+}
+
+.ix-entry-go {
+  flex: 0 0 auto;
+  margin-left: 16rpx;
+  color: #0d6efd;
+  font-size: 28rpx;
+  font-weight: 700;
+}

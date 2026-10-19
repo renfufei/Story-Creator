@@ -1,6 +1,6 @@
 package com.storycreator.persistence.entity;
 
-import com.storycreator.core.domain.WorkflowStep;
+import com.storycreator.core.domain.GuidanceLibraryStep;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -18,7 +18,7 @@ public class GuidanceLibraryEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "step", nullable = false, length = 50)
-    private WorkflowStep step;
+    private GuidanceLibraryStep step;
 
     @Column(name = "guidance", columnDefinition = "TEXT")
     private String guidance;
@@ -56,11 +56,11 @@ public class GuidanceLibraryEntity {
         this.name = name;
     }
 
-    public WorkflowStep getStep() {
+    public GuidanceLibraryStep getStep() {
         return step;
     }
 
-    public void setStep(WorkflowStep step) {
+    public void setStep(GuidanceLibraryStep step) {
         this.step = step;
     }
 

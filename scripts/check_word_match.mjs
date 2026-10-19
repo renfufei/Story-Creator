@@ -1031,15 +1031,15 @@ async function main() {
         const r = el.getBoundingClientRect();
         return { items, left: Math.round(r.left), right: Math.round(r.right), vw: window.innerWidth };
     })()`);
-    check('弹层里正好 6 个条目', !!pop && pop.items.length === 6,
+    check('弹层里正好 7 个条目', !!pop && pop.items.length === 7,
         pop ? pop.items.map(i => i.title).join(' / ') : 'null');
-    check('条目名与功能一一对应（错题本/重做本关/音效与朗读/导出/源码/重置进度）',
-        !!pop && ['错题本', '重做本关', '音效与朗读', '导出', '源码', '重置进度']
+    check('条目名与功能一一对应（错题本/重做本关/音效与朗读/导出 HTML/导出小程序/源码/重置进度）',
+        !!pop && ['错题本', '重做本关', '音效与朗读', '导出 HTML', '导出小程序', '源码', '重置进度']
             .every((t, i) => pop.items[i] && pop.items[i].title.indexOf(t) >= 0),
         pop ? pop.items.map(i => i.title).join(' / ') : 'null');
     /* 「源码」是唯一的外链条目：必须是真 <a>（中键/右键新标签页才照常可用），
        且指向仓库、带 target=_blank + rel=noopener */
-    const srcItem = pop && pop.items[4];
+    const srcItem = pop && pop.items[5];
     check('「源码」是外链 <a>：指向 GitHub 仓库、新标签页打开',
         !!srcItem && srcItem.tag === 'A'
             && srcItem.href === 'https://github.com/renfufei/Story-Creator'
@@ -2124,6 +2124,11 @@ async function main() {
        这里只钉住四件事，细则（位置/暂停/开关/320x568 不越界）由
        scripts/probe_wm_auto_hand.mjs 逐条守。 */
     let handSeen = 0, handEn = 0, handZh = 0, handMisplaced = 0, handStray = 0, handPrev = null;
+    /* 「错位」和「收回」是同一类竞态：Alpine 的 x-show / 列表重排都是异步刷 DOM 的，
+       阶段刚切、或卡片刚被移除那一拍，读到的是上一帧 ⇒ 小手还挂在旧卡上。
+       所以只有**画面完全没变却仍然错位**（阶段、目标卡、实际挂的卡三者两拍一致）才判违规；
+       其余记进 handShift，只做诊断输出。 */
+    let handShift = 0;
     const t0 = Date.now();
     while (Date.now() - t0 < 20000) {
         const s = await state();
@@ -2148,7 +2153,8 @@ async function main() {
             const d = Alpine.$data(document.querySelector('.wm-root'));
             const vis = Array.from(document.querySelectorAll('.wm-hand'))
                 .filter(h => h.getClientRects().length > 0);
-            const out = { n: vis.length, stage: d.autoStage, col: '', ok: true };
+            const out = { n: vis.length, stage: d.autoStage, col: '', uid: '',
+                          spot: d.autoSpot || '', ok: true };
             if (vis.length !== 1) return { ...out, ok: vis.length === 0 };
             const card = vis[0].closest('.wm-card');
             const colEl = card.closest('.wm-col');
@@ -2159,23 +2165,31 @@ async function main() {
                结果就是「挂错卡」100% 假阳性（首轮实测 29/29 全错）。按 .wm-card 定位。 */
             const idx = Array.prototype.indexOf.call(colEl.querySelectorAll('.wm-card'), card);
             const uid = list[idx] ? list[idx].uid : '';
+            out.uid = uid;
             out.ok = uid !== '' && uid === d.autoSpot;
             return out;
         })()`);
+        /* 两拍完全一致（阶段 + 目标 + 实际所挂卡片都没变）⇒ 画面已稳定，
+           此时还错位才是真 bug；否则只是 DOM 还没跟上。 */
+        const steady = !!handPrev && handPrev.stage === hs.stage
+            && handPrev.spot === hs.spot && handPrev.uid === hs.uid;
         if (hs.n === 1) {
             handSeen++;
             if (hs.col === 'en' && hs.stage === 'pick-en') handEn++;
             if (hs.col === 'zh' && hs.stage === 'pick-zh') handZh++;
-            if (!hs.ok) handMisplaced++;
+            if (!hs.ok) {
+                if (steady && handPrev.n === 1) handMisplaced++; else handShift++;
+            }
         } else if (hs.n > 1) {
-            handMisplaced++;
+            /* 两只小手同时在场：切换瞬间新旧各一只很常见，同样要两拍一致才算违规 */
+            if (steady && handPrev.n > 1) handMisplaced++; else handShift++;
         }
         /* 「点完就收回」的负向断言：要**同一个阶段连续两拍**都还挂着小手才算违规 ——
            Alpine 的 x-show 是异步刷的，阶段刚切换那一拍可能读到上一帧的 DOM。
            （正向断言不受此影响：那一拍读到的是「还没出现」，只是漏采一次。） */
         if (handPrev && handPrev.stage === hs.stage && hs.n === 1
             && hs.stage !== 'pick-en' && hs.stage !== 'pick-zh') handStray++;
-        handPrev = { stage: hs.stage, n: hs.n };
+        handPrev = { stage: hs.stage, n: hs.n, uid: hs.uid, spot: hs.spot };
         if (/^2\//.test(s.counter || '')) break;
         await sleep(70);
     }
@@ -2203,7 +2217,8 @@ async function main() {
     check('自动学习时「即将点选」的卡片上出现了小手引导', handEn >= 1 && handZh >= 1,
         `英文步 ${handEn} 次 / 中文步 ${handZh} 次`);
     check('小手只挂在「即将被点选」的那张卡上（不挂错卡、也不会同时出现两只）',
-        handSeen > 0 && handMisplaced === 0, `看到 ${handSeen} 次，错位 ${handMisplaced} 次`);
+        handSeen > 0 && handMisplaced === 0,
+        `看到 ${handSeen} 次，稳定错位 ${handMisplaced} 次，过渡帧 ${handShift} 次`);
     check('点完之后小手就收回（朗读/思考/过场阶段不该有）', handStray === 0,
         `同阶段连续两拍仍挂着 ${handStray} 次`);
     const handClean = await evalJs(`(() => {
@@ -2895,9 +2910,10 @@ async function main() {
 
     await openSettings();
     const soloSet = await evalJs(`(() => {
-        const ex = document.querySelector('.wm-set-item.is-export');
+        const exs = Array.from(document.querySelectorAll('.wm-set-item.is-export'));
         const src = document.querySelector('.wm-set-item.is-source');
-        return { exportDisplay: ex ? getComputedStyle(ex).display : 'missing',
+        return { exportTotal: exs.length,
+                 exportHidden: exs.filter(it => getComputedStyle(it).display === 'none').length,
                  sourceVisible: !!src && getComputedStyle(src).display !== 'none',
                  sourceHref: src ? src.getAttribute('href') : '',
                  sourceTag: src ? src.tagName : '',
@@ -2906,11 +2922,11 @@ async function main() {
                      .filter(it => getComputedStyle(it).display !== 'none')
                      .map(it => it.querySelector('.wm-set-title').innerText.trim()).join(' / ') };
     })()`);
-    check('S12 单机件里「导出」隐藏、「源码」保留可见（能跳仓库），其余设置项保留',
-        soloSet.exportDisplay === 'none' && soloSet.sourceVisible === true
+    check('S12 单机件里「导出 HTML」「导出小程序」都隐藏、「源码」保留可见（能跳仓库），其余设置项保留',
+        soloSet.exportTotal === 2 && soloSet.exportHidden === 2 && soloSet.sourceVisible === true
         && soloSet.sourceTag === 'A' && soloSet.sourceHref === 'https://github.com/renfufei/Story-Creator'
-        && soloSet.items === 6, JSON.stringify(soloSet));
-    check('S12 单机件里可见的设置项顺序（错题本/重做本关/音效与朗读/源码/重置进度，无「导出」）',
+        && soloSet.items === 7, JSON.stringify(soloSet));
+    check('S12 单机件里可见的设置项顺序（错题本/重做本关/音效与朗读/源码/重置进度，两个导出项都无）',
         soloSet.titles === '错题本 / 重做本关 / 音效与朗读 / 源码 / 重置进度', soloSet.titles);
     await shot('27-standalone-settings');
 

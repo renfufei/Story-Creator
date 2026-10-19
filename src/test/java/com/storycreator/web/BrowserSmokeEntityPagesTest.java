@@ -1,5 +1,6 @@
 package com.storycreator.web;
 
+import com.storycreator.core.domain.GuidanceLibraryStep;
 import com.storycreator.core.domain.MaterialCategory;
 import com.storycreator.core.domain.PromptSubStep;
 import com.storycreator.core.domain.WorkflowStep;
@@ -64,7 +65,7 @@ class BrowserSmokeEntityPagesTest extends BrowserSmokeSupport {
 
         GuidanceLibraryEntity guidance = new GuidanceLibraryEntity();
         guidance.setName("冒烟创作指导");
-        guidance.setStep(WorkflowStep.WORLD_BUILDING);
+        guidance.setStep(GuidanceLibraryStep.WORLD_BUILDING);
         guidance.setGuidance("冒烟测试用的指导内容");
         guidanceId = guidanceRepository.save(guidance).getId();
 

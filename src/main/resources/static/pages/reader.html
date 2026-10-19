@@ -438,25 +438,27 @@
                     </button>
                 </div>
                 <!-- Active: show controls -->
-                <div x-show="playlist.isActive" class="d-flex align-items-center gap-2 flex-wrap">
-                    <span class="badge bg-success">
-                        <i class="bi bi-music-note-list"></i> 全文收听中
-                    </span>
-                    <span class="small text-muted" x-text="'第' + (playlist.chapters[playlist.currentIndex] || '') + '章 (' + (playlist.currentIndex + 1) + '/' + playlist.chapters.length + ')'"></span>
-                    <div class="btn-group btn-group-sm ms-auto">
-                        <button class="btn btn-sm btn-outline-secondary" @click="playlistPrev()" :disabled="playlist.currentIndex <= 0">
-                            <i class="bi bi-skip-backward-fill"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-primary" @click="playlist.paused ? playlistResume() : playlistPause()">
-                            <i :class="playlist.paused ? 'bi bi-play-fill' : 'bi bi-pause-fill'"></i>
-                            <span x-text="playlist.paused ? '继续' : '暂停'"></span>
-                        </button>
-                        <button class="btn btn-sm btn-outline-secondary" @click="playlistNext()" :disabled="playlist.currentIndex >= playlist.chapters.length - 1">
-                            <i class="bi bi-skip-forward-fill"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger" @click="stopFullListen()">
-                            <i class="bi bi-stop-fill"></i> 停止
-                        </button>
+                <div x-show="playlist.isActive">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <span class="badge bg-success">
+                            <i class="bi bi-music-note-list"></i> 全文收听中
+                        </span>
+                        <span class="small text-muted" x-text="'第' + (playlist.chapters[playlist.currentIndex] || '') + '章 (' + (playlist.currentIndex + 1) + '/' + playlist.chapters.length + ')'"></span>
+                        <div class="btn-group btn-group-sm ms-auto">
+                            <button class="btn btn-sm btn-outline-secondary" @click="playlistPrev()" :disabled="playlist.currentIndex <= 0">
+                                <i class="bi bi-skip-backward-fill"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" @click="playlist.paused ? playlistResume() : playlistPause()">
+                                <i :class="playlist.paused ? 'bi bi-play-fill' : 'bi bi-pause-fill'"></i>
+                                <span x-text="playlist.paused ? '继续' : '暂停'"></span>
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" @click="playlistNext()" :disabled="playlist.currentIndex >= playlist.chapters.length - 1">
+                                <i class="bi bi-skip-forward-fill"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" @click="stopFullListen()">
+                                <i class="bi bi-stop-fill"></i> 停止
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

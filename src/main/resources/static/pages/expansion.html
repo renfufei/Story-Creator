@@ -15,6 +15,9 @@
     <style>
         body { margin: 0; }
         [x-cloak] { display: none !important; }
+        /* 操作列按钮一律不换行：窄屏下文字按字竖排会把行高撑到 300px+ */
+        .exp-actions .btn { white-space: nowrap; }
+        .exp-table td, .exp-table th { vertical-align: middle; }
     </style>
 </head>
 <body class="sc-page" data-nav="projects">
@@ -39,115 +42,202 @@
 
 
 <main class="sc-main container py-4" x-data="expansionPage()">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <!-- ===================== 页头 ===================== -->
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
         <div>
-            <h4 class="mb-0">情节拓展</h4>
-            <small class="text-muted" x-text="projectTitle">项目名</small>
+            <h4 class="mb-1"><i class="bi bi-arrows-expand-vertical"></i> 情节拓展</h4>
+            <div class="text-muted small">
+                <span x-text="projectTitle">项目名</span>
+                <span class="mx-1">·</span>
+                <span>标记章节 → 批量扩写 → 逐章确认或回滚</span>
+            </div>
         </div>
-        <a :href="'/projects/' + PROJECT_ID + '/workflow/world-building'" class="btn btn-sm btn-outline-secondary">
-            <i class="bi bi-arrow-left"></i> 返回创作
-        </a>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-sm btn-outline-secondary" :href="readUrl" title="去全文阅读页标记要扩写的章节">
+                <i class="bi bi-journal-text"></i> 全文阅读
+            </a>
+            <a class="btn btn-sm btn-outline-secondary" :href="workflowUrl" title="返回工作流">
+                <i class="bi bi-arrow-left"></i> 返回创作
+            </a>
+        </div>
     </div>
 
-    <!-- Guidance Card -->
+    <!-- ===================== 扩写指导 ===================== -->
     <div class="card mb-3">
-        <div class="card-header">
-            <i class="bi bi-compass"></i> 扩写指导
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span class="d-flex align-items-center gap-2">
+                <i class="bi bi-compass"></i>
+                <strong>扩写指导</strong>
+                <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle"
+                      x-show="!editingGuidance && guidance" x-cloak>
+                    <i class="bi bi-check2"></i> 已配置
+                </span>
+                <span class="badge rounded-pill bg-secondary-subtle text-secondary border"
+                      x-show="!editingGuidance && !guidance" x-cloak>未配置</span>
+            </span>
+            <div class="btn-group btn-group-sm" x-show="!editingGuidance" x-cloak>
+                <button type="button" class="btn btn-outline-secondary" @click="startEditGuidance()"
+                        title="编辑本项目的扩写指导">
+                    <i class="bi bi-pencil"></i> 配置
+                </button>
+                <button type="button" class="btn btn-outline-success" @click="saveGuidanceAsShared()"
+                        :disabled="savingShared || !guidance.trim()"
+                        title="把这份指导存入创作指导库，其他项目可直接复用">
+                    <span x-show="!savingShared"><i class="bi bi-box-arrow-up"></i> 存为通用</span>
+                    <span x-show="savingShared" x-cloak><span class="spinner-border spinner-border-sm me-1"></span>保存中</span>
+                </button>
+                <button type="button" class="btn btn-outline-primary" @click="openReuseModal()"
+                        title="从创作指导库挑一份已有的扩写指导套用">
+                    <i class="bi bi-journal-arrow-down"></i> 复用指导
+                </button>
+            </div>
         </div>
         <div class="card-body">
-            <textarea class="form-control mb-2" rows="3" x-model="guidance"
-                      placeholder="输入扩写方向，例如：丰富环境描写和心理活动，补充更多对话细节..."></textarea>
-            <button class="btn btn-sm btn-primary" @click="saveGuidance()" :disabled="savingGuidance">
-                <span x-show="savingGuidance" class="spinner-border spinner-border-sm"></span>
-                保存
+            <!-- 只读态 -->
+            <template x-if="!editingGuidance">
+                <div>
+                    <p class="mb-0 small text-body-secondary" style="white-space: pre-line;" x-text="guidance"></p>
+                    <p class="mb-0 small text-body-secondary fst-italic" x-show="!guidance" x-cloak>
+                        尚未设置。点「配置」填写扩写方向（如：加强环境描写与人物心理，补充对话细节与伏笔），
+                        也可从指导库「复用指导」挑一份现成的。
+                    </p>
+                </div>
+            </template>
+            <!-- 编辑态 -->
+            <template x-if="editingGuidance">
+                <div>
+                    <textarea class="form-control form-control-sm" rows="4" x-model="guidanceEdit"
+                              placeholder="输入扩写方向，例如：丰富环境描写和心理活动，补充更多对话细节..."></textarea>
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-2">
+                        <small class="text-muted" x-text="'当前 ' + guidanceEdit.length + ' 字'"></small>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @click="cancelEditGuidance()">
+                                <i class="bi bi-x-lg"></i> 取消
+                            </button>
+                            <button type="button" class="btn btn-sm btn-primary" @click="saveGuidance()"
+                                    :disabled="savingGuidance">
+                                <span x-show="savingGuidance" class="spinner-border spinner-border-sm me-1"></span>
+                                <i class="bi bi-check-lg" x-show="!savingGuidance"></i> 保存配置
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- ===================== 扩写队列 ===================== -->
+    <div class="card mb-3">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span class="d-flex align-items-center gap-2 flex-wrap">
+                <i class="bi bi-list-check"></i>
+                <strong>扩写队列</strong>
+                <span class="badge rounded-pill bg-warning text-dark" x-text="pendingCount + ' 待扩写'"></span>
+                <span class="badge rounded-pill bg-success" x-text="expandedCount + ' 已扩写'"></span>
+            </span>
+            <button type="button" class="btn btn-sm btn-outline-secondary" @click="refreshStatus()"
+                    :disabled="refreshing" title="重新拉取任务状态与章节">
+                <span x-show="!refreshing"><i class="bi bi-arrow-clockwise"></i> 刷新</span>
+                <span x-show="refreshing" x-cloak><span class="spinner-border spinner-border-sm me-1"></span>刷新中</span>
             </button>
         </div>
-    </div>
-
-    <!-- Chapter Queue Card -->
-    <div class="card mb-3">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-list-check"></i> 扩写队列</span>
-            <div class="d-flex gap-2 align-items-center">
-                <span class="badge bg-warning" x-text="pendingCount + ' 待扩写'"></span>
-                <span class="badge bg-success" x-text="expandedCount + ' 已扩写'"></span>
-            </div>
-        </div>
         <div class="card-body">
-            <div class="d-flex gap-2 mb-3">
-                <button class="btn btn-sm" :class="active ? 'btn-outline-danger' : 'btn-primary'"
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                <button type="button" class="btn btn-sm"
+                        :class="active ? 'btn-outline-danger' : 'btn-primary'"
                         @click="active ? stopExpansion() : startExpansion()"
-                        :disabled="!active && pendingCount === 0">
+                        :disabled="!active && pendingCount === 0"
+                        :title="active ? '停止当前批量扩写任务' : '按队列顺序逐章扩写'">
                     <i :class="active ? 'bi bi-pause-fill' : 'bi bi-play-fill'"></i>
-                    <span x-text="active ? '暂停' : '开始批量扩写'"></span>
+                    <span x-text="active ? '暂停扩写' : '开始批量扩写'"></span>
                 </button>
-                <button class="btn btn-sm btn-outline-success" @click="confirmAll()" :disabled="expandedCount === 0">
+                <button type="button" class="btn btn-sm btn-outline-success" @click="confirmAll()"
+                        :disabled="expandedCount === 0 || active"
+                        title="把已扩写的章节全部确认，并清空它们的扩写状态">
                     <i class="bi bi-check2-all"></i> 批量确认
                 </button>
-                <button class="btn btn-sm btn-outline-warning" @click="removeAllPending()" :disabled="pendingCount === 0 || active">
+                <button type="button" class="btn btn-sm btn-outline-warning" @click="removeAllPending()"
+                        :disabled="pendingCount === 0 || active"
+                        title="把待扩写的章节全部移出队列（不动已扩写内容）">
                     <i class="bi bi-x-circle"></i> 批量移除
                 </button>
-                <button class="btn btn-sm btn-outline-secondary" @click="refreshStatus()">
-                    <i class="bi bi-arrow-clockwise"></i> 刷新
-                </button>
+                <span class="ms-auto small text-muted" x-show="active" x-cloak>
+                    <span class="spinner-border spinner-border-sm me-1"></span>扩写进行中，可随时暂停
+                </span>
             </div>
 
-            <!-- SSE Progress -->
-            <div x-show="active || streamContent" class="mb-3">
-                <div class="d-flex align-items-center mb-2" x-show="active">
-                    <span class="spinner-border spinner-border-sm me-2"></span>
-                    <span>扩写进行中...</span>
+            <!-- 实时日志 -->
+            <div x-show="active || streamContent" x-cloak class="mb-3">
+                <div class="border rounded">
+                    <div class="d-flex justify-content-between align-items-center px-2 py-1 bg-light border-bottom">
+                        <small class="text-muted"><i class="bi bi-terminal"></i> 实时日志</small>
+                        <button type="button" class="btn btn-sm btn-outline-danger py-0" @click="stopExpansion()"
+                                x-show="active">
+                            <i class="bi bi-stop-circle"></i> 停止
+                        </button>
+                    </div>
+                    <div class="p-2" style="max-height:220px; overflow-y:auto; font-size:0.85rem; white-space:pre-wrap;"
+                         x-ref="streamBox" x-text="streamContent"></div>
                 </div>
-                <div class="border rounded p-2 bg-light" style="max-height:200px; overflow-y:auto; font-size:0.85rem; white-space:pre-wrap;"
-                     x-ref="streamBox" x-text="streamContent"></div>
             </div>
 
-            <!-- Chapter Table -->
+            <!-- 队列表格 -->
             <div class="table-responsive">
-                <table class="table table-sm table-hover mb-0">
-                    <thead>
+                <table class="table table-sm table-hover align-middle exp-table mb-0">
+                    <thead class="table-light">
                         <tr>
-                            <th style="width:60px;">章节</th>
-                            <th>标题</th>
-                            <th style="width:80px;">字数</th>
-                            <th style="width:100px;">状态</th>
-                            <th style="width:160px;">操作</th>
+                            <th style="width:72px;" class="text-nowrap">章节</th>
+                            <th class="text-nowrap">标题</th>
+                            <th style="width:80px;" class="text-nowrap d-none d-sm-table-cell">字数</th>
+                            <th style="width:96px;" class="text-nowrap">状态</th>
+                            <th style="width:180px;" class="text-nowrap">操作</th>
                         </tr>
                     </thead>
                     <tbody>
                         <template x-for="ch in filteredChapters" :key="ch.chapterNumber">
                             <tr>
-                                <td x-text="'第' + ch.chapterNumber + '章'"></td>
-                                <td x-text="ch.title || '-'"></td>
-                                <td x-text="ch.wordCount"></td>
+                                <td class="text-nowrap" x-text="'第' + ch.chapterNumber + '章'"></td>
+                                <td class="text-truncate" style="max-width:420px;" :title="ch.title || '-'"
+                                    x-text="ch.title || '-'"></td>
+                                <td class="d-none d-sm-table-cell" x-text="ch.wordCount"></td>
                                 <td>
-                                    <span class="badge" :class="statusBadgeClass(ch.expansionStatus)"
+                                    <span class="badge rounded-pill" :class="statusBadgeClass(ch.expansionStatus)"
                                           x-text="statusLabel(ch.expansionStatus)"></span>
                                 </td>
-                                <td>
+                                <td class="exp-actions">
                                     <template x-if="ch.expansionStatus === 'PENDING'">
-                                        <button class="btn btn-sm btn-outline-secondary" @click="unmarkChapter(ch.chapterNumber)">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                @click="unmarkChapter(ch.chapterNumber)" title="移出扩写队列">
                                             <i class="bi bi-x-lg"></i> 移除
                                         </button>
                                     </template>
                                     <template x-if="ch.expansionStatus === 'EXPANDED'">
                                         <div class="btn-group btn-group-sm">
-                                            <button class="btn btn-sm btn-outline-warning" @click="rollbackChapter(ch.chapterNumber)">
+                                            <button type="button" class="btn btn-outline-warning"
+                                                    @click="rollbackChapter(ch.chapterNumber)"
+                                                    title="恢复扩写前的原文">
                                                 <i class="bi bi-arrow-counterclockwise"></i> 回滚
                                             </button>
-                                            <button class="btn btn-sm btn-outline-success" @click="confirmChapter(ch.chapterNumber)">
+                                            <button type="button" class="btn btn-outline-success"
+                                                    @click="confirmChapter(ch.chapterNumber)"
+                                                    title="保留扩写结果并清空状态">
                                                 <i class="bi bi-check-lg"></i> 确认
                                             </button>
                                         </div>
                                     </template>
                                     <template x-if="ch.expansionStatus === 'GENERATING'">
-                                        <span class="spinner-border spinner-border-sm"></span>
+                                        <span class="text-muted small"><span class="spinner-border spinner-border-sm me-1"></span>扩写中</span>
                                     </template>
                                 </td>
                             </tr>
                         </template>
-                        <tr x-show="filteredChapters.length === 0">
-                            <td colspan="5" class="text-center text-muted">暂无待扩写章节，请从全文阅读页面标记章节</td>
+                        <tr x-show="filteredChapters.length === 0" x-cloak>
+                            <td colspan="5" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-4 d-block mb-1"></i>
+                                队列为空。到
+                                <a :href="readUrl" class="text-decoration-none">全文阅读页</a>
+                                标记需要扩写的章节，或在下方「全部章节」里勾选后加入队列。
+                            </td>
                         </tr>
                     </tbody>
                 </table>
@@ -155,21 +245,25 @@
         </div>
     </div>
 
-    <!-- All chapters for batch marking, grouped by volume -->
+    <!-- ===================== 全部章节（按分卷） ===================== -->
     <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-book"></i> 全部章节（按分卷）</span>
-            <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-outline-secondary" @click="toggleAllVolumes()">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span class="d-flex align-items-center gap-2">
+                <i class="bi bi-book"></i>
+                <strong>全部章节</strong>
+                <span class="badge rounded-pill bg-light text-dark border">按分卷</span>
+            </span>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" @click="toggleAllVolumes()">
                     <i class="bi" :class="allVolumesExpanded ? 'bi-chevron-contract' : 'bi-chevron-expand'"></i>
                     <span x-text="allVolumesExpanded ? '全部折叠' : '全部展开'"></span>
                 </button>
-                <button class="btn btn-sm btn-outline-primary" @click="toggleSelectAllChapters()"
+                <button type="button" class="btn btn-sm btn-outline-primary" @click="toggleSelectAllChapters()"
                         :disabled="selectableChapters.length === 0">
                     <i class="bi" :class="allSelectableSelected ? 'bi-square' : 'bi-check-all'"></i>
                     <span x-text="allSelectableSelected ? '全部取消' : '全部选中'"></span>
                 </button>
-                <button class="btn btn-sm btn-primary" @click="addSelectedToQueue()"
+                <button type="button" class="btn btn-sm btn-primary" @click="addSelectedToQueue()"
                         :disabled="selectedChapters.length === 0">
                     <i class="bi bi-plus-lg"></i> 加入队列
                     <span x-show="selectedChapters.length" x-text="'(' + selectedChapters.length + ')'"></span>
@@ -177,15 +271,17 @@
             </div>
         </div>
         <div class="card-body p-0">
-            <div class="p-3 text-muted" x-show="groupedVolumes.length === 0">暂无章节</div>
+            <div class="p-4 text-center text-muted" x-show="groupedVolumes.length === 0" x-cloak>
+                <i class="bi bi-book fs-4 d-block mb-1"></i>暂无章节
+            </div>
             <template x-for="vol in groupedVolumes" :key="vol.volume">
                 <div class="volume-group border-bottom">
-                    <div class="d-flex align-items-center gap-2 px-2 py-2 bg-light">
+                    <div class="d-flex align-items-center gap-2 px-3 py-2 bg-light">
                         <button class="btn btn-sm btn-link p-0 text-dark" type="button"
                                 @click="toggleVolume(vol.volume)" style="text-decoration:none;">
                             <i class="bi" :class="isVolumeExpanded(vol.volume) ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
                         </button>
-                        <input type="checkbox" class="form-check-input"
+                        <input type="checkbox" class="form-check-input mt-0"
                                :checked="isVolumeSelected(vol.volume)"
                                x-effect="$el.indeterminate = volumeIndeterminate(vol.volume)"
                                :disabled="volumeSelectableChapters(vol.volume).length === 0"
@@ -197,14 +293,14 @@
                               x-text="volumeSelectedCount(vol.volume) + '/' + volumeSelectableChapters(vol.volume).length + ' 可加入'"></span>
                     </div>
                     <div x-show="isVolumeExpanded(vol.volume)" class="table-responsive">
-                        <table class="table table-sm table-hover mb-0">
+                        <table class="table table-sm table-hover align-middle exp-table mb-0">
                             <thead>
                                 <tr>
                                     <th style="width:40px;"></th>
-                                    <th style="width:60px;">章节</th>
-                                    <th>标题</th>
-                                    <th style="width:80px;">字数</th>
-                                    <th style="width:100px;">扩写状态</th>
+                                    <th style="width:72px;" class="text-nowrap">章节</th>
+                                    <th class="text-nowrap">标题</th>
+                                    <th style="width:80px;" class="text-nowrap d-none d-sm-table-cell">字数</th>
+                                    <th style="width:110px;" class="text-nowrap">扩写状态</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -214,16 +310,19 @@
                                             <input type="checkbox" class="form-check-input"
                                                    :checked="selectedChapters.includes(ch.chapterNumber)"
                                                    :disabled="ch.expansionStatus === 'GENERATING' || ch.expansionStatus === 'EXPANDED' || !ch.hasContent"
-                                                   @change="onChapterCheck(ch, $event.target.checked)">
+                                                   @change="onChapterCheck(ch, $event.target.checked)"
+                                                   :title="!ch.hasContent ? '该章还没有正文' : (ch.expansionStatus === 'EXPANDED' ? '已扩写，无需重复加入' : '勾选后可加入队列')">
                                         </td>
-                                        <td x-text="ch.chapterNumber"></td>
-                                        <td x-text="ch.title || '-'"></td>
-                                        <td x-text="ch.wordCount"></td>
+                                        <td class="text-nowrap" x-text="ch.chapterNumber"></td>
+                                        <td class="text-truncate" style="max-width:520px;" :title="ch.title || '-'"
+                                            x-text="ch.title || '-'"></td>
+                                        <td class="d-none d-sm-table-cell" x-text="ch.wordCount"></td>
                                         <td>
-                                            <span x-show="ch.expansionStatus" class="badge"
+                                            <span x-show="ch.expansionStatus" class="badge rounded-pill"
                                                   :class="statusBadgeClass(ch.expansionStatus)"
                                                   x-text="statusLabel(ch.expansionStatus)"></span>
-                                            <span x-show="!ch.expansionStatus && !ch.hasContent" class="text-muted" style="font-size:0.8rem;">无内容</span>
+                                            <span x-show="!ch.expansionStatus && !ch.hasContent" class="text-muted"
+                                                  style="font-size:0.8rem;">无内容</span>
                                         </td>
                                     </tr>
                                 </template>
@@ -232,6 +331,75 @@
                     </div>
                 </div>
             </template>
+        </div>
+    </div>
+
+    <!-- ===================== 复用指导弹窗 ===================== -->
+    <div class="modal fade" id="reuseGuidanceModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-journal-arrow-down"></i> 复用扩写指导</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" id="reuseExpansionOnly"
+                                   x-model="reuseExpansionOnly" @change="loadGuidanceLibrary()">
+                            <label class="form-check-label small" for="reuseExpansionOnly">
+                                只显示情节拓展的指导
+                            </label>
+                        </div>
+                        <small class="text-muted" x-show="!guidanceLibraryLoading"
+                               x-text="'共 ' + guidanceLibraryItems.length + ' 条'"></small>
+                    </div>
+
+                    <div x-show="guidanceLibraryLoading" class="text-center py-4">
+                        <div class="spinner-border spinner-border-sm"></div>
+                        <span class="ms-2 small text-muted">加载中...</span>
+                    </div>
+
+                    <div x-show="!guidanceLibraryLoading && guidanceLibraryItems.length === 0" class="text-center text-muted py-4">
+                        <i class="bi bi-journal-x fs-4 d-block mb-1"></i>
+                        <div class="small">
+                            暂无可用的创作指导。<br>
+                            先在本页「配置」一份扩写指导，再点「存为通用」，或去
+                            <a href="/settings/guidances" target="_blank" rel="noopener">创作指导库</a> 新建。
+                        </div>
+                    </div>
+
+                    <div x-show="!guidanceLibraryLoading && guidanceLibraryItems.length > 0"
+                         class="list-group" style="max-height: 52vh; overflow-y: auto;">
+                        <template x-for="item in guidanceLibraryItems" :key="item.id">
+                            <label class="list-group-item list-group-item-action d-flex align-items-start gap-2"
+                                   :class="{ 'active': String(selectedGuidanceId) === String(item.id) }">
+                                <input type="radio" class="form-check-input mt-1" name="reuseGuidanceRadio"
+                                       :value="item.id" x-model="selectedGuidanceId">
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="d-flex justify-content-between align-items-center gap-2">
+                                        <strong class="text-truncate" x-text="item.name"></strong>
+                                        <span class="badge rounded-pill bg-info flex-shrink-0" x-text="item.stepLabel"></span>
+                                    </div>
+                                    <small class="d-block mt-1 text-truncate"
+                                           :class="String(selectedGuidanceId) === String(item.id) ? '' : 'text-muted'"
+                                           :title="item.guidance"
+                                           x-text="item.guidance.length > 160 ? item.guidance.substring(0, 160) + '...' : item.guidance"></small>
+                                </div>
+                            </label>
+                        </template>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-lg"></i> 取消
+                    </button>
+                    <button type="button" class="btn btn-sm btn-primary" @click="applyReuseGuidance()"
+                            :disabled="!selectedGuidanceId">
+                        <i class="bi bi-check-lg"></i> 使用选中指导
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 </main>
@@ -243,13 +411,28 @@
     const CHAPTERS_PER_VOLUME = window.__EXPANSION_DATA__.chaptersPerVolume || 10;
     // 后端下发的分卷分组（章节->卷绑定优先，无绑定时按每卷 N 章推算）；为空则前端回落旧公式
     const INITIAL_VOLUMES = window.__EXPANSION_DATA__.volumes || [];
+    // 情节拓展在创作指导库里的分类（对应 GuidanceLibraryStep.EXPANSION）
+    const GUIDANCE_STEP = 'EXPANSION';
 
     function expansionPage() {
         return {
             projectTitle: (window.__EXPANSION_DATA__ && window.__EXPANSION_DATA__.projectTitle) || '',
+            readUrl: '/projects/' + PROJECT_ID + '/read',
+            workflowUrl: '/projects/' + PROJECT_ID + '/workflow/world-building',
             guidance: INITIAL_GUIDANCE,
+            // 指导编辑态
+            editingGuidance: false,
+            guidanceEdit: '',
             savingGuidance: false,
+            savingShared: false,
+            // 复用指导
+            guidanceLibraryItems: [],
+            guidanceLibraryLoading: false,
+            reuseExpansionOnly: true,
+            selectedGuidanceId: null,
+            // 任务态
             active: false,
+            refreshing: false,
             pendingCount: 0,
             expandedCount: 0,
             streamContent: '',
@@ -291,6 +474,106 @@
                 if (this.pollTimer) clearInterval(this.pollTimer);
                 if (this.eventSource) this.eventSource.close();
             },
+
+            /* ===================== 扩写指导 ===================== */
+
+            startEditGuidance() {
+                this.guidanceEdit = this.guidance || '';
+                this.editingGuidance = true;
+            },
+
+            cancelEditGuidance() {
+                this.editingGuidance = false;
+                this.guidanceEdit = this.guidance || '';
+            },
+
+            async saveGuidance() {
+                this.savingGuidance = true;
+                try {
+                    const resp = await fetch(`/projects/${PROJECT_ID}/expansion/guidance`, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({guidance: this.guidanceEdit})
+                    });
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    this.guidance = this.guidanceEdit;
+                    this.editingGuidance = false;
+                    SC.toast.success('扩写指导已保存');
+                } catch (e) {
+                    SC.toast.error('保存失败：' + e.message);
+                } finally {
+                    this.savingGuidance = false;
+                }
+            },
+
+            /** 把当前扩写指导存进创作指导库（分类=情节拓展），供其他项目复用 */
+            async saveGuidanceAsShared() {
+                const text = (this.guidance || '').trim();
+                if (!text) {
+                    SC.toast.warn('请先配置扩写指导');
+                    return;
+                }
+                if (this.editingGuidance) {
+                    SC.toast.warn('请先保存配置，再存为通用');
+                    return;
+                }
+                this.savingShared = true;
+                try {
+                    const fd = new FormData();
+                    fd.append('projectId', PROJECT_ID);
+                    fd.append('step', GUIDANCE_STEP);
+                    const resp = await fetch('/settings/guidances/save-from-project', {method: 'POST', body: fd});
+                    const data = await resp.json().catch(() => ({}));
+                    if (!resp.ok || data.error) throw new Error(data.error || ('HTTP ' + resp.status));
+                    SC.toast.success('已存为通用指导：' + (data.name || ''));
+                } catch (e) {
+                    SC.toast.error('存为通用失败：' + e.message);
+                } finally {
+                    this.savingShared = false;
+                }
+            },
+
+            openReuseModal() {
+                this.selectedGuidanceId = null;
+                this.loadGuidanceLibrary();
+                const el = document.getElementById('reuseGuidanceModal');
+                if (el) bootstrap.Modal.getOrCreateInstance(el).show();
+            },
+
+            loadGuidanceLibrary() {
+                this.guidanceLibraryLoading = true;
+                let url = '/settings/guidances/list-json';
+                if (this.reuseExpansionOnly) url += '?step=' + GUIDANCE_STEP;
+                fetch(url)
+                    .then(r => r.ok ? r.json() : [])
+                    .then(list => { this.guidanceLibraryItems = Array.isArray(list) ? list : []; })
+                    .catch(() => { this.guidanceLibraryItems = []; })
+                    .finally(() => { this.guidanceLibraryLoading = false; });
+            },
+
+            async applyReuseGuidance() {
+                const item = this.guidanceLibraryItems.find(i => String(i.id) === String(this.selectedGuidanceId));
+                if (!item) return;
+                try {
+                    const resp = await fetch(`/projects/${PROJECT_ID}/expansion/guidance`, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({guidance: item.guidance})
+                    });
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    this.guidance = item.guidance;
+                    this.guidanceEdit = item.guidance;
+                    this.editingGuidance = false;
+                    const el = document.getElementById('reuseGuidanceModal');
+                    const inst = el ? bootstrap.Modal.getInstance(el) : null;
+                    if (inst) inst.hide();
+                    SC.toast.success('已应用指导：' + item.name);
+                } catch (e) {
+                    SC.toast.error('应用失败：' + e.message);
+                }
+            },
+
+            /* ===================== 队列与章节 ===================== */
 
             get filteredChapters() {
                 return this.allChapters.filter(ch => ch.expansionStatus != null);
@@ -398,7 +681,7 @@
             statusBadgeClass(status) {
                 switch(status) {
                     case 'PENDING': return 'bg-warning text-dark';
-                    case 'GENERATING': return 'bg-info';
+                    case 'GENERATING': return 'bg-info text-dark';
                     case 'EXPANDED': return 'bg-success';
                     default: return 'bg-secondary';
                 }
@@ -413,21 +696,14 @@
                 }
             },
 
-            async saveGuidance() {
-                this.savingGuidance = true;
-                try {
-                    await fetch(`/projects/${PROJECT_ID}/expansion/guidance`, {
-                        method: 'PUT',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({guidance: this.guidance})
-                    });
-                } finally {
-                    this.savingGuidance = false;
-                }
-            },
-
             async refreshStatus() {
-                await this.pollStatus();
+                if (this.refreshing) return;
+                this.refreshing = true;
+                try {
+                    await this.pollStatus();
+                } finally {
+                    this.refreshing = false;
+                }
                 // 完整重载以拿到最新章节状态
                 window.location.reload();
             },
@@ -458,22 +734,31 @@
                 this.active = true;
                 this.streamContent = '';
                 this.connectStream();
+                SC.toast.info('已开始批量扩写');
             },
 
             async stopExpansion() {
                 await fetch(`/projects/${PROJECT_ID}/expansion/stop`, {method: 'POST'});
                 this.active = false;
+                SC.toast.info('已请求停止，当前章节处理完即停');
                 // 不主动关 EventSource，让后台 stopped 事件驱动 refreshStatus
             },
 
             async confirmAll() {
-                if (this.expandedCount === 0) return;
-                if (!confirm('确认全部 ' + this.expandedCount + ' 章已扩写？将清空扩写状态。')) return;
+                const total = this.expandedCount;
+                if (total === 0) return;
+                const ok = await SC.confirm({
+                    title: '批量确认',
+                    message: '确认全部 ' + total + ' 章已扩写？将清空它们的扩写状态（正文保留）。',
+                    confirmText: '确认全部'
+                });
+                if (!ok) return;
                 await fetch(`/projects/${PROJECT_ID}/expansion/confirm-all`, {method: 'POST'});
                 this.allChapters.forEach(ch => {
                     if (ch.expansionStatus === 'EXPANDED') ch.expansionStatus = null;
                 });
                 this.updateCounts();
+                SC.toast.success('已确认 ' + total + ' 章');
             },
 
             connectStream() {
@@ -585,6 +870,7 @@
                 });
                 this.selectedChapters = [];
                 this.updateCounts();
+                SC.toast.success('已加入队列 ' + toAdd.length + ' 章');
             },
 
             async removeAllPending() {
@@ -592,7 +878,13 @@
                     .filter(ch => ch.expansionStatus === 'PENDING')
                     .map(ch => ch.chapterNumber);
                 if (pending.length === 0) return;
-                if (!confirm('移除全部 ' + pending.length + ' 章待扩写？')) return;
+                const ok = await SC.confirm({
+                    title: '批量移除',
+                    message: '把 ' + pending.length + ' 章移出扩写队列？已扩写的内容不受影响。',
+                    confirmText: '全部移除',
+                    danger: true
+                });
+                if (!ok) return;
                 await fetch(`/projects/${PROJECT_ID}/expansion/mark`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -603,6 +895,7 @@
                     if (ch) ch.expansionStatus = null;
                 });
                 this.updateCounts();
+                SC.toast.success('已移除 ' + pending.length + ' 章');
             },
 
             // 全部选中 / 全部取消：仅切换勾选状态，不涉及后端标记与队列
@@ -617,11 +910,18 @@
             },
 
             async rollbackChapter(chapterNumber) {
-                if (!confirm('确认回滚第' + chapterNumber + '章？将恢复扩写前的原文。')) return;
+                const ok = await SC.confirm({
+                    title: '回滚第' + chapterNumber + '章',
+                    message: '将恢复扩写前的原文，扩写结果会被丢弃。确定回滚？',
+                    confirmText: '回滚',
+                    danger: true
+                });
+                if (!ok) return;
                 await fetch(`/projects/${PROJECT_ID}/expansion/rollback/${chapterNumber}`, {method: 'POST'});
                 const ch = this.allChapters.find(c => c.chapterNumber === chapterNumber);
                 if (ch) ch.expansionStatus = 'PENDING';
                 this.updateCounts();
+                SC.toast.success('已回滚第' + chapterNumber + '章');
             },
 
             async confirmChapter(chapterNumber) {
@@ -629,6 +929,7 @@
                 const ch = this.allChapters.find(c => c.chapterNumber === chapterNumber);
                 if (ch) ch.expansionStatus = null;
                 this.updateCounts();
+                SC.toast.success('已确认第' + chapterNumber + '章');
             },
 
             updateCounts() {

@@ -1,0 +1,297 @@
+<!-- 单词匹配 · 主页面
+     ---------------------------------------------------------------------------
+     与网页版 learn-word-match.html 的模板一一对应：
+       x-data="wordMatchApp()"   → Page({ data })
+       x-for / :key              → wx:for / wx:key
+       x-if / x-show             → wx:if / wx:else / 条件 class
+       @click / @click.stop      → bindtap / catchtap
+       @click.outside            → 独立的遮罩层 catchtap
+       x-text                    → {{ }}
+       <div>/<span>/<button>     → <view>/<text>
+     --------------------------------------------------------------------------- -->
+
+<view class="wm-root">
+
+    <!-- ==================== 工具栏 ==================== -->
+    <view class="wm-toolbar">
+        <view class="wm-toolbar-title">单词趣味配对</view>
+        <view class="wm-toolbar-actions">
+
+            <view class="wm-btn wm-btn-primary-outline wm-book-btn" hover-class="wm-tap"
+                  bindtap="openBookPicker">
+                <text class="wm-book-btn-text">{{bookLabel || '选择词库'}}</text>
+                <text class="wm-caret">▾</text>
+            </view>
+
+            <view class="wm-btn {{autoMode ? 'wm-btn-danger-outline' : 'wm-btn-success'}}"
+                  hover-class="wm-tap" bindtap="onAutoToggle">
+                <text>{{autoMode ? '退出练习' : '自动练习'}}</text>
+            </view>
+
+            <view class="wm-btn wm-btn-warning-outline" hover-class="wm-tap"
+                  bindtap="toggleAutoPause" wx:if="{{autoMode}}">
+                <text>{{autoPaused ? '继续' : '暂停'}}</text>
+            </view>
+
+            <!-- 错题本 / 重做本关 / 音效 / 重置进度 统一收进「设置」面板 -->
+            <view class="wm-btn wm-btn-outline wm-set-btn {{settingsOpen ? 'is-open' : ''}}"
+                  hover-class="wm-tap" bindtap="openSettings">
+                <text>设置</text>
+                <text class="wm-count" wx:if="{{wrongTotal > 0}}">{{wrongTotal}}</text>
+            </view>
+
+        </view>
+    </view>
+
+    <!-- ==================== 舞台 ==================== -->
+    <view class="wm-stage" wx:if="{{levelCount > 0}}">
+
+        <!-- HUD：高度为 0，浮在舞台顶边，不占纵向空间 -->
+        <view class="wm-hud">
+            <!-- 关卡数不多时逐关画小格；多到看不清时（大学的 1251 / 942 关）换成比例横条 -->
+            <view class="wm-progress {{autoMode ? 'is-auto' : ''}}" wx:if="{{segMode}}">
+                <view class="wm-seg {{item.cls}}" wx:for="{{segments}}" wx:key="i"></view>
+            </view>
+            <view class="wm-bar {{autoMode ? 'is-auto' : ''}}" wx:else>
+                <view class="wm-bar-fill {{barDone ? 'is-done' : ''}}" style="width: {{barPct}}%"></view>
+            </view>
+            <view class="wm-counter {{autoMode ? 'is-auto' : ''}}">
+                <text class="wm-counter-num">{{levelIndex + 1}}</text><text>/{{levelCount}}</text>
+            </view>
+        </view>
+
+        <!-- 标题行（同时是过关提示的定位基准：提示出现时这一行让位） -->
+        <view class="wm-titlebar {{flash ? 'is-flashing' : ''}}">
+            <text class="wm-title">{{autoMode ? '自动练习' : '选择配对'}}</text>
+            <text class="wm-theme" wx:if="{{!autoMode && theme}}">{{theme}}</text>
+            <text class="wm-auto-badge" wx:if="{{autoMode}}">自动练习中</text>
+
+            <view class="wm-flash" wx:if="{{flash}}">
+                <text class="wm-flash-emoji">{{flashEmoji}}</text>
+                <text class="wm-flash-text">{{flash}}</text>
+            </view>
+        </view>
+
+        <!-- 自动练习状态条 -->
+        <view class="wm-auto-bar {{autoPaused ? 'is-paused' : ''}}" wx:if="{{autoMode}}">
+            <view class="wm-auto-tip">
+                <text class="wm-auto-tag">{{autoPaused ? '已暂停' : autoTag}}</text>
+                <text class="wm-auto-text">{{autoPaused ? '点「继续」接着练' : autoTip}}</text>
+            </view>
+            <view class="wm-auto-count" wx:if="{{!autoPaused && autoCountdown > 0}}">
+                <text>{{autoCountdown}}</text><text class="wm-auto-sec">s</text>
+            </view>
+            <view class="wm-auto-btn" hover-class="wm-tap" bindtap="toggleAutoPause">
+                <text>{{autoPaused ? '继续' : '暂停'}}</text>
+            </view>
+            <view class="wm-auto-btn is-exit" hover-class="wm-tap" bindtap="stopAutoTap">
+                <text>退出</text>
+            </view>
+        </view>
+
+        <!-- 信息栏：说明文字 + 关卡导航 -->
+        <view class="wm-infobar">
+            <view class="wm-footer">
+                <text class="wm-footer-item">{{hintText}}</text>
+                <text class="wm-footer-item wm-footer-done">{{autoMode ? '本册已练' : '本册已完成'}}
+                    <text class="wm-em">{{doneCount}}</text>/<text>{{levelCount}}</text> 关
+                </text>
+            </view>
+            <view class="wm-nav">
+                <view class="wm-btn wm-nav-btn {{canPrev ? '' : 'wm-btn-disabled'}}" hover-class="wm-tap"
+                      bindtap="prevLevel">
+                    <text>‹ 上一关</text>
+                </view>
+                <view class="wm-btn wm-nav-btn {{atBookEnd ? 'wm-nav-btn-primary' : ''}} {{canNavNext ? '' : 'wm-btn-disabled'}}"
+                      hover-class="wm-tap" bindtap="navNext">
+                    <text>{{navNextLabel}}</text>
+                </view>
+            </view>
+        </view>
+
+        <!-- 棋盘 -->
+        <view class="wm-board {{autoMode ? 'is-auto' : ''}}">
+            <view class="wm-col wm-col-en">
+                <view class="wm-card {{item.cls}}" wx:for="{{leftCards}}" wx:key="uid"
+                      data-i="{{index}}" bindtap="onTapLeft"
+                      hover-class="{{autoMode ? 'none' : 'wm-tap'}}">
+                    <text class="wm-card-text">{{item.text}}</text>
+                </view>
+            </view>
+            <view class="wm-col wm-col-zh">
+                <view class="wm-card {{item.cls}}" wx:for="{{rightCards}}" wx:key="uid"
+                      data-i="{{index}}" bindtap="onTapRight"
+                      hover-class="{{autoMode ? 'none' : 'wm-tap'}}">
+                    <text class="wm-card-text">{{item.text}}</text>
+                </view>
+            </view>
+        </view>
+
+    </view>
+
+    <!-- 词库没读到时的兜底 -->
+    <view class="wm-stage" wx:else>
+        <view class="wm-fallback">
+            <text class="wm-fallback-icon">!</text>
+            单词库加载失败，请退出小程序后重新进入。
+        </view>
+    </view>
+
+    <!-- ==================== 册次选择 ==================== -->
+    <view class="wm-modal-backdrop" wx:if="{{bookPickerOpen}}" bindtap="closeBookPicker">
+        <view class="wm-modal is-wide" catchtap="noop">
+            <view class="wm-head">
+                <text class="wm-head-title">选择词库</text>
+                <text class="wm-head-total is-neutral">{{totalBooks}} 册</text>
+            </view>
+            <view class="wm-modal-desc wm-mt-sm">共 {{totalLevels}} 关 · 每关 3~7 对单词（多为 6 对）</view>
+
+            <scroll-view class="wm-book-list" scroll-y>
+                <view class="wm-book-group" wx:for="{{bookGroups}}" wx:for-item="g" wx:key="stage">
+                    <view class="wm-book-group-head {{g.isOpen ? 'is-open' : ''}}" hover-class="wm-tap"
+                          data-stage="{{g.stage}}" bindtap="toggleStage">
+                        <text class="wm-book-group-caret">›</text>
+                        <text class="wm-book-group-name">{{g.stage}}</text>
+                        <text class="wm-book-group-sub">
+                            <text class="wm-book-group-cur" wx:if="{{g.hasCurrent}}">{{bookLabel}} · </text>{{g.books.length}} 册 · {{g.wordCount}} 词
+                        </text>
+                    </view>
+                    <scroll-view class="wm-book-group-body" scroll-y wx:if="{{g.isOpen}}">
+                        <view class="wm-book-item {{item.isActive ? 'is-active' : ''}}" hover-class="wm-tap"
+                              wx:for="{{g.books}}" wx:key="id" data-id="{{item.id}}" bindtap="pickBook">
+                            <text class="wm-book-label">{{item.label}}</text>
+                            <view class="wm-book-meta">
+                                <text>{{item.wordCount}} 词 · {{item.levelCount}} 关</text>
+                                <view class="wm-book-prog">练习 <text class="wm-em-ok">{{item.doneP}}</text>/<text>{{item.levelCount}}</text> 关
+                                </view>
+                                <view class="wm-book-prog is-auto" wx:if="{{item.doneA > 0}}">自动练习 <text class="wm-em-auto">{{item.doneA}}</text>/<text>{{item.levelCount}}</text> 关
+                                </view>
+                            </view>
+                            <text class="wm-book-check" wx:if="{{item.isActive}}">✓</text>
+                        </view>
+                    </scroll-view>
+                </view>
+            </scroll-view>
+
+            <view class="wm-modal-actions-col">
+                <view class="wm-btn wm-btn-outline wm-btn-block" hover-class="wm-tap" bindtap="closeBookPicker">关闭
+                </view>
+            </view>
+        </view>
+    </view>
+
+    <!-- ==================== 设置面板 ==================== -->
+    <view class="wm-sheet-mask" wx:if="{{settingsOpen}}" bindtap="closeSettings"></view>
+    <view class="wm-set-pop" wx:if="{{settingsOpen}}">
+        <view class="wm-set-head">
+            <text>设置</text>
+            <text>保存在本机</text>
+        </view>
+
+        <view class="wm-set-item" hover-class="wm-tap" bindtap="openWrongBookFromSettings">
+            <text class="wm-set-icon">题</text>
+            <view class="wm-set-main">
+                <view class="wm-set-title">
+                    <text>错题本</text>
+                    <text class="wm-count" wx:if="{{wrongTotal > 0}}">{{wrongTotal}}</text>
+                </view>
+                <text class="wm-set-desc">{{wrongTotal > 0 ? ('答错 ' + wrongTotal + ' 个，答对也不会自动移除') : '还没有错题，答错的词自动记在这里'}}</text>
+            </view>
+            <text class="wm-set-arrow">›</text>
+        </view>
+
+        <view class="wm-set-item" hover-class="wm-tap" bindtap="restartLevelFromSettings">
+            <text class="wm-set-icon">↻</text>
+            <view class="wm-set-main">
+                <view class="wm-set-title"><text>重做本关</text></view>
+                <text class="wm-set-desc">重新打乱第 {{levelIndex + 1}} 关的单词顺序，进度不变</text>
+            </view>
+            <text class="wm-set-arrow">›</text>
+        </view>
+
+        <view class="wm-set-item" hover-class="wm-tap" bindtap="toggleSound">
+            <text class="wm-set-icon">♪</text>
+            <view class="wm-set-main">
+                <view class="wm-set-title"><text>音效</text></view>
+                <text class="wm-set-desc">{{soundOn ? '已开启：配对成功与失误都有提示音' : '已关闭：不播提示音'}}</text>
+            </view>
+            <view class="wm-set-switch {{soundOn ? 'is-on' : ''}}">
+                <text>{{soundOn ? '开' : '关'}}</text>
+            </view>
+        </view>
+
+        <view class="wm-set-item is-danger" hover-class="wm-tap" bindtap="resetProgressFromSettings">
+            <text class="wm-set-icon">✕</text>
+            <view class="wm-set-main">
+                <view class="wm-set-title"><text>重置进度</text></view>
+                <text class="wm-set-desc">清空「{{bookLabel}}」的{{autoMode ? '自动练习' : '手动练习'}}进度记录</text>
+            </view>
+            <text class="wm-set-arrow">›</text>
+        </view>
+    </view>
+
+    <!-- ==================== 错题本 ==================== -->
+    <view class="wm-modal-backdrop" wx:if="{{wrongOpen}}" bindtap="closeWrongBook">
+        <view class="wm-modal is-wide" catchtap="noop">
+            <view class="wm-head">
+                <text class="wm-head-title">错题本</text>
+                <text class="wm-head-total">{{wrongTotal}} 个单词</text>
+            </view>
+            <view class="wm-modal-desc wm-mt-sm">答错的单词自动记在这里，只保存在本机；答对后不会自动移除。</view>
+
+            <scroll-view class="wm-wrong-list" scroll-y wx:if="{{wrongList.length}}">
+                <view class="wm-wrong-item" wx:for="{{wrongList}}" wx:key="key">
+                    <view class="wm-wrong-main">
+                        <view class="wm-wrong-en"><text>{{item.en}}</text></view>
+                        <view class="wm-wrong-zh">正确：<text class="wm-em-ok">{{item.zh}}</text> · 误选：<text class="wm-wrong-miss">{{item.miss}}</text>
+                        </view>
+                        <view class="wm-wrong-src">{{item.bookLabel}} · 第 {{item.level + 1}} 关 · {{item.theme}} · 错 {{item.count}} 次
+                        </view>
+                    </view>
+                    <view class="wm-wrong-acts">
+                        <view class="wm-btn wm-btn-primary-outline" hover-class="wm-tap"
+                              data-key="{{item.key}}" bindtap="gotoWrong">去练
+                        </view>
+                        <view class="wm-btn wm-btn-outline" hover-class="wm-tap"
+                              data-key="{{item.key}}" bindtap="removeWrong">删除
+                        </view>
+                    </view>
+                </view>
+            </scroll-view>
+
+            <view class="wm-wrong-empty" wx:else>
+                <text class="wm-wrong-empty-icon">✓</text>
+                还没有错题，继续保持！
+            </view>
+
+            <view class="wm-modal-actions-col">
+                <view class="wm-btn wm-btn-danger-outline wm-btn-block {{wrongTotal ? '' : 'wm-btn-disabled'}}"
+                      hover-class="wm-tap" bindtap="clearWrong">清空错题本
+                </view>
+                <view class="wm-btn wm-btn-outline wm-btn-block" hover-class="wm-tap" bindtap="closeWrongBook">关闭
+                </view>
+            </view>
+        </view>
+    </view>
+
+    <!-- ==================== 本册完成弹窗 ==================== -->
+    <view class="wm-modal-backdrop" wx:if="{{finishedAll}}" bindtap="closeFinish">
+        <view class="wm-modal is-finish" catchtap="noop">
+            <view class="wm-modal-close" hover-class="wm-tap" bindtap="closeFinish">✕</view>
+            <view class="wm-modal-emoji">🏆</view>
+            <view class="wm-modal-title">本册全部完成！</view>
+            <view class="wm-modal-desc">{{bookLabel}} 的 {{levelCount}} 关已经全部完成，太厉害了。</view>
+            <!-- 主按钮 = 「能往前走」的那个：有下一册就给「下一册」，
+                 已是最后一册才退回「重做本册」，保证弹窗里始终只有一个蓝色主按钮。 -->
+            <view class="wm-modal-actions">
+                <view class="wm-btn {{hasNextBook ? 'wm-btn-outline' : 'wm-btn-primary'}}" hover-class="wm-tap"
+                      bindtap="replayBook">↻ 重做本册
+                </view>
+                <view class="wm-btn {{hasNextBook ? 'wm-btn-primary' : 'wm-btn-outline'}}" hover-class="wm-tap"
+                      wx:if="{{hasNextBook}}" bindtap="gotoNextBook">下一册 ›
+                </view>
+            </view>
+        </view>
+    </view>
+
+</view>

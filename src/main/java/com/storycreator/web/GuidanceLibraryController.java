@@ -2,7 +2,7 @@ package com.storycreator.web;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.storycreator.core.domain.WorkflowStep;
+import com.storycreator.core.domain.GuidanceLibraryStep;
 import com.storycreator.persistence.entity.GuidanceLibraryEntity;
 import com.storycreator.persistence.entity.ProjectEntity;
 import com.storycreator.persistence.entity.StepGuidanceEntity;
@@ -71,14 +71,14 @@ public class GuidanceLibraryController {
     }
 
     private static List<Map<String, Object>> stepOptions() {
-        return Arrays.stream(WorkflowStep.values())
+        return Arrays.stream(GuidanceLibraryStep.values())
                 .map(s -> Map.<String, Object>of("name", s.name(), "displayName", s.getDisplayName()))
                 .toList();
     }
 
     @PostMapping
     public String create(@RequestParam String name,
-                         @RequestParam WorkflowStep step,
+                         @RequestParam GuidanceLibraryStep step,
                          @RequestParam(defaultValue = "") String guidance) {
         GuidanceLibraryEntity entity = new GuidanceLibraryEntity();
         entity.setName(name);
@@ -117,7 +117,7 @@ public class GuidanceLibraryController {
     @PostMapping("/{id}/update")
     public String update(@PathVariable Long id,
                          @RequestParam String name,
-                         @RequestParam WorkflowStep step,
+                         @RequestParam GuidanceLibraryStep step,
                          @RequestParam(defaultValue = "") String guidance) {
         GuidanceLibraryEntity entity = guidanceLibraryRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Guidance not found: " + id));
@@ -137,20 +137,30 @@ public class GuidanceLibraryController {
     @PostMapping("/save-from-project")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> saveFromProject(@RequestParam Long projectId,
-                                                                @RequestParam WorkflowStep step) {
+                                                                @RequestParam GuidanceLibraryStep step) {
         ProjectEntity project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
-        StepGuidanceEntity stepGuidance = stepGuidanceRepository.findByProjectIdAndStep(projectId, step)
-                .orElse(null);
-        if (stepGuidance == null || stepGuidance.getGuidance() == null || stepGuidance.getGuidance().isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "当前步骤没有创作指导内容"));
+
+        // 工作流步骤的指导存在 step_guidance 表；情节拓展（EXPANSION）的指导直接挂在项目上
+        String guidance;
+        if (step == GuidanceLibraryStep.EXPANSION) {
+            guidance = project.getExpansionGuidance();
+        } else {
+            StepGuidanceEntity stepGuidance = stepGuidanceRepository
+                    .findByProjectIdAndStep(projectId, step.getWorkflowStep())
+                    .orElse(null);
+            guidance = stepGuidance != null ? stepGuidance.getGuidance() : null;
+        }
+        if (guidance == null || guidance.isBlank()) {
+            String where = step == GuidanceLibraryStep.EXPANSION ? "当前项目还没有扩写指导内容" : "当前步骤没有创作指导内容";
+            return ResponseEntity.badRequest().body(Map.of("error", where));
         }
 
         String defaultName = project.getTitle() + "-" + step.getDisplayName() + "-创作指导";
         GuidanceLibraryEntity entity = new GuidanceLibraryEntity();
         entity.setName(defaultName);
         entity.setStep(step);
-        entity.setGuidance(stepGuidance.getGuidance());
+        entity.setGuidance(guidance);
         guidanceLibraryRepository.save(entity);
 
         return ResponseEntity.ok(Map.of("success", true, "name", defaultName));
@@ -158,7 +168,7 @@ public class GuidanceLibraryController {
 
     @GetMapping("/list-json")
     @ResponseBody
-    public List<Map<String, Object>> listJson(@RequestParam(required = false) WorkflowStep step) {
+    public List<Map<String, Object>> listJson(@RequestParam(required = false) GuidanceLibraryStep step) {
         List<GuidanceLibraryEntity> items;
         if (step != null) {
             items = guidanceLibraryRepository.findByStepOrderByUpdatedAtDesc(step);
@@ -227,9 +237,9 @@ public class GuidanceLibraryController {
                     String guidance = (String) itemMap.get("guidance");
                     if (name == null || stepStr == null) continue;
 
-                    WorkflowStep step;
+                    GuidanceLibraryStep step;
                     try {
-                        step = WorkflowStep.valueOf(stepStr);
+                        step = GuidanceLibraryStep.valueOf(stepStr);
                     } catch (IllegalArgumentException e) {
                         continue;
                     }

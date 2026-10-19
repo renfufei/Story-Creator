@@ -227,14 +227,16 @@
             </button>
         </div>
         <div class="card-body">
-            <div x-show="selectedCharIds.length > 0" class="d-flex flex-wrap gap-2">
-                <template x-for="charId in selectedCharIds" :key="charId">
-                    <span class="badge bg-secondary fs-6 fw-normal">
-                        <i class="bi bi-person me-1"></i>
-                        <span x-text="getCharName(charId)"></span>
-                        <small class="ms-1 opacity-75" x-text="getCharRole(charId)"></small>
-                    </span>
-                </template>
+            <div x-show="selectedCharIds.length > 0">
+                <div class="d-flex flex-wrap gap-2">
+                    <template x-for="charId in selectedCharIds" :key="charId">
+                        <span class="badge bg-secondary fs-6 fw-normal">
+                            <i class="bi bi-person me-1"></i>
+                            <span x-text="getCharName(charId)"></span>
+                            <small class="ms-1 opacity-75" x-text="getCharRole(charId)"></small>
+                        </span>
+                    </template>
+                </div>
             </div>
             <div x-show="selectedCharIds.length === 0" class="text-muted">暂未关联角色</div>
         </div>
@@ -271,7 +273,7 @@
                                        @change="toggleCharEdit(c.id)">
                                 <label class="form-check-label" :for="'charEdit-' + c.id" style="min-width:0;">
                                     <strong x-text="c.name || '未命名'"></strong>
-                                    <small class="text-muted d-block text-truncate" x-show="c.role" x-text="c.role"></small>
+                                    <span class="d-block text-truncate"><small class="text-muted" x-show="c.role" x-text="c.role"></small></span>
                                 </label>
                             </div>
                         </template>

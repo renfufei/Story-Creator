@@ -20,6 +20,9 @@ app.pid
 data/
 .DS_Store
 error_words.log
+# 小程序工程是「生成物」：页面代码的源在 src/main/resources/miniprogram-template/，
+# 词库（752KB）在导出时由后端现算，所以这里不入库。
+# 重新生成：./scripts/learn/export_miniprogram.sh  或网页「设置 → 导出小程序」
 word-match-miniprogram
 *.genie
 docs/translation-review/
