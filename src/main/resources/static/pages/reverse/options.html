@@ -15,28 +15,30 @@
 </head>
 <body class="sc-page" data-nav="projects">
 
-<script>
-/* 引导数据：同步 XHR，确保 reverseOptions() 构造时已就绪。
-   按项目 id 解析最近一次 TXT 导入 job（见 ReversePageController#data）。 */
-window.__REVERSE_DATA__ = (function () {
-    var projectId = (location.pathname.match(/\/projects\/(\d+)/) || [])[1];
-    var d = { error: '无效的项目地址' };
-    if (projectId) {
-        try {
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', '/projects/' + projectId + '/reverse/data', false);
-            xhr.send();
-            d = JSON.parse(xhr.responseText || '{}');
-        } catch (e) { console.error('__REVERSE_DATA__ load failed', e); d = { error: '引导数据加载失败' }; }
-    }
-    return d;
-})();
-</script>
+<!-- 引导数据：改由 /js/reverse.js 的 loadReverseData() 异步取（原来这里是同步 XHR，首屏白屏）；
+     组件在 boot() 里 await 它，取完再铺字段。 -->
 
 <header id="site-nav"></header>
 
 <main class="sc-main container py-4">
 <div x-data="reverseOptions()" x-init="init()">
+    <!-- 引导数据还在路上：先出骨架（原来同步 XHR 会把整页卡在白屏） -->
+    <div x-show="booting" x-cloak>
+        <div class="sc-skel-row mb-3">
+            <div class="sc-skel sc-skel-line w-25"></div>
+            <div class="sc-skel sc-skel-line w-50"></div>
+        </div>
+        <div class="sc-skel-row mb-3">
+            <div class="sc-skel sc-skel-line"></div>
+            <div class="sc-skel sc-skel-line w-75"></div>
+        </div>
+        <div class="sc-skel-row">
+            <div class="sc-skel sc-skel-line w-50"></div>
+        </div>
+    </div>
+
+    <div x-show="!booting" x-cloak>
+
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 class="mb-0"><i class="bi bi-arrow-up-right-circle"></i> 逆向工程 · 选项</h2>
         <div class="d-flex gap-2">
@@ -137,6 +139,8 @@ window.__REVERSE_DATA__ = (function () {
             </div>
         </div>
     </div>
+
+    </div><!-- /x-show="!booting" -->
 </div>
 </main>
 

@@ -1087,3 +1087,67 @@ a.lt-set-item:focus { color: #2b3138; text-decoration: none; }
 body[data-standalone] .lt-back,
 body[data-standalone] .lt-set-item.is-export,
 body[data-standalone] .lt-set-item.is-source { display: none !important; }
+
+/* ---------- 前后对照面板（扩写 / 润色 / 精修 共用）----------
+   逻辑见 js/compare-panel.js（句级差异、字数增量、左右同步滚动）。
+   面板永远贴在**触发它的那一行正下方**：
+     · 表格里是紧跟主行的一个 <tr>，td 去掉内边距铺满整行（.sc-cmp 自带上下边线）；
+     · 列表里是 list-group-item 末尾的 .sc-cmp-card（补左右边线与圆角，看起来像卡片）。
+   背景走主题变量、不写死 bg-light；两栏各自滚动，避免一章几千字把整页拉长。 */
+.sc-cmp {
+    background: var(--bs-tertiary-bg, #f8f9fa);
+    border-top: 1px solid var(--bs-border-color, #dee2e6);
+    border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+    padding: .75rem .85rem;
+}
+.sc-cmp-card {
+    border-left: 1px solid var(--bs-border-color, #dee2e6);
+    border-right: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: .375rem;
+}
+.sc-cmp .btn { white-space: nowrap; }
+.sc-cmp-head { min-width: 0; }
+.sc-cmp-pane-head {
+    display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+    padding: .25rem .55rem; font-size: .8rem; font-weight: 600;
+    background: var(--bs-body-bg, #fff);
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-bottom: 0; border-radius: .25rem .25rem 0 0;
+}
+.sc-cmp-pane {
+    max-height: 420px; overflow-y: auto;
+    word-break: break-word;
+    padding: .5rem .65rem; font-size: .875rem; line-height: 1.8;
+    background: var(--bs-body-bg, #fff);
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 0 0 .25rem .25rem;
+}
+/* ⚠️ pre-wrap 只给正文容器，不能给 .sc-cmp-pane 自己 —— 否则模板之间的缩进空白
+   会被当成真实换行，正文上方凭空多出七八行空行（2026-10-19 踩过） */
+.sc-cmp-pane > div { white-space: pre-wrap; }
+/* 句级差异高亮：删除（只在前一版出现）/ 新增（只在后一版出现） */
+.sc-cmp-del { background: var(--bs-danger-bg-subtle, #f8d7da); color: var(--bs-danger-text-emphasis, #58151c); border-radius: 2px; }
+.sc-cmp-add { background: var(--bs-success-bg-subtle, #d1e7dd); color: var(--bs-success-text-emphasis, #0a3622); border-radius: 2px; }
+@media (max-width: 575.98px) {
+    .sc-cmp { padding: .6rem .5rem; }
+    .sc-cmp-pane { max-height: 300px; font-size: .82rem; line-height: 1.7; }
+}
+
+/* ---------- 引导数据骨架屏（异步 boot 期间占位）----------
+   同步 XHR 时代，数据没回来页面就是白屏/空列表；改成异步之后必须有东西先顶上，
+   否则用户会先看到「队列为空」再突然冒出几行。灰块 + 呼吸动画，尺寸贴近真实内容，
+   数据到了整块替换（x-show 切换），不要用 spinner 顶整页——那会把已渲染的页头也藏起来。 */
+.sc-skel {
+    display: inline-block;
+    height: .85rem;
+    background: var(--bs-secondary-bg, #e9ecef);
+    border-radius: .25rem;
+    animation: sc-skel-pulse 1.2s ease-in-out infinite;
+}
+.sc-skel-line { display: block; width: 100%; margin-bottom: .55rem; }
+.sc-skel-line:last-child { margin-bottom: 0; }
+.sc-skel-line.w-75 { width: 75%; }
+.sc-skel-line.w-50 { width: 50%; }
+.sc-skel-badge { width: 4.5rem; height: 1.1rem; border-radius: 999px; }
+@keyframes sc-skel-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .sc-skel { animation: none; } }

@@ -69,7 +69,18 @@
         .compare-container > div { border: 1px solid #dee2e6; border-radius: 4px; padding: 1rem; max-height: 65vh; overflow-y: auto; }
     </style>
 </head>
-<body x-data="inspectChapter()" x-init="init()">
+<body x-data="inspectChapter()" x-init="boot()">
+    <!-- 引导数据还在路上：先盖一层骨架，别让用户看到空的侧栏与正文 -->
+    <div x-show="booting" x-cloak
+         style="position:fixed;inset:0;z-index:1040;background:var(--bs-body-bg,#fff);padding:2rem 1.25rem;">
+        <div class="mb-3"><span class="sc-skel" style="width: 9rem;"></span></div>
+        <h4 class="mb-3"><span class="sc-skel" style="width: 14rem; height: 1.4rem;"></span></h4>
+        <div class="sc-skel sc-skel-line"></div>
+        <div class="sc-skel sc-skel-line"></div>
+        <div class="sc-skel sc-skel-line w-75"></div>
+        <div class="sc-skel sc-skel-line"></div>
+        <div class="sc-skel sc-skel-line w-50"></div>
+    </div>
     <!-- Toggle Button -->
     <button class="btn btn-sm btn-outline-secondary toggle-btn"
             :class="sidebarOpen ? 'shifted' : ''"
@@ -176,19 +187,35 @@
 
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script>
-        window.__inspectData = (function () {
-            var d = {};
-            try {
+        /* 引导数据：异步 fetch。
+           原来这里是同步 XHR —— 浏览器停在 HTML 解析期等往返，首屏白屏；
+           现在先给空壳，由 Alpine 的 boot()（x-init）await 之后铺数据，期间盖一层骨架。 */
+        window.__inspectData = {};
+        window.loadInspectChapterData = function () {
+            if (!window.__inspectChapterDataPromise) {
                 var parts = location.pathname.split('/');
                 var pid = parts[2];
                 var num = parts[5];
-                var xhr = new XMLHttpRequest();
-                xhr.open('GET', '/projects/' + pid + '/inspect/chapters/' + num + '/data', false);
-                xhr.send();
-                d = JSON.parse(xhr.responseText || '{}');
-            } catch (e) { console.error('inspect chapter data load failed', e); }
-            return d;
-        })();
+                window.__inspectChapterDataPromise = fetch(
+                    '/projects/' + pid + '/inspect/chapters/' + num + '/data',
+                    { headers: { 'Accept': 'application/json' } })
+                    .then(function (res) {
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        return res.json();
+                    })
+                    .then(function (d) {
+                        // ★ 合并而不是替换：js/inspect-chapter.js 里捕获的是同一个对象引用
+                        Object.assign(window.__inspectData, d || {});
+                        return window.__inspectData;
+                    })
+                    .catch(function (e) {
+                        // 退化：数据全空，页面仍可渲染（空态）
+                        console.error('inspect chapter bootstrap failed: ' + (e && e.message ? e.message : e));
+                        return window.__inspectData;
+                    });
+            }
+            return window.__inspectChapterDataPromise;
+        };
     </script>
     <script src="/js/inspect-chapter.js"></script>
     <script src="/vendor/alpinejs/cdn.min.js" defer></script>

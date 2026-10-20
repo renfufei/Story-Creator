@@ -13,18 +13,29 @@
 <body class="sc-page">
 
 <script>
-/* 引导数据：同步 XHR（路径形如 /settings/guidances/{id}/edit） */
-window.__GUIDANCE_EDIT_DATA__ = (function () {
-    var d = {};
-    try {
-        var id = location.pathname.split('/')[3] || '';
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/settings/guidances/' + encodeURIComponent(id) + '/edit-data', false);
-        xhr.send();
-        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
-    } catch (e) { console.error('__GUIDANCE_EDIT_DATA__ load failed', e); }
-    return d;
-})();
+/* 引导数据：异步 fetch（路径形如 /settings/guidances/{id}/edit）
+   原来这里是同步 XHR —— 浏览器停在 HTML 解析期等往返，JS 没开始跑、DOM 也没解析完，首屏白屏。
+   现在先给空壳（表单区顶骨架），填充改到 await 之后（见页面末尾的 boot()）。 */
+window.__GUIDANCE_EDIT_DATA__ = {};
+window.loadGuidanceEditData = function () {
+    if (!window.__GuidanceEditPromise) {
+        var url = '/settings/guidances/' + encodeURIComponent(location.pathname.split('/')[3] || '') + '/edit-data';
+        window.__GuidanceEditPromise = fetch(url, { headers: { 'Accept': 'application/json' } })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (d) {
+                window.__GUIDANCE_EDIT_DATA__ = d || window.__GUIDANCE_EDIT_DATA__;
+                return window.__GUIDANCE_EDIT_DATA__;
+            })
+            .catch(function (e) {
+                console.error('__GUIDANCE_EDIT_DATA__ bootstrap failed: ' + (e && e.message ? e.message : e));
+                return window.__GUIDANCE_EDIT_DATA__;
+            });
+    }
+    return window.__GuidanceEditPromise;
+};
 </script>
 
 <header id="site-nav"></header>
@@ -46,7 +57,18 @@ window.__GUIDANCE_EDIT_DATA__ = (function () {
 
     <div class="card">
         <div class="card-body">
-            <form id="editForm" method="post">
+            <!-- 引导数据还在路上：先出骨架（原来同步 XHR 会让表单先空一片） -->
+            <div id="bootSkel" class="sc-skel-row">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6"><div class="sc-skel sc-skel-line" style="width: 40%;"></div></div>
+                    <div class="col-md-4"><div class="sc-skel sc-skel-line" style="width: 55%;"></div></div>
+                </div>
+                <div class="sc-skel sc-skel-line"></div>
+                <div class="sc-skel sc-skel-line"></div>
+                <div class="sc-skel sc-skel-line w-75"></div>
+                <div class="sc-skel sc-skel-line w-50"></div>
+            </div>
+            <form id="editForm" method="post" style="display:none">
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
                         <label class="form-label">名称</label>
@@ -75,18 +97,11 @@ window.__GUIDANCE_EDIT_DATA__ = (function () {
 (function () {
     'use strict';
     var d = window.__GUIDANCE_EDIT_DATA__ || {};
-
-    document.getElementById('editForm').setAttribute('action', '/settings/guidances/' + d.id + '/update');
-    document.getElementById('fName').value = d.name || '';
-    document.getElementById('fGuidance').value = d.guidance || '';
-    document.getElementById('fStep').innerHTML = (d.steps || []).map(function (s) {
-        return '<option value="' + SC.escape(s.name) + '"' + (s.name === d.step ? ' selected' : '') + '>' +
-            SC.escape(s.displayName) + '</option>';
-    }).join('');
-
-    /* 删除入口（从列表页移到这里，放在右上角），提交前二次确认 */
+    var editForm = document.getElementById('editForm');
     var delForm = document.getElementById('deleteForm');
-    delForm.setAttribute('action', '/settings/guidances/' + d.id + '/delete');
+
+    /* 删除入口（从列表页移到这里，放在右上角），提交前二次确认。
+       事件同步绑好，动作和文案等都走 boot() 补——d 是同一个闭包变量，await 之后会被重新赋值。 */
     delForm.addEventListener('submit', function (e) {
         if (delForm.dataset.confirmed === '1') return;
         e.preventDefault();
@@ -99,6 +114,32 @@ window.__GUIDANCE_EDIT_DATA__ = (function () {
             if (ok) { delForm.dataset.confirmed = '1'; delForm.submit(); }
         });
     });
+
+    /** 引导数据是异步的：await 之后填表单，最后才收骨架并露出表单 */
+    async function boot() {
+        try {
+            d = (typeof window.loadGuidanceEditData === 'function')
+                ? await window.loadGuidanceEditData()
+                : (window.__GUIDANCE_EDIT_DATA__ || {});
+            if (d.id != null) {
+                editForm.setAttribute('action', '/settings/guidances/' + d.id + '/update');
+                delForm.setAttribute('action', '/settings/guidances/' + d.id + '/delete');
+            }
+            document.getElementById('fName').value = d.name || '';
+            document.getElementById('fGuidance').value = d.guidance || '';
+            document.getElementById('fStep').innerHTML = (d.steps || []).map(function (s) {
+                return '<option value="' + SC.escape(s.name) + '"' + (s.name === d.step ? ' selected' : '') + '>' +
+                    SC.escape(s.displayName) + '</option>';
+            }).join('');
+        } finally {
+            // ★ 填完才露表单：先露的话用户会看到空表单闪一下
+            var skel = document.getElementById('bootSkel');
+            if (skel) skel.remove();
+            editForm.style.display = '';
+        }
+    }
+
+    boot();
 })();
 </script>
 </body>

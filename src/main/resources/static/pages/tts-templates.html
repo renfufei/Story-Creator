@@ -16,17 +16,27 @@
 <body class="sc-page">
 
 <script>
-/* 引导数据：同步 XHR，确保渲染脚本读取时已就绪 */
-window.__TTS_TEMPLATES_DATA__ = (function () {
-    var d = { builtinTemplates: [], userTemplates: [] };
-    try {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/settings/tts-templates/data', false);
-        xhr.send();
-        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
-    } catch (e) { console.error('__TTS_TEMPLATES_DATA__ load failed', e); }
-    return d;
-})();
+/* 引导数据：异步 fetch（原来同步 XHR，浏览器停在 HTML 解析期等一趟，首屏白屏） */
+window.__TTS_TEMPLATES_DATA__ = { builtinTemplates: [], userTemplates: [] };
+window.loadTtsTemplatesData = function () {
+    if (!window.__ttsTemplatesPromise) {
+        window.__ttsTemplatesPromise = fetch('/settings/tts-templates/data',
+            { headers: { 'Accept': 'application/json' } })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (d) {
+                Object.assign(window.__TTS_TEMPLATES_DATA__, d || {});
+                return window.__TTS_TEMPLATES_DATA__;
+            })
+            .catch(function (e) {
+                console.error('__TTS_TEMPLATES_DATA__ bootstrap failed: ' + (e && e.message ? e.message : e));
+                return window.__TTS_TEMPLATES_DATA__;
+            });
+    }
+    return window.__ttsTemplatesPromise;
+};
 </script>
 
 <header id="site-nav"></header>
@@ -43,6 +53,13 @@ window.__TTS_TEMPLATES_DATA__ = (function () {
                 <i class="bi bi-plus-lg"></i> 新建模板
             </button>
         </div>
+    </div>
+
+    <!-- 引导数据还在路上：先出骨架（原来同步 XHR 会让两张列表先空着） -->
+    <div id="bootSkel" class="sc-skel-row mb-4">
+        <div class="sc-skel sc-skel-line mb-2" style="width: 30%;"></div>
+        <div class="sc-skel sc-skel-line"></div>
+        <div class="sc-skel sc-skel-line w-75"></div>
     </div>
 
     <!-- Add Template Form -->
@@ -92,8 +109,8 @@ window.__TTS_TEMPLATES_DATA__ = (function () {
 (function () {
     'use strict';
     var data = window.__TTS_TEMPLATES_DATA__ || { builtinTemplates: [], userTemplates: [] };
-    var builtin = data.builtinTemplates || [];
-    var users = data.userTemplates || [];
+    var builtin = [];      // 引导数据是异步的，boot() 里填
+    var users = [];
     var main = document.querySelector('main');
 
     function renderBuiltin() {
@@ -160,8 +177,23 @@ window.__TTS_TEMPLATES_DATA__ = (function () {
         if (form && !confirm(form.dataset.confirm)) e.preventDefault();
     });
 
-    renderBuiltin();
-    renderUsers();
+    /** 引导数据是异步的：await 之后填列表再渲染，最后收骨架 */
+    async function boot() {
+        try {
+            data = (typeof window.loadTtsTemplatesData === 'function')
+                ? await window.loadTtsTemplatesData()
+                : (window.__TTS_TEMPLATES_DATA__ || {});
+            builtin = data.builtinTemplates || [];
+            users = data.userTemplates || [];
+            renderBuiltin();
+            renderUsers();
+        } finally {
+            var skel = document.getElementById('bootSkel');
+            if (skel) skel.remove();
+        }
+    }
+
+    boot();
 })();
 </script>
 <script src="/vendor/alpinejs/cdn.min.js" defer></script>

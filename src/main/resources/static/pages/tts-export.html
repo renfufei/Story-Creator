@@ -96,20 +96,33 @@
 <body class="sc-page" data-nav="projects">
 
 <script>
-/* 引导数据：同步 XHR，确保 ttsExportApp() 构造时已就绪（保留 ?projectId= 预选） */
-window.__TTS_EXPORT_DATA__ = (function () {
-    var d = { projects: [], preselectedProjectId: null };
-    try {
+/* 引导数据：异步 fetch。
+   原来这里是**同步 XHR**（`open(..., false)` 的三参形态），浏览器要停在 HTML 解析期等一个往返，
+   JS 还没开始跑、DOM 也没解析完，首绘直接白屏——现在改成先给空壳、由 init() await 后铺数据。
+   保留 ?projectId= 预选能力（预选号直接从 URL 取，不需要等接口）。 */
+window.__TTS_EXPORT_DATA__ = { projects: [], preselectedProjectId: null };
+window.loadTtsExportData = function () {
+    if (!window.__ttsExportDataPromise) {
         var params = new URLSearchParams(location.search);
         var pid = params.get('projectId');
         var url = '/tts-export/data' + (pid ? '?projectId=' + encodeURIComponent(pid) : '');
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url, false);
-        xhr.send();
-        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
-    } catch (e) { console.error('__TTS_EXPORT_DATA__ load failed', e); }
-    return d;
-})();
+        window.__ttsExportDataPromise = fetch(url, { headers: { 'Accept': 'application/json' } })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (d) {
+                window.__TTS_EXPORT_DATA__ = d || window.__TTS_EXPORT_DATA__;
+                return window.__TTS_EXPORT_DATA__;
+            })
+            .catch(function (e) {
+                // 退化：项目列表为空，向导仍能打开（只是没得选）
+                console.error('tts-export bootstrap failed: ' + (e && e.message ? e.message : e));
+                return window.__TTS_EXPORT_DATA__;
+            });
+    }
+    return window.__ttsExportDataPromise;
+};
 </script>
 
 <header id="site-nav"></header>
@@ -132,8 +145,21 @@ window.__TTS_EXPORT_DATA__ = (function () {
         <div class="card-body p-0">
             <!-- 这张 8 列的宽表在 375px 手机上会把**整页**撑出横向滚动条（实测 597px > 375px）。
                  用 Bootstrap 的 table-responsive 让它只在卡片内部横向滚动，页面本身不再溢出。 -->
+            <!-- 任务列表骨架：接口还在路上时先占位，避免先闪「还没有导出任务」 -->
+            <div class="p-3" x-show="booting" x-cloak>
+                <template x-for="i in 3" :key="i">
+                    <div class="d-flex align-items-center gap-3 py-2"
+                         style="border-bottom: 1px solid var(--bs-border-color-translucent, #dee2e6);">
+                        <span class="sc-skel" style="width: 2rem;"></span>
+                        <span class="sc-skel sc-skel-line flex-grow-1" style="max-width: 16rem;"></span>
+                        <span class="sc-skel sc-skel-line" style="width: 4rem;"></span>
+                        <span class="sc-skel sc-skel-badge"></span>
+                        <span class="sc-skel sc-skel-line flex-grow-1" style="max-width: 12rem;"></span>
+                    </div>
+                </template>
+            </div>
             <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0" x-show="tasks.length > 0">
+            <table class="table table-hover align-middle mb-0" x-show="!booting && tasks.length > 0">
                 <thead class="table-light">
                     <tr>
                         <th class="text-nowrap">#</th>
@@ -345,7 +371,7 @@ window.__TTS_EXPORT_DATA__ = (function () {
                 </template>
             </table>
             </div>
-            <div class="text-center text-muted py-5" x-show="tasks.length === 0">
+            <div class="text-center text-muted py-5" x-show="!booting && tasks.length === 0">
                 <i class="bi bi-inbox" style="font-size: 2rem;"></i>
                 <p class="mt-2 mb-3">还没有导出任务</p>
                 <button class="btn btn-sm btn-primary" @click="openWizard()">
@@ -651,13 +677,19 @@ window.__TTS_EXPORT_DATA__ = (function () {
 <script src="/js/nav.js"></script>
 <script>
 function ttsExportApp() {
+    // 引导数据是异步的：构造时只能拿空壳，项目列表由 init() await 之后补进来
     const PAGE = window.__TTS_EXPORT_DATA__ || {};
-    const preselectedProjectId = PAGE.preselectedProjectId || null;
-    const allProjects = PAGE.projects || [];
+    let preselectedProjectId = PAGE.preselectedProjectId || null;
+    if (!preselectedProjectId) {
+        const pid = new URLSearchParams(location.search).get('projectId');
+        if (pid) preselectedProjectId = pid;
+    }
 
     return {
+        // 数据还在路上：先出骨架，别先闪「还没有导出任务」
+        booting: true,
         tasks: [],
-        projects: allProjects.map(p => ({ id: String(p.id), title: p.title, chapterCount: p.chapterCount || 0, wordCount: p.wordCount || 0 })),
+        projects: [],
         expandedTaskId: null,
         expandedChapters: [],
         progressLogs: {},
@@ -696,17 +728,34 @@ function ttsExportApp() {
         },
 
         async init() {
-            await this.loadTasks();
-            this.startPolling();
-            // Pre-load TTS configs
-            await this.loadTtsConfigs();
-            this.applyDefaultTtsConfig();
-            // 探测 ffmpeg（后端每次都会真起一次 `ffmpeg -version`，不读缓存）
-            await this.refreshFfmpegStatus();
-            // If preselected project, load chapters and auto-open wizard
-            if (preselectedProjectId) {
-                await this.loadChaptersForProject(preselectedProjectId);
-                this.openWizard();
+            try {
+                // ① 引导数据（向导要用的项目列表 + 预选项目）
+                const page = (typeof window.loadTtsExportData === 'function')
+                    ? await window.loadTtsExportData()
+                    : (window.__TTS_EXPORT_DATA__ || {});
+                this.projects = (page.projects || []).map(p => ({
+                    id: String(p.id), title: p.title,
+                    chapterCount: p.chapterCount || 0, wordCount: p.wordCount || 0
+                }));
+                if (!preselectedProjectId && page.preselectedProjectId) {
+                    preselectedProjectId = page.preselectedProjectId;
+                }
+                // ② 任务列表 / TTS 配置 / ffmpeg 探测
+                await this.loadTasks();
+                this.startPolling();
+                // Pre-load TTS configs
+                await this.loadTtsConfigs();
+                this.applyDefaultTtsConfig();
+                // 探测 ffmpeg（后端每次都会真起一次 `ffmpeg -version`，不读缓存）
+                await this.refreshFfmpegStatus();
+                // If preselected project, load chapters and auto-open wizard
+                if (preselectedProjectId) {
+                    await this.loadChaptersForProject(preselectedProjectId);
+                    this.openWizard();
+                }
+            } finally {
+                // ★ 数据全部铺完才收骨架：先收的话空列表会把刚发出的操作冲掉
+                this.booting = false;
             }
         },
 

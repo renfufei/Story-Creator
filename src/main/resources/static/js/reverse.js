@@ -2,7 +2,7 @@
  * 逆向工程流程页共享逻辑（/projects/{id}/reverse/options 与 /progress 两个页面复用）。
  *
  * 拆分自原 /import/txt 单页的第 3/4 步：引导数据由
- * GET /projects/{projectId}/reverse/data 注入 window.__REVERSE_DATA__（同步 XHR，先于 Alpine 解析）。
+ * GET /projects/{projectId}/reverse/data 注入 window.__REVERSE_DATA__（**异步 fetch**，见 loadReverseData）。
  * 业务接口（reverse-plan / start-reverse / stream / stop）仍走 /import/txt/{jobId}/...。
  */
 
@@ -205,26 +205,88 @@ function reverseMixin() {
     };
 }
 
-/** 逆向选项页（原第 3 步）。 */
+/* ==================== 引导数据（异步） ====================
+   原来两个页面各自在顶部跑同步 XHR：浏览器停在 HTML 解析期等一趟，首屏白屏。
+   现在空壳先摆上，数据由 loadReverseData() 异步取；组件在 boot() 里才铺字段。
+   两个页面共用这一个函数（同源同路径规则，区别只在 boot 之后要不要开 SSE）。 */
+window.__REVERSE_DATA__ = window.__REVERSE_DATA__ || { error: '无效的项目地址' };
+window.loadReverseData = function () {
+    if (!window.__reverseDataPromise) {
+        var projectId = (location.pathname.match(/\/projects\/(\d+)/) || [])[1];
+        if (!projectId) {
+            window.__REVERSE_DATA__.error = '无效的项目地址';
+            window.__reverseDataPromise = Promise.resolve(window.__REVERSE_DATA__);
+        } else {
+            window.__reverseDataPromise = fetch('/projects/' + projectId + '/reverse/data',
+                { headers: { 'Accept': 'application/json' } })
+                .then(function (res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
+                .then(function (d) {
+                    /* ★ 合并而非替换：页面别处可能已经抓了同一个对象。
+                       成功时必须清掉空壳预置的 error（'无效的项目地址'），否则合并不清旧键、会一直误报。 */
+                    delete window.__REVERSE_DATA__.error;
+                    Object.assign(window.__REVERSE_DATA__, d || {});
+                    return window.__REVERSE_DATA__;
+                })
+                .catch(function (e) {
+                    console.error('__REVERSE_DATA__ bootstrap failed: ' + (e && e.message ? e.message : e));
+                    /* 直接给出本次失败的具体原因，别保留空壳预置的旧文案 */
+                    window.__REVERSE_DATA__.error = '引导数据加载失败';
+                    return window.__REVERSE_DATA__;
+                });
+        }
+    }
+    return window.__reverseDataPromise;
+};
+
+/** 逆向选项页（原第 3 步）。
+ *  ★ mixin 挂到原型（Object.create）而不是 Object.assign 进字面量：
+ *    assign 会把 mixin 上的 getter（planHeadline / startButtonText / planSubline）
+ *    求值一次并摊平成静态值，plan 刷新后文案永不更新。原型链上的 getter
+ *    通过 Alpine 响应式代理访问时 this 指向 proxy，才能正常 track。 */
 function reverseOptions() {
-    var BOOT = window.__REVERSE_DATA__ || {};
-    return Object.assign({}, reverseMixin(), {
-        bootError: BOOT.error || '',
-        jobId: BOOT.jobId || null,
-        jobTitle: BOOT.title || '',
-        jobStatus: BOOT.status || '',
+    return Object.assign(Object.create(reverseMixin()), {
+        booting: true,
+        /* 引导数据是异步的：这些字段在 boot() 里铺 */
+        bootError: '',
+        jobId: null,
+        jobTitle: '',
+        jobStatus: '',
         projectId: (location.pathname.match(/\/projects\/(\d+)/) || [])[1],
         // 逆向选项（初值取自 job 上次保存的选项，可修改后重新启动）
-        runWorldBuilding: BOOT.runWorldBuilding !== false,
-        runCharacters: BOOT.runCharacters !== false,
-        runOutline: BOOT.runOutline !== false,
-        chaptersPerVolume: BOOT.chaptersPerVolume || 30,
-        modelConfigId: BOOT.modelConfigId || '',
-        modelConfigs: BOOT.modelConfigs || [],
+        runWorldBuilding: true,
+        runCharacters: true,
+        runOutline: true,
+        chaptersPerVolume: 30,
+        modelConfigId: '',
+        modelConfigs: [],
         starting: false,
 
         init() {
-            if (this.jobId) this.refreshPlan();
+            return this.boot();
+        },
+
+        async boot() {
+            try {
+                var BOOT = (typeof window.loadReverseData === 'function')
+                    ? await window.loadReverseData()
+                    : (window.__REVERSE_DATA__ || {});
+                this.bootError = BOOT.error || '';
+                this.jobId = BOOT.jobId || null;
+                this.jobTitle = BOOT.title || '';
+                this.jobStatus = BOOT.status || '';
+                this.runWorldBuilding = BOOT.runWorldBuilding !== false;
+                this.runCharacters = BOOT.runCharacters !== false;
+                this.runOutline = BOOT.runOutline !== false;
+                this.chaptersPerVolume = BOOT.chaptersPerVolume || 30;
+                this.modelConfigId = BOOT.modelConfigId || '';
+                this.modelConfigs = BOOT.modelConfigs || [];
+                if (this.jobId) await this.refreshPlan();
+            } finally {
+                this.booting = false;
+            }
         },
 
         /** 启动（或继续）逆向工程，成功后跳转到独立的执行监控页。 */
@@ -235,13 +297,21 @@ function reverseOptions() {
     });
 }
 
-/** 执行监控页（原第 4 步）：重开时自动恢复实时监控或展示最终状态。 */
+/** 执行监控页（原第 4 步）：重开时自动恢复实时监控或展示最终状态。
+ *  ★ 同上：mixin 挂原型；页面自己的 allCompleted getter 也不能进
+ *    Object.assign（同样会被摊平成静态 false），用 defineProperty 挂。 */
 function reverseProgress() {
-    var BOOT = window.__REVERSE_DATA__ || {};
-    return Object.assign({}, reverseMixin(), {
-        bootError: BOOT.error || '',
-        jobId: BOOT.jobId || null,
-        jobTitle: BOOT.title || '',
+    const base = Object.create(reverseMixin());
+    Object.defineProperty(base, 'allCompleted', {
+        enumerable: true, configurable: true,
+        get() { return this.done || !!(this.plan && this.plan.completed); }
+    });
+    return Object.assign(base, {
+        booting: true,
+        /* 引导数据是异步的：这些字段在 boot() 里铺 */
+        bootError: '',
+        jobId: null,
+        jobTitle: '',
         projectId: (location.pathname.match(/\/projects\/(\d+)/) || [])[1],
         output: '',
         active: false,
@@ -257,22 +327,40 @@ function reverseProgress() {
         terminal: false,
 
         // 逆向选项：直接复用 job 上次保存的选项续跑（后端对未提交的字段沿用旧值）
-        runWorldBuilding: BOOT.runWorldBuilding !== false,
-        runCharacters: BOOT.runCharacters !== false,
-        runOutline: BOOT.runOutline !== false,
-        chaptersPerVolume: BOOT.chaptersPerVolume || 30,
-        modelConfigId: BOOT.modelConfigId || '',
+        runWorldBuilding: true,
+        runCharacters: true,
+        runOutline: true,
+        chaptersPerVolume: 30,
+        modelConfigId: '',
         starting: false,
 
         init() {
-            if (!this.jobId) return;
-            this.refreshPlan().then(() => this.watchStatus());
+            return this.boot();
         },
 
-        /** 是否已全部完成：完成态不再提供「开始」入口，避免误触发重跑。 */
-        get allCompleted() {
-            return this.done || !!(this.plan && this.plan.completed);
+        async boot() {
+            try {
+                var BOOT = (typeof window.loadReverseData === 'function')
+                    ? await window.loadReverseData()
+                    : (window.__REVERSE_DATA__ || {});
+                this.bootError = BOOT.error || '';
+                this.jobId = BOOT.jobId || null;
+                this.jobTitle = BOOT.title || '';
+                this.runWorldBuilding = BOOT.runWorldBuilding !== false;
+                this.runCharacters = BOOT.runCharacters !== false;
+                this.runOutline = BOOT.runOutline !== false;
+                this.chaptersPerVolume = BOOT.chaptersPerVolume || 30;
+                this.modelConfigId = BOOT.modelConfigId || '';
+                if (!this.jobId) return;
+                await this.refreshPlan();
+                this.watchStatus();
+            } finally {
+                this.booting = false;
+            }
         },
+
+        /** 是否已全部完成：完成态不再提供「开始」入口，避免误触发重跑。
+         *  （allCompleted 已用 defineProperty 挂在 base 上，见函数头注释） */
 
         /** 在监控页直接开始 / 继续逆向工程，成功后原地进入实时监控（无需回选项页）。 */
         async startReverse() {

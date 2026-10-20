@@ -16,37 +16,101 @@
             font-size: 0.72rem;
             color: #adb5bd; /* 灰色，浅色主题下仍可读 */
         }
+
+        /* 外壳高度：桌面按视口减掉导航；移动端用 dvh（100vh 在地址栏收放时会溢出） */
+        .chat-shell { height: calc(100vh - 200px); }
+        @media (max-width: 767.98px) {
+            .chat-shell { height: calc(100dvh - 150px); min-height: 420px; }
+        }
+
+        /* 移动端：会话列表做成左侧抽屉。
+           原来固定 col-3，390px 屏幕上只分到 97px，标题全被截成一两个字。 */
+        .chat-mobile-bar { display: none; }
+        .chat-sidebar-backdrop { display: none; }
+        .chat-sidebar-close { display: none; }
+
+        @media (max-width: 767.98px) {
+            .chat-sidebar {
+                position: fixed; top: 0; bottom: 0; left: 0;
+                width: 78vw; max-width: 300px; height: 100%;
+                z-index: 1045;
+                background: var(--bs-body-bg, #fff);
+                border-right: 1px solid var(--bs-border-color, #dee2e6);
+                transform: translateX(-100%);
+                transition: transform .18s ease;
+            }
+            .chat-sidebar.chat-sidebar-open { transform: none; box-shadow: 0 0 28px rgba(0, 0, 0, .22); }
+
+            .chat-sidebar-backdrop { display: block; position: fixed; inset: 0; z-index: 1040; background: rgba(0, 0, 0, .35); }
+
+            .chat-mobile-bar { display: flex; align-items: center; gap: .5rem; padding: .25rem .5rem; }
+            .chat-sidebar-close { display: inline-flex; align-items: center; }
+        }
     </style>
 </head>
 <body class="sc-page" data-nav="chat">
 
 <script>
-/* 引导数据：同步 XHR，确保 chatApp() 构造时已就绪 */
-window.__CHAT_DATA__ = (function () {
-    var d = { sessions: [], textConfigs: [], ttsConfigs: [], imageConfigs: [] };
-    try {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/chat/data', false);
-        xhr.send();
-        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
-    } catch (e) { console.error('__CHAT_DATA__ load failed', e); }
-    return d;
-})();
+/*
+ * 引导数据：**异步**拉取。
+ * 原来是同步 XHR（open() 第三个参数传 false 那种）：浏览器必须停下来等网络往返，
+ * HTML 解析、样式计算、首次绘制全被卡住（数据没回来就是一片白屏；同步 XHR 也已被
+ * 浏览器标记为弃用，页面 unload 时还会直接抛错）。
+ * 现在改成 fetch：骨架先渲染（booting 骨架屏），数据到了再由 Alpine 的 init 填进去。
+ */
+window.__CHAT_DATA__ = null;
+window.loadChatData = function () {
+    if (window.__chatDataPromise) return window.__chatDataPromise;
+    window.__chatDataPromise = fetch('/chat/data', { headers: { 'Accept': 'application/json' } })
+        .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function (d) {
+            window.__CHAT_DATA__ = d || {};
+            return window.__CHAT_DATA__;
+        })
+        .catch(function (e) {
+            // 引导数据失败不该让整页坏死：退化成空列表，用户仍可点「新建会话」继续用
+            console.error('chat bootstrap failed: ' + e.message);
+            window.__CHAT_DATA__ = { sessions: [], textConfigs: [], ttsConfigs: [], imageConfigs: [] };
+            return window.__CHAT_DATA__;
+        });
+    return window.__chatDataPromise;
+};
 </script>
 
 <header id="site-nav"></header>
 
 <main class="sc-main container py-4">
-<div x-data="chatApp()" x-init="init()" style="height: calc(100vh - 200px);">
+<div x-data="chatApp()" x-init="init()" class="chat-shell">
     <div class="row h-100 g-0">
-        <!-- Left Sidebar: Sessions -->
-        <div class="col-3 border-end d-flex flex-column h-100">
-            <div class="p-2 border-bottom">
-                <button class="btn btn-primary btn-sm w-100" @click="createSession()">
+        <!-- Left Sidebar: Sessions（窄屏下是左侧抽屉，见 .chat-sidebar） -->
+        <div class="col-12 col-md-3 border-end d-flex flex-column h-100 chat-sidebar"
+             :class="{ 'chat-sidebar-open': sidebarOpen }">
+            <div class="p-2 border-bottom d-flex gap-1">
+                <button class="btn btn-primary btn-sm flex-grow-1" @click="createSession()"
+                        :disabled="booting">
                     <i class="bi bi-plus-lg"></i> 新建会话
+                </button>
+                <button class="btn btn-sm btn-outline-secondary chat-sidebar-close"
+                        @click="sidebarOpen = false" title="收起会话列表">
+                    <i class="bi bi-x-lg"></i>
                 </button>
             </div>
             <div class="overflow-auto flex-grow-1">
+                <!-- 引导数据是异步拉的，先给骨架，避免「先闪一下空列表再冒出会话」 -->
+                <template x-if="booting">
+                    <div class="p-3 text-muted small">
+                        <span class="spinner-border spinner-border-sm me-1"></span>加载会话…
+                    </div>
+                </template>
+                <template x-if="!booting && sessions.length === 0">
+                    <div class="p-3 text-center text-muted small">
+                        <i class="bi bi-chat-square d-block mb-1 fs-5"></i>
+                        还没有会话，点上面的「新建会话」
+                    </div>
+                </template>
                 <template x-for="s in sessions" :key="s.id">
                     <div class="p-2 border-bottom d-flex align-items-center"
                          :class="{'bg-primary-subtle': activeSessionId == s.id}"
@@ -72,13 +136,42 @@ window.__CHAT_DATA__ = (function () {
         </div>
 
         <!-- Main Chat Area -->
-        <div class="col-9 d-flex flex-column h-100">
+        <div class="col-12 col-md-9 d-flex flex-column h-100">
+            <!-- 窄屏专用：会话列表在抽屉里，这里给入口 + 当前会话标题 -->
+            <div class="chat-mobile-bar border-bottom">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        @click="sidebarOpen = true" title="会话列表">
+                    <i class="bi bi-list"></i>
+                </button>
+                <div class="small text-truncate flex-grow-1" x-text="activeTitle()"></div>
+                <span class="small text-muted" x-show="sessions.length > 0"
+                      x-text="sessions.length + ' 个会话'"></span>
+            </div>
+
             <!-- Messages -->
             <div class="flex-grow-1 overflow-auto p-3" x-ref="messageContainer">
-                <template x-if="messages.length === 0 && !streaming">
+                <!-- 引导数据在路上的骨架（原来同步 XHR 会把这段时间变成白屏） -->
+                <template x-if="booting">
+                    <div class="text-center text-muted mt-5">
+                        <span class="spinner-border spinner-border-sm me-2"></span>正在加载会话…
+                    </div>
+                </template>
+                <!-- 会话消息拉取失败时给明确提示，而不是一片空白 -->
+                <template x-if="!booting && loadError">
+                    <div class="alert alert-warning py-2 small d-flex align-items-center gap-2">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <span x-text="loadError"></span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary ms-auto"
+                                @click="switchSession(activeSessionId)">重试</button>
+                    </div>
+                </template>
+                <template x-if="!booting && !loadError && messages.length === 0 && !streaming">
                     <div class="text-center text-muted mt-5">
                         <i class="bi bi-chat-dots" style="font-size: 3rem;"></i>
                         <p class="mt-2">开始对话吧</p>
+                        <p class="small mb-0" x-show="selectedType === 'TEXT' && !selectedConfigId">
+                            还没有可用的文本模型配置，先到「设置」里添加一个再开始。
+                        </p>
                     </div>
                 </template>
                 <template x-for="msg in messages" :key="msg.id || msg.tempId">
@@ -162,6 +255,9 @@ window.__CHAT_DATA__ = (function () {
             </div>
         </div>
     </div>
+
+    <!-- 抽屉遮罩：点空白处收起（桌面端由 CSS 屏蔽，见 .chat-sidebar-backdrop） -->
+    <div class="chat-sidebar-backdrop" x-show="sidebarOpen" x-cloak @click="sidebarOpen = false"></div>
 </div>
 </main>
 
@@ -170,16 +266,22 @@ window.__CHAT_DATA__ = (function () {
 <script src="/js/nav.js"></script>
 <script>
 function chatApp() {
-    const PAGE = window.__CHAT_DATA__ || {};
     return {
         sessions: [],
         activeSessionId: null,
         messages: [],
         userInput: '',
+        booting: true,               // 引导数据还在路上（渲染骨架屏）
+        loadError: '',               // 会话消息拉取失败的说明
+        sidebarOpen: false,          // 窄屏会话抽屉是否展开
         streaming: false,
         sending: false,
         streamingContent: '',
         streamStartedAt: null,
+        _streamAbort: null,          // 当前文本流的 AbortController（切会话/重发时掐断）
+        _seq: 0,                      // 切会话的竞态守卫（只认最后一次点击）
+        _pendingTokens: '',           // 流式 token 缓冲区（每帧一次性写入）
+        _flushHandle: 0,
         selectedType: 'TEXT',
         selectedConfigId: null,
         ttsVoice: 'alloy',
@@ -191,8 +293,20 @@ function chatApp() {
         _ttsConfigs: [],
         _imageConfigs: [],
 
-        init: function() {
+        init: async function() {
             var self = this;
+            // 引导数据是异步的：页面骨架先出来，这里 await 之后再填。
+            // 失败时 loadChatData 内部已兜成空列表，页面仍可用（可以新建会话）。
+            var PAGE = {};
+            try {
+                PAGE = (typeof window.loadChatData === 'function')
+                    ? await window.loadChatData()
+                    : (window.__CHAT_DATA__ || {});
+            } catch (e) {
+                PAGE = {};
+            }
+            if (!PAGE || typeof PAGE !== 'object') PAGE = {};
+
             // Parse configs（引导数据已裁剪为 id/displayName/modelId）
             self._textConfigs = (PAGE.textConfigs || []).map(function(c) {
                 return { id: c.id, displayName: c.displayName, modelId: c.modelId };
@@ -211,10 +325,23 @@ function chatApp() {
 
             self.onTypeChange();
 
-            // Auto-select first session or create one
+            // 自动打开最近一次会话（列表已按 updatedAt 倒序）。
+            // ★ 必须等它把消息也加载完再收骨架：否则 booting=false 之后用户抢着发消息，
+            //   随后返回的「空消息列表」会把刚发出去的那条连同回复一起冲掉。
             if (self.sessions.length > 0) {
-                self.switchSession(self.sessions[0].id);
+                await self.switchSession(self.sessions[0].id);
             }
+            self.booting = false;
+        },
+
+        /* 当前会话标题（窄屏工具栏显示用） */
+        activeTitle: function() {
+            for (var i = 0; i < this.sessions.length; i++) {
+                if (this.sessions[i].id === this.activeSessionId) {
+                    return this.sessions[i].title || '未命名会话';
+                }
+            }
+            return this.booting ? '加载中…' : '新对话';
         },
 
         onTypeChange: function() {
@@ -235,42 +362,82 @@ function chatApp() {
 
         createSession: function() {
             var self = this;
-            fetch('/api/chat/sessions', { method: 'POST' })
-                .then(function(r) { return r.json(); })
+            return fetch('/api/chat/sessions', { method: 'POST' })
+                .then(function(r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                })
                 .then(function(data) {
                     self.sessions.unshift({ id: data.id, title: data.title });
                     self.switchSession(data.id);
+                    self.sidebarOpen = false;
+                    return data.id;
+                })
+                .catch(function(e) {
+                    SC.toast.error('新建会话失败：' + e.message);
+                    return null;
                 });
         },
 
         switchSession: function(id) {
             var self = this;
+            // 切会话必须掐掉在跑的流：否则上一个会话的 token 会继续写进新会话的界面
+            self.abortStream();
+            self.streaming = false;
             self.activeSessionId = id;
             self.messages = [];
             self.streamingContent = '';
-            fetch('/api/chat/sessions/' + id + '/messages')
-                .then(function(r) { return r.json(); })
+            self.loadError = '';
+            self.sidebarOpen = false;
+            // 竞态守卫：连着点两个会话时，先发的请求可能后到，不能让它盖掉后点的那一个
+            var seq = ++self._seq;
+            var mark = self.messages.length;        // 请求发出时列表是空的
+            return fetch('/api/chat/sessions/' + id + '/messages', { headers: { 'Accept': 'application/json' } })
+                .then(function(r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                })
                 .then(function(data) {
-                    self.messages = data;
-                    self.$nextTick(function() { self.scrollToBottom(); });
+                    if (seq !== self._seq) return;  // 已经切走了，丢弃过期响应
+                    // 等待期间用户已经发出消息：服务端这份列表是「发之前」的旧快照，
+                    // 用它覆盖会把刚发的消息和正在流式返回的回复一起抹掉。
+                    if (self.messages.length !== mark) return;
+                    self.messages = Array.isArray(data) ? data : [];
+                    self.$nextTick(function() { self.autoScroll(true); });
+                })
+                .catch(function(e) {
+                    if (seq !== self._seq) return;
+                    // 之前是静默失败：界面一片空白，看起来像「这个会话没有消息」
+                    self.loadError = '消息加载失败：' + e.message;
                 });
         },
 
         deleteSession: function(id) {
             var self = this;
-            if (!confirm('确认删除此会话?')) return;
-            fetch('/api/chat/sessions/' + id, { method: 'DELETE' })
-                .then(function() {
-                    self.sessions = self.sessions.filter(function(s) { return s.id !== id; });
-                    if (self.activeSessionId === id) {
-                        if (self.sessions.length > 0) {
-                            self.switchSession(self.sessions[0].id);
-                        } else {
-                            self.activeSessionId = null;
-                            self.messages = [];
+            // 用项目统一的 SC.confirm（原生 confirm 会阻塞主线程、样式不可控、移动端体验差）
+            SC.confirm({
+                title: '删除会话',
+                message: '这个会话的所有消息都会被删除，无法恢复。',
+                confirmText: '删除',
+                danger: true
+            }).then(function(ok) {
+                if (!ok) return;
+                return fetch('/api/chat/sessions/' + id, { method: 'DELETE' })
+                    .then(function(r) {
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
+                        self.sessions = self.sessions.filter(function(s) { return s.id !== id; });
+                        if (self.activeSessionId === id) {
+                            if (self.sessions.length > 0) {
+                                self.switchSession(self.sessions[0].id);
+                            } else {
+                                self.activeSessionId = null;
+                                self.messages = [];
+                            }
                         }
-                    }
-                });
+                        SC.toast.success('会话已删除');
+                    })
+                    .catch(function(e) { SC.toast.error('删除失败：' + e.message); });
+            });
         },
 
         startEditTitle: function(s) {
@@ -280,30 +447,37 @@ function chatApp() {
 
         saveTitle: function(s) {
             var self = this;
-            if (self.editingTitle.trim()) {
-                s.title = self.editingTitle.trim();
-                fetch('/api/chat/sessions/' + s.id + '/title', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title: s.title })
-                });
-            }
+            // 回车保存后 editingSessionId 立刻清空 ⇒ 输入框隐藏 ⇒ 触发 blur ⇒ 再进来一次。
+            // 原来这样会连发两个 PUT（第二个还把已经改好的标题又写一遍）。
+            if (self.editingSessionId !== s.id) return;
             self.editingSessionId = null;
+
+            var title = (self.editingTitle || '').trim();
+            if (!title || title === s.title) return;   // 空标题 / 没改就不发请求
+
+            var prev = s.title;
+            s.title = title;
+            fetch('/api/chat/sessions/' + s.id + '/title', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: title })
+            }).then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+            }).catch(function(e) {
+                s.title = prev;                        // 写失败要回滚，别让界面显示一个没保存的标题
+                SC.toast.error('重命名失败：' + e.message);
+            });
         },
 
         sendMessage: function() {
             var self = this;
             if (!self.userInput.trim() || self.streaming || self.sending) return;
 
-            // Auto-create session if none
+            // 还没有会话就建一个（失败时 createSession 会 toast，不要继续发一条注定失败的请求）
             if (!self.activeSessionId) {
-                fetch('/api/chat/sessions', { method: 'POST' })
-                    .then(function(r) { return r.json(); })
-                    .then(function(data) {
-                        self.sessions.unshift({ id: data.id, title: data.title });
-                        self.activeSessionId = data.id;
-                        self.doSend();
-                    });
+                self.createSession().then(function(id) {
+                    if (id) self.doSend();
+                });
                 return;
             }
 
@@ -323,21 +497,67 @@ function chatApp() {
             }
         },
 
+        /* 掐断当前文本流（切会话 / 页面离开 / 重发前调用） */
+        abortStream: function() {
+            var ctrl = this._streamAbort;
+            this._streamAbort = null;
+            this.dropPendingTokens();
+            if (ctrl) {
+                try { ctrl.abort(); } catch (e) { /* 已结束的流 abort 会抛，忽略 */ }
+            }
+        },
+
         sendTextMessage: function(input) {
             var self = this;
             // Show user message immediately
             self.messages.push({ tempId: Date.now(), role: 'user', content: input });
+            self.abortStream();
+            var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+            self._streamAbort = ctrl;
             self.streaming = true;
             self.streamingContent = '';
-            self.$nextTick(function() { self.scrollToBottom(); });
+            self.$nextTick(function() { self.autoScroll(true); });
 
-            var url = '/api/chat/sessions/' + self.activeSessionId + '/stream?configId=' + self.selectedConfigId + '&input=' + encodeURIComponent(input);
-
-            fetch(url).then(function(response) {
-                if (!response.ok) throw new Error('HTTP ' + response.status);
+            // ★ POST + JSON body：聊天原文不再进 URL。
+            // 原来是把 configId 和 input 都拼在 GET 的 query 里 —— 中文按 encodeURIComponent
+            // 编码后一个汉字占 9 个字符，长消息会顶到请求头 8KB 上限（414/400）；
+            // 原文还会留在浏览器历史、服务端访问日志、Referer 里。
+            // 响应仍是 text/event-stream，这里用 ReadableStream 自己读，所以 POST 无碍
+            // （EventSource 只支持 GET，所以本来就没用它）。
+            fetch('/api/chat/sessions/' + self.activeSessionId + '/stream', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    // 同时接受 json：出错时后端走 /error 返回 JSON，只写 text/event-stream 会被判 406
+                    'Accept': 'text/event-stream, application/json'
+                },
+                body: JSON.stringify({ configId: self.selectedConfigId, input: input }),
+                signal: ctrl ? ctrl.signal : undefined
+            }).then(function(response) {
+                if (!response.ok) {
+                    // 400 之类：把后端给的说明透出来，别只显示 "HTTP 400"
+                    return response.text().then(function(txt) {
+                        var msg = 'HTTP ' + response.status;
+                        try {
+                            var body = JSON.parse(txt);
+                            msg = body.error || body.detail || body.message || msg;
+                        } catch (e) {
+                            if (txt && txt.length <= 200) msg = txt;
+                        }
+                        throw new Error(msg);
+                    });
+                }
                 var reader = response.body.getReader();
                 var decoder = new TextDecoder();
                 var buffer = '';
+                var finished = false;
+
+                /* 收到 done/error 或中止后立刻关掉 reader，别让连接挂到 GC 才释放 */
+                function stopReading() {
+                    if (finished) return;
+                    finished = true;
+                    try { reader.cancel(); } catch (e) { /* ignore */ }
+                }
 
                 function pump() {
                     return reader.read().then(function(result) {
@@ -349,21 +569,35 @@ function chatApp() {
                         var parts = buffer.split('\n\n');
                         buffer = parts.pop();
                         for (var i = 0; i < parts.length; i++) {
-                            var block = parts[i].trim();
-                            if (!block) continue;
-                            var eventName = '', data = '';
+                            var block = parts[i];
+                            if (!block.trim()) continue;
+                            var eventName = '', dataLines = [], seenData = false;
                             var lines = block.split('\n');
                             for (var j = 0; j < lines.length; j++) {
-                                if (lines[j].startsWith('event:')) eventName = lines[j].substring(6).trim();
-                                else if (lines[j].startsWith('data:')) data = lines[j].substring(5);
+                                var line = lines[j];
+                                if (line.indexOf('event:') === 0) {
+                                    eventName = line.substring(6).trim();
+                                } else if (line.indexOf('data:') === 0) {
+                                    seenData = true;
+                                    dataLines.push(line.substring(5));
+                                }
                             }
+                            // ★ 多行 data 必须**拼接**：Spring 的 SseEmitter 会把 token 里的
+                            // "\n" 改写成 "\ndata:"，模型输出换行时一条事件就有多行 data:；
+                            // 这里原来只取最后一行 ⇒ 换行和前半句被吞掉（刷新后才"自己好了"）。
+                            var data = seenData ? dataLines.join('\n') : '';
                             if (eventName === 'token') {
-                                self.streamingContent += data;
-                                self.$nextTick(function() { self.scrollToBottom(); });
+                                // 先进缓冲区，由 scheduleFlush 每帧合并写入一次。
+                                // 原来每个 token 都赋值 + $nextTick 滚一次底：模型吐几千个
+                                // 小包时就是几千次重渲染与滚动计算，长回复会明显掉帧。
+                                self._pendingTokens += data;
+                                self.scheduleFlush();
                             } else if (eventName === 'done') {
+                                stopReading();
                                 self.finishStreaming();
                                 return;
                             } else if (eventName === 'error') {
+                                stopReading();
                                 self.streamingContent += '\n[错误: ' + (data || '调用失败') + ']';
                                 self.finishStreaming();
                                 return;
@@ -374,6 +608,15 @@ function chatApp() {
                 }
                 return pump();
             }).catch(function(err) {
+                if (err && err.name === 'AbortError') {
+                    // 主动中止（切会话等）不算失败：只把「生成中」收掉，不弹错误
+                    if (self._streamAbort && self._streamAbort !== ctrl) return;  // 已被新流接管
+                    self.dropPendingTokens();       // 缓冲区里没来得及写的 token 也一起丢掉
+                    self.streaming = false;
+                    self.streamingContent = '';
+                    return;
+                }
+                if (self._streamAbort && self._streamAbort !== ctrl) return;      // 旧流的滞后错误，忽略
                 self.streamingContent = '请求失败: ' + err.message;
                 self.finishStreaming();
             });
@@ -381,19 +624,23 @@ function chatApp() {
 
         finishStreaming: function() {
             var self = this;
+            // ★ 必须先把缓冲区里剩下的 token 落进正文：done 事件与最后一帧 rAF 之间
+            //   进来的内容否则会被丢掉（缓冲换性能最容易踩的坑）。
+            self.flushTokens();
+            self._streamAbort = null;
             if (self.streamingContent) {
                 self.messages.push({ tempId: Date.now() + 1, role: 'assistant', content: self.streamingContent, modelType: 'TEXT' });
             }
             self.streaming = false;
             self.streamingContent = '';
-            self.$nextTick(function() { self.scrollToBottom(); });
+            self.$nextTick(function() { self.autoScroll(true); });
         },
 
         sendMediaMessage: function(input) {
             var self = this;
             self.messages.push({ tempId: Date.now(), role: 'user', content: input });
             self.sending = true;
-            self.$nextTick(function() { self.scrollToBottom(); });
+            self.$nextTick(function() { self.autoScroll(true); });
 
             var body = {
                 configId: self.selectedConfigId,
@@ -410,7 +657,10 @@ function chatApp() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             })
-            .then(function(r) { return r.json(); })
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
             .then(function(data) {
                 self.sending = false;
                 if (data.success) {
@@ -426,7 +676,7 @@ function chatApp() {
                 } else {
                     self.messages.push({ tempId: Date.now() + 1, role: 'assistant', content: '错误: ' + (data.message || '未知错误'), modelType: 'TEXT' });
                 }
-                self.$nextTick(function() { self.scrollToBottom(); });
+                self.$nextTick(function() { self.autoScroll(true); });
             })
             .catch(function(err) {
                 self.sending = false;
@@ -434,9 +684,53 @@ function chatApp() {
             });
         },
 
-        scrollToBottom: function() {
+        /*
+         * 自动滚到底。
+         * 只在「已经贴着底部」时跟随（force=true 例外：用户自己发送、切会话、生成结束）。
+         * 之前无条件滚到底：生成长回复时用户想往上翻看前文，一有新 token 就被拽回底部，
+         * 根本读不了。
+         */
+        autoScroll: function(force) {
             var el = this.$refs.messageContainer;
-            if (el) el.scrollTop = el.scrollHeight;
+            if (!el) return;
+            var gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+            if (!force && gap > 80) return;      // 用户在看历史，别抢滚动条
+            el.scrollTop = el.scrollHeight;
+        },
+
+        /* 流式渲染节流：把 token 攒进缓冲区，每帧（rAF）一次性写进正文 */
+        scheduleFlush: function() {
+            var self = this;
+            if (self._flushHandle) return;
+            var raf = window.requestAnimationFrame || function(cb) { return setTimeout(cb, 16); };
+            self._flushHandle = raf(function() {
+                self._flushHandle = 0;
+                if (self._pendingTokens) {
+                    self.streamingContent += self._pendingTokens;
+                    self._pendingTokens = '';
+                }
+                self.autoScroll();
+            });
+        },
+
+        /* 立刻把缓冲区写进正文（收尾前必须调，否则最后一帧的内容会丢） */
+        flushTokens: function() {
+            if (this._flushHandle) {
+                try {
+                    (window.cancelAnimationFrame || clearTimeout)(this._flushHandle);
+                } catch (e) { /* 已执行过，忽略 */ }
+            }
+            this._flushHandle = 0;
+            if (this._pendingTokens) {
+                this.streamingContent += this._pendingTokens;
+                this._pendingTokens = '';
+            }
+        },
+
+        /* 丢弃缓冲区（中止/切会话时用：这些内容不该再出现在任何界面上） */
+        dropPendingTokens: function() {
+            this.flushTokens();
+            this._pendingTokens = '';
         },
 
         /* 时间展示：本地临时消息没有 createdAt 时取当前时间（仅首次渲染求值，之后不会跳动） */

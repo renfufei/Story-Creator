@@ -16,23 +16,50 @@
 <body class="sc-page" data-nav="learn">
 
 <script>
-/* 引导数据：同步 XHR，确保 settingsApp() 构造时已就绪 */
-window.__LEARN_SETTINGS_DATA__ = (function () {
-    var d = { ttsConfigs: [], defaultTtsConfigId: null, formulas: [], prefixes: [], totalAudioCount: 54 };
-    try {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/learn/multiplication/settings/data', false);
-        xhr.send();
-        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
-    } catch (e) { console.error('__LEARN_SETTINGS_DATA__ load failed', e); }
-    return d;
-})();
+/* 引导数据：异步 fetch（原来同步 XHR，浏览器停在 HTML 解析期等一趟，首屏白屏） */
+window.__LEARN_SETTINGS_DATA__ = { ttsConfigs: [], defaultTtsConfigId: null, formulas: [], prefixes: [], totalAudioCount: 54 };
+window.loadLearnSettingsData = function () {
+    if (!window.__learnSettingsPromise) {
+        window.__learnSettingsPromise = fetch('/learn/multiplication/settings/data',
+            { headers: { 'Accept': 'application/json' } })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (d) {
+                Object.assign(window.__LEARN_SETTINGS_DATA__, d || {});
+                return window.__LEARN_SETTINGS_DATA__;
+            })
+            .catch(function (e) {
+                console.error('__LEARN_SETTINGS_DATA__ bootstrap failed: ' + (e && e.message ? e.message : e));
+                return window.__LEARN_SETTINGS_DATA__;
+            });
+    }
+    return window.__learnSettingsPromise;
+};
 </script>
 
 <header id="site-nav"></header>
 
 <main class="sc-main container py-4">
 <div x-data="settingsApp()" x-init="init()">
+
+    <!-- 引导数据还在路上：先出骨架（原来同步 XHR 会把整页卡在白屏） -->
+    <div x-show="booting" x-cloak>
+        <div class="sc-skel-row mb-3">
+            <div class="sc-skel sc-skel-line w-25"></div>
+        </div>
+        <div class="sc-skel-row mb-3">
+            <div class="sc-skel sc-skel-line"></div>
+            <div class="sc-skel sc-skel-line w-75"></div>
+        </div>
+        <div class="sc-skel-row">
+            <div class="sc-skel sc-skel-line"></div>
+            <div class="sc-skel sc-skel-line"></div>
+        </div>
+    </div>
+
+    <div x-show="!booting" x-cloak>
 
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h3><i class="bi bi-gear"></i> 乘法口诀 - 音频管理</h3>
@@ -152,6 +179,7 @@ window.__LEARN_SETTINGS_DATA__ = (function () {
         </div>
     </div>
 
+    </div><!-- /x-show="!booting" -->
 </div>
 </main>
 
@@ -160,33 +188,34 @@ window.__LEARN_SETTINGS_DATA__ = (function () {
 <script src="/js/nav.js"></script>
 <script>
 function settingsApp() {
-    const boot = window.__LEARN_SETTINGS_DATA__ || {};
-    const ttsConfigsRaw = boot.ttsConfigs || [];
-    const defaultTtsConfigId = boot.defaultTtsConfigId || null;
-    const formulasRaw = boot.formulas || [];
-    const prefixesRaw = boot.prefixes || [];
-    const totalAudioCount = boot.totalAudioCount || 54;
+    /* 引导数据改异步：构造期只留空壳，数据到了在 boot() 里铺（见下）。
+       原来这里是同步 XHR，浏览器停在 HTML 解析期等这一趟，首屏白屏。 */
+    const normalizeConfigs = (list) => (list || []).map(c => {
+        let voices = null, fmt = null;
+        if (c.extraParams) {
+            try {
+                const ep = typeof c.extraParams === 'string' ? JSON.parse(c.extraParams) : c.extraParams;
+                if (ep.voices) voices = ep.voices;
+                if (ep.format) fmt = ep.format;
+            } catch(e) {}
+        }
+        return {id: c.id, displayName: c.displayName, modelId: c.modelId || '', voices: voices, format: fmt};
+    });
 
-    const formulaMap = {};
-    formulasRaw.forEach(f => { formulaMap[f.itemKey] = f.mathExpression; });
-    prefixesRaw.forEach(p => { formulaMap[p.itemKey] = '[前缀]'; });
+    const buildFormulaMap = (d) => {
+        const map = {};
+        (d.formulas || []).forEach(f => { map[f.itemKey] = f.mathExpression; });
+        (d.prefixes || []).forEach(p => { map[p.itemKey] = '[前缀]'; });
+        return map;
+    };
 
     return {
-        ttsConfigs: ttsConfigsRaw.map(c => {
-            let voices = null, fmt = null;
-            if (c.extraParams) {
-                try {
-                    const ep = typeof c.extraParams === 'string' ? JSON.parse(c.extraParams) : c.extraParams;
-                    if (ep.voices) voices = ep.voices;
-                    if (ep.format) fmt = ep.format;
-                } catch(e) {}
-            }
-            return {id: c.id, displayName: c.displayName, modelId: c.modelId || '', voices: voices, format: fmt};
-        }),
-        formulaMap: formulaMap,
-        totalCount: totalAudioCount,
+        booting: true,
+        ttsConfigs: [],
+        formulaMap: {},
+        totalCount: 54,
         records: [],
-        configId: defaultTtsConfigId ? String(defaultTtsConfigId) : (ttsConfigsRaw.length > 0 ? String(ttsConfigsRaw[0].id) : ''),
+        configId: '',
         voice: '',
         speed: 1.0,
         format: 'mp3',
@@ -203,10 +232,30 @@ function settingsApp() {
         },
 
         init() {
-            this.applyConfigDefaults();
+            /* ★ $watch 必须同步注册：Alpine 的组件作用域只在 init 执行期有效，
+               await 之后再挂就挂不到组件上了 */
             this.$watch('configId', () => this.applyConfigDefaults());
-            this.fetchStatus();
-            this.checkRunning();
+            return this.boot();
+        },
+
+        async boot() {
+            try {
+                const d = (typeof window.loadLearnSettingsData === 'function')
+                    ? await window.loadLearnSettingsData()
+                    : (window.__LEARN_SETTINGS_DATA__ || {});
+                this.ttsConfigs = normalizeConfigs(d.ttsConfigs);
+                this.formulaMap = buildFormulaMap(d);
+                this.totalCount = d.totalAudioCount || 54;
+                const def = d.defaultTtsConfigId || null;
+                this.configId = def ? String(def)
+                    : (this.ttsConfigs.length > 0 ? String(this.ttsConfigs[0].id) : '');
+                this.applyConfigDefaults();
+                /* ★ 记录也要等回来再收骨架，否则表格先空一下再涨出来 */
+                await this.fetchStatus();
+                await this.checkRunning();
+            } finally {
+                this.booting = false;
+            }
         },
 
         applyConfigDefaults() {

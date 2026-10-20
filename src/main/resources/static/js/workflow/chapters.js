@@ -112,13 +112,9 @@ function workflowChaptersMixin() {
                         this.inlinePreviewEditContent = '';
                     } else if (this.currentStep === 'POLISHING') {
                         if (this.polishPreviews[num]) {
-                            const { [num]: _, ...rest } = this.polishPreviews;
-                            this.polishPreviews = rest;
+                            this.closePolishPreview(num);   // 已展开 → 收起（与扩写页同一套开合逻辑）
                         } else {
-                            this.polishPreviews = { ...this.polishPreviews, [num]: {
-                                draft: data.contentDraft || '',
-                                content: data.content || '（暂无内容）'
-                            }};
+                            this._setPolishPreview(num, data.contentDraft || '', data.content || '（暂无内容）');
                         }
                     } else {
                         this.editableContent = data.content || '（暂无内容）';

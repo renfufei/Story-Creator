@@ -16,23 +16,49 @@
 <body class="sc-page" data-nav="projects">
 
 <script>
-/* 引导数据：同步 XHR，确保 txtImport() 构造时已就绪 */
-window.__TXT_IMPORT_DATA__ = (function () {
-    var d = { splitConfigs: [], genres: [], modelConfigs: [] };
-    try {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/import/txt/data', false);
-        xhr.send();
-        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
-    } catch (e) { console.error('__TXT_IMPORT_DATA__ load failed', e); }
-    return d;
-})();
+/* 引导数据：异步 fetch（原来同步 XHR，浏览器停在 HTML 解析期等一趟，首屏白屏） */
+window.__TXT_IMPORT_DATA__ = { splitConfigs: [], genres: [], modelConfigs: [] };
+window.loadTxtImportData = function () {
+    if (!window.__txtImportDataPromise) {
+        window.__txtImportDataPromise = fetch('/import/txt/data', { headers: { 'Accept': 'application/json' } })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (d) {
+                Object.assign(window.__TXT_IMPORT_DATA__, d || {});
+                return window.__TXT_IMPORT_DATA__;
+            })
+            .catch(function (e) {
+                console.error('__TXT_IMPORT_DATA__ bootstrap failed: ' + (e && e.message ? e.message : e));
+                return window.__TXT_IMPORT_DATA__;
+            });
+    }
+    return window.__txtImportDataPromise;
+};
 </script>
 
 <header id="site-nav"></header>
 
 <main class="sc-main container py-4">
 <div x-data="txtImport()" x-init="init()">
+
+    <!-- 引导数据还在路上：先出骨架（原来同步 XHR 会把整页卡在白屏） -->
+    <div x-show="booting" x-cloak>
+        <div class="sc-skel-row mb-3">
+            <div class="sc-skel sc-skel-line w-25"></div>
+        </div>
+        <div class="sc-skel-row mb-3">
+            <div class="sc-skel sc-skel-line w-50"></div>
+            <div class="sc-skel sc-skel-line w-75"></div>
+        </div>
+        <div class="sc-skel-row">
+            <div class="sc-skel sc-skel-line"></div>
+            <div class="sc-skel sc-skel-line w-50"></div>
+        </div>
+    </div>
+
+    <div x-show="!booting" x-cloak>
     <div class="d-flex align-items-center gap-3 mb-4">
         <h2 class="mb-0"><i class="bi bi-file-earmark-text"></i> TXT导入</h2>
         <a href="/import" class="btn btn-sm btn-outline-secondary">
@@ -194,6 +220,8 @@ window.__TXT_IMPORT_DATA__ = (function () {
             </div>
         </div>
     </div>
+
+    </div><!-- /x-show="!booting" -->
 </div>
 </main>
 
@@ -202,12 +230,12 @@ window.__TXT_IMPORT_DATA__ = (function () {
 <script src="/js/nav.js"></script>
 <script>
 function txtImport() {
-    var BOOT = window.__TXT_IMPORT_DATA__ || {};
     return {
+        booting: true,
         step: 1,
-        // 引导数据
-        splitConfigs: BOOT.splitConfigs || [],
-        genres: BOOT.genres || [],
+        // 引导数据（异步：boot() 里填）
+        splitConfigs: [],
+        genres: [],
         // Step 1
         file: null,
         fileBaseName: '',
@@ -225,12 +253,26 @@ function txtImport() {
         totalWordCount: 0,
 
         init() {
-            const all = this.splitConfigs || [];
-            // 内置 Handler 由系统自检测、始终参与分割，无需勾选；
-            // 仅把「自定义正则配置」中默认启用的项列入可选集合。
-            const builtinIds = all.filter(c => c.builtin).map(c => parseInt(c.id));
-            const customEnabledIds = all.filter(c => !c.builtin && c.enabled).map(c => parseInt(c.id));
-            this.selectedConfigIds = builtinIds.concat(customEnabledIds);
+            return this.boot();
+        },
+
+        async boot() {
+            try {
+                const d = (typeof window.loadTxtImportData === 'function')
+                    ? await window.loadTxtImportData()
+                    : (window.__TXT_IMPORT_DATA__ || {});
+                this.splitConfigs = d.splitConfigs || [];
+                this.genres = d.genres || [];
+
+                const all = this.splitConfigs || [];
+                // 内置 Handler 由系统自检测、始终参与分割，无需勾选；
+                // 仅把「自定义正则配置」中默认启用的项列入可选集合。
+                const builtinIds = all.filter(c => c.builtin).map(c => parseInt(c.id));
+                const customEnabledIds = all.filter(c => !c.builtin && c.enabled).map(c => parseInt(c.id));
+                this.selectedConfigIds = builtinIds.concat(customEnabledIds);
+            } finally {
+                this.booting = false;
+            }
         },
 
         /**

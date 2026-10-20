@@ -480,11 +480,19 @@ class PageRenderingIntegrationTest {
     @Test
     void reader_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/projects/" + projectId + "/read"), String.class);
-        // 静态化后：阅读页通过同步 XHR 拉取 /api/projects/{id}/read-data，由 Alpine 渲染章节
+        // 静态化后：阅读页通过异步 fetch 拉取 /api/projects/{id}/read-data，由 Alpine 渲染章节
         assertStaticPage(response, "reader", "readerApp()");
         assertThat(response.getBody())
-                .as("阅读页应通过同步 XHR 拉取引导数据")
+                .as("阅读页应通过异步 fetch 拉取引导数据（不再是解析期同步 XHR）")
                 .contains("/read-data")
+                .contains("window.loadReaderData")
+                .contains("await window.loadReaderData()")
+                .as("正文还在路上时先出骨架屏，不能白屏、也不能先闪空态")
+                .contains("booting: true")
+                .contains("sc-skel")
+                .as("骨架最后才收：数据铺完再置 booting=false，否则空书会冲掉展开状态")
+                .contains("async boot()")
+                .doesNotContain("xhr.open(")
                 .as("阅读页应内置护眼背景色选择器：浮动按钮 + 弹出层 + 预设 + 本地记忆")
                 .contains("class=\"bg-fab\"")
                 .contains("阅读背景色")
@@ -533,11 +541,14 @@ class PageRenderingIntegrationTest {
         assertThat(response.getBody())
                 .as("/workflow 应重定向并渲染 world-building 步骤页（Hub 已下线）")
                 .contains("worldBuildingApp()")
-                .contains("var step = 'world-building'")
-                .doesNotContain("workflowHubApp()");
+                .doesNotContain("workflowHubApp()")
+                .as("引导数据改成异步：页面里不该再有同步 XHR，先出骨架等数据")
+                .doesNotContain("xhr.open(")
+                .contains("x-show=\"booting\"")
+                .contains("/js/workflow/core.js");
     }
 
-    /** 6 个按步骤拆分的工作流页面各自独立渲染，并通过同步 XHR 拉取自己的引导数据。 */
+    /** 6 个按步骤拆分的工作流页面各自独立渲染，引导数据统一由 core.js 异步拉取。 */
     @Test
     void workflowStepPages_renderSuccessfully() {
         java.util.Map<String, String> routeApp = java.util.Map.of(
@@ -555,16 +566,75 @@ class PageRenderingIntegrationTest {
                     .as("workflow step page %s should return 200", route)
                     .isEqualTo(HttpStatus.OK);
             assertThat(response.getBody())
-                    .as("step page %s 应挂载对应 app 并通过同步 XHR 拉取自己的引导数据", route)
+                    .as("step page %s 应挂载对应 app，并由 core.js 异步拉取引导数据", route)
                     .contains(e.getValue())
-                    .contains("var step = '" + route + "'");
+                    .contains("/js/workflow/core.js")
+                    .as("数据在路上先出骨架，页面里不该再有解析期同步 XHR")
+                    .contains("x-show=\"booting\"")
+                    .contains("sc-skel")
+                    .doesNotContain("xhr.open(");
         }
+
+        // 引导数据的异步装配在 core.js 里：一次性断言，避免 6 个页面重复
+        ResponseEntity<String> core = restTemplate.getForEntity(url("/js/workflow/core.js"), String.class);
+        assertThat(core.getStatusCode()).as("core.js 应可访问").isEqualTo(HttpStatus.OK);
+        assertThat(core.getBody())
+                .as("core.js 应暴露 loadWorkflowData，由 init() await 后 applyBootstrap")
+                .contains("window.loadWorkflowData")
+                .contains("applyBootstrap")
+                .contains("booting: true")
+                .as("共享 loader 必须把结果合并进同一个对象（const d 捕获的是引用）")
+                .contains("Object.assign(window.__WORKFLOW_DATA__")
+                .as("分步页与枢纽页的 URL 约定")
+                .contains("/workflow/data")
+                .doesNotContain("xhr.open(");
+    }
+
+    /**
+     * 润色 / 精修页的「预览」换成与扩写页**同一套**前后对照面板：
+     * 贴在各自章节行下方、两栏并排、句级差异高亮、左右同步滚动。
+     * 三页共用 js/compare-panel.js + app.css 里的 .sc-cmp* 样式，页面里不该再有裸 split-view。
+     */
+    @Test
+    void workflowPreviewPanels_shareComparePanelWithExpansion() {
+        ResponseEntity<String> polish = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/workflow/polishing"), String.class);
+        assertThat(polish.getBody())
+                .as("润色页：预览面板贴在章节行下方，两栏并排 + 差异高亮 + 同步滚动")
+                .contains("/js/compare-panel.js")
+                .contains("togglePreview(")
+                .contains("closePolishPreview(")
+                .contains("sc-cmp-pane")
+                .contains("syncPreviewScroll(")
+                .contains("润色前后对照")
+                .contains("差异高亮")
+                .doesNotContain("split-view-container");
+
+        ResponseEntity<String> proof = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/workflow/proofreading"), String.class);
+        assertThat(proof.getBody())
+                .as("精修页：同样换成共享面板，旧的 split-view 预览下线")
+                .contains("/js/compare-panel.js")
+                .contains("toggleProofreadPreview(")
+                .contains("closeProofreadPreview(")
+                .contains("sc-cmp-pane")
+                .contains("syncPreviewScroll(")
+                .contains("精修前后对照")
+                .doesNotContain("split-view-container");
+
+        ResponseEntity<String> shared = restTemplate.getForEntity(url("/js/compare-panel.js"), String.class);
+        assertThat(shared.getStatusCode()).as("共享面板脚本应可直接访问").isEqualTo(HttpStatus.OK);
+        assertThat(shared.getBody())
+                .as("共享脚本要提供句级差异、增量文案与滚动同步三个能力")
+                .contains("preparePair")
+                .contains("deltaText")
+                .contains("syncScroll")
+                .contains("sc-cmp-pane");
     }
 
     /** 按步骤拆分的数据接口返回合法引导 JSON，且 currentStep 与路由一致。 */
     @Test
-    void workflowStepData_returnsBootstrapJson() {
-        java.util.Map<String, String> expected = java.util.Map.of(
+    void workflowStepData_returnsBootstrapJson() {        java.util.Map<String, String> expected = java.util.Map.of(
                 "world-building", "WORLD_BUILDING",
                 "characters", "CHARACTER_DESIGN",
                 "outline", "OUTLINE_GENERATION",
@@ -613,23 +683,32 @@ class PageRenderingIntegrationTest {
     void sideStoryList_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/side-stories"), String.class);
-        // 静态化后：列表页通过同步 XHR 拉取 /side-stories/list-data，由 Alpine 渲染卡片
+        // 静态化后：列表页通过异步 fetch 拉取 /side-stories/list-data，由 Alpine 渲染卡片
         assertStaticPage(response, "side-story-list", "sideStoryList()");
         assertThat(response.getBody())
-                .as("番外列表页应通过同步 XHR 拉取引导数据")
-                .contains("/side-stories/list-data");
+                .as("番外列表页引导数据走异步 fetch：先出骨架卡，别先闪「暂无番外篇」")
+                .contains("/side-stories/list-data")
+                .contains("loadSideStoryListData")
+                .contains("booting: true")
+                .contains("sc-skel")
+                .doesNotContain("xhr.open(");
     }
 
     @Test
     void sideStoryDetail_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/side-stories/" + sideStoryId), String.class);
-        // 静态化后：详情页通过同步 XHR 拉取 /side-stories/{id}/data，由 Alpine 渲染
+        // 静态化后：详情页通过异步 fetch 拉取 /side-stories/{id}/data，由 Alpine 渲染
         assertStaticPage(response, "side-story", "sideStoryWorkflow()");
         assertThat(response.getBody())
-                .as("番外详情页应通过同步 XHR 拉取引导数据")
+                .as("番外详情页引导数据走异步 fetch：先出骨架，别整片白屏")
                 .contains("/side-stories/")
-                .contains("'/data'");
+                .contains("'/data'")
+                .contains("loadSideStoryData")
+                .contains("applyBootstrap")
+                .contains("booting: true")
+                .contains("sc-skel")
+                .doesNotContain("xhr.open(");
     }
 
     @Test
@@ -682,12 +761,19 @@ class PageRenderingIntegrationTest {
     void expansion_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/expansion"), String.class);
-        // 静态化后：拓展页通过同步 XHR 拉取 /expansion/data，由 Alpine 渲染
+        // 静态化后：拓展页通过 /expansion/data 拉引导数据，由 Alpine 渲染
         assertStaticPage(response, "expansion", "expansionPage()");
         assertThat(response.getBody())
-                .as("情节拓展页应通过同步 XHR 拉取引导数据")
+                .as("情节拓展页引导数据走**异步** fetch（同步 XHR 会卡住首屏绘制）")
                 .contains("/expansion/data")
-                .contains("PROJECT_ID");
+                .contains("loadExpansionData")
+                .contains("PROJECT_ID")
+                .doesNotContain("xhr.open(")
+                .as("数据在路上时先渲染骨架屏，别让用户先看到「队列为空」")
+                .contains("booting")
+                .contains("sc-skel")
+                .as("骨架收得晚一点：等章节数据铺完再置 booting=false")
+                .contains("applyBootstrap");
     }
 
     @Test
@@ -706,6 +792,64 @@ class PageRenderingIntegrationTest {
         ResponseEntity<String> missing = restTemplate.getForEntity(
                 url("/projects/999999/expansion/data"), String.class);
         assertThat(missing.getStatusCode()).as("未知项目 expansion/data 应 404").isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void expansionQueue_offersCompareToggle() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/expansion"), String.class);
+        assertStaticPage(response, "expansion", "expansionPage()");
+        assertThat(response.getBody())
+                .as("已扩写章节要有「预览」按钮，点开在该行下方并排展示扩写前后")
+                .contains("toggleCompare(")
+                .contains("/expansion/compare/")
+                // 每章一组 tbody：主行 + 紧贴其下的预览行（允许同时展开多个面板）
+                .contains("exp-chapter-group")
+                .contains("exp-compare-row")
+                // 面板与润色/精修页共用一套（.sc-cmp*，实现在 js/compare-panel.js）
+                .contains("sc-cmp-pane")
+                .contains("/js/compare-panel.js")
+                // 左右两栏滚动同步
+                .contains("syncCompareScroll(")
+                .contains("扩写前（原文）")
+                .contains("差异高亮")
+                .as("按钮文案已从「对比」改成「预览」").contains("'收起' : '预览'");
+    }
+
+    @Test
+    void expansionCompare_returnsBeforeAndAfterText() {
+        ChapterEntity ch = chapterRepository.findByProjectIdAndChapterNumber(projectId, 2).orElseThrow();
+        String before = "扩写前原文。只有两句。";
+        String after = "扩写前原文。只有两句。补了一段环境描写。又补了一段心理活动。";
+        ch.setContentBeforeExpansion(before);
+        ch.setContent(after);
+        ch.setWordCount(after.length());
+        ch.setExpansionStatus("EXPANDED");
+        chapterRepository.save(ch);
+
+        ResponseEntity<String> resp = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/expansion/compare/2"), String.class);
+        assertThat(resp.getStatusCode()).as("对比接口应 200").isEqualTo(HttpStatus.OK);
+        assertThat(resp.getBody())
+                .as("对比接口要同时下发原文备份与扩写后正文，并给出两侧字数")
+                .contains("\"hasBefore\":true")
+                .contains("扩写前原文")
+                .contains("补了一段环境描写")
+                .contains("\"beforeWordCount\":")
+                .contains("\"afterWordCount\":");
+
+        // 没有备份（例如已确认）时不报错，用 hasBefore=false 让页面给提示
+        ch = chapterRepository.findByProjectIdAndChapterNumber(projectId, 2).orElseThrow();
+        ch.setContentBeforeExpansion(null);
+        chapterRepository.save(ch);
+        ResponseEntity<String> noBackup = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/expansion/compare/2"), String.class);
+        assertThat(noBackup.getStatusCode()).as("无备份时仍应 200").isEqualTo(HttpStatus.OK);
+        assertThat(noBackup.getBody()).as("无备份要以 hasBefore=false 标记").contains("\"hasBefore\":false");
+
+        ResponseEntity<String> missing = restTemplate.getForEntity(
+                url("/projects/" + projectId + "/expansion/compare/99"), String.class);
+        assertThat(missing.getStatusCode()).as("未知章节对比应 404").isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test
@@ -813,6 +957,57 @@ class PageRenderingIntegrationTest {
                 .doesNotContain("xmlns:th")
                 .doesNotContain("th:replace")
                 .contains(marker);
+    }
+
+    /**
+     * ★ 全站红线：引导数据的同步 XHR 已清零（2026-10-20 骨架化改造）。
+     * 同步 XHR（xhr.open(url, false)）会把首屏卡死在 HTML 解析期：数据慢 = 白屏，
+     * JS/DOM 全都动不了。新页面一律 fetch + 骨架，这里做反断言防回归。
+     * 注意 learn-word-match 还有一个**异步** xhr.open(url, true)（CET 词库），
+     * 正则只匹配 `, false)` 收尾，不会误伤。
+     */
+    private void assertNoSyncXhr(String body, String name) {
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("open\\s*\\([^)]*,\\s*false\\s*\\)").matcher(body);
+        assertThat(m.find())
+                .as("%s 不应再包含同步 XHR（xhr.open(url, false)）；引导数据请走 fetch + 骨架", name)
+                .isFalse();
+    }
+
+    /**
+     * 引导数据异步化 + 骨架的三件套断言（静态页用）：
+     * ① 空壳数据变量还在（数据到达前先有壳）；② loadXxxData 异步加载器在；
+     * ③ sc-skel 骨架占位在；④ 没有同步 XHR。
+     */
+    private void assertAsyncBootstrap(ResponseEntity<String> response, String name,
+                                      String dataVar, String loaderFn) {
+        assertPageOk(response, name);
+        String body = response.getBody();
+        assertThat(body)
+                .as("%s 应包含空壳引导数据变量 %s（数据到达前先有壳）", name, dataVar)
+                .contains(dataVar);
+        assertThat(body)
+                .as("%s 应包含异步加载器 %s", name, loaderFn)
+                .contains(loaderFn);
+        assertThat(body)
+                .as("%s 应包含骨架占位（sc-skel）：数据到达前不白屏、不闪空表单", name)
+                .contains("sc-skel");
+        assertNoSyncXhr(body, name);
+    }
+
+    /** Alpine 异步引导页变体：引导数据在共享 JS 里取（页面只有骨架与 booting 状态）。 */
+    private void assertAsyncBootPage(ResponseEntity<String> response, String name) {
+        assertPageOk(response, name);
+        String body = response.getBody();
+        assertThat(body)
+                .as("%s 应为静态页（无 Thymeleaf 内联表达式痕迹）", name)
+                .doesNotContain("xmlns:th")
+                .doesNotContain("th:replace");
+        assertThat(body)
+                .as("%s 应有 booting 骨架状态：x-show=\"booting\" 遮住内容区", name)
+                .contains("x-show=\"booting\"")
+                .contains("sc-skel");
+        assertNoSyncXhr(body, name);
     }
 
     @Test
@@ -1152,6 +1347,12 @@ class PageRenderingIntegrationTest {
     void prompts_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/prompts"), String.class);
         assertStaticPage(response, "prompts", "__PROMPTS_DATA__");
+        assertThat(response.getBody())
+                .as("提示词页引导数据走异步 fetch：先摆 3 行表格骨架，别先闪空表")
+                .contains("loadPromptsData")
+                .contains("sc-skel")
+                .contains("data-booting")
+                .doesNotContain("xhr.open(");
     }
 
     @Test
@@ -1198,8 +1399,9 @@ class PageRenderingIntegrationTest {
     void promptExplore_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/prompts/explore"), String.class);
         assertStaticPage(response, "prompt-explore", "__PROMPT_EXPLORE_DATA__");
+        assertAsyncBootstrap(response, "prompt-explore", "__PROMPT_EXPLORE_DATA__", "loadPromptExploreData");
         assertThat(response.getBody())
-                .as("提示词探索页应通过同步 XHR 拉取引导数据")
+                .as("提示词探索页应通过异步接口拉取引导数据")
                 .contains("/prompts/explore/data");
     }
 
@@ -1229,6 +1431,7 @@ class PageRenderingIntegrationTest {
         try {
             ResponseEntity<String> page = restTemplate.getForEntity(url("/prompts/" + id + "/edit"), String.class);
             assertStaticPage(page, "prompt-edit", "__PROMPT_EDIT_DATA__");
+            assertAsyncBootstrap(page, "prompt-edit", "__PROMPT_EDIT_DATA__", "loadPromptEditData");
 
             ResponseEntity<String> data = restTemplate.getForEntity(
                     url("/prompts/" + id + "/edit-data"), String.class);
@@ -1248,6 +1451,7 @@ class PageRenderingIntegrationTest {
         String key = "WORLD_BUILDING|WORLD_BUILDING_PRIMARY|";
         ResponseEntity<String> page = restTemplate.getForEntity(url("/prompts/builtin/" + key), String.class);
         assertStaticPage(page, "prompt-edit", "__PROMPT_EDIT_DATA__");
+        assertAsyncBootstrap(page, "prompt-edit", "__PROMPT_EDIT_DATA__", "loadPromptEditData");
 
         ResponseEntity<String> data = restTemplate.getForEntity(
                 url("/prompts/builtin/" + key + "/edit-data"), String.class);
@@ -1380,6 +1584,7 @@ class PageRenderingIntegrationTest {
             ResponseEntity<String> page = restTemplate.getForEntity(
                     url("/settings/guidances/" + id + "/edit"), String.class);
             assertPageOk(page, "guidance-edit");
+            assertAsyncBootstrap(page, "guidance-edit", "__GUIDANCE_EDIT_DATA__", "loadGuidanceEditData");
             assertThat(page.getBody())
                     .as("删除按钮应出现在编辑页（列表页已移除）")
                     .contains("id=\"deleteForm\"")
@@ -1419,7 +1624,7 @@ class PageRenderingIntegrationTest {
         try {
             ResponseEntity<String> page = restTemplate.getForEntity(
                     url("/settings/guidances/" + id + "/edit"), String.class);
-            assertPageOk(page, "guidance-edit");
+            assertAsyncBootstrap(page, "guidance-edit", "__GUIDANCE_EDIT_DATA__", "loadGuidanceEditData");
             assertThat(page.getBody())
                     .as("指导编辑页应为静态页")
                     .doesNotContain("xmlns:th")
@@ -1484,7 +1689,7 @@ class PageRenderingIntegrationTest {
         try {
             ResponseEntity<String> page = restTemplate.getForEntity(
                     url("/settings/materials/" + id + "/edit"), String.class);
-            assertPageOk(page, "material-edit");
+            assertAsyncBootstrap(page, "material-edit", "__MATERIAL_EDIT_DATA__", "loadMaterialEditData");
             assertThat(page.getBody())
                     .as("素材编辑页应为静态页")
                     .doesNotContain("xmlns:th")
@@ -1570,6 +1775,7 @@ class PageRenderingIntegrationTest {
     void txtImport_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/import/txt"), String.class);
         assertStaticPage(response, "txt-import", "__TXT_IMPORT_DATA__");
+        assertAsyncBootstrap(response, "txt-import", "__TXT_IMPORT_DATA__", "loadTxtImportData");
 
         String body = response.getBody();
         assertThat(body).as("txt-import 页面必须完整渲染到 </script> 结束").contains("</script>");
@@ -1658,7 +1864,8 @@ class PageRenderingIntegrationTest {
     void reverseOptionsPage_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/reverse/options"), String.class);
-        assertStaticPage(response, "reverse-options", "__REVERSE_DATA__");
+        // 引导数据已改由 /js/reverse.js 的 loadReverseData() 异步取：页面只有骨架 + booting 状态
+        assertAsyncBootPage(response, "reverse-options");
         assertThat(response.getBody())
                 .as("逆向选项页应挂载 reverseOptions()、包含启动逻辑并引用共享 JS")
                 .contains("reverseOptions()")
@@ -1670,7 +1877,8 @@ class PageRenderingIntegrationTest {
     void reverseProgressPage_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/projects/" + projectId + "/reverse/progress"), String.class);
-        assertStaticPage(response, "reverse-progress", "__REVERSE_DATA__");
+        // 引导数据已改由 /js/reverse.js 的 loadReverseData() 异步取：页面只有骨架 + booting 状态
+        assertAsyncBootPage(response, "reverse-progress");
 
         String body = response.getBody();
         assertThat(body).as("监控页必须完整渲染到 </script> 结束").contains("</script>");
@@ -1701,6 +1909,17 @@ class PageRenderingIntegrationTest {
             assertThat(body).as("reverse.js 应包含 SSE 监听器 %s", listener).contains(listener);
         }
         assertThat(body).as("启动成功后应跳转到独立监控页").contains("/reverse/progress");
+        // 引导数据异步化（原同步 XHR 已移除）：
+        assertThat(body).as("reverse.js 应提供异步加载器 loadReverseData()").contains("loadReverseData");
+        assertThat(body).as("reverse.js 应在引导失败时清空壳预置的 error（避免旧文案误报）")
+                .contains("delete window.__REVERSE_DATA__.error");
+        // ★ mixin 必须挂原型（Object.create）而不是 Object.assign 进字面量：
+        //   assign 会把 getter（planHeadline / startButtonText / planSubline）求值一次并
+        //   摊平成静态值，plan 刷新后按钮文案/提示永不更新（2026-10-20 探针抓到的真 bug）。
+        assertThat(body).as("reverseOptions/reverseProgress 应以 Object.create 挂 mixin（getter 不能被 assign 摊平）")
+                .contains("Object.create(reverseMixin())");
+        assertThat(body).as("页面字面量里不应再残留 allCompleted getter（已 defineProperty 挂 base）")
+                .doesNotContain("get allCompleted()");
     }
 
     @Test
@@ -1747,6 +1966,12 @@ class PageRenderingIntegrationTest {
     void ttsExport_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/tts-export"), String.class);
         assertStaticPage(response, "tts-export", "__TTS_EXPORT_DATA__");
+        assertThat(response.getBody())
+                .as("TTS 导出页引导数据走异步 fetch：任务表先出骨架行，别先闪「还没有导出任务」")
+                .contains("loadTtsExportData")
+                .contains("booting: true")
+                .contains("sc-skel")
+                .doesNotContain("xhr.open(");
     }
 
     /**
@@ -1860,6 +2085,7 @@ class PageRenderingIntegrationTest {
     void ttsTemplates_asStaticPage_rendersSuccessfully() {
         ResponseEntity<String> response = restTemplate.getForEntity(url("/settings/tts-templates"), String.class);
         assertStaticPage(response, "tts-templates", "__TTS_TEMPLATES_DATA__");
+        assertAsyncBootstrap(response, "tts-templates", "__TTS_TEMPLATES_DATA__", "loadTtsTemplatesData");
     }
 
     @Test
@@ -1879,6 +2105,7 @@ class PageRenderingIntegrationTest {
         ResponseEntity<String> page = restTemplate.getForEntity(
                 url("/settings/tts-templates/builtin/" + builtinId + "/view"), String.class);
         assertStaticPage(page, "tts-template-view", "__TTS_TEMPLATE_VIEW_DATA__");
+        assertAsyncBootstrap(page, "tts-template-view", "__TTS_TEMPLATE_VIEW_DATA__", "loadTtsTemplateViewData");
 
         ResponseEntity<String> data = restTemplate.getForEntity(
                 url("/settings/tts-templates/builtin/" + builtinId + "/view-data"), String.class);
@@ -1904,6 +2131,7 @@ class PageRenderingIntegrationTest {
             ResponseEntity<String> page = restTemplate.getForEntity(
                     url("/settings/tts-templates/" + id + "/edit"), String.class);
             assertStaticPage(page, "tts-template-edit", "__TTS_TEMPLATE_EDIT_DATA__");
+            assertAsyncBootstrap(page, "tts-template-edit", "__TTS_TEMPLATE_EDIT_DATA__", "loadTtsTemplateEditData");
 
             ResponseEntity<String> data = restTemplate.getForEntity(
                     url("/settings/tts-templates/" + id + "/edit-data"), String.class);
@@ -1931,6 +2159,7 @@ class PageRenderingIntegrationTest {
         ResponseEntity<String> page = restTemplate.getForEntity(
                 url("/settings/tts-templates/bindings/1"), String.class);
         assertStaticPage(page, "tts-template-bindings", "__TTS_BINDINGS_DATA__");
+        assertAsyncBootstrap(page, "tts-template-bindings", "__TTS_BINDINGS_DATA__", "loadTtsBindingsData");
 
         ResponseEntity<String> data = restTemplate.getForEntity(
                 url("/settings/tts-templates/bindings/1/data"), String.class);
@@ -1952,6 +2181,81 @@ class PageRenderingIntegrationTest {
                 .as("聊天页应含 chatApp 与流式解析逻辑")
                 .contains("chatApp()")
                 .contains("/api/chat/sessions/");
+    }
+
+    @Test
+    void chatBootstrap_isAsyncAndShowsSkeleton() {
+        ResponseEntity<String> page = restTemplate.getForEntity(url("/chat"), String.class);
+        String body = page.getBody();
+        assertThat(body)
+                .as("引导数据不能再用同步 XHR（会阻塞解析与首屏，且已被浏览器弃用）")
+                .doesNotContain("xhr.open('GET', '/chat/data', false)")
+                .doesNotContain("XMLHttpRequest")
+                .contains("window.loadChatData")
+                .contains("booting: true")
+                .contains("正在加载会话");
+        assertThat(body)
+                .as("异步化之后必须有骨架屏：否则数据没回来时用户看到空白会话列表")
+                .contains("加载会话…");
+    }
+
+    @Test
+    void chatLayout_hasMobileDrawer() {
+        ResponseEntity<String> page = restTemplate.getForEntity(url("/chat"), String.class);
+        assertThat(page.getBody())
+                .as("窄屏会话列表要做成抽屉：原来固定 col-3，390px 屏只分到 97px，标题全被截断")
+                .contains("chat-sidebar")
+                .contains("chat-sidebar-open")
+                .contains("chat-mobile-bar")
+                .contains("chat-shell")
+                .contains("sidebarOpen");
+    }
+
+    @Test
+    void chatStream_sendsRenderingIsThrottledAndScrollIsPolite() {
+        ResponseEntity<String> page = restTemplate.getForEntity(url("/chat"), String.class);
+        assertThat(page.getBody())
+                .as("流式渲染要按帧合并（否则每个 token 一次重渲染 + 一次滚动），滚动要「贴底才跟随」")
+                .contains("scheduleFlush")
+                .contains("flushTokens")
+                .contains("autoScroll")
+                .contains("_pendingTokens")
+                // 收尾必须 flush，否则缓冲会把尾巴吃掉
+                .contains("self.flushTokens();")
+                .doesNotContain("self.streamingContent += data;");
+    }
+
+    @Test
+    void chatStream_usesPostBodyNotQueryParams() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/chat"), String.class);
+        assertThat(response.getBody())
+                .as("聊天流式请求必须是 POST + JSON body：原文不能再进 URL（8KB 请求头上限 / 浏览器历史 / 访问日志 / Referer）")
+                .contains("method: 'POST'")
+                .contains("JSON.stringify({ configId: self.selectedConfigId, input: input })")
+                .doesNotContain("/stream?configId=")
+                .doesNotContain("encodeURIComponent(input)");
+    }
+
+    @Test
+    void chatStream_getMethodIsGone() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/api/chat/sessions/1/stream?configId=1&input=hi"), String.class);
+        assertThat(response.getStatusCode())
+                .as("旧的 GET 流式接口应已下线（只剩 POST，GET 得 405）")
+                .isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
+    }
+
+    @Test
+    void chatStream_rejectsBlankInput() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        ResponseEntity<String> response = restTemplate.postForEntity(
+                url("/api/chat/sessions/1/stream"),
+                new HttpEntity<>("{\"configId\":1,\"input\":\"  \"}", headers),
+                String.class);
+        assertThat(response.getStatusCode())
+                .as("空 input 应当场 400，不开流也不落库")
+                .isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     @Test
@@ -2057,6 +2361,7 @@ class PageRenderingIntegrationTest {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/learn/word-match"), String.class);
         assertStaticPage(response, "learn-word-match", "wordMatchApp()");
+        assertAsyncBootstrap(response, "learn-word-match", "__WORD_MATCH_DATA__", "loadWordMatchData");
         assertThat(response.getBody())
                 .as("单词匹配页应含引导数据钩子、配对状态与音效开关")
                 .contains("__WORD_MATCH_DATA__")
@@ -2226,6 +2531,7 @@ class PageRenderingIntegrationTest {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/learn/idiom-fill"), String.class);
         assertStaticPage(response, "learn-idiom-fill", "idiomApp()");
+        assertAsyncBootstrap(response, "learn-idiom-fill", "__IDIOM_FILL_DATA__", "loadIdiomFillData");
         assertThat(response.getBody())
                 .as("成语填空页应含引导数据钩子与三学段入口")
                 .contains("__IDIOM_FILL_DATA__")
@@ -2290,6 +2596,7 @@ class PageRenderingIntegrationTest {
         ResponseEntity<String> response = restTemplate.getForEntity(
                 url("/learn/synonym-match"), String.class);
         assertStaticPage(response, "learn-word-relation", "relationApp()");
+        assertAsyncBootstrap(response, "learn-word-relation", "__RELATION_DATA__", "loadRelationData");
         assertThat(response.getBody())
                 .as("近义词匹配页应含引导数据钩子、词库端点与三学段骨架")
                 .contains("__RELATION_DATA__")
@@ -2326,6 +2633,7 @@ class PageRenderingIntegrationTest {
         ResponseEntity<String> page = restTemplate.getForEntity(
                 url("/learn/antonym-match"), String.class);
         assertStaticPage(page, "learn-word-relation", "relationApp()");
+        assertAsyncBootstrap(page, "learn-word-relation", "__RELATION_DATA__", "loadRelationData");
         assertThat(page.getBody())
                 .as("反义词用玫红强调色（--wr-accent 在 .mode-antonym 下被覆盖）")
                 .contains(".wr-root.mode-antonym")
@@ -2560,6 +2868,7 @@ class PageRenderingIntegrationTest {
         ResponseEntity<String> page = restTemplate.getForEntity(
                 url("/learn/multiplication/settings"), String.class);
         assertStaticPage(page, "learn-multiplication-settings", "__LEARN_SETTINGS_DATA__");
+        assertAsyncBootstrap(page, "learn-multiplication-settings", "__LEARN_SETTINGS_DATA__", "loadLearnSettingsData");
         assertThat(page.getBody())
                 .as("音频管理页应含 settingsApp 与音频状态接口")
                 .contains("settingsApp()")

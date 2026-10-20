@@ -1749,17 +1749,29 @@
 <body class="sc-page" data-nav="learn">
 
 <script>
-/* 引导数据：同步 XHR，确保下方 Alpine 组件读取时已就绪 */
-window.__WORD_MATCH_DATA__ = (function () {
-    var d = { books: [], levels: {} };
-    try {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/learn/word-match/data', false);
-        xhr.send();
-        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
-    } catch (e) { console.error('__WORD_MATCH_DATA__ load failed', e); }
-    return d;
-})();
+/* 引导数据：异步 fetch，回调里再交给 Alpine 组件（见 wordMatchApp 的 boot()）。
+   原来这里是同步 XHR —— 浏览器停在 HTML 解析期等往返，JS 没开始跑、DOM 也没解析完，首屏白屏。
+   本页词库最大（2 万条、24 册），同步那一下尤其明显。 */
+window.__WORD_MATCH_DATA__ = { books: [], extraBooks: [], levels: {} };
+window.loadWordMatchData = function () {
+    if (!window.__wordMatchDataPromise) {
+        window.__wordMatchDataPromise = fetch('/learn/word-match/data', { headers: { 'Accept': 'application/json' } })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (d) {
+                /* ★ 合并而非替换：下面多处（导出、ensureCet）抓的是同一个对象引用 */
+                Object.assign(window.__WORD_MATCH_DATA__, d || {});
+                return window.__WORD_MATCH_DATA__;
+            })
+            .catch(function (e) {
+                console.error('__WORD_MATCH_DATA__ bootstrap failed: ' + (e && e.message ? e.message : e));
+                return window.__WORD_MATCH_DATA__;
+            });
+    }
+    return window.__wordMatchDataPromise;
+};
 </script>
 
 <header id="site-nav"></header>
@@ -1767,6 +1779,22 @@ window.__WORD_MATCH_DATA__ = (function () {
 <main class="sc-main container py-4">
 
 <div class="wm-root" x-data="wordMatchApp()">
+
+    <!-- 引导数据还在路上：先出骨架（原来同步 XHR 会把整页卡在白屏） -->
+    <div class="wm-boot-skel" x-show="booting" x-cloak>
+        <div class="sc-skel sc-skel-line mb-3" style="width: 40%; height: 30px;"></div>
+        <div class="sc-skel-row mb-3">
+            <div class="sc-skel sc-skel-line w-50"></div>
+            <div class="sc-skel sc-skel-line w-75"></div>
+            <div class="sc-skel sc-skel-line"></div>
+        </div>
+        <div class="sc-skel-row">
+            <div class="sc-skel sc-skel-line w-25"></div>
+            <div class="sc-skel sc-skel-line w-50"></div>
+        </div>
+    </div>
+
+    <div x-show="!booting" x-cloak>
 
     <div class="wm-toolbar">
         <div class="wm-toolbar-title">
@@ -2587,6 +2615,7 @@ window.__WORD_MATCH_DATA__ = (function () {
         </div>
     </div>
 
+    </div><!-- /x-show="!booting" -->
 </div>
 </main>
 
@@ -2760,16 +2789,24 @@ function wordMatchApp() {
         return 'v3-' + b + '-' + lv + '-' + wd;
     }
 
-    try {
-        var dataSig = dataSignature();
-        if (localStorage.getItem(DATA_SIG_KEY) !== dataSig) {
-            localStorage.removeItem(PROGRESS_KEY);
-            localStorage.removeItem(AUTO_KEY);
-            localStorage.setItem(DATA_SIG_KEY, dataSig);
-        }
-        /* 指纹机制上线前的一次性 v1→v2 迁移标记，已无用，顺手清掉 */
-        localStorage.removeItem('word_match_v2_migrated');
-    } catch (e) { /* 隐私模式等场景忽略 */ }
+    /* ★ 指纹校验必须等词库到齐才能跑：引导数据改异步后，构造期 DATA 还是空的，
+       此刻算出来是 v3-0-0-0，会把用户真实进度当成「词库已换代」整片清掉。
+       故收成函数，由 boot() 在 await 之后调用。 */
+    function ensureDataVersion() {
+        /* 词库没拿到（接口失败 / 空库）就一个字都别动：
+           空数据算出来的指纹会把用户的真实进度当成「已换代」永远清掉。 */
+        if (!(DATA.books || []).length) return;
+        try {
+            var dataSig = dataSignature();
+            if (localStorage.getItem(DATA_SIG_KEY) !== dataSig) {
+                localStorage.removeItem(PROGRESS_KEY);
+                localStorage.removeItem(AUTO_KEY);
+                localStorage.setItem(DATA_SIG_KEY, dataSig);
+            }
+            /* 指纹机制上线前的一次性 v1→v2 迁移标记，已无用，顺手清掉 */
+            localStorage.removeItem('word_match_v2_migrated');
+        } catch (e) { /* 隐私模式等场景忽略 */ }
+    }
     var WRONG_KEY = 'word_match_wrong_v1';              // 错题本（本机浏览器）
     var BOOK_KEY = 'word_match_book_v1';
     /* 首页「输入即出」的去抖：每敲一个字就摊平两万条去比没必要（索引已缓存，但逐次 run 仍要过）
@@ -2848,10 +2885,12 @@ function wordMatchApp() {
     var BOOK_GAP_SEC = Math.max(1, Math.round(AUTO_BOOK_GAP / 1000));
 
     return {
+        /* 引导数据还在路上：先空着，boot() 里填。骨架见模板里的 x-show="booting" */
+        booting: true,
         /* 人教版 24 册 + 大学 2 册：后者首屏只带册元信息（extraBooks），
            关卡等真正选到大学时再拉，见 ensureCet */
-        books: (DATA.books || []).concat(DATA.extraBooks || []),
-        allLevels: DATA.levels || {},
+        books: [],
+        allLevels: {},
         cetLoaded: !!window.__WM_STANDALONE__,
         cetPromise: null,
 
@@ -2952,9 +2991,6 @@ function wordMatchApp() {
         audioCtx: null,
 
         init: function () {
-            this.progress = this.loadProgress();
-            this.autoProgress = this.loadAutoProgress();
-            this.wrongBook = this.loadWrong();
             this.soundOn = localStorage.getItem(SOUND_KEY) !== '0';
 
             /* 单页导出件会给这两个变量（线上页面没有 ⇒ 下面全部退回原行为）：
@@ -2965,25 +3001,6 @@ function wordMatchApp() {
                优先级：本文件自己的记录（且该册确实在文件里）→ 锁定的起始册 → 最前面的册。
                第二条就是「导出时没勾当前册」的兜底：导出侧已把默认册算成勾选册里最靠前的一册。 */
             this.bookKey = window.__WM_BOOK_KEY__ || BOOK_KEY;
-            var saved = localStorage.getItem(this.bookKey);
-            var books = this.books;
-            var has = function (id) { return !!id && books.some(function (b) { return b.id === id; }); };
-            if (!has(saved)) saved = window.__WM_DEFAULT_BOOK__ || '';
-            /* ⚠️ 首次访问**不预设册次**（原来会兜底到第一册）。默认视图是检索首页，
-               页头那个下拉要停在占位文案【选择关卡练习】上等用户自己挑 ——
-               一旦预设了册，占位文案永远不出现，那个按钮也就没人看得出是干什么的。
-               导出件照旧：它锁定了起始册（__WM_DEFAULT_BOOK__），并且直接落在棋盘上。 */
-            this.bookId = has(saved) ? saved : '';
-            if (this.bookId) {
-                this.applyBook(this.bookId, true);
-                /* 上次停在大学、而这次还没拉过词库：补一次，否则进去是空棋盘 */
-                if (this.isCetBook(this.bookId) && !this.cetLoaded) {
-                    this.applyBookWhenReady(this.bookId, true);
-                }
-            } else {
-                this.levels = [];
-                this.levelIndex = 0;
-            }
 
             var self = this;
             window.addEventListener('resize', function () { self.measureTop(); });
@@ -3019,6 +3036,53 @@ function wordMatchApp() {
                 }
             }
             window.addEventListener('load', function () { self.measureTop(); });
+
+            /* 引导数据是异步的：上面这些监听先挂好，数据到了再铺内容（见 boot） */
+            return this.boot();
+        },
+
+        /* 引导数据到齐之后才能做的事：词库指纹、进度恢复、册次还原。
+           原来这些都在 init 里同步跑，靠同步 XHR 保证数据已就绪；改异步后必须搬到这里。 */
+        async boot() {
+            try {
+                var d = (typeof window.loadWordMatchData === 'function')
+                    ? await window.loadWordMatchData()
+                    : (window.__WORD_MATCH_DATA__ || {});
+
+                /* ★ 先校验指纹再读进度：顺序反了会把旧数据当现数据 */
+                ensureDataVersion();
+                this.books = (d.books || []).concat(d.extraBooks || []);
+                this.allLevels = d.levels || {};
+
+                this.progress = this.loadProgress();
+                this.autoProgress = this.loadAutoProgress();
+                this.wrongBook = this.loadWrong();
+
+                var saved = localStorage.getItem(this.bookKey);
+                var books = this.books;
+                var has = function (id) { return !!id && books.some(function (b) { return b.id === id; }); };
+                if (!has(saved)) saved = window.__WM_DEFAULT_BOOK__ || '';
+                /* ⚠️ 首次访问**不预设册次**（原来会兜底到第一册）。默认视图是检索首页，
+                   页头那个下拉要停在占位文案【选择关卡练习】上等用户自己挑 ——
+                   一旦预设了册，占位文案永远不出现，那个按钮也就没人看得出是干什么的。
+                   导出件照旧：它锁定了起始册（__WM_DEFAULT_BOOK__），并且直接落在棋盘上。 */
+                this.bookId = has(saved) ? saved : '';
+                if (this.bookId) {
+                    this.applyBook(this.bookId, true);
+                    /* 上次停在大学、而这次还没拉过词库：补一次，否则进去是空棋盘 */
+                    if (this.isCetBook(this.bookId) && !this.cetLoaded) {
+                        this.applyBookWhenReady(this.bookId, true);
+                    }
+                } else {
+                    this.levels = [];
+                    this.levelIndex = 0;
+                }
+            } finally {
+                /* ★ 内容铺完再收骨架：先收的话「未选册」空态会闪一下 */
+                await this.$nextTick();
+                this.measureTop();
+                this.booting = false;
+            }
         },
 
         /* 移动端舞台高度：用「舞台自身到页面顶部的距离」算——标题、工具栏、按钮换行都算在内。

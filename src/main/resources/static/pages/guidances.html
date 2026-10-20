@@ -10,20 +10,32 @@
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/app.css">
 </head>
-<body class="sc-page">
+<body class="sc-page" data-booting="1">
 
 <script>
-/* 引导数据：同步 XHR，确保下方渲染脚本读取时已就绪 */
-window.__GUIDANCES_DATA__ = (function () {
-    var d = { items: [], itemIds: [], steps: [] };
-    try {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/settings/guidances/data', false);
-        xhr.send();
-        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
-    } catch (e) { console.error('__GUIDANCES_DATA__ load failed', e); }
-    return d;
-})();
+/* 引导数据：异步 fetch。
+   原来这里是同步 XHR —— 浏览器停在 HTML 解析期等往返，首屏白屏。
+   现在先给空壳（列表区顶一块骨架），渲染改到 await 之后（见页面末尾的 boot()）。 */
+window.__GUIDANCES_DATA__ = { items: [], itemIds: [], steps: [] };
+window.loadGuidancesData = function () {
+    if (!window.__guidancesDataPromise) {
+        window.__guidancesDataPromise = fetch('/settings/guidances/data', { headers: { 'Accept': 'application/json' } })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (d) {
+                window.__GUIDANCES_DATA__ = d || window.__GUIDANCES_DATA__;
+                return window.__GUIDANCES_DATA__;
+            })
+            .catch(function (e) {
+                // 退化：列表为空，页面仍可用（可以新建/导入）
+                console.error('guidances bootstrap failed: ' + (e && e.message ? e.message : e));
+                return window.__GUIDANCES_DATA__;
+            });
+    }
+    return window.__guidancesDataPromise;
+};
 </script>
 
 <header id="site-nav"></header>
@@ -106,7 +118,26 @@ window.__GUIDANCES_DATA__ = (function () {
             </span>
             <span class="text-muted small" id="listMeta"></span>
         </div>
-        <div class="card-body" id="listArea"></div>
+        <!-- 引导数据还在路上：先出骨架卡（renderList 会整块替换这个容器） -->
+        <div class="card-body" id="listArea">
+            <div class="sc-guidance-grid">
+                <div class="border rounded p-3 sc-skel-row">
+                    <div class="sc-skel sc-skel-line" style="width: 40%;"></div>
+                    <div class="sc-skel sc-skel-line w-75"></div>
+                    <div class="sc-skel sc-skel-line w-50"></div>
+                </div>
+                <div class="border rounded p-3 sc-skel-row">
+                    <div class="sc-skel sc-skel-line" style="width: 34%;"></div>
+                    <div class="sc-skel sc-skel-line w-75"></div>
+                    <div class="sc-skel sc-skel-line w-50"></div>
+                </div>
+                <div class="border rounded p-3 sc-skel-row">
+                    <div class="sc-skel sc-skel-line" style="width: 44%;"></div>
+                    <div class="sc-skel sc-skel-line w-75"></div>
+                    <div class="sc-skel sc-skel-line w-50"></div>
+                </div>
+            </div>
+        </div>
     </div>
 </main>
 
@@ -118,7 +149,8 @@ window.__GUIDANCES_DATA__ = (function () {
     'use strict';
 
     var data = window.__GUIDANCES_DATA__ || { items: [], itemIds: [], steps: [] };
-    var items = data.items || [];
+    // 引导数据是异步的：先空着，boot() await 之后再赋值
+    var items = [];
     var listArea = document.getElementById('listArea');
     var exportBar = document.getElementById('exportBar');
     var btnExport = document.getElementById('btnExport');
@@ -354,11 +386,29 @@ window.__GUIDANCES_DATA__ = (function () {
         if (exportMode && e.key === 'Escape') exitExportMode();
     });
 
-    /* ===================== 初始化 ===================== */
-    fillSteps();
-    renderFlash();
-    renderList();
-    applyMode();
+    /* ===================== 初始化：引导数据是异步的 ===================== */
+    function setBooting(on) {
+        if (on) document.body.setAttribute('data-booting', '1');
+        else document.body.removeAttribute('data-booting');
+    }
+
+    async function boot() {
+        try {
+            data = (typeof window.loadGuidancesData === 'function')
+                ? await window.loadGuidancesData()
+                : (window.__GUIDANCES_DATA__ || {});
+            items = (data && data.items) || [];
+            fillSteps();
+            renderFlash();
+            renderList();
+            applyMode();
+        } finally {
+            // ★ 渲染铺完才收骨架（先收的话空列表会闪一下「暂无指导」）
+            setBooting(false);
+        }
+    }
+
+    boot();
 })();
 </script>
 </body>

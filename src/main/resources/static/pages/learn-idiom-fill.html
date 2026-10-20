@@ -757,18 +757,30 @@
 <body class="sc-page" data-nav="learn">
 
 <script>
-/* 引导数据：同步 XHR，确保下方 Alpine 组件读取时已就绪（与单词匹配同一做法）。
-   一次性下发三学段共 180 条成语（gzip ≈ 20KB），切学段 / 切关卡零请求。 */
-window.__IDIOM_FILL_DATA__ = (function () {
-    var d = { stages: [], levels: {} };
-    try {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/learn/idiom-fill/data', false);
-        xhr.send();
-        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
-    } catch (e) { console.error('__IDIOM_FILL_DATA__ load failed', e); }
-    return d;
-})();
+/* 引导数据：异步 fetch（与单词匹配同一做法）。
+   一次性下发三学段共 180 条成语（gzip ≈ 20KB），切学段 / 切关卡零请求。
+   ★ 2026-10-20 从同步 XHR 改过来：原来浏览器停在 HTML 解析期等这一趟，首屏白屏；
+     现在先给空壳（见模板里的 x-show="booting" 骨架），数据到了再铺场。 */
+window.__IDIOM_FILL_DATA__ = { stages: [], levels: {} };
+window.loadIdiomFillData = function () {
+    if (!window.__idiomFillDataPromise) {
+        window.__idiomFillDataPromise = fetch('/learn/idiom-fill/data', { headers: { 'Accept': 'application/json' } })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (d) {
+                /* ★ 合并而非替换：导出（exportOptions）抓的是同一个对象引用 */
+                Object.assign(window.__IDIOM_FILL_DATA__, d || {});
+                return window.__IDIOM_FILL_DATA__;
+            })
+            .catch(function (e) {
+                console.error('__IDIOM_FILL_DATA__ bootstrap failed: ' + (e && e.message ? e.message : e));
+                return window.__IDIOM_FILL_DATA__;
+            });
+    }
+    return window.__idiomFillDataPromise;
+};
 </script>
 
 <header id="site-nav"></header>
@@ -776,6 +788,25 @@ window.__IDIOM_FILL_DATA__ = (function () {
 <main class="sc-main container py-4">
 
 <div class="ic-root" x-data="idiomApp()" x-init="init()">
+
+    <!-- 引导数据还在路上：先出骨架（原来同步 XHR 会把整页卡在白屏） -->
+    <div x-show="booting" x-cloak>
+        <div class="sc-skel-row mb-3">
+            <div class="sc-skel sc-skel-line w-25"></div>
+            <div class="sc-skel sc-skel-line w-50"></div>
+        </div>
+        <div class="sc-skel-row mb-3">
+            <div class="sc-skel sc-skel-line" style="width: 30%;"></div>
+            <div class="sc-skel sc-skel-line" style="width: 30%;"></div>
+        </div>
+        <div class="sc-skel-row">
+            <div class="sc-skel sc-skel-line"></div>
+            <div class="sc-skel sc-skel-line"></div>
+            <div class="sc-skel sc-skel-line w-75"></div>
+        </div>
+    </div>
+
+    <div x-show="!booting" x-cloak>
 
     <!-- ==================== 工具栏 ====================
          朗读 / 重做 / 错题本 / 导出 / 源码 / 重置进度 统一收进「设置」弹层
@@ -1108,6 +1139,8 @@ window.__IDIOM_FILL_DATA__ = (function () {
         </div>
     </div>
 
+    </div><!-- /x-show="!booting" -->
+
 </div>
 
 </main>
@@ -1162,6 +1195,7 @@ function idiomApp() {
         soundOn: true,
         pickerOpen: false,
         progress: {},
+        booting: true,    // 引导数据还没到（骨架阶段）
         ready: false,     // 引导数据装载完成（没装载完就报错会闪一下「加载失败」）
 
         /* ---------- 设置弹层 / 错题本 / 导出 ---------- */
@@ -1176,7 +1210,15 @@ function idiomApp() {
         /* ==================== 生命周期 ==================== */
 
         init: function () {
-            var data = window.__IDIOM_FILL_DATA__ || {};
+            /* 引导数据是异步的：真正的铺场在 boot()（init 只留一个同步入口） */
+            return this.boot();
+        },
+
+        async boot() {
+            try {
+            var data = (typeof window.loadIdiomFillData === 'function')
+                ? await window.loadIdiomFillData()
+                : (window.__IDIOM_FILL_DATA__ || {});
             this.stages = data.stages || [];
             this.levelsByStage = data.levels || {};
             this.progress = this.readProgress();
@@ -1204,6 +1246,11 @@ function idiomApp() {
             this.stageId = first;
             var saved = (this.progress[first] && this.progress[first].current) || 0;
             this.loadLevel(saved > this.levelCount - 1 ? 0 : saved);
+            } finally {
+                /* ★ 内容铺完再收骨架：先收会让「还没有关卡」空态闪一下 */
+                await this.$nextTick();
+                this.booting = false;
+            }
         },
 
         /* ==================== 派生状态（getter 风格） ==================== */

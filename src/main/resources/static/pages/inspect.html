@@ -20,7 +20,35 @@
 <body class="sc-page" data-nav="projects">
 <header id="site-nav"></header>
 
-<main class="sc-main container py-4" x-data="inspectOverview()" x-cloak>
+<main class="sc-main container py-4" x-data="inspectOverview()">
+    <!-- 引导数据还在路上：先出骨架（原来 x-cloak 后面整片白屏等同步 XHR） -->
+    <div x-show="booting" x-cloak>
+        <div class="mb-3"><span class="sc-skel" style="width: 10rem;"></span></div>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+            <h4 class="mb-0"><span class="sc-skel" style="width: 9rem; height: 1.4rem;"></span></h4>
+            <div class="d-flex gap-2">
+                <span class="sc-skel" style="width: 6.5rem; height: 1.9rem;"></span>
+                <span class="sc-skel" style="width: 6rem; height: 1.9rem;"></span>
+            </div>
+        </div>
+        <div class="row g-3 mb-3">
+            <template x-for="i in 4" :key="i">
+                <div class="col-6 col-lg-3">
+                    <div class="border rounded p-3">
+                        <div class="sc-skel sc-skel-line" style="width: 50%;"></div>
+                        <div class="sc-skel sc-skel-line w-75"></div>
+                    </div>
+                </div>
+            </template>
+        </div>
+        <div class="card"><div class="card-body">
+            <div class="sc-skel sc-skel-line" style="width: 24%;"></div>
+            <div class="sc-skel sc-skel-line"></div>
+            <div class="sc-skel sc-skel-line w-75"></div>
+            <div class="sc-skel sc-skel-line w-50"></div>
+        </div></div>
+    </div>
+    <div x-show="!booting" x-cloak>
 
     <!-- Breadcrumb -->
     <nav aria-label="breadcrumb" class="mb-3">
@@ -211,32 +239,71 @@
             </template>
         </div>
     </div>
+    </div><!-- /x-show="!booting" -->
 
     <script>
-        window.__INSPECT_OVERVIEW_DATA__ = (function () {
-            var d = {};
-            try {
+        /* 引导数据：异步 fetch。
+           原来这里是同步 XHR —— 浏览器停在 HTML 解析期等往返，首屏白屏；
+           现在先给空壳，由 Alpine 的 init() await 之后铺数据（期间显示骨架）。 */
+        window.__INSPECT_OVERVIEW_DATA__ = {};
+        window.loadInspectOverviewData = function () {
+            if (!window.__inspectOverviewDataPromise) {
                 var pid = location.pathname.split('/')[2];
-                var xhr = new XMLHttpRequest();
-                xhr.open('GET', '/projects/' + pid + '/inspect/data', false);
-                xhr.send();
-                d = JSON.parse(xhr.responseText || '{}');
-            } catch (e) { console.error('inspect overview data load failed', e); }
-            return d;
-        })();
+                window.__inspectOverviewDataPromise = fetch('/projects/' + pid + '/inspect/data',
+                    { headers: { 'Accept': 'application/json' } })
+                    .then(function (res) {
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        return res.json();
+                    })
+                    .then(function (d) {
+                        window.__INSPECT_OVERVIEW_DATA__ = d || {};
+                        return window.__INSPECT_OVERVIEW_DATA__;
+                    })
+                    .catch(function (e) {
+                        // 退化：数据全空，页面仍可渲染（空态）
+                        console.error('inspect overview bootstrap failed: ' + (e && e.message ? e.message : e));
+                        return window.__INSPECT_OVERVIEW_DATA__;
+                    });
+            }
+            return window.__inspectOverviewDataPromise;
+        };
     </script>
     <script>
         function inspectOverview() {
-            var d = window.__INSPECT_OVERVIEW_DATA__ || {};
             return {
-                projectId: d.projectId,
-                projectTitle: d.projectTitle,
-                writingRules: d.writingRules,
-                styleFingerprint: d.styleFingerprint,
-                storyOutline: d.storyOutline,
-                volumes: d.volumes || [],
-                outlines: d.outlines || [],
-                chapterList: d.chapterList || []
+                // 引导数据还在路上：先出骨架
+                booting: true,
+                projectId: null,
+                projectTitle: '',
+                writingRules: '',
+                styleFingerprint: null,
+                storyOutline: '',
+                volumes: [],
+                outlines: [],
+                chapterList: [],
+
+                init() {
+                    return this.boot();
+                },
+
+                /** 引导数据是异步的：await 之后铺数据，最后才收骨架 */
+                async boot() {
+                    try {
+                        var d = (typeof window.loadInspectOverviewData === 'function')
+                            ? await window.loadInspectOverviewData()
+                            : (window.__INSPECT_OVERVIEW_DATA__ || {});
+                        this.projectId = d.projectId;
+                        this.projectTitle = d.projectTitle || '';
+                        this.writingRules = d.writingRules || '';
+                        this.styleFingerprint = d.styleFingerprint;
+                        this.storyOutline = d.storyOutline || '';
+                        this.volumes = d.volumes || [];
+                        this.outlines = d.outlines || [];
+                        this.chapterList = d.chapterList || [];
+                    } finally {
+                        this.booting = false;
+                    }
+                }
             };
         }
     </script>

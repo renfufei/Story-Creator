@@ -13,27 +13,47 @@
 <body class="sc-page">
 
 <script>
-/* 引导数据：TTS 模型 configId 取自路径 /settings/tts-templates/bindings/{configId} */
-window.__TTS_BINDINGS_DATA__ = (function () {
-    var d = { configId: null, currentConfig: null, bindings: [], allOptions: [] };
-    try {
+/* 引导数据：异步 fetch（TTS 模型 configId 取自路径 /settings/tts-templates/bindings/{configId}）
+   原来同步 XHR，浏览器停在 HTML 解析期等一趟，首屏白屏。 */
+window.__TTS_BINDINGS_DATA__ = { configId: null, currentConfig: null, bindings: [], allOptions: [] };
+window.loadTtsBindingsData = function () {
+    if (!window.__ttsBindingsPromise) {
         var m = location.pathname.match(/\/settings\/tts-templates\/bindings\/(\d+)/);
         var id = m ? m[1] : '';
-        d.configId = id ? parseInt(id) : null;
-        if (id) {
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', '/settings/tts-templates/bindings/' + id + '/data', false);
-            xhr.send();
-            if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
-        }
-    } catch (e) { console.error('__TTS_BINDINGS_DATA__ load failed', e); }
-    return d;
-})();
+        /* 路径里没有 id 也要把 configId 落到空壳上，后面的渲染才知道「没有模型」 */
+        window.__TTS_BINDINGS_DATA__.configId = id ? parseInt(id) : null;
+        var url = '/settings/tts-templates/bindings/' + id + '/data';
+        window.__ttsBindingsPromise = (!id
+            ? Promise.resolve(window.__TTS_BINDINGS_DATA__)
+            : fetch(url, { headers: { 'Accept': 'application/json' } })
+                .then(function (res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
+                .then(function (d) {
+                    Object.assign(window.__TTS_BINDINGS_DATA__, d || {});
+                    return window.__TTS_BINDINGS_DATA__;
+                })
+                .catch(function (e) {
+                    console.error('__TTS_BINDINGS_DATA__ bootstrap failed: ' + (e && e.message ? e.message : e));
+                    return window.__TTS_BINDINGS_DATA__;
+                }));
+    }
+    return window.__ttsBindingsPromise;
+};
 </script>
 
 <header id="site-nav"></header>
 
 <main class="sc-main container py-4">
+    <!-- 引导数据还在路上：先出骨架（原来同步 XHR 会让绑定列表先空一片） -->
+    <div id="bootSkel" class="sc-skel-row mb-4">
+        <div class="sc-skel sc-skel-line mb-2" style="width: 30%;"></div>
+        <div class="sc-skel sc-skel-line"></div>
+        <div class="sc-skel sc-skel-line w-75"></div>
+        <div class="sc-skel sc-skel-line w-50"></div>
+    </div>
+
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="mb-0">模板绑定管理</h2>
@@ -85,7 +105,13 @@ window.__TTS_BINDINGS_DATA__ = (function () {
 <script>
 (function () {
     'use strict';
-    var data = window.__TTS_BINDINGS_DATA__ || { bindings: [], allOptions: [] };
+
+    /** 引导数据是异步的：await 之后才铺内容，最后收骨架 */
+    async function boot() {
+    try {
+    var data = (typeof window.loadTtsBindingsData === 'function')
+        ? await window.loadTtsBindingsData()
+        : (window.__TTS_BINDINGS_DATA__ || { bindings: [], allOptions: [] });
     var configId = data.configId;
     var bindings = data.bindings || [];
     var options = data.allOptions || [];
@@ -147,6 +173,13 @@ window.__TTS_BINDINGS_DATA__ = (function () {
         var form = e.target.closest('form[data-confirm]');
         if (form && !confirm(form.dataset.confirm)) e.preventDefault();
     });
+    } finally {
+        var skel = document.getElementById('bootSkel');
+        if (skel) skel.remove();
+    }
+    }
+
+    boot();
 })();
 </script>
 </body>

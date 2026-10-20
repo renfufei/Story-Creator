@@ -13,10 +13,10 @@
 <body class="sc-page" data-nav="prompts">
 
 <script>
-/* 引导数据：同步 XHR，确保下面的渲染脚本读取时已就绪 */
-window.__PROMPT_EDIT_DATA__ = (function () {
-    var d = {};
-    try {
+/* 引导数据：异步 fetch（原来同步 XHR，浏览器停在 HTML 解析期等一趟，首屏白屏） */
+window.__PROMPT_EDIT_DATA__ = {};
+window.loadPromptEditData = function () {
+    if (!window.__promptEditPromise) {
         var parts = location.pathname.split('/');
         var url;
         // /prompts/builtin/{key} → 片段为 ['', 'prompts', 'builtin', key]
@@ -27,15 +27,22 @@ window.__PROMPT_EDIT_DATA__ = (function () {
             // /prompts/{id}/edit
             url = '/prompts/' + (parts[2] || '') + '/edit-data';
         }
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url, false);
-        xhr.send();
-        if (xhr.status === 200) {
-            d = JSON.parse(xhr.responseText || '{}');
-        }
-    } catch (e) { console.error('__PROMPT_EDIT_DATA__ load failed', e); }
-    return d;
-})();
+        window.__promptEditPromise = fetch(url, { headers: { 'Accept': 'application/json' } })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (d) {
+                window.__PROMPT_EDIT_DATA__ = d || window.__PROMPT_EDIT_DATA__;
+                return window.__PROMPT_EDIT_DATA__;
+            })
+            .catch(function (e) {
+                console.error('__PROMPT_EDIT_DATA__ bootstrap failed: ' + (e && e.message ? e.message : e));
+                return window.__PROMPT_EDIT_DATA__;
+            });
+    }
+    return window.__promptEditPromise;
+};
 </script>
 
 <header id="site-nav"></header>
@@ -51,6 +58,16 @@ window.__PROMPT_EDIT_DATA__ = (function () {
         <button type="button" class="btn btn-sm btn-outline-danger" id="btnDelete" style="display:none">
             <i class="bi bi-trash"></i> 删除
         </button>
+    </div>
+
+    <!-- 引导数据还在路上：先出骨架（原来同步 XHR 会让表单先空一片） -->
+    <div id="bootSkel" class="sc-skel-row">
+        <div class="sc-skel sc-skel-line mb-3" style="width: 35%;"></div>
+        <div class="sc-skel sc-skel-line mb-3"></div>
+        <div class="sc-skel sc-skel-line mb-3"></div>
+        <div class="sc-skel sc-skel-line w-75 mb-3"></div>
+        <div class="sc-skel sc-skel-line"></div>
+        <div class="sc-skel sc-skel-line w-50"></div>
     </div>
 
     <div class="alert alert-danger" id="loadError" style="display:none">模板加载失败（可能已被删除）。</div>
@@ -146,6 +163,13 @@ window.__PROMPT_EDIT_DATA__ = (function () {
         });
     }
 
+    /** 引导数据是异步的：await 之后才判断「有没有这条模板」，最后统一收骨架 */
+    async function boot() {
+        try {
+            d = (typeof window.loadPromptEditData === 'function')
+                ? await window.loadPromptEditData()
+                : (window.__PROMPT_EDIT_DATA__ || {});
+
     if (!d || (d.isBuiltin !== true && !d.id)) {
         document.getElementById('loadError').style.display = '';
         return;
@@ -194,6 +218,14 @@ window.__PROMPT_EDIT_DATA__ = (function () {
             .then(function () { window.location.href = '/prompts'; })
             .catch(function (err) { alert(err.message || '删除失败'); });
     });
+        } finally {
+            // ★ 渲染完才收骨架：先收会看到表单空一片再填上
+            var skel = document.getElementById('bootSkel');
+            if (skel) skel.remove();
+        }
+    }
+
+    boot();
 })();
 </script>
 </body>

@@ -10,6 +10,59 @@ function workflowPolishingMixin() {
         batchPolishList: [],
         batchPolishIndex: 0,
 
+        /* ===== 预览（写作步看正文、润色步看「原稿 / 润色后」对照） =====
+           写作步与润色步用的是同一个按钮：展开哪一份，由 currentStep 决定。 */
+        previewOpen(num) {
+            return this.currentStep === 'POLISHING'
+                ? !!this.polishPreviews[num]
+                : this.inlinePreviewChapter === num;
+        },
+
+        togglePreview(num) {
+            if (this.currentStep === 'POLISHING') {
+                this.previewChapter(num);        // 已展开则收起，否则现拉
+                return;
+            }
+            if (this.inlinePreviewChapter === num) {
+                this.closeInlinePreview();
+                return;
+            }
+            this.previewChapter(num);
+        },
+
+        /** 把 {draft, content} 组装成面板要的数据：句级差异表 + 两侧字数 + 高亮开关 */
+        _polishPreview(draft, content, highlight) {
+            const d = draft || '';
+            const c = content || '';
+            const pair = SCCmp.preparePair(d, c, {
+                highlight: highlight === undefined ? true : highlight
+            });
+            return Object.assign({ draft: d, content: c }, pair);
+        },
+
+        _setPolishPreview(num, draft, content, highlight) {
+            const prev = this.polishPreviews[num];
+            const hl = highlight === undefined
+                ? (prev && prev.highlight !== undefined ? prev.highlight : true)
+                : highlight;
+            this.polishPreviews = {
+                ...this.polishPreviews,
+                [num]: this._polishPreview(draft, content, hl)
+            };
+        },
+
+        /** 收起这一章的对照面板（只影响自己，其它章不受影响） */
+        closePolishPreview(num) {
+            const { [num]: _, ...rest } = this.polishPreviews;
+            this.polishPreviews = rest;
+            if (this.polishEditingChapter === num) this.polishEditingChapter = null;
+        },
+
+        beginPolishEdit(num) {
+            this.polishEditingChapter = num;
+            this.polishEditContent = (this.polishPreviews[num] || {}).content || '';
+        },
+
         polishChapter(num) {
             this.generating = true;
             this.generatedContent = '';
@@ -31,10 +84,7 @@ function workflowPolishingMixin() {
                         this.startElapsedTimer();
                         this.attachSimpleStream('POLISHING', num, () => {
                             if (this.viewingChapterDraft && this.generatedContent) {
-                                this.polishPreviews = { ...this.polishPreviews, [num]: {
-                                    draft: this.viewingChapterDraft,
-                                    content: this.generatedContent
-                                }};
+                                this._setPolishPreview(num, this.viewingChapterDraft, this.generatedContent);
                             }
                             this.viewingChapterDraft = '';
                             this.loadChapterList();
@@ -87,10 +137,7 @@ function workflowPolishingMixin() {
                         this.startElapsedTimer();
                         this.attachSimpleStream('POLISHING', chNum, () => {
                             if (this.viewingChapterDraft && this.generatedContent) {
-                                this.polishPreviews = { ...this.polishPreviews, [chNum]: {
-                                    draft: this.viewingChapterDraft,
-                                    content: this.generatedContent
-                                }};
+                                this._setPolishPreview(chNum, this.viewingChapterDraft, this.generatedContent);
                             }
                             this.viewingChapterDraft = '';
                             this.batchPolishIndex++;
@@ -120,10 +167,8 @@ function workflowPolishingMixin() {
             .then(data => {
                 if (data.status === 'ok') {
                     if (this.polishPreviews[num]) {
-                        this.polishPreviews = { ...this.polishPreviews, [num]: {
-                            ...this.polishPreviews[num],
-                            content: content
-                        }};
+                        // 正文改了，差异表要跟着重算（原稿不变，只换后一版）
+                        this._setPolishPreview(num, this.polishPreviews[num].draft, content);
                     }
                     this.polishEditingChapter = null;
                     this.loadChapterList();

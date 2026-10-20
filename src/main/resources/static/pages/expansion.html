@@ -12,32 +12,73 @@
     <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="/js/common.js"></script>
     <script src="/js/nav.js"></script>
+    <script src="/js/compare-panel.js"></script>
     <style>
         body { margin: 0; }
         [x-cloak] { display: none !important; }
         /* 操作列按钮一律不换行：窄屏下文字按字竖排会把行高撑到 300px+ */
         .exp-actions .btn { white-space: nowrap; }
         .exp-table td, .exp-table th { vertical-align: middle; }
+
+        /* 队列表格列宽走类，方便窄屏整体收紧（行内 style 的 width 没法被媒体查询覆盖） */
+        .exp-table .exp-col-chapter { width: 72px; }
+        .exp-table .exp-col-words { width: 80px; }
+        .exp-table .exp-col-status { width: 96px; }
+        .exp-table .exp-col-actions { width: 240px; }
+        .exp-table .exp-title-cell { max-width: 420px; }
+
+        /* ===== 扩写前后预览（贴在各自章节行的**正下方**） =====
+           面板本体（.sc-cmp / .sc-cmp-pane / 差异高亮）是三个页面共用的，
+           样式在 app.css、逻辑在 js/compare-panel.js；这里只留本页特有的两件事：
+           ① 面板是表格里的一个 td（colspan=5），去掉内边距让它铺满整行；
+           ② 窄屏把列宽整体收紧，否则表格一宽过视口，贴在行内的面板就被顶出视口。 */
+        .exp-table .exp-compare-cell { padding: 0; }
+        @media (max-width: 575.98px) {
+            .exp-table .exp-col-chapter { width: 48px; }
+            .exp-table .exp-col-status { width: 64px; }
+            .exp-table .exp-col-actions { width: auto; }
+            .exp-table .exp-title-cell { max-width: 104px; }
+            .exp-table td, .exp-table th { padding-left: .3rem; padding-right: .3rem; }
+            .exp-actions .btn { padding-left: .4rem; padding-right: .4rem; }
+        }
     </style>
 </head>
 <body class="sc-page" data-nav="projects">
 <header id="site-nav"></header>
 
     <script>
-    window.__EXPANSION_DATA__ = (function () {
-        var d = {};
-        try {
-            var parts = location.pathname.split('/');
-            var pid = parts[2];
-            var ssid = parts[4];
-            var url = '/projects/' + pid + '/expansion/data';
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', url, false);
-            xhr.send();
-            d = JSON.parse(xhr.responseText || '{}');
-        } catch (e) { console.error('__EXPANSION_DATA__ load failed', e); }
-        return d;
-    })();
+    /*
+     * 引导数据：**异步**拉取。
+     * 原来这里是同步 XHR（open() 第三个参数传 false 那种）：浏览器必须停下来等一个网络往返，
+     * HTML 解析、样式计算、首次绘制全被卡住，数据没回来就是一片白屏（同步 XHR 也已被浏览器
+     * 标记为弃用，页面 unload 时还会直接抛错）。
+     * 现在改成 fetch：骨架屏先出来（x-show="booting"），数据到了再由 Alpine 的 init 填进去。
+     * projectId 仍然同步从路径取——页头链接与各处接口地址不必等数据。
+     */
+    window.__EXPANSION_DATA__ = null;
+    window.loadExpansionData = function () {
+        if (window.__expansionDataPromise) return window.__expansionDataPromise;
+        var pid = location.pathname.split('/')[2];
+        window.__expansionDataPromise = fetch('/projects/' + pid + '/expansion/data',
+                { headers: { 'Accept': 'application/json' } })
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (d) {
+                window.__EXPANSION_DATA__ = d || {};
+                return window.__EXPANSION_DATA__;
+            })
+            .catch(function (e) {
+                // 引导数据失败不该让整页坏死：退化成空队列，用户仍看得到页头与空态
+                console.error('expansion bootstrap failed: ' + e.message);
+                window.__EXPANSION_DATA__ = {
+                    projectId: pid, chapters: [], volumes: [], chaptersPerVolume: 10
+                };
+                return window.__EXPANSION_DATA__;
+            });
+        return window.__expansionDataPromise;
+    };
     </script>
 
 
@@ -47,7 +88,9 @@
         <div>
             <h4 class="mb-1"><i class="bi bi-arrows-expand-vertical"></i> 情节拓展</h4>
             <div class="text-muted small">
-                <span x-text="projectTitle">项目名</span>
+                <!-- 引导数据异步到达：先占位再填，避免先闪「项目名」再变 -->
+                <span x-show="booting" class="sc-skel" style="width:7rem;"></span>
+                <span x-show="!booting" x-text="projectTitle || '项目'"></span>
                 <span class="mx-1">·</span>
                 <span>标记章节 → 批量扩写 → 逐章确认或回滚</span>
             </div>
@@ -69,11 +112,11 @@
                 <i class="bi bi-compass"></i>
                 <strong>扩写指导</strong>
                 <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle"
-                      x-show="!editingGuidance && guidance" x-cloak>
+                      x-show="!booting && !editingGuidance && guidance" x-cloak>
                     <i class="bi bi-check2"></i> 已配置
                 </span>
                 <span class="badge rounded-pill bg-secondary-subtle text-secondary border"
-                      x-show="!editingGuidance && !guidance" x-cloak>未配置</span>
+                      x-show="!booting && !editingGuidance && !guidance" x-cloak>未配置</span>
             </span>
             <div class="btn-group btn-group-sm" x-show="!editingGuidance" x-cloak>
                 <button type="button" class="btn btn-outline-secondary" @click="startEditGuidance()"
@@ -96,11 +139,18 @@
             <!-- 只读态 -->
             <template x-if="!editingGuidance">
                 <div>
-                    <p class="mb-0 small text-body-secondary" style="white-space: pre-line;" x-text="guidance"></p>
-                    <p class="mb-0 small text-body-secondary fst-italic" x-show="!guidance" x-cloak>
-                        尚未设置。点「配置」填写扩写方向（如：加强环境描写与人物心理，补充对话细节与伏笔），
-                        也可从指导库「复用指导」挑一份现成的。
-                    </p>
+                    <!-- 骨架：指导正文要等引导数据（没配过时也走同一段占位，长度一致不会跳） -->
+                    <div x-show="booting" x-cloak>
+                        <span class="sc-skel sc-skel-line"></span>
+                        <span class="sc-skel sc-skel-line w-75"></span>
+                    </div>
+                    <div x-show="!booting">
+                        <p class="mb-0 small text-body-secondary" style="white-space: pre-line;" x-text="guidance"></p>
+                        <p class="mb-0 small text-body-secondary fst-italic" x-show="!guidance" x-cloak>
+                            尚未设置。点「配置」填写扩写方向（如：加强环境描写与人物心理，补充对话细节与伏笔），
+                            也可从指导库「复用指导」挑一份现成的。
+                        </p>
+                    </div>
                 </div>
             </template>
             <!-- 编辑态 -->
@@ -132,8 +182,10 @@
             <span class="d-flex align-items-center gap-2 flex-wrap">
                 <i class="bi bi-list-check"></i>
                 <strong>扩写队列</strong>
-                <span class="badge rounded-pill bg-warning text-dark" x-text="pendingCount + ' 待扩写'"></span>
-                <span class="badge rounded-pill bg-success" x-text="expandedCount + ' 已扩写'"></span>
+                <!-- 计数来自引导数据：加载中先给骨架，别显示「0 待扩写」误导 -->
+                <span x-show="booting" class="sc-skel sc-skel-badge"></span>
+                <span x-show="!booting" class="badge rounded-pill bg-warning text-dark" x-text="pendingCount + ' 待扩写'"></span>
+                <span x-show="!booting" class="badge rounded-pill bg-success" x-text="expandedCount + ' 已扩写'"></span>
             </span>
             <button type="button" class="btn btn-sm btn-outline-secondary" @click="refreshStatus()"
                     :disabled="refreshing" title="重新拉取任务状态与章节">
@@ -186,18 +238,34 @@
                 <table class="table table-sm table-hover align-middle exp-table mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th style="width:72px;" class="text-nowrap">章节</th>
+                            <th class="text-nowrap exp-col-chapter">章节</th>
                             <th class="text-nowrap">标题</th>
-                            <th style="width:80px;" class="text-nowrap d-none d-sm-table-cell">字数</th>
-                            <th style="width:96px;" class="text-nowrap">状态</th>
-                            <th style="width:180px;" class="text-nowrap">操作</th>
+                            <th class="text-nowrap exp-col-words d-none d-sm-table-cell">字数</th>
+                            <th class="text-nowrap exp-col-status">状态</th>
+                            <th class="text-nowrap exp-col-actions">操作</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <template x-for="ch in filteredChapters" :key="ch.chapterNumber">
+                    <!-- 引导数据还在路上：先给三行骨架。
+                         没有这段，异步改造后用户会先看到「队列为空」再突然冒出章节。 -->
+                    <tbody x-show="booting">
+                        <template x-for="i in 3" :key="'skel' + i">
                             <tr>
+                                <td><span class="sc-skel sc-skel-line w-50"></span></td>
+                                <td><span class="sc-skel sc-skel-line"></span></td>
+                                <td class="d-none d-sm-table-cell"><span class="sc-skel sc-skel-line w-50"></span></td>
+                                <td><span class="sc-skel sc-skel-badge"></span></td>
+                                <td><span class="sc-skel sc-skel-line"></span></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                    <!-- ★ 每章一个 tbody：主行 + **紧贴在这行下面**的预览面板行。
+                         多面板要能同时展开、各自贴自己那行，就只能一章一组 tbody；
+                         x-for 只认单根节点，所以模板的根是 tbody 而不是 tr。 -->
+                    <template x-for="ch in filteredChapters" :key="ch.chapterNumber">
+                        <tbody class="exp-chapter-group">
+                            <tr :class="ch.cmpOpen ? 'table-active' : ''">
                                 <td class="text-nowrap" x-text="'第' + ch.chapterNumber + '章'"></td>
-                                <td class="text-truncate" style="max-width:420px;" :title="ch.title || '-'"
+                                <td class="text-truncate exp-title-cell" :title="ch.title || '-'"
                                     x-text="ch.title || '-'"></td>
                                 <td class="d-none d-sm-table-cell" x-text="ch.wordCount"></td>
                                 <td>
@@ -208,20 +276,32 @@
                                     <template x-if="ch.expansionStatus === 'PENDING'">
                                         <button type="button" class="btn btn-sm btn-outline-secondary"
                                                 @click="unmarkChapter(ch.chapterNumber)" title="移出扩写队列">
-                                            <i class="bi bi-x-lg"></i> 移除
+                                            <i class="bi bi-x-lg"></i> <span class="d-none d-sm-inline">移除</span>
                                         </button>
                                     </template>
                                     <template x-if="ch.expansionStatus === 'EXPANDED'">
-                                        <div class="btn-group btn-group-sm">
-                                            <button type="button" class="btn btn-outline-warning"
+                                        <!-- 独立按钮 + gap：btn-group 会把三个按钮贴死并共享边框，太挤；
+                                             拆开后各有完整边框，间距由 gap-1（4px）控制 -->
+                                        <div class="d-inline-flex gap-1">
+                                            <button type="button" class="btn btn-sm exp-compare-toggle"
+                                                    :class="ch.cmpOpen ? 'btn-secondary' : 'btn-outline-primary'"
+                                                    :aria-expanded="ch.cmpOpen ? 'true' : 'false'"
+                                                    @click="toggleCompare(ch)"
+                                                    :title="ch.cmpOpen ? '收起扩写前后预览' : '在下方预览扩写前后的正文'">
+                                                <i class="bi" :class="ch.cmpOpen ? 'bi-chevron-up' : 'bi-eye'"></i>
+                                                <span class="d-none d-sm-inline" x-text="ch.cmpOpen ? '收起' : '预览'"></span>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-warning"
                                                     @click="rollbackChapter(ch.chapterNumber)"
                                                     title="恢复扩写前的原文">
-                                                <i class="bi bi-arrow-counterclockwise"></i> 回滚
+                                                <i class="bi bi-arrow-counterclockwise"></i>
+                                                <span class="d-none d-sm-inline">回滚</span>
                                             </button>
-                                            <button type="button" class="btn btn-outline-success"
+                                            <button type="button" class="btn btn-sm btn-outline-success"
                                                     @click="confirmChapter(ch.chapterNumber)"
                                                     title="保留扩写结果并清空状态">
-                                                <i class="bi bi-check-lg"></i> 确认
+                                                <i class="bi bi-check-lg"></i>
+                                                <span class="d-none d-sm-inline">确认</span>
                                             </button>
                                         </div>
                                     </template>
@@ -230,8 +310,97 @@
                                     </template>
                                 </td>
                             </tr>
-                        </template>
-                        <tr x-show="filteredChapters.length === 0" x-cloak>
+
+                            <!-- ===== 这一章的扩写前后预览（紧贴上一行） ===== -->
+                            <tr x-show="ch.cmpOpen" class="exp-compare-row">
+                                <td colspan="5" class="exp-compare-cell">
+                                    <div class="sc-cmp" :id="'exp-cmp-' + ch.chapterNumber">
+                                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                                            <div style="min-width:0;">
+                                                <div class="fw-bold text-truncate exp-cmp-header">
+                                                    <i class="bi bi-columns-gap"></i>
+                                                    第<span x-text="ch.chapterNumber"></span>章
+                                                    <span x-text="ch.title || ''"></span>
+                                                    <span class="fw-normal text-muted">· 扩写前后对照</span>
+                                                </div>
+                                                <div class="small text-muted mt-1 exp-cmp-stats"
+                                                     x-show="!ch.cmpLoading && !ch.cmpError && ch.cmp.hasBefore">
+                                                    <span x-text="'原文 ' + ch.cmp.beforeCount + ' 字'"></span>
+                                                    <i class="bi bi-arrow-right mx-1"></i>
+                                                    <span x-text="'扩写后 ' + ch.cmp.afterCount + ' 字'"></span>
+                                                    <span class="badge rounded-pill ms-2 exp-cmp-delta" :class="deltaBadgeClass(ch)"
+                                                          x-text="deltaText(ch)"></span>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div class="form-check form-switch mb-0"
+                                                     x-show="!ch.cmpLoading && !ch.cmpError && ch.cmp.hasBefore">
+                                                    <input class="form-check-input" type="checkbox"
+                                                           :id="'expCmpHighlight' + ch.chapterNumber"
+                                                           x-model="ch.cmpHighlight">
+                                                    <label class="form-check-label small"
+                                                           :for="'expCmpHighlight' + ch.chapterNumber">差异高亮</label>
+                                                </div>
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-secondary exp-close-compare"
+                                                        @click="closeCompare(ch)">
+                                                    <i class="bi bi-x-lg"></i> 收起
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div x-show="ch.cmpLoading" class="text-center text-muted py-4">
+                                            <span class="spinner-border spinner-border-sm me-1"></span>加载预览内容…
+                                        </div>
+
+                                        <div x-show="!ch.cmpLoading && ch.cmpError" class="alert alert-warning py-2 mb-0 small">
+                                            <i class="bi bi-exclamation-triangle"></i>
+                                            <span x-text="ch.cmpError"></span>
+                                        </div>
+
+                                        <div x-show="!ch.cmpLoading && !ch.cmpError && !ch.cmp.hasBefore"
+                                             class="alert alert-secondary py-2 mb-0 small">
+                                            <i class="bi bi-info-circle"></i>
+                                            这一章没有可对比的原文备份（确认或回滚后备份会被清空）。
+                                        </div>
+
+                                        <div class="row g-2" x-show="!ch.cmpLoading && !ch.cmpError && ch.cmp.hasBefore">
+                                            <div class="col-12 col-lg-6">
+                                                <div class="sc-cmp-pane-head">
+                                                    <span>扩写前（原文）</span>
+                                                    <span class="text-muted fw-normal" x-text="ch.cmp.beforeCount + ' 字'"></span>
+                                                </div>
+                                                <div class="sc-cmp-pane" @scroll="syncCompareScroll($event)">
+                                                    <template x-if="ch.cmpHighlight">
+                                                        <div><template x-for="(op, i) in ch.cmp.opsBefore" :key="'b' + i"><span :class="diffClass(op.t)" x-text="op.s"></span></template></div>
+                                                    </template>
+                                                    <template x-if="!ch.cmpHighlight">
+                                                        <div x-text="ch.cmp.beforeText"></div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                            <div class="col-12 col-lg-6">
+                                                <div class="sc-cmp-pane-head">
+                                                    <span>扩写后</span>
+                                                    <span class="text-muted fw-normal" x-text="ch.cmp.afterCount + ' 字'"></span>
+                                                </div>
+                                                <div class="sc-cmp-pane" @scroll="syncCompareScroll($event)">
+                                                    <template x-if="ch.cmpHighlight">
+                                                        <div><template x-for="(op, i) in ch.cmp.opsAfter" :key="'a' + i"><span :class="diffClass(op.t)" x-text="op.s"></span></template></div>
+                                                    </template>
+                                                    <template x-if="!ch.cmpHighlight">
+                                                        <div x-text="ch.cmp.afterText"></div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </template>
+                    <tbody x-show="!booting && filteredChapters.length === 0" x-cloak>
+                        <tr>
                             <td colspan="5" class="text-center text-muted py-4">
                                 <i class="bi bi-inbox fs-4 d-block mb-1"></i>
                                 队列为空。到
@@ -271,7 +440,13 @@
             </div>
         </div>
         <div class="card-body p-0">
-            <div class="p-4 text-center text-muted" x-show="groupedVolumes.length === 0" x-cloak>
+            <!-- 骨架：分卷与章节列表要等引导数据，直接空态会闪一下「暂无章节」 -->
+            <div x-show="booting" class="p-3">
+                <span class="sc-skel sc-skel-line"></span>
+                <span class="sc-skel sc-skel-line w-75"></span>
+                <span class="sc-skel sc-skel-line w-50"></span>
+            </div>
+            <div class="p-4 text-center text-muted" x-show="!booting && groupedVolumes.length === 0" x-cloak>
                 <i class="bi bi-book fs-4 d-block mb-1"></i>暂无章节
             </div>
             <template x-for="vol in groupedVolumes" :key="vol.volume">
@@ -405,21 +580,19 @@
 </main>
 
 <script>
-    const PROJECT_ID = window.__EXPANSION_DATA__.projectId;
-    const INITIAL_GUIDANCE = window.__EXPANSION_DATA__.expansionGuidance || '';
-    const INITIAL_CHAPTERS = window.__EXPANSION_DATA__.chapters || [];
-    const CHAPTERS_PER_VOLUME = window.__EXPANSION_DATA__.chaptersPerVolume || 10;
-    // 后端下发的分卷分组（章节->卷绑定优先，无绑定时按每卷 N 章推算）；为空则前端回落旧公式
-    const INITIAL_VOLUMES = window.__EXPANSION_DATA__.volumes || [];
+    // 项目 id 同步从路径取：页头链接和接口地址不必等引导数据
+    const PROJECT_ID = location.pathname.split('/')[2];
     // 情节拓展在创作指导库里的分类（对应 GuidanceLibraryStep.EXPANSION）
     const GUIDANCE_STEP = 'EXPANSION';
 
     function expansionPage() {
         return {
-            projectTitle: (window.__EXPANSION_DATA__ && window.__EXPANSION_DATA__.projectTitle) || '',
+            // 引导数据还在路上：页面骨架先顶上，避免「先闪一下空队列再冒出章节」
+            booting: true,
+            projectTitle: '',
             readUrl: '/projects/' + PROJECT_ID + '/read',
             workflowUrl: '/projects/' + PROJECT_ID + '/workflow/world-building',
-            guidance: INITIAL_GUIDANCE,
+            guidance: '',
             // 指导编辑态
             editingGuidance: false,
             guidanceEdit: '',
@@ -436,38 +609,64 @@
             pendingCount: 0,
             expandedCount: 0,
             streamContent: '',
-            allChapters: INITIAL_CHAPTERS.map(ch => ({
-                chapterNumber: ch.chapterNumber,
-                title: ch.title,
-                wordCount: ch.wordCount,
-                expansionStatus: ch.expansionStatus,
-                hasContent: ch.content != null
-            })),
+            // 扩写前后预览：**每章一份状态**，可以同时展开多个面板。
+            // cmpOpen/cmpLoading/cmpError/cmpHighlight/cmp 都挂在章节对象上，
+            // 面板直接读 ch.cmp.*，不需要再按章号去查表，也不会互相串数据。
+            allChapters: [],
             selectedChapters: [],
-            volumeGroups: INITIAL_VOLUMES,
-            chaptersPerVolume: CHAPTERS_PER_VOLUME,
-            // 默认展开全部分卷：在 x-data 创建时即初始化，保证首屏按钮文案正确
-            expandedVolumes: (function () {
-                const m = {};
-                if (INITIAL_VOLUMES && INITIAL_VOLUMES.length > 0) {
-                    INITIAL_VOLUMES.forEach(v => { m[v.volumeNumber] = true; });
-                    return m;
-                }
-                const per = CHAPTERS_PER_VOLUME || 10;
-                INITIAL_CHAPTERS.forEach(ch => {
-                    const vol = Math.ceil(ch.chapterNumber / per);
-                    m[vol] = true;
-                });
-                return m;
-            })(),
+            volumeGroups: [],
+            chaptersPerVolume: 10,
+            expandedVolumes: {},
             eventSource: null,
             pollTimer: null,
 
-            init() {
+            async init() {
+                // 引导数据是异步的：骨架屏先出来，这里 await 之后再把章节/分卷填进去。
+                // 失败时 loadExpansionData 内部已兜成空队列，页面仍可用（可以刷新或重新标记）。
+                const data = (typeof window.loadExpansionData === 'function')
+                    ? await window.loadExpansionData()
+                    : (window.__EXPANSION_DATA__ || {});
+                this.applyBootstrap(data || {});
                 this.updateCounts();
                 // 首次拉真实状态，恢复后台任务时按钮可用
                 this.pollStatus();
                 this.pollTimer = setInterval(() => this.pollStatus(), 5000);
+                // ★ 数据铺完才收骨架：否则用户抢在数据到达前点「开始扩写」，
+                //   随后到达的空章节列表会把刚标记的章节冲掉（chat 页踩过同样的坑）
+                this.booting = false;
+            },
+
+            /** 把引导数据铺到页面上（章节对象顺带带上各自独立的预览面板状态） */
+            applyBootstrap(d) {
+                this.projectTitle = d.projectTitle || '';
+                this.guidance = d.expansionGuidance || '';
+                this.chaptersPerVolume = d.chaptersPerVolume || 10;
+                this.volumeGroups = d.volumes || [];
+                this.allChapters = (d.chapters || []).map(ch => ({
+                    chapterNumber: ch.chapterNumber,
+                    title: ch.title,
+                    wordCount: ch.wordCount,
+                    expansionStatus: ch.expansionStatus,
+                    hasContent: ch.content != null,
+                    cmpOpen: false,
+                    cmpLoading: false,
+                    cmpError: '',
+                    cmpHighlight: true,
+                    cmp: this.emptyCompare()
+                }));
+                this.expandedVolumes = this.defaultExpandedVolumes();
+            },
+
+            /** 默认展开全部分卷：首屏「第 N 卷」按钮的文案才对 */
+            defaultExpandedVolumes() {
+                const m = {};
+                if (this.volumeGroups && this.volumeGroups.length > 0) {
+                    this.volumeGroups.forEach(v => { m[v.volumeNumber] = true; });
+                    return m;
+                }
+                const per = this.chaptersPerVolume || 10;
+                this.allChapters.forEach(ch => { m[Math.ceil(ch.chapterNumber / per)] = true; });
+                return m;
             },
 
             destroy() {
@@ -755,7 +954,10 @@
                 if (!ok) return;
                 await fetch(`/projects/${PROJECT_ID}/expansion/confirm-all`, {method: 'POST'});
                 this.allChapters.forEach(ch => {
-                    if (ch.expansionStatus === 'EXPANDED') ch.expansionStatus = null;
+                    if (ch.expansionStatus === 'EXPANDED') {
+                        ch.expansionStatus = null;
+                        ch.cmpOpen = false;     // 章已离开队列，面板跟着收掉
+                    }
                 });
                 this.updateCounts();
                 SC.toast.success('已确认 ' + total + ' 章');
@@ -919,7 +1121,11 @@
                 if (!ok) return;
                 await fetch(`/projects/${PROJECT_ID}/expansion/rollback/${chapterNumber}`, {method: 'POST'});
                 const ch = this.allChapters.find(c => c.chapterNumber === chapterNumber);
-                if (ch) ch.expansionStatus = 'PENDING';
+                if (ch) {
+                    ch.expansionStatus = 'PENDING';
+                    // 回滚会清空原文备份，预览面板失去意义
+                    ch.cmpOpen = false;
+                }
                 this.updateCounts();
                 SC.toast.success('已回滚第' + chapterNumber + '章');
             },
@@ -927,9 +1133,83 @@
             async confirmChapter(chapterNumber) {
                 await fetch(`/projects/${PROJECT_ID}/expansion/confirm/${chapterNumber}`, {method: 'POST'});
                 const ch = this.allChapters.find(c => c.chapterNumber === chapterNumber);
-                if (ch) ch.expansionStatus = null;
+                if (ch) {
+                    ch.expansionStatus = null;
+                    ch.cmpOpen = false;
+                }
                 this.updateCounts();
                 SC.toast.success('已确认第' + chapterNumber + '章');
+            },
+
+            /* ===================== 扩写前后预览 ===================== */
+
+            /** 点「预览」：展开这一章的面板（其它章的面板不受影响，可同时展开多个） */
+            async toggleCompare(ch) {
+                if (ch.cmpOpen) {
+                    this.closeCompare(ch);
+                    return;
+                }
+                ch.cmpOpen = true;
+                ch.cmpError = '';
+                ch.cmpLoading = true;
+                ch.cmp = this.emptyCompare();
+                // 队列长时面板可能落在视口外，开出来后轻轻滚进视野（不打断当前滚动位置）
+                this.$nextTick(() => {
+                    const panel = document.getElementById('exp-cmp-' + ch.chapterNumber);
+                    if (panel) panel.scrollIntoView({block: 'nearest'});
+                });
+                try {
+                    const resp = await fetch(`/projects/${PROJECT_ID}/expansion/compare/${ch.chapterNumber}`);
+                    const data = await resp.json().catch(() => ({}));
+                    if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
+                    // 期间用户可能已经把这章的面板收起来了，就别再往回填内容
+                    if (!ch.cmpOpen) return;
+                    const beforeText = data.before || '';
+                    const afterText = data.after || '';
+                    // 差异算法在共享组件里（js/compare-panel.js），三个页面同一套句级 LCS
+                    const pair = SCCmp.preparePair(beforeText, afterText, {
+                        beforeCount: data.beforeWordCount,
+                        afterCount: data.afterWordCount,
+                        highlight: ch.cmpHighlight
+                    });
+                    pair.hasBefore = data.hasBefore !== false;
+                    ch.cmp = pair;
+                } catch (e) {
+                    ch.cmpError = '预览内容加载失败：' + e.message;
+                } finally {
+                    ch.cmpLoading = false;
+                }
+            },
+
+            emptyCompare() {
+                return {
+                    hasBefore: true, beforeText: '', afterText: '',
+                    beforeCount: 0, afterCount: 0,
+                    opsBefore: [], opsAfter: []
+                };
+            },
+
+            closeCompare(ch) {
+                ch.cmpOpen = false;
+                ch.cmpError = '';
+                ch.cmpLoading = false;
+            },
+
+            /** 左右滚动同步：实现在共享组件里（按滚动占比同步；窄屏上下堆叠时各滚各的） */
+            syncCompareScroll(ev) {
+                SCCmp.syncScroll(ev);
+            },
+
+            diffClass(kind) {
+                return SCCmp.diffClass(kind);
+            },
+
+            deltaBadgeClass(ch) {
+                return SCCmp.deltaClass(ch.cmp.beforeCount, ch.cmp.afterCount);
+            },
+
+            deltaText(ch) {
+                return SCCmp.deltaText(ch.cmp.beforeCount, ch.cmp.afterCount);
             },
 
             updateCounts() {

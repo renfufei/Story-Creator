@@ -3,14 +3,63 @@ function checkResponse(r) {
     return r.json();
 }
 
+/**
+ * 引导数据：异步 fetch。
+ *
+ * 原来 7 个 workflow 页面（枢纽页 + 6 个分步页）各自在 <head>/<body> 里跑一段**同步 XHR**，
+ * 浏览器要停在 HTML 解析期等一个往返 —— JS 没开始跑、DOM 也没解析完，首屏白屏。
+ * 现在统一走这里，由 workflowCoreMixin().init() await 之后再铺数据。
+ *
+ * URL 约定：
+ *   · 分步页 /projects/{pid}/workflow/{step}      → /projects/{pid}/workflow/{step}/data
+ *   · 枢纽页 /projects/{pid}/workflow[?step=XXX]  → /projects/{pid}/workflow/data[?step=XXX]
+ *
+ * ⚠️ 结果用 Object.assign **合并**进 window.__WORKFLOW_DATA__，不换对象：
+ *    core.js 里 `const d = window.__WORKFLOW_DATA__` 捕获的是同一个引用。
+ */
+window.__WORKFLOW_DATA__ = window.__WORKFLOW_DATA__ || {};
+window.loadWorkflowData = function () {
+    if (!window.__workflowDataPromise) {
+        const parts = location.pathname.split('/');
+        const pid = parts[2];
+        const stepMatch = location.pathname.match(/\/workflow\/([a-z-]+)$/);
+        const queryStep = new URLSearchParams(location.search).get('step') || '';
+        const url = stepMatch
+            ? '/projects/' + pid + '/workflow/' + stepMatch[1] + '/data'
+            : '/projects/' + pid + '/workflow/data'
+                + (queryStep ? '?step=' + encodeURIComponent(queryStep) : '');
+        window.__workflowDataPromise = fetch(url, { headers: { 'Accept': 'application/json' } })
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                Object.assign(window.__WORKFLOW_DATA__, data || {});
+                return window.__WORKFLOW_DATA__;
+            })
+            .catch(function (e) {
+                // 退化：字段全空，页面仍能渲染（骨架收掉后是空态）
+                console.error('workflow bootstrap failed: ' + (e && e.message ? e.message : e));
+                return window.__WORKFLOW_DATA__;
+            });
+    }
+    return window.__workflowDataPromise;
+};
+
 function workflowCoreMixin() {
-    const d = window.__WORKFLOW_DATA__;
+    // 引导数据是异步的：这里先拿空壳，真正的字段在 init() await 之后由 applyBootstrap 铺进来。
+    // 注意 d 捕获的是**同一个对象引用**（loadWorkflowData 用 Object.assign 合并，不换对象），
+    // 所以任何早期读到的 d 都不会指向过期的那份。
+    const d = window.__WORKFLOW_DATA__ || {};
+    const pidFromPath = (location.pathname.match(/\/projects\/(\d+)/) || [])[1] || 0;
     return {
+        // 引导数据还在路上：先出骨架
+        booting: true,
         generating: false,
         generatedContent: '',
         existingContent: d.currentContent || '',
         editableContent: d.currentContent || '',
-        projectId: d.projectId,
+        projectId: d.projectId != null ? d.projectId : Number(pidFromPath),
         projectTitle: d.projectTitle || '',
         viewStepDisplayName: d.viewStepDisplayName || '',
         genreDisplayName: d.genreDisplayName || '',
@@ -55,34 +104,78 @@ function workflowCoreMixin() {
             { name: 'PROOFREADING', label: '校对精修', order: 6, route: 'proofreading', icon: 'bi-check2-square' },
         ],
 
-        init() {
-            // Initialize data from server-rendered values
-            this.wfStateCurrentStep = d.projectCurrentStep;
-            this.autoMode = d.autoMode;
-            this.autoRunStepConfigs = d.autoRunStepConfigs;
-            this.autoRunStrategy = d.autoRunStrategy || 'DEFAULT';
-            this.autoRunConfigExpanded = localStorage.getItem('autoRunConfigExpanded') !== 'false';
-            this.autoRunActiveStep = d.currentStep;
-            this.autoRunActiveOrder = d.currentStepOrder;
-            this.characterStateDims = d.characterStateDims;
+        /**
+         * 把引导数据铺进组件状态。
+         * 这些字段原来在构造期直接从 window.__WORKFLOW_DATA__ 取，
+         * 异步化之后只能等 await 回来再赋值，所以集中到这里（init 里调用一次）。
+         */
+        applyBootstrap(boot) {
+            const dd = boot || {};
+            this.existingContent = dd.currentContent || '';
+            this.editableContent = dd.currentContent || '';
+            if (dd.projectId != null) this.projectId = dd.projectId;
+            this.projectTitle = dd.projectTitle || '';
+            this.viewStepDisplayName = dd.viewStepDisplayName || '';
+            this.genreDisplayName = dd.genreDisplayName || '';
+            this.projectCurrentStepOrder = dd.projectCurrentStepOrder || 1;
+            this.isCurrentStep = dd.isCurrentStep || false;
+            this.hasNextStep = dd.hasNextStep || false;
+            this.modelConfigs = dd.modelConfigs || [];
+            this.stepModelConfigId = dd.stepModelConfigId;
+            this.currentStep = dd.currentStep;
+            this.currentStepOrder = dd.currentStepOrder;
+            this.stepConfirmed = dd.stepConfirmed;
+            this.isLastStep = dd.isLastStep;
+            this.totalChapters = dd.totalChapters;
+            this.chapterWordCount = dd.chapterWordCount;
+            this.chapterWordCountMin = dd.chapterWordCountMin;
+            this.chapterWordCountMax = dd.chapterWordCountMax;
+            this.stepGuidance = dd.stepGuidance || '';
+            this.wfStateCurrentStep = dd.projectCurrentStep;
+            this.autoMode = dd.autoMode;
+            this.autoRunStepConfigs = dd.autoRunStepConfigs;
+            this.autoRunStrategy = dd.autoRunStrategy || 'DEFAULT';
+            this.autoRunActiveStep = dd.currentStep;
+            this.autoRunActiveOrder = dd.currentStepOrder;
+            this.characterStateDims = dd.characterStateDims;
+        },
 
+        init() {
+            // $watch 必须留在 init 里同步注册（Alpine 的作用域只在 init 执行期有效，
+            // await 之后再注册就挂不到组件作用域上）
             this.$watch('reuseFilterByStep', () => { this.loadGuidanceLibrary(); });
-            this.loadChapterList();
-            this.loadCharacterList();
-            if (this.currentStep === 'OUTLINE_GENERATION') {
-                this.loadOutlineData();
+            return this.boot();
+        },
+
+        async boot() {
+            // 引导数据先到位：后面几个 load* 都依赖 currentStep / projectId
+            try {
+                const boot = (typeof window.loadWorkflowData === 'function')
+                    ? await window.loadWorkflowData()
+                    : (window.__WORKFLOW_DATA__ || {});
+                this.applyBootstrap(boot);
+                this.autoRunConfigExpanded = localStorage.getItem('autoRunConfigExpanded') !== 'false';
+
+                this.loadChapterList();
+                this.loadCharacterList();
+                if (this.currentStep === 'OUTLINE_GENERATION') {
+                    this.loadOutlineData();
+                }
+                if (this.currentStep === 'PROOFREADING') {
+                    this.loadProofreadData();
+                }
+                if (['CHAPTER_WRITING', 'POLISHING', 'PROOFREADING'].includes(this.currentStep)) {
+                    this.loadVolumes();
+                }
+                this.checkBgGenStatus();
+                if (this.autoMode) {
+                    this.checkAutoRunStatus();
+                }
+                this.initGlobalScrollSync();
+            } finally {
+                // ★ 数据铺完才收骨架：先收的话空列表会把刚发出的操作冲掉
+                this.booting = false;
             }
-            if (this.currentStep === 'PROOFREADING') {
-                this.loadProofreadData();
-            }
-            if (['CHAPTER_WRITING', 'POLISHING', 'PROOFREADING'].includes(this.currentStep)) {
-                this.loadVolumes();
-            }
-            this.checkBgGenStatus();
-            if (this.autoMode) {
-                this.checkAutoRunStatus();
-            }
-            this.initGlobalScrollSync();
         },
 
         checkBgGenStatus() {
@@ -533,6 +626,28 @@ function workflowCoreMixin() {
                     this.showGuidanceToast('已应用指导: ' + item.name, 'success');
                 })
                 .catch(err => this.showGuidanceToast('应用失败: ' + err, 'danger'));
+        },
+
+        /* ===== 前后对照面板的通用封装（实现见 js/compare-panel.js） =====
+           扩写 / 润色 / 精修 三个页面用的是同一套面板：句级差异高亮、字数增量徽标、
+           左右栏按占比同步滚动。这里只做薄封装，算法只有一份，别在页面里重写。 */
+        diffClass(kind) {
+            return window.SCCmp ? SCCmp.diffClass(kind) : '';
+        },
+
+        syncPreviewScroll(ev) {
+            if (window.SCCmp) SCCmp.syncScroll(ev);
+        },
+
+        /** @param pair 形如 {beforeCount, afterCount} 的对照数据（页面里通常是 polishPreviews[n] 这类） */
+        previewDeltaClass(pair) {
+            if (!pair || !window.SCCmp) return 'bg-secondary';
+            return SCCmp.deltaClass(pair.beforeCount, pair.afterCount);
+        },
+
+        previewDeltaText(pair) {
+            if (!pair || !window.SCCmp) return '';
+            return SCCmp.deltaText(pair.beforeCount, pair.afterCount);
         },
 
         initGlobalScrollSync() {

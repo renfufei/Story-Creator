@@ -209,19 +209,41 @@ function workflowProofreadingMixin() {
         },
 
         previewProofreadFix(num) {
+            this.toggleProofreadPreview(num);
+        },
+
+        /* ===== 精修前后预览（面板与扩写/润色共用 js/compare-panel.js） ===== */
+
+        toggleProofreadPreview(num) {
             if (this.proofreadFixPreviews[num]) {
-                const { [num]: _, ...rest } = this.proofreadFixPreviews;
-                this.proofreadFixPreviews = rest;
+                this.closeProofreadPreview(num);
                 return;
             }
             fetch(`/projects/${this.projectId}/chapters/${num}/content`)
                 .then(checkResponse)
                 .then(data => {
-                    this.proofreadFixPreviews = { ...this.proofreadFixPreviews, [num]: {
-                        draft: data.contentBeforeFix || '',
-                        content: data.content || ''
-                    }};
-                });
+                    this._setProofreadPreview(num, data.contentBeforeFix || '', data.content || '');
+                })
+                .catch(err => alert('加载精修结果失败: ' + err));
+        },
+
+        _setProofreadPreview(num, beforeText, afterText, highlight) {
+            const prev = this.proofreadFixPreviews[num];
+            const hl = highlight === undefined
+                ? (prev && prev.highlight !== undefined ? prev.highlight : true)
+                : highlight;
+            const b = beforeText || '';
+            const a = afterText || '';
+            const pair = SCCmp.preparePair(b, a, { highlight: hl });
+            this.proofreadFixPreviews = {
+                ...this.proofreadFixPreviews,
+                [num]: Object.assign({ draft: b, content: a }, pair)
+            };
+        },
+
+        closeProofreadPreview(num) {
+            const { [num]: _, ...rest } = this.proofreadFixPreviews;
+            this.proofreadFixPreviews = rest;
         },
 
         openGlobalReplace() {

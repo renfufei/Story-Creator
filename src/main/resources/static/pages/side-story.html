@@ -21,24 +21,62 @@
 <header id="site-nav"></header>
 
     <script>
-    window.__SIDE_STORY_DATA__ = (function () {
-        var d = {};
-        try {
+    /* 引导数据：异步 fetch。
+       原来是同步 XHR —— 浏览器要停在 HTML 解析期等番外数据，JS 没开始跑、DOM 也没解析完，首屏白屏。
+       现在先给空壳，由 boot() await 之后铺数据（标题 / 正文 / 目录 / 角色都等它）。 */
+    window.__SIDE_STORY_DATA__ = {};
+    window.loadSideStoryData = function () {
+        if (!window.__sideStoryDataPromise) {
             var parts = location.pathname.split('/');
             var pid = parts[2];
             var ssid = parts[4];
             var url = '/projects/' + pid + '/side-stories/' + ssid + '/data';
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', url, false);
-            xhr.send();
-            d = JSON.parse(xhr.responseText || '{}');
-        } catch (e) { console.error('__SIDE_STORY_DATA__ load failed', e); }
-        return d;
-    })();
+            window.__sideStoryDataPromise = fetch(url, { headers: { 'Accept': 'application/json' } })
+                .then(function (res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
+                .then(function (d) {
+                    window.__SIDE_STORY_DATA__ = d || {};
+                    return window.__SIDE_STORY_DATA__;
+                })
+                .catch(function (e) {
+                    // 退化：番外正文取不到，页面仍能渲染（标题 / 章节为空）
+                    console.error('side-story bootstrap failed: ' + (e && e.message ? e.message : e));
+                    return window.__SIDE_STORY_DATA__;
+                });
+        }
+        return window.__sideStoryDataPromise;
+    };
     </script>
 
 
-<main class="sc-main container py-4" x-data="sideStoryWorkflow()" x-cloak>
+<main class="sc-main container py-4" x-data="sideStoryWorkflow()">
+    <!-- 引导数据还在路上：先出骨架（页面原来在 x-cloak 后面整片白屏等同步 XHR） -->
+    <div x-show="booting" x-cloak>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div>
+                <h4 class="mb-1"><span class="sc-skel" style="width: 12rem; height: 1.4rem;"></span></h4>
+                <span class="sc-skel" style="width: 14rem;"></span>
+            </div>
+            <div class="d-flex gap-2">
+                <span class="sc-skel" style="width: 6.5rem; height: 1.9rem;"></span>
+                <span class="sc-skel" style="width: 5.5rem; height: 1.9rem;"></span>
+            </div>
+        </div>
+        <div class="card mb-3"><div class="card-body">
+            <div class="sc-skel sc-skel-line" style="width: 30%;"></div>
+            <div class="sc-skel sc-skel-line"></div>
+            <div class="sc-skel sc-skel-line w-75"></div>
+            <div class="sc-skel sc-skel-line w-50"></div>
+        </div></div>
+        <div class="card mb-3"><div class="card-body">
+            <div class="sc-skel sc-skel-line" style="width: 24%;"></div>
+            <div class="sc-skel sc-skel-line"></div>
+            <div class="sc-skel sc-skel-line w-75"></div>
+        </div></div>
+    </div>
+    <div x-show="!booting" x-cloak>
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
@@ -518,60 +556,47 @@
 
     <script>
 function sideStoryWorkflow() {
-    const projectId = window.__SIDE_STORY_DATA__.projectId;
-    const sideStoryId = window.__SIDE_STORY_DATA__.sideStory.id;
-    const initChapters = window.__SIDE_STORY_DATA__.chapters;
-    const initOutline = window.__SIDE_STORY_DATA__.sideStory.outline || '';
-    const initArcName = window.__SIDE_STORY_DATA__.sideStory.arcName || '';
-    const initCharacterIds = window.__SIDE_STORY_DATA__.characterIds;
-    const initCharacters = window.__SIDE_STORY_DATA__.characters;
-    const initCreativeGuidance = window.__SIDE_STORY_DATA__.sideStory.creativeGuidance || '';
-    const initTitle = window.__SIDE_STORY_DATA__.sideStory.title || '';
-    const initDescription = window.__SIDE_STORY_DATA__.sideStory.description || '';
-    const initType = window.__SIDE_STORY_DATA__.sideStory.type || 'SUPPLEMENTARY';
-    const initAttachedVolume = window.__SIDE_STORY_DATA__.sideStory.attachedVolume;
+    // 路径同步可得：projectId / sideStoryId 不用等接口（各处 save / generate 请求都裸用这两个名字）
+    const pageParts = location.pathname.split('/');
+    const projectId = pageParts[2];
+    const sideStoryId = pageParts[4];
 
     return {
+        // 引导数据还在路上：先出骨架
+        booting: true,
         // 模板 :href 直接引用 projectId，必须挂到 Alpine data 上（函数内 const 局部变量不可见）
         projectId: projectId,
         // 模板直接用 sideStory.status，必须挂到 data 上（函数内 const 局部变量不可见）
-        sideStory: window.__SIDE_STORY_DATA__.sideStory || {},
-        projectTitle: window.__SIDE_STORY_DATA__.projectTitle,
-        volumes: window.__SIDE_STORY_DATA__.volumes || [],
+        sideStory: {},
+        projectTitle: '',
+        volumes: [],
         // Basic Info
-        infoTitle: initTitle,
-        infoType: initType,
-        infoDescription: initDescription,
-        infoAttachedVolume: initAttachedVolume,
+        infoTitle: '',
+        infoType: 'SUPPLEMENTARY',
+        infoDescription: '',
+        infoAttachedVolume: null,
         showInfoModal: false,
         infoEditForm: { title: '', description: '', type: '', attachedVolume: null, chapterCount: 0 },
 
         // Creative Guidance
-        creativeGuidance: initCreativeGuidance,
+        creativeGuidance: '',
         editingGuidance: false,
         guidanceEdit: '',
 
         // Characters
-        selectedCharIds: initCharacterIds || [],
-        allCharacters: initCharacters.map(c => ({ id: c.id, name: c.name || '未命名', role: c.role || '' })),
+        selectedCharIds: [],
+        allCharacters: [],
         showCharModal: false,
         charEditIds: [],
 
         // Outline
-        outline: initOutline,
-        arcName: initArcName,
+        outline: '',
+        arcName: '',
         editingOutline: false,
         outlineEdit: '',
 
         // Chapters
-        chapters: initChapters.map(ch => ({
-            chapterNumber: ch.chapterNumber,
-            title: ch.title || '',
-            outlineSummary: ch.outlineSummary || '',
-            content: ch.content || '',
-            wordCount: ch.wordCount || 0,
-            status: ch.status || 'NOT_STARTED'
-        })),
+        chapters: [],
         expandedChapters: [],
         editingChapterOutline: null,
         editingChapterContent: null,
@@ -591,8 +616,55 @@ function sideStoryWorkflow() {
         autoRunStreamStep: '',
         autoRunEventSource: null,
 
+        /**
+         * 把引导数据铺进组件状态。
+         * 这些值原来是在构造期从 window.__SIDE_STORY_DATA__ 取的 const，
+         * 异步化之后只能等 await 回来再赋值，所以集中到这里。
+         */
+        applyBootstrap(d) {
+            const ss = d.sideStory || {};
+            this.sideStory = ss;
+            this.projectTitle = d.projectTitle || '';
+            this.volumes = d.volumes || [];
+            this.infoTitle = ss.title || '';
+            this.infoType = ss.type || 'SUPPLEMENTARY';
+            this.infoDescription = ss.description || '';
+            this.infoAttachedVolume = ss.attachedVolume == null ? null : ss.attachedVolume;
+            this.creativeGuidance = ss.creativeGuidance || '';
+            this.selectedCharIds = d.characterIds || [];
+            this.allCharacters = (d.characters || []).map(c => ({
+                id: c.id, name: c.name || '未命名', role: c.role || ''
+            }));
+            this.outline = ss.outline || '';
+            this.arcName = ss.arcName || '';
+            this.chapters = (d.chapters || []).map(ch => ({
+                chapterNumber: ch.chapterNumber,
+                title: ch.title || '',
+                outlineSummary: ch.outlineSummary || '',
+                content: ch.content || '',
+                wordCount: ch.wordCount || 0,
+                status: ch.status || 'NOT_STARTED'
+            }));
+        },
+
+        /**
+         * 引导数据是异步的：await 之后铺数据，最后才收骨架
+         * （先收的话空章节列表会把「自动创作」刚发出的状态冲掉）
+         */
+        async boot() {
+            try {
+                const d = (typeof window.loadSideStoryData === 'function')
+                    ? await window.loadSideStoryData()
+                    : (window.__SIDE_STORY_DATA__ || {});
+                this.applyBootstrap(d || {});
+            } finally {
+                this.booting = false;
+            }
+        },
+
         init() {
             this.pollAutoRunStatus();
+            this.boot();
         },
 
         // === Info Methods ===
@@ -1030,6 +1102,7 @@ function sideStoryWorkflow() {
     };
 }
     </script>
+    </div><!-- /x-show="!booting" -->
 </main>
 
     <script src="/vendor/alpinejs/cdn.min.js" defer></script>

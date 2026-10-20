@@ -21,25 +21,64 @@
 <header id="site-nav"></header>
 
     <script>
-    window.__SIDE_STORY_LIST_DATA__ = (function () {
-        var d = {};
-        try {
+    /* 引导数据：异步 fetch。
+       原来是同步 XHR —— 浏览器停在 HTML 解析期等番外列表，再叠上 <main x-cloak>，首屏就是纯白。
+       现在先给空壳，由 boot() await 之后铺数据。 */
+    window.__SIDE_STORY_LIST_DATA__ = {};
+    window.loadSideStoryListData = function () {
+        if (!window.__sideStoryListDataPromise) {
             var parts = location.pathname.split('/');
             var pid = parts[2];
-            var ssid = parts[4];
             var url = '/projects/' + pid + '/side-stories/list-data';
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', url, false);
-            xhr.send();
-            d = JSON.parse(xhr.responseText || '{}');
-        } catch (e) { console.error('__SIDE_STORY_LIST_DATA__ load failed', e); }
-        return d;
-    })();
+            window.__sideStoryListDataPromise = fetch(url, { headers: { 'Accept': 'application/json' } })
+                .then(function (res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
+                .then(function (d) {
+                    window.__SIDE_STORY_LIST_DATA__ = d || {};
+                    return window.__SIDE_STORY_LIST_DATA__;
+                })
+                .catch(function (e) {
+                    // 退化：列表为空，页面仍可用（显示空态）
+                    console.error('side-story-list bootstrap failed: ' + (e && e.message ? e.message : e));
+                    return window.__SIDE_STORY_LIST_DATA__;
+                });
+        }
+        return window.__sideStoryListDataPromise;
+    };
     </script>
 
 
-<main class="sc-main container py-4" x-data="sideStoryList()" x-cloak>
-    <div class="d-flex justify-content-between align-items-center mb-4">
+<main class="sc-main container py-4" x-data="sideStoryList()">
+    <!-- 引导数据还在路上：先出骨架（原来在 x-cloak 后面整片白屏等同步 XHR） -->
+    <div x-show="booting" x-cloak>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+            <div>
+                <h2 class="mb-1">番外篇</h2>
+                <span class="sc-skel" style="width: 9rem;"></span>
+            </div>
+            <div class="d-flex gap-2">
+                <span class="sc-skel" style="width: 6rem; height: 1.9rem;"></span>
+                <span class="sc-skel" style="width: 6.5rem; height: 1.9rem;"></span>
+            </div>
+        </div>
+        <div class="row g-3">
+            <template x-for="i in 3" :key="i">
+                <div class="col-md-6 col-lg-4">
+                    <!-- 骨架卡故意不用 .card：探针靠 .row.g-3 .card 数真实卡片 -->
+                    <div class="border rounded h-100 p-3">
+                        <div class="sc-skel sc-skel-line" style="width: 55%;"></div>
+                        <div class="sc-skel sc-skel-line w-75"></div>
+                        <div class="sc-skel sc-skel-line w-50"></div>
+                        <span class="sc-skel sc-skel-badge"></span>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+    <div x-show="!booting" x-cloak>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
         <div>
             <h2 class="mb-0">番外篇</h2>
             <small class="text-muted" x-text="projectTitle">项目名</small>
@@ -226,18 +265,23 @@
         </div>
     </div>
     <div class="modal-backdrop fade show" x-show="showWizard" x-cloak></div>
+    </div><!-- /x-show="!booting" -->
 
 <script>
 function sideStoryList() {
-    const projectId = window.__SIDE_STORY_LIST_DATA__.projectId;
+    // 路径同步可得（各处 API 请求都裸用 projectId）
+    const pageParts = location.pathname.split('/');
+    const projectId = pageParts[2];
     return {
+        // 引导数据还在路上：先出骨架
+        booting: true,
         // 模板里 :href 直接引用 projectId，必须挂到 Alpine data 上，
         // 否则 Alpine 求值时报 ReferenceError（函数内的 const 局部变量不可见）
         projectId: projectId,
-        projectTitle: window.__SIDE_STORY_LIST_DATA__.projectTitle || '',
-        sideStories: window.__SIDE_STORY_LIST_DATA__.sideStories || [],
-        characters: window.__SIDE_STORY_LIST_DATA__.characters || [],
-        volumes: window.__SIDE_STORY_LIST_DATA__.volumes || [],
+        projectTitle: '',
+        sideStories: [],
+        characters: [],
+        volumes: [],
         showWizard: false,
         wizardStep: 1,
         form: {
@@ -249,8 +293,28 @@ function sideStoryList() {
             creativeGuidance: '',
             chapterCount: 3
         },
-        allCharCount: (window.__SIDE_STORY_LIST_DATA__.characters || []).length,
-        init() {},
+        allCharCount: 0,
+
+        /**
+         * 引导数据是异步的：await 之后铺数据，最后才收骨架
+         * （先收的话空列表会把「暂无番外」闪出来）
+         */
+        async boot() {
+            try {
+                const d = (typeof window.loadSideStoryListData === 'function')
+                    ? await window.loadSideStoryListData()
+                    : (window.__SIDE_STORY_LIST_DATA__ || {});
+                this.projectTitle = d.projectTitle || '';
+                this.sideStories = d.sideStories || [];
+                this.characters = d.characters || [];
+                this.volumes = d.volumes || [];
+                this.allCharCount = this.characters.length;
+            } finally {
+                this.booting = false;
+            }
+        },
+
+        init() { this.boot(); },
         toggleChar(id) {
             const idx = this.form.characterIds.indexOf(id);
             if (idx >= 0) this.form.characterIds.splice(idx, 1);

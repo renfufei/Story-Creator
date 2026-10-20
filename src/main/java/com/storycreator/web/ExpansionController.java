@@ -97,6 +97,33 @@ public class ExpansionController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    /**
+     * 扩写前后对比：返回扩写前的原文备份（content_before_expansion）与当前正文。
+     * 队列里的「对比」按钮点开时按章拉取，前端做句级差异高亮。
+     */
+    @GetMapping("/compare/{chapterNumber}")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> compare(@PathVariable Long projectId,
+                                                       @PathVariable int chapterNumber) {
+        return chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber)
+                .map(ch -> {
+                    String before = ch.getContentBeforeExpansion();
+                    String after = ch.getContent();
+                    Map<String, Object> data = new java.util.LinkedHashMap<>();
+                    data.put("chapterNumber", ch.getChapterNumber());
+                    data.put("title", ch.getTitle() != null ? ch.getTitle() : "");
+                    data.put("expansionStatus", ch.getExpansionStatus());
+                    // 已确认/已回滚的章备份会被清空，此时 hasBefore=false，前端给出提示而不是空白面板
+                    data.put("hasBefore", before != null && !before.isEmpty());
+                    data.put("before", before != null ? before : "");
+                    data.put("after", after != null ? after : "");
+                    data.put("beforeWordCount", before != null ? before.length() : 0);
+                    data.put("afterWordCount", after != null ? after.length() : 0);
+                    return ResponseEntity.ok(data);
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     @PostMapping("/mark")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> markChapters(@PathVariable Long projectId,

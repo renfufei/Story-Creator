@@ -701,21 +701,35 @@
    模式看路径（/learn/antonym-match ⇒ 反义词），不依赖查询串：
    这两个路由是服务端 forward 到同一张静态页的，浏览器地址栏里没有 ?mode=。
 
-   词库用同步 XHR 一次取完（3 学段 × 30 关 × 6 对 = 540 对，gzip 三十几 KB），
-   切学段 / 切关卡零请求 —— 与单词匹配、成语填空同一做法。 */
+   词库一次取完（3 学段 × 30 关 × 6 对 = 540 对，gzip 三十几 KB），
+   切学段 / 切关卡零请求 —— 与单词匹配、成语填空同一做法。
+
+   ★ 2026-10-20 改成异步 fetch：原来是同步 XHR，浏览器停在 HTML 解析期等这一趟，
+     首屏白屏。现在先给空壳（见模板里的 x-show="booting" 骨架），数据到了再铺内容。 */
 var WR_MODE = /\/learn\/antonym-match/.test(window.location.pathname) ? 'antonym' : 'synonym';
 var WR_LABEL = WR_MODE === 'antonym' ? '反义词' : '近义词';
 
-window.__RELATION_DATA__ = (function () {
-    var d = { mode: WR_MODE, label: WR_LABEL, stages: [], levels: {} };
-    try {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/learn/word-relation/data?mode=' + WR_MODE, false);
-        xhr.send();
-        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
-    } catch (e) { console.error('__RELATION_DATA__ load failed', e); }
-    return d;
-})();
+window.__RELATION_DATA__ = { mode: WR_MODE, label: WR_LABEL, stages: [], levels: {} };
+window.loadRelationData = function () {
+    if (!window.__relationDataPromise) {
+        window.__relationDataPromise = fetch('/learn/word-relation/data?mode=' + WR_MODE,
+            { headers: { 'Accept': 'application/json' } })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (d) {
+                /* ★ 合并而非替换：导出（exportOptions）抓的是同一个对象引用 */
+                Object.assign(window.__RELATION_DATA__, d || {});
+                return window.__RELATION_DATA__;
+            })
+            .catch(function (e) {
+                console.error('__RELATION_DATA__ bootstrap failed: ' + (e && e.message ? e.message : e));
+                return window.__RELATION_DATA__;
+            });
+    }
+    return window.__relationDataPromise;
+};
 </script>
 
 <header id="site-nav"></header>
@@ -723,6 +737,25 @@ window.__RELATION_DATA__ = (function () {
 <main class="sc-main container py-4">
 
 <div class="wr-root" :class="'mode-' + mode" x-data="relationApp()" x-init="init()">
+
+    <!-- 引导数据还在路上：先出骨架（原来同步 XHR 会把整页卡在白屏） -->
+    <div x-show="booting" x-cloak>
+        <div class="sc-skel-row mb-3">
+            <div class="sc-skel sc-skel-line w-25"></div>
+            <div class="sc-skel sc-skel-line w-50"></div>
+        </div>
+        <div class="sc-skel-row mb-3">
+            <div class="sc-skel sc-skel-line" style="width: 30%;"></div>
+            <div class="sc-skel sc-skel-line" style="width: 30%;"></div>
+        </div>
+        <div class="sc-skel-row">
+            <div class="sc-skel sc-skel-line"></div>
+            <div class="sc-skel sc-skel-line"></div>
+            <div class="sc-skel sc-skel-line w-75"></div>
+        </div>
+    </div>
+
+    <div x-show="!booting" x-cloak>
 
     <!-- ==================== 工具栏 ====================
          朗读 / 重做 / 错题本 / 导出 / 源码 / 重置进度 统一收进「设置」弹层
@@ -1051,6 +1084,8 @@ window.__RELATION_DATA__ = (function () {
         </div>
     </div>
 
+    </div><!-- /x-show="!booting" -->
+
 </div>
 
 </main>
@@ -1108,6 +1143,7 @@ function relationApp() {
         soundOn: true,
         pickerOpen: false,
         progress: {},
+        booting: true,      // 引导数据还没到（骨架阶段）
         ready: false,
 
         /* ---------- 设置弹层 / 错题本 / 导出 ---------- */
@@ -1122,7 +1158,16 @@ function relationApp() {
         /* ==================== 生命周期 ==================== */
 
         init: function () {
-            var data = window.__RELATION_DATA__ || {};
+            /* 引导数据是异步的：真正的铺场在 boot()（init 只留一个同步入口，
+               免得 Alpine 作用域在 await 之后失效的坑） */
+            return this.boot();
+        },
+
+        async boot() {
+            try {
+            var data = (typeof window.loadRelationData === 'function')
+                ? await window.loadRelationData()
+                : (window.__RELATION_DATA__ || {});
             this.mode = data.mode || WR_MODE;
             this.label = data.label || WR_LABEL;
             this.title = this.label + '匹配';
@@ -1155,6 +1200,11 @@ function relationApp() {
             this.stageId = first;
             var saved = (this.progress[first] && this.progress[first].current) || 0;
             this.loadLevel(saved > this.levelCount - 1 ? 0 : saved);
+            } finally {
+                /* ★ 内容铺完再收骨架：先收会让「还没有关卡」空态闪一下 */
+                await this.$nextTick();
+                this.booting = false;
+            }
         },
 
         /* ==================== 派生状态 ==================== */

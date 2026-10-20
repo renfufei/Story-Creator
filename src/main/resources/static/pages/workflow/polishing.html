@@ -16,11 +16,40 @@
 
 <main class="sc-main container py-4">
     <div x-data="polishingApp()">
+        <!-- 引导数据还在路上：先出骨架（原来的同步 XHR 会把整页卡在白屏） -->
+        <div x-show="booting" x-cloak>
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                <span class="sc-skel" style="width: 5.5rem;"></span>
+                <span class="sc-skel" style="width: 5.5rem;"></span>
+                <span class="sc-skel" style="width: 5.5rem;"></span>
+                <span class="sc-skel" style="width: 5.5rem;"></span>
+                <span class="sc-skel" style="width: 5.5rem;"></span>
+                <span class="sc-skel" style="width: 5.5rem;"></span>
+            </div>
+            <h4 class="mb-3"><span class="sc-skel" style="width: 11rem; height: 1.4rem;"></span></h4>
+            <div class="row g-3">
+                <div class="col-12 col-lg-5"><div class="card"><div class="card-body">
+                    <div class="sc-skel sc-skel-line" style="width: 40%;"></div>
+                    <div class="sc-skel sc-skel-line"></div>
+                    <div class="sc-skel sc-skel-line w-75"></div>
+                    <div class="sc-skel sc-skel-line w-50"></div>
+                </div></div></div>
+                <div class="col-12 col-lg-7"><div class="card"><div class="card-body">
+                    <div class="sc-skel sc-skel-line" style="width: 30%;"></div>
+                    <div class="sc-skel sc-skel-line"></div>
+                    <div class="sc-skel sc-skel-line"></div>
+                    <div class="sc-skel sc-skel-line w-75"></div>
+                    <div class="sc-skel sc-skel-line w-50"></div>
+                </div></div></div>
+            </div>
+        </div>
+        <div x-show="!booting" x-cloak>
         <!-- Sticky header area -->
         <div class="sticky-top bg-white pb-2" style="z-index: 100;">
-<div class="d-flex justify-content-between align-items-center mb-2">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
         <h4 class="mb-0"><a :href="'/projects/' + projectId + ''" class="sc-card-link" title="查看项目详情"><i class="bi bi-journal-text"></i><span x-text="projectTitle">项目名</span></a></h4>
-        <div class="d-flex gap-2">
+        <!-- 窄屏这一排按钮必须能换行：8 个按钮不换行时会把整页顶宽 47px（390px 屏横向滚动） -->
+        <div class="d-flex flex-wrap gap-2">
             <a :href="'/projects/' + projectId + '/side-stories'" class="btn btn-sm btn-outline-secondary">
                 <i class="bi bi-journal-bookmark"></i> 番外
             </a>
@@ -419,20 +448,13 @@
                                                         </template>
                                                     </span>
                                                     <div class="d-flex gap-1">
-                                                        <button class="btn btn-sm btn-outline-secondary"
-                                                                @click="previewChapter(ch.chapterNumber)"
-                                                                x-show="(currentStep !== 'CHAPTER_WRITING' || inlinePreviewChapter !== ch.chapterNumber) && (currentStep !== 'POLISHING' || !polishPreviews[ch.chapterNumber])">
-                                                            <i class="bi bi-eye"></i> 预览
-                                                        </button>
-                                                        <button class="btn btn-sm btn-outline-secondary"
-                                                                @click="closeInlinePreview()"
-                                                                x-show="inlinePreviewChapter === ch.chapterNumber && currentStep === 'CHAPTER_WRITING'">
-                                                            <i class="bi bi-x-lg"></i> 关闭预览
-                                                        </button>
-                                                        <button class="btn btn-sm btn-outline-secondary"
-                                                                @click="previewChapter(ch.chapterNumber)"
-                                                                x-show="currentStep === 'POLISHING' && polishPreviews[ch.chapterNumber]">
-                                                            <i class="bi bi-x-lg"></i> 关闭预览
+                                                        <button class="btn btn-sm"
+                                                                :class="previewOpen(ch.chapterNumber) ? 'btn-secondary' : 'btn-outline-primary'"
+                                                                :aria-expanded="previewOpen(ch.chapterNumber) ? 'true' : 'false'"
+                                                                @click="togglePreview(ch.chapterNumber)"
+                                                                :title="previewOpen(ch.chapterNumber) ? '收起预览' : (currentStep === 'POLISHING' ? '在下方预览润色前后的正文' : '在下方预览章节正文')">
+                                                            <i class="bi" :class="previewOpen(ch.chapterNumber) ? 'bi-chevron-up' : 'bi-eye'"></i>
+                                                            <span x-text="previewOpen(ch.chapterNumber) ? '收起' : '预览'"></span>
                                                         </button>
                                                         <template x-if="currentStep === 'CHAPTER_WRITING'">
                                                             <button class="btn btn-sm btn-outline-primary"
@@ -457,20 +479,33 @@
                                                         </template>
                                                     </div>
                                                 </div>
-                                                <!-- Inline preview (CHAPTER_WRITING only) -->
+                                                <!-- 章节正文预览（写作步）：外形与润色/精修共用同一套面板（.sc-cmp） -->
                                                 <template x-if="currentStep === 'CHAPTER_WRITING' && inlinePreviewChapter === ch.chapterNumber">
-                                                    <div class="mt-2 pt-2 border-top">
-                                                        <div x-show="!inlinePreviewEditing">
-                                                            <pre class="streaming-output mb-0" style="max-height: 50vh; overflow-y: auto; white-space:pre-wrap; font-family:inherit;" x-text="inlinePreviewContent"></pre>
-                                                            <div class="d-flex justify-content-between align-items-center mt-2">
-                                                                <small class="text-muted">字数: <strong x-text="inlinePreviewContent.length"></strong></small>
-                                                                <div class="d-flex gap-1">
-                                                                    <button type="button" class="btn btn-sm btn-outline-primary" @click="startInlineEdit()"
-                                                                            :disabled="fullAutoRunning">
-                                                                        <i class="bi bi-pencil"></i> 编辑
-                                                                    </button>
+                                                    <div class="sc-cmp sc-cmp-card mt-2">
+                                                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                                                            <div style="min-width:0;">
+                                                                <div class="fw-bold text-truncate sc-cmp-head">
+                                                                    <i class="bi bi-journal-text"></i>
+                                                                    第<span x-text="ch.chapterNumber"></span>章
+                                                                    <span x-text="ch.title || ''"></span>
+                                                                    <span class="fw-normal text-muted">· 章节正文</span>
+                                                                </div>
+                                                                <div class="small text-muted mt-1">
+                                                                    <span x-text="'正文 ' + inlinePreviewContent.length + ' 字'"></span>
                                                                 </div>
                                                             </div>
+                                                            <div class="d-flex align-items-center gap-2">
+                                                                <button type="button" class="btn btn-sm btn-outline-primary" @click="startInlineEdit()"
+                                                                        :disabled="fullAutoRunning" x-show="!inlinePreviewEditing">
+                                                                    <i class="bi bi-pencil"></i> 编辑
+                                                                </button>
+                                                                <button type="button" class="btn btn-sm btn-outline-secondary" @click="closeInlinePreview()">
+                                                                    <i class="bi bi-x-lg"></i> 收起
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <div class="sc-cmp-pane" style="max-height:50vh;" x-show="!inlinePreviewEditing">
+                                                            <div x-text="inlinePreviewContent"></div>
                                                         </div>
                                                         <div x-show="inlinePreviewEditing">
                                                             <textarea class="form-control content-editor" style="height: 50vh; overflow-y: auto;"
@@ -490,31 +525,70 @@
                                                         </div>
                                                     </div>
                                                 </template>
-                                                <!-- Inline polish preview (POLISHING) -->
+                                                <!-- 润色前后对照：两栏并排 + 句级差异高亮 + 左右同步滚动（面板实现见 js/compare-panel.js） -->
                                                 <template x-if="currentStep === 'POLISHING' && polishPreviews[ch.chapterNumber]">
-                                                    <div class="mt-2 pt-2 border-top">
-                                                        <div x-show="polishEditingChapter !== ch.chapterNumber">
-                                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                                <small class="text-muted">
-                                                                    原稿 <strong x-text="(polishPreviews[ch.chapterNumber]?.draft || '').length"></strong>字
-                                                                    → 润色后 <strong x-text="(polishPreviews[ch.chapterNumber]?.content || '').length"></strong>字
-                                                                </small>
+                                                    <div class="sc-cmp sc-cmp-preview sc-cmp-card mt-2">
+                                                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                                                            <div style="min-width:0;">
+                                                                <div class="fw-bold text-truncate sc-cmp-head">
+                                                                    <i class="bi bi-columns-gap"></i>
+                                                                    第<span x-text="ch.chapterNumber"></span>章
+                                                                    <span x-text="ch.title || ''"></span>
+                                                                    <span class="fw-normal text-muted">· 润色前后对照</span>
+                                                                </div>
+                                                                <div class="small text-muted mt-1" x-show="polishEditingChapter !== ch.chapterNumber">
+                                                                    <span x-text="'原稿 ' + polishPreviews[ch.chapterNumber].beforeCount + ' 字'"></span>
+                                                                    <i class="bi bi-arrow-right mx-1"></i>
+                                                                    <span x-text="'润色后 ' + polishPreviews[ch.chapterNumber].afterCount + ' 字'"></span>
+                                                                    <span class="badge rounded-pill ms-2"
+                                                                          :class="previewDeltaClass(polishPreviews[ch.chapterNumber])"
+                                                                          x-text="previewDeltaText(polishPreviews[ch.chapterNumber])"></span>
+                                                                </div>
+                                                            </div>
+                                                            <div class="d-flex align-items-center gap-2">
+                                                                <div class="form-check form-switch mb-0" x-show="polishEditingChapter !== ch.chapterNumber">
+                                                                    <input class="form-check-input" type="checkbox" :id="'polishHl' + ch.chapterNumber"
+                                                                           x-model="polishPreviews[ch.chapterNumber].highlight">
+                                                                    <label class="form-check-label small" :for="'polishHl' + ch.chapterNumber">差异高亮</label>
+                                                                </div>
                                                                 <button type="button" class="btn btn-sm btn-outline-primary"
-                                                                        @click="polishEditingChapter = ch.chapterNumber; polishEditContent = polishPreviews[ch.chapterNumber]?.content || ''"
-                                                                        :disabled="fullAutoRunning">
+                                                                        @click="beginPolishEdit(ch.chapterNumber)" :disabled="fullAutoRunning"
+                                                                        x-show="polishEditingChapter !== ch.chapterNumber">
                                                                     <i class="bi bi-pencil"></i> 编辑润色稿
                                                                 </button>
+                                                                <button type="button" class="btn btn-sm btn-outline-secondary sc-cmp-close"
+                                                                        @click="closePolishPreview(ch.chapterNumber)">
+                                                                    <i class="bi bi-x-lg"></i> 收起
+                                                                </button>
                                                             </div>
-                                                            <div class="split-view-container">
-                                                                <div class="split-view-panel">
-                                                                    <div class="split-view-header">原稿</div>
-                                                                    <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;"
-                                                                         x-text="polishPreviews[ch.chapterNumber]?.draft || ''"></pre>
+                                                        </div>
+                                                        <div class="row g-2" x-show="polishEditingChapter !== ch.chapterNumber">
+                                                            <div class="col-12 col-lg-6">
+                                                                <div class="sc-cmp-pane-head">
+                                                                    <span>原稿</span>
+                                                                    <span class="text-muted fw-normal" x-text="polishPreviews[ch.chapterNumber].beforeCount + ' 字'"></span>
                                                                 </div>
-                                                                <div class="split-view-panel">
-                                                                    <div class="split-view-header">润色后</div>
-                                                                    <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;"
-                                                                         x-text="polishPreviews[ch.chapterNumber]?.content || ''"></pre>
+                                                                <div class="sc-cmp-pane" @scroll="syncPreviewScroll($event)">
+                                                                    <template x-if="polishPreviews[ch.chapterNumber].highlight">
+                                                                        <div><template x-for="(op, i) in polishPreviews[ch.chapterNumber].opsBefore" :key="'pb' + i"><span :class="diffClass(op.t)" x-text="op.s"></span></template></div>
+                                                                    </template>
+                                                                    <template x-if="!polishPreviews[ch.chapterNumber].highlight">
+                                                                        <div x-text="polishPreviews[ch.chapterNumber].beforeText"></div>
+                                                                    </template>
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-12 col-lg-6">
+                                                                <div class="sc-cmp-pane-head">
+                                                                    <span>润色后</span>
+                                                                    <span class="text-muted fw-normal" x-text="polishPreviews[ch.chapterNumber].afterCount + ' 字'"></span>
+                                                                </div>
+                                                                <div class="sc-cmp-pane" @scroll="syncPreviewScroll($event)">
+                                                                    <template x-if="polishPreviews[ch.chapterNumber].highlight">
+                                                                        <div><template x-for="(op, i) in polishPreviews[ch.chapterNumber].opsAfter" :key="'pa' + i"><span :class="diffClass(op.t)" x-text="op.s"></span></template></div>
+                                                                    </template>
+                                                                    <template x-if="!polishPreviews[ch.chapterNumber].highlight">
+                                                                        <div x-text="polishPreviews[ch.chapterNumber].afterText"></div>
+                                                                    </template>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -536,9 +610,9 @@
                                                         </div>
                                                     </div>
                                                 </template>
-                                                <!-- Inline polish generating (POLISHING, streaming) -->
+                                                <!-- 润色中的实时两栏（流式输出中，两栏同样同步滚动） -->
                                                 <template x-if="currentStep === 'POLISHING' && generating && viewingChapterNum === ch.chapterNumber && viewingChapterDraft">
-                                                    <div class="mt-2 pt-2 border-top">
+                                                    <div class="sc-cmp sc-cmp-card mt-2">
                                                         <div class="d-flex align-items-center mb-2">
                                                             <small class="text-muted">
                                                                 <span class="spinner-border spinner-border-sm me-1"></span>
@@ -547,16 +621,17 @@
                                                                 <span class="ms-3"><i class="bi bi-clock"></i> <span x-text="generateElapsed"></span></span>
                                                             </small>
                                                         </div>
-                                                        <div class="split-view-container">
-                                                            <div class="split-view-panel">
-                                                                <div class="split-view-header">原稿</div>
-                                                                <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;" x-text="viewingChapterDraft"></pre>
+                                                        <div class="row g-2">
+                                                            <div class="col-12 col-lg-6">
+                                                                <div class="sc-cmp-pane-head">原稿</div>
+                                                                <div class="sc-cmp-pane" @scroll="syncPreviewScroll($event)">
+                                                                    <div x-text="viewingChapterDraft"></div>
+                                                                </div>
                                                             </div>
-                                                            <div class="split-view-panel">
-                                                                <div class="split-view-header">润色中...</div>
-                                                                <div class="streaming-output split-panel-content">
-                                                                    <span x-text="generatedContent"></span>
-                                                                    <span class="cursor"></span>
+                                                            <div class="col-12 col-lg-6">
+                                                                <div class="sc-cmp-pane-head">润色中…</div>
+                                                                <div class="sc-cmp-pane" @scroll="syncPreviewScroll($event)">
+                                                                    <div><span x-text="generatedContent"></span><span class="cursor"></span></div>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -591,20 +666,13 @@
                                 </template>
                             </span>
                             <div class="d-flex gap-1">
-                                <button class="btn btn-sm btn-outline-secondary"
-                                        @click="previewChapter(ch.chapterNumber)"
-                                        x-show="(currentStep !== 'CHAPTER_WRITING' || inlinePreviewChapter !== ch.chapterNumber) && (currentStep !== 'POLISHING' || !polishPreviews[ch.chapterNumber])">
-                                    <i class="bi bi-eye"></i> 预览
-                                </button>
-                                <button class="btn btn-sm btn-outline-secondary"
-                                        @click="closeInlinePreview()"
-                                        x-show="inlinePreviewChapter === ch.chapterNumber && currentStep === 'CHAPTER_WRITING'">
-                                    <i class="bi bi-x-lg"></i> 关闭预览
-                                </button>
-                                <button class="btn btn-sm btn-outline-secondary"
-                                        @click="previewChapter(ch.chapterNumber)"
-                                        x-show="currentStep === 'POLISHING' && polishPreviews[ch.chapterNumber]">
-                                    <i class="bi bi-x-lg"></i> 关闭预览
+                                <button class="btn btn-sm"
+                                        :class="previewOpen(ch.chapterNumber) ? 'btn-secondary' : 'btn-outline-primary'"
+                                        :aria-expanded="previewOpen(ch.chapterNumber) ? 'true' : 'false'"
+                                        @click="togglePreview(ch.chapterNumber)"
+                                        :title="previewOpen(ch.chapterNumber) ? '收起预览' : (currentStep === 'POLISHING' ? '在下方预览润色前后的正文' : '在下方预览章节正文')">
+                                    <i class="bi" :class="previewOpen(ch.chapterNumber) ? 'bi-chevron-up' : 'bi-eye'"></i>
+                                    <span x-text="previewOpen(ch.chapterNumber) ? '收起' : '预览'"></span>
                                 </button>
                                 <template x-if="currentStep === 'CHAPTER_WRITING'">
                                     <button class="btn btn-sm btn-outline-primary"
@@ -629,20 +697,33 @@
                                 </template>
                             </div>
                         </div>
-                        <!-- Inline preview (CHAPTER_WRITING only) -->
+                        <!-- 章节正文预览（写作步）：外形与润色/精修共用同一套面板（.sc-cmp） -->
                         <template x-if="currentStep === 'CHAPTER_WRITING' && inlinePreviewChapter === ch.chapterNumber">
-                            <div class="mt-2 pt-2 border-top">
-                                <div x-show="!inlinePreviewEditing">
-                                    <pre class="streaming-output mb-0" style="max-height: 50vh; overflow-y: auto; white-space:pre-wrap; font-family:inherit;" x-text="inlinePreviewContent"></pre>
-                                    <div class="d-flex justify-content-between align-items-center mt-2">
-                                        <small class="text-muted">字数: <strong x-text="inlinePreviewContent.length"></strong></small>
-                                        <div class="d-flex gap-1">
-                                            <button type="button" class="btn btn-sm btn-outline-primary" @click="startInlineEdit()"
-                                                    :disabled="fullAutoRunning">
-                                                <i class="bi bi-pencil"></i> 编辑
-                                            </button>
+                            <div class="sc-cmp sc-cmp-card mt-2">
+                                <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                                    <div style="min-width:0;">
+                                        <div class="fw-bold text-truncate sc-cmp-head">
+                                            <i class="bi bi-journal-text"></i>
+                                            第<span x-text="ch.chapterNumber"></span>章
+                                            <span x-text="ch.title || ''"></span>
+                                            <span class="fw-normal text-muted">· 章节正文</span>
+                                        </div>
+                                        <div class="small text-muted mt-1">
+                                            <span x-text="'正文 ' + inlinePreviewContent.length + ' 字'"></span>
                                         </div>
                                     </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" @click="startInlineEdit()"
+                                                :disabled="fullAutoRunning" x-show="!inlinePreviewEditing">
+                                            <i class="bi bi-pencil"></i> 编辑
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" @click="closeInlinePreview()">
+                                            <i class="bi bi-x-lg"></i> 收起
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="sc-cmp-pane" style="max-height:50vh;" x-show="!inlinePreviewEditing">
+                                    <div x-text="inlinePreviewContent"></div>
                                 </div>
                                 <div x-show="inlinePreviewEditing">
                                     <textarea class="form-control content-editor" style="height: 50vh; overflow-y: auto;"
@@ -663,31 +744,70 @@
                             </div>
                         </template>
 
-                        <!-- Inline polish preview (POLISHING) -->
+                        <!-- 润色前后对照：两栏并排 + 句级差异高亮 + 左右同步滚动（面板实现见 js/compare-panel.js） -->
                         <template x-if="currentStep === 'POLISHING' && polishPreviews[ch.chapterNumber]">
-                            <div class="mt-2 pt-2 border-top">
-                                <div x-show="polishEditingChapter !== ch.chapterNumber">
-                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <small class="text-muted">
-                                            原稿 <strong x-text="(polishPreviews[ch.chapterNumber]?.draft || '').length"></strong>字
-                                            → 润色后 <strong x-text="(polishPreviews[ch.chapterNumber]?.content || '').length"></strong>字
-                                        </small>
+                            <div class="sc-cmp sc-cmp-preview sc-cmp-card mt-2">
+                                <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                                    <div style="min-width:0;">
+                                        <div class="fw-bold text-truncate sc-cmp-head">
+                                            <i class="bi bi-columns-gap"></i>
+                                            第<span x-text="ch.chapterNumber"></span>章
+                                            <span x-text="ch.title || ''"></span>
+                                            <span class="fw-normal text-muted">· 润色前后对照</span>
+                                        </div>
+                                        <div class="small text-muted mt-1" x-show="polishEditingChapter !== ch.chapterNumber">
+                                            <span x-text="'原稿 ' + polishPreviews[ch.chapterNumber].beforeCount + ' 字'"></span>
+                                            <i class="bi bi-arrow-right mx-1"></i>
+                                            <span x-text="'润色后 ' + polishPreviews[ch.chapterNumber].afterCount + ' 字'"></span>
+                                            <span class="badge rounded-pill ms-2"
+                                                  :class="previewDeltaClass(polishPreviews[ch.chapterNumber])"
+                                                  x-text="previewDeltaText(polishPreviews[ch.chapterNumber])"></span>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="form-check form-switch mb-0" x-show="polishEditingChapter !== ch.chapterNumber">
+                                            <input class="form-check-input" type="checkbox" :id="'polishHl' + ch.chapterNumber"
+                                                   x-model="polishPreviews[ch.chapterNumber].highlight">
+                                            <label class="form-check-label small" :for="'polishHl' + ch.chapterNumber">差异高亮</label>
+                                        </div>
                                         <button type="button" class="btn btn-sm btn-outline-primary"
-                                                @click="polishEditingChapter = ch.chapterNumber; polishEditContent = polishPreviews[ch.chapterNumber]?.content || ''"
-                                                :disabled="fullAutoRunning">
+                                                @click="beginPolishEdit(ch.chapterNumber)" :disabled="fullAutoRunning"
+                                                x-show="polishEditingChapter !== ch.chapterNumber">
                                             <i class="bi bi-pencil"></i> 编辑润色稿
                                         </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary sc-cmp-close"
+                                                @click="closePolishPreview(ch.chapterNumber)">
+                                            <i class="bi bi-x-lg"></i> 收起
+                                        </button>
                                     </div>
-                                    <div class="split-view-container">
-                                        <div class="split-view-panel">
-                                            <div class="split-view-header">原稿</div>
-                                            <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;"
-                                                 x-text="polishPreviews[ch.chapterNumber]?.draft || ''"></pre>
+                                </div>
+                                <div class="row g-2" x-show="polishEditingChapter !== ch.chapterNumber">
+                                    <div class="col-12 col-lg-6">
+                                        <div class="sc-cmp-pane-head">
+                                            <span>原稿</span>
+                                            <span class="text-muted fw-normal" x-text="polishPreviews[ch.chapterNumber].beforeCount + ' 字'"></span>
                                         </div>
-                                        <div class="split-view-panel">
-                                            <div class="split-view-header">润色后</div>
-                                            <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;"
-                                                 x-text="polishPreviews[ch.chapterNumber]?.content || ''"></pre>
+                                        <div class="sc-cmp-pane" @scroll="syncPreviewScroll($event)">
+                                            <template x-if="polishPreviews[ch.chapterNumber].highlight">
+                                                <div><template x-for="(op, i) in polishPreviews[ch.chapterNumber].opsBefore" :key="'pb' + i"><span :class="diffClass(op.t)" x-text="op.s"></span></template></div>
+                                            </template>
+                                            <template x-if="!polishPreviews[ch.chapterNumber].highlight">
+                                                <div x-text="polishPreviews[ch.chapterNumber].beforeText"></div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-lg-6">
+                                        <div class="sc-cmp-pane-head">
+                                            <span>润色后</span>
+                                            <span class="text-muted fw-normal" x-text="polishPreviews[ch.chapterNumber].afterCount + ' 字'"></span>
+                                        </div>
+                                        <div class="sc-cmp-pane" @scroll="syncPreviewScroll($event)">
+                                            <template x-if="polishPreviews[ch.chapterNumber].highlight">
+                                                <div><template x-for="(op, i) in polishPreviews[ch.chapterNumber].opsAfter" :key="'pa' + i"><span :class="diffClass(op.t)" x-text="op.s"></span></template></div>
+                                            </template>
+                                            <template x-if="!polishPreviews[ch.chapterNumber].highlight">
+                                                <div x-text="polishPreviews[ch.chapterNumber].afterText"></div>
+                                            </template>
                                         </div>
                                     </div>
                                 </div>
@@ -710,9 +830,9 @@
                             </div>
                         </template>
 
-                        <!-- Inline polish generating (POLISHING, streaming) -->
+                        <!-- 润色中的实时两栏（流式输出中，两栏同样同步滚动） -->
                         <template x-if="currentStep === 'POLISHING' && generating && viewingChapterNum === ch.chapterNumber && viewingChapterDraft">
-                            <div class="mt-2 pt-2 border-top">
+                            <div class="sc-cmp sc-cmp-card mt-2">
                                 <div class="d-flex align-items-center mb-2">
                                     <small class="text-muted">
                                         <span class="spinner-border spinner-border-sm me-1"></span>
@@ -721,16 +841,17 @@
                                         <span class="ms-3"><i class="bi bi-clock"></i> <span x-text="generateElapsed"></span></span>
                                     </small>
                                 </div>
-                                <div class="split-view-container">
-                                    <div class="split-view-panel">
-                                        <div class="split-view-header">原稿</div>
-                                        <pre class="streaming-output split-panel-content" style="white-space:pre-wrap; font-family:inherit;" x-text="viewingChapterDraft"></pre>
+                                <div class="row g-2">
+                                    <div class="col-12 col-lg-6">
+                                        <div class="sc-cmp-pane-head">原稿</div>
+                                        <div class="sc-cmp-pane" @scroll="syncPreviewScroll($event)">
+                                            <div x-text="viewingChapterDraft"></div>
+                                        </div>
                                     </div>
-                                    <div class="split-view-panel">
-                                        <div class="split-view-header">润色中...</div>
-                                        <div class="streaming-output split-panel-content">
-                                            <span x-text="generatedContent"></span>
-                                            <span class="cursor"></span>
+                                    <div class="col-12 col-lg-6">
+                                        <div class="sc-cmp-pane-head">润色中…</div>
+                                        <div class="sc-cmp-pane" @scroll="syncPreviewScroll($event)">
+                                            <div><span x-text="generatedContent"></span><span class="cursor"></span></div>
                                         </div>
                                     </div>
                                 </div>
@@ -1138,34 +1259,18 @@
             </div>
         </div>
     </div>
+        </div><!-- /x-show="!booting" -->
     </div>
 </main>
 
-<!-- 同步拉取创作引导数据，等价替代原 th:inline 服务端注入；Alpine(defer) 在解析时全局已就绪 -->
-<script>
-(function () {
-    try {
-        var parts = location.pathname.split('/');
-        var pid = parts[2];
-        var step = 'polishing';
-        var url = '/projects/' + pid + '/workflow/' + step + '/data';
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url, false);
-        xhr.send();
-        if (xhr.status === 200) {
-            window.__WORKFLOW_DATA__ = JSON.parse(xhr.responseText);
-        } else {
-            window.__WORKFLOW_DATA__ = { projectId: Number(pid) };
-        }
-    } catch (e) {
-        window.__WORKFLOW_DATA__ = window.__WORKFLOW_DATA__ || { projectId: 0 };
-    }
-})();
-</script>
+<!-- 引导数据改成异步 fetch（见 /js/workflow/core.js 的 loadWorkflowData）：
+     原来这里是一段同步 XHR，浏览器要停在 HTML 解析期等往返，首屏白屏；
+     现在由 workflowCoreMixin().init() await 之后再铺数据，期间显示骨架。 -->
 
 <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="/js/common.js"></script>
 <script src="/js/nav.js"></script>
+<script src="/js/compare-panel.js"></script>
 <script src="/js/workflow/workflow-state.js"></script>
 <script src="/js/workflow/outline.js"></script>
 <script src="/js/workflow/characters.js"></script>

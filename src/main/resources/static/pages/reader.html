@@ -15,6 +15,8 @@
             color: var(--reader-fg, #212529);
         }
         [x-cloak] { display: none !important; }
+        /* 正文骨架：行宽节奏贴近真实正文，数据到了不会有明显跳动 */
+        .reader-skeleton { padding: .5rem 0 1.5rem; max-width: 46rem; }
         /* 侧边栏跟随阅读背景色：--reader-sidebar-* 由 applyBg() 按当前底色/文字色推导 */
         .reader-sidebar {
             width: 260px;
@@ -221,7 +223,7 @@
         }
     </style>
 </head>
-<body x-data="readerApp()" x-init="initVolumes(); initTts(); initBg()">
+<body x-data="readerApp()" x-init="initTts(); initBg(); boot()">
 
     <button class="btn btn-sm toggle-btn"
             :class="{ 'shifted': sidebarOpen && window.innerWidth > 768,
@@ -267,7 +269,17 @@
                 <i class="bi bi-arrow-left"></i> 返回项目
             </a>
         </div>
-        <h6 class="text-muted mb-2" x-text="projectTitle">书名</h6>
+        <h6 class="text-muted mb-2">
+            <span x-show="booting" class="sc-skel" style="width:7rem;"></span>
+            <span x-show="!booting" x-text="projectTitle"></span>
+        </h6>
+        <!-- 目录骨架：书目/分卷要等引导数据，空着会比正文晚一步才「长出来」 -->
+        <div x-show="booting">
+            <span class="sc-skel sc-skel-line"></span>
+            <span class="sc-skel sc-skel-line w-75"></span>
+            <span class="sc-skel sc-skel-line"></span>
+            <span class="sc-skel sc-skel-line w-50"></span>
+        </div>
         <div class="small text-muted mb-2" x-show="author" x-cloak
              x-text="'作者：' + author"></div>
         <hr>
@@ -368,7 +380,11 @@
     </aside>
 
     <main class="reader-main" :class="{ 'expanded': !sidebarOpen }">
-        <h2 class="mb-2" x-text="projectTitle">书名</h2>
+        <h2 class="mb-2">
+            <!-- 书名/正文要等引导数据：先给骨架，别先闪一个空书名 -->
+            <span x-show="booting" class="sc-skel" style="width:12rem;height:1.4rem;"></span>
+            <span x-show="!booting" x-text="projectTitle"></span>
+        </h2>
         <p class="text-muted mb-4" x-show="author" x-cloak x-text="'作者：' + author"></p>
 
         <!-- TTS Controls -->
@@ -464,6 +480,16 @@
             </div>
         </div>
 
+        <!-- 正文骨架：整本书的正文是这一页最重的一次请求，先给占位再填 -->
+        <div x-show="booting" class="reader-skeleton">
+            <span class="sc-skel sc-skel-line" style="height:1.1rem;width:40%;"></span>
+            <span class="sc-skel sc-skel-line"></span>
+            <span class="sc-skel sc-skel-line"></span>
+            <span class="sc-skel sc-skel-line w-75"></span>
+            <span class="sc-skel sc-skel-line"></span>
+            <span class="sc-skel sc-skel-line w-50"></span>
+        </div>
+
         <template x-for="(chapter, iter) in chapters" :key="chapter.number">
             <div>
                 <hr x-show="iter > 0" class="chapter-divider">
@@ -525,7 +551,7 @@
             </div>
         </template>
 
-        <div x-show="chapters.length === 0" x-cloak class="text-muted text-center py-5">
+        <div x-show="!booting && chapters.length === 0" x-cloak class="text-muted text-center py-5">
             <i class="bi bi-journal-x" style="font-size: 3rem;"></i>
             <p class="mt-2">暂无章节内容</p>
         </div>
@@ -533,40 +559,87 @@
 
     <script src="/vendor/alpinejs/cdn.min.js" defer></script>
     <script>
-    // 引导数据：同步 XHR 拉取（Alpine defer 解析前完成，readerApp() 构造时可直接读取）
-    window.__READER_DATA__ = (function () {
+    /*
+     * 引导数据：**异步**拉取。
+     * 全文阅读页的 payload 是整本书的正文（几百 KB 很常见），原来用同步 XHR 时
+     * 浏览器要一直停在这里等：HTML 解析、样式计算、首次绘制全被卡住，网速慢就是整页白屏。
+     * 现在先渲染骨架屏（x-show="booting"），正文数据到了再由 boot() 铺进来。
+     */
+    window.__READER_DATA__ = null;
+    window.loadReaderData = function () {
+        if (window.__readerDataPromise) return window.__readerDataPromise;
         var m = window.location.pathname.match(/\/projects\/(\d+)\/read/);
         var pid = m ? m[1] : null;
         var empty = { projectId: pid, projectTitle: '', author: '', volumes: [], chapters: [], sideStories: [] };
-        if (!pid) return empty;
-        try {
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', '/api/projects/' + pid + '/read-data', false);
-            xhr.send();
-            if (xhr.status >= 200 && xhr.status < 300) {
-                return JSON.parse(xhr.responseText);
-            }
-            console.error('reader bootstrap HTTP ' + xhr.status);
-        } catch (e) {
-            console.error('reader bootstrap failed', e);
+        if (!pid) {
+            window.__READER_DATA__ = empty;
+            return Promise.resolve(empty);
         }
-        return empty;
-    })();
+        window.__readerDataPromise = fetch('/api/projects/' + pid + '/read-data',
+                { headers: { 'Accept': 'application/json' } })
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (d) {
+                window.__READER_DATA__ = d || empty;
+                return window.__READER_DATA__;
+            })
+            .catch(function (e) {
+                // 失败不该让页面坏死：退化成空书，至少能看到「暂无章节内容」
+                console.error('reader bootstrap failed: ' + e.message);
+                window.__READER_DATA__ = empty;
+                return empty;
+            });
+        return window.__readerDataPromise;
+    };
     </script>
     <script>
     function readerApp() {
-        const d = window.__READER_DATA__ || {};
-        const projectId = d.projectId;
+        // projectId 同步从路径取：侧栏「返回项目」等链接不必等正文数据
+        const m = window.location.pathname.match(/\/projects\/(\d+)\/read/);
+        const pathPid = m ? Number(m[1]) : null;
+        // 组件内部很多方法直接用闭包里的 projectId（TTS / 导出链接 / localStorage key），
+        // 这里保持同名，避免异步改造后变成 ReferenceError
+        const projectId = pathPid;
         return {
-            projectId: projectId,
-            projectTitle: d.projectTitle || '',
-            author: d.author || '',
+            // 正文数据还在路上：骨架屏先顶上
+            booting: true,
+            projectId: pathPid,
+            projectTitle: '',
+            author: '',
             sidebarOpen: window.innerWidth > 768,
-            volumes: d.volumes || [],
-            chapters: d.chapters || [],
+            volumes: [],
+            chapters: [],
             openVolumes: [],
-            sideStoriesData: d.sideStories || [],
+            sideStoriesData: [],
             openSideStories: [],
+
+            /**
+             * 引导数据是异步的：await 之后再把书目/正文铺进来。
+             * 失败时 loadReaderData 内部已兜成空书，页面仍可用（显示空态）。
+             */
+            async boot() {
+                const d = (typeof window.loadReaderData === 'function')
+                    ? await window.loadReaderData()
+                    : (window.__READER_DATA__ || {});
+                this.projectId = d.projectId || this.projectId;
+                this.projectTitle = d.projectTitle || '';
+                this.author = d.author || '';
+                this.volumes = d.volumes || [];
+                this.chapters = d.chapters || [];
+                this.sideStoriesData = d.sideStories || [];
+                this.initVolumes();
+                if (this.projectTitle) document.title = this.projectTitle + ' - 全文阅读';
+                // ★ 数据铺完才收骨架，否则空书会把用户的滚动/展开状态冲掉
+                this.booting = false;
+                // 番外块要插到所属分卷末章后面：等 DOM 渲染出来再挪一次
+                this.$nextTick(() => {
+                    if (typeof window.repositionSideStoryBlocks === 'function') {
+                        window.repositionSideStoryBlocks(this.volumes);
+                    }
+                });
+            },
             initVolumes() {
                 const hash = window.location.hash;
                 const match = hash.match(/chapter-(\d+)/);
@@ -1062,16 +1135,14 @@
         };
     }
 
-    // 设置标题（引导数据到位后）
-    (function () {
-        var d = window.__READER_DATA__ || {};
-        if (d.projectTitle) document.title = d.projectTitle + ' - 全文阅读';
-    })();
+    // 标题由 boot() 在数据到位后设置（异步引导数据，解析期还拿不到书名）
     </script>
     <script>
     // Reposition side story blocks after their associated volume's last chapter
-    document.addEventListener('DOMContentLoaded', function() {
-        const volumes = (window.__READER_DATA__ || {}).volumes || [];
+    // ★ 引导数据改成异步后，这段必须在数据铺完后再跑（原来挂在 DOMContentLoaded 上，
+    //   那时 volumes 还是空的，整段会静默不生效）
+    window.repositionSideStoryBlocks = function (volumes) {
+        volumes = volumes || [];
         const blocks = document.querySelectorAll('.side-story-block');
         blocks.forEach(function(block) {
             const attachedVol = block.dataset.attachedVolume;
@@ -1092,10 +1163,14 @@
                 chapterContainer.after(block);
             }
         });
-    });
+    };
     </script>
     <script>
-    const EXPANSION_PROJECT_ID = (window.__READER_DATA__ || {}).projectId;
+    // 从路径取（引导数据是异步的，解析期还没有 projectId）
+    const EXPANSION_PROJECT_ID = (function () {
+        const m = window.location.pathname.match(/\/projects\/(\d+)\/read/);
+        return m ? Number(m[1]) : null;
+    })();
     function toggleExpansionMark(btn) {
         const chapterNumber = parseInt(btn.dataset.chapter);
         const isMarked = btn.classList.contains('btn-warning');

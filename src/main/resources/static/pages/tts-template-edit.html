@@ -16,27 +16,38 @@
 <body class="sc-page">
 
 <script>
-/* 引导数据：模板 id 取自路径 /settings/tts-templates/{id}/edit，同步 XHR 拉取 */
-window.__TTS_TEMPLATE_EDIT_DATA__ = (function () {
-    var d = { templateId: null, template: null, rules: [] };
-    try {
+/* 引导数据：异步 fetch（模板 id 取自路径 /settings/tts-templates/{id}/edit）
+   原来同步 XHR，浏览器停在 HTML 解析期等一趟，首屏白屏。 */
+window.__TTS_TEMPLATE_EDIT_DATA__ = { templateId: null, template: null, rules: [] };
+window.loadTtsTemplateEditData = function () {
+    if (!window.__ttsTemplateEditPromise) {
         var m = location.pathname.match(/\/settings\/tts-templates\/(\d+)\/edit/);
         var id = m ? m[1] : '';
-        d.templateId = id ? parseInt(id) : null;
-        if (id) {
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', '/settings/tts-templates/' + id + '/edit-data', false);
-            xhr.send();
-            if (xhr.status === 200) {
-                // 保留从路径解析出的 templateId（接口只返回 template/rules）
-                var parsed = JSON.parse(xhr.responseText || '{}');
-                parsed.templateId = d.templateId;
-                d = parsed;
-            }
-        }
-    } catch (e) { console.error('__TTS_TEMPLATE_EDIT_DATA__ load failed', e); }
-    return d;
-})();
+        /* 路径里的 id 先落到空壳上：接口只返回 template/rules，不返回 id */
+        window.__TTS_TEMPLATE_EDIT_DATA__.templateId = id ? parseInt(id) : null;
+        var url = '/settings/tts-templates/' + id + '/edit-data';
+        window.__ttsTemplateEditPromise = (!id
+            ? Promise.resolve(window.__TTS_TEMPLATE_EDIT_DATA__)
+            : fetch(url, { headers: { 'Accept': 'application/json' } })
+                .then(function (res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
+                .then(function (d) {
+                    var tid = window.__TTS_TEMPLATE_EDIT_DATA__.templateId;
+                    Object.assign(window.__TTS_TEMPLATE_EDIT_DATA__, d || {});
+                    if (window.__TTS_TEMPLATE_EDIT_DATA__.templateId == null) {
+                        window.__TTS_TEMPLATE_EDIT_DATA__.templateId = tid;
+                    }
+                    return window.__TTS_TEMPLATE_EDIT_DATA__;
+                })
+                .catch(function (e) {
+                    console.error('__TTS_TEMPLATE_EDIT_DATA__ bootstrap failed: ' + (e && e.message ? e.message : e));
+                    return window.__TTS_TEMPLATE_EDIT_DATA__;
+                }));
+    }
+    return window.__ttsTemplateEditPromise;
+};
 </script>
 
 <header id="site-nav"></header>
@@ -51,6 +62,14 @@ window.__TTS_TEMPLATE_EDIT_DATA__ = (function () {
         <a href="/settings/tts-templates" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> 返回列表
         </a>
+    </div>
+
+    <!-- 引导数据还在路上：先出骨架（原来同步 XHR 会让表单与规则表先空一片） -->
+    <div id="bootSkel" class="sc-skel-row mb-4">
+        <div class="sc-skel sc-skel-line mb-2" style="width: 30%;"></div>
+        <div class="sc-skel sc-skel-line"></div>
+        <div class="sc-skel sc-skel-line w-75"></div>
+        <div class="sc-skel sc-skel-line w-50"></div>
     </div>
 
     <!-- Template Info -->
@@ -127,10 +146,11 @@ window.__TTS_TEMPLATE_EDIT_DATA__ = (function () {
 <script>
 (function () {
     'use strict';
-    var data = window.__TTS_TEMPLATE_EDIT_DATA__ || {};
-    var tid = data.templateId;
-    var tpl = data.template || {};
-    var rules = data.rules || [];
+    /* 引导数据是异步的：这些字段在 boot() 里填（renderRules 等函数读的是这几个闭包变量） */
+    var data = {};
+    var tid = null;
+    var tpl = {};
+    var rules = [];
     var main = document.querySelector('main');
 
     function fillInfo() {
@@ -179,8 +199,24 @@ window.__TTS_TEMPLATE_EDIT_DATA__ = (function () {
         if (form && !confirm(form.dataset.confirm)) e.preventDefault();
     });
 
-    fillInfo();
-    renderRules();
+    /** 引导数据是异步的：await 之后填字段再渲染，最后收骨架 */
+    async function boot() {
+        try {
+            data = (typeof window.loadTtsTemplateEditData === 'function')
+                ? await window.loadTtsTemplateEditData()
+                : (window.__TTS_TEMPLATE_EDIT_DATA__ || {});
+            tid = data.templateId;
+            tpl = data.template || {};
+            rules = data.rules || [];
+            fillInfo();
+            renderRules();
+        } finally {
+            var skel = document.getElementById('bootSkel');
+            if (skel) skel.remove();
+        }
+    }
+
+    boot();
 })();
 </script>
 <script src="/vendor/alpinejs/cdn.min.js" defer></script>

@@ -16,30 +16,55 @@
 <body class="sc-page" data-nav="prompts">
 
 <script>
-/* 引导数据：同步 XHR，确保 exploreApp() 构造时已就绪 */
-window.__PROMPT_EXPLORE_DATA__ = (function () {
-    var d = {};
-    try {
+/* 引导数据：异步 fetch（原来同步 XHR，浏览器停在 HTML 解析期等一趟，首屏白屏） */
+window.__PROMPT_EXPLORE_DATA__ = {};
+window.loadPromptExploreData = function () {
+    if (!window.__promptExplorePromise) {
         var params = new URLSearchParams(location.search);
         var qs = [];
         if (params.get('templateKey')) qs.push('templateKey=' + encodeURIComponent(params.get('templateKey')));
         if (params.get('templateId')) qs.push('templateId=' + encodeURIComponent(params.get('templateId')));
         var url = '/prompts/explore/data' + (qs.length ? '?' + qs.join('&') : '');
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url, false);
-        xhr.send();
-        if (xhr.status === 200) {
-            d = JSON.parse(xhr.responseText || '{}');
-        }
-    } catch (e) { console.error('__PROMPT_EXPLORE_DATA__ load failed', e); }
-    return d;
-})();
+        window.__promptExplorePromise = fetch(url, { headers: { 'Accept': 'application/json' } })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (d) {
+                /* ★ 合并而非替换：下面 var PAGE 抓的是同一个对象 */
+                Object.assign(window.__PROMPT_EXPLORE_DATA__, d || {});
+                return window.__PROMPT_EXPLORE_DATA__;
+            })
+            .catch(function (e) {
+                console.error('__PROMPT_EXPLORE_DATA__ bootstrap failed: ' + (e && e.message ? e.message : e));
+                return window.__PROMPT_EXPLORE_DATA__;
+            });
+    }
+    return window.__promptExplorePromise;
+};
 </script>
 
 <header id="site-nav"></header>
 
 <main class="sc-main container py-4">
     <div x-data="exploreApp()" x-init="init()">
+
+        <!-- 引导数据还在路上：先出骨架（原来同步 XHR 会把整页卡在白屏） -->
+        <div x-show="booting" x-cloak>
+            <div class="sc-skel-row mb-3">
+                <div class="sc-skel sc-skel-line w-25"></div>
+                <div class="sc-skel sc-skel-line w-50"></div>
+            </div>
+            <div class="sc-skel-row mb-3">
+                <div class="sc-skel sc-skel-line"></div>
+                <div class="sc-skel sc-skel-line w-75"></div>
+            </div>
+            <div class="sc-skel-row">
+                <div class="sc-skel sc-skel-line w-50"></div>
+            </div>
+        </div>
+
+        <div x-show="!booting" x-cloak>
         <!-- Section A: Header + Template Info -->
         <div class="d-flex align-items-center gap-3 mb-3">
             <a href="/prompts" class="btn btn-sm btn-outline-secondary">
@@ -258,6 +283,8 @@ window.__PROMPT_EXPLORE_DATA__ = (function () {
 
         <!-- Resolve error -->
         <div class="alert alert-danger" x-show="resolveError" x-text="resolveError"></div>
+
+        </div><!-- /x-show="!booting" -->
     </div>
 </main>
 
@@ -274,17 +301,18 @@ window.__PROMPT_EXPLORE_DATA__ = (function () {
 
     function exploreApp() {
         return {
-            // 页面级（来自引导数据）
-            pageStep: pageStep,
-            pageSubStep: pageSubStep,
-            templateName: PAGE.templateName || '',
-            stepDisplayName: PAGE.stepDisplayName || '',
-            subStepDisplayName: PAGE.subStepDisplayName || '',
-            variableNames: PAGE.variableNames || [],
-            templateContent: PAGE.templateContent || '',
-            systemPromptContent: PAGE.systemPromptContent || '',
-            projects: PAGE.projects || [],
-            modelConfigs: PAGE.modelConfigs || [],
+            booting: true,
+            // 页面级（来自引导数据，boot() 里填）
+            pageStep: null,
+            pageSubStep: null,
+            templateName: '',
+            stepDisplayName: '',
+            subStepDisplayName: '',
+            variableNames: [],
+            templateContent: '',
+            systemPromptContent: '',
+            projects: [],
+            modelConfigs: [],
 
             showTemplate: false,
             projectId: '',
@@ -372,7 +400,34 @@ window.__PROMPT_EXPLORE_DATA__ = (function () {
                 return this.chapterOutlines.filter(o => self.volumeOfOutline(o) === sv);
             },
 
-            init() {},
+            init() { return this.boot(); },
+
+            /* 引导数据是异步的：getter 读的是模块级 pageStep/pageSubStep，
+               所以这两个变量也必须在数据到了之后重新赋值（只改 this.xxx 不够）。 */
+            async boot() {
+                try {
+                    var d = (typeof window.loadPromptExploreData === 'function')
+                        ? await window.loadPromptExploreData()
+                        : (window.__PROMPT_EXPLORE_DATA__ || {});
+                    pageStep = d.step || null;
+                    pageSubStep = d.subStep || null;
+                    pageTemplateKey = d.templateKey || null;
+                    pageTemplateId = d.templateId || null;
+
+                    this.pageStep = pageStep;
+                    this.pageSubStep = pageSubStep;
+                    this.templateName = d.templateName || '';
+                    this.stepDisplayName = d.stepDisplayName || '';
+                    this.subStepDisplayName = d.subStepDisplayName || '';
+                    this.variableNames = d.variableNames || [];
+                    this.templateContent = d.templateContent || '';
+                    this.systemPromptContent = d.systemPromptContent || '';
+                    this.projects = d.projects || [];
+                    this.modelConfigs = d.modelConfigs || [];
+                } finally {
+                    this.booting = false;
+                }
+            },
 
             onProjectChange() {
                 this.chapters = [];

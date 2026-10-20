@@ -10,20 +10,32 @@
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/app.css">
 </head>
-<body class="sc-page">
+<body class="sc-page" data-booting="1">
 
 <script>
-/* 引导数据：同步 XHR，确保下方渲染脚本读取时已就绪 */
-window.__MATERIALS_DATA__ = (function () {
-    var d = { items: [], categories: [], modelConfigs: [] };
-    try {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/settings/materials/data', false);
-        xhr.send();
-        if (xhr.status === 200) d = JSON.parse(xhr.responseText || '{}');
-    } catch (e) { console.error('__MATERIALS_DATA__ load failed', e); }
-    return d;
-})();
+/* 引导数据：异步 fetch。
+   原来这里是同步 XHR —— 浏览器停在 HTML 解析期等往返，JS 没开始跑、DOM 也没解析完，首屏白屏。
+   现在先给空壳（列表区顶一块骨架），渲染改到 await 之后（见页面末尾的 boot()）。 */
+window.__MATERIALS_DATA__ = { items: [], categories: [], modelConfigs: [] };
+window.loadMaterialsData = function () {
+    if (!window.__materialsDataPromise) {
+        window.__materialsDataPromise = fetch('/settings/materials/data', { headers: { 'Accept': 'application/json' } })
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function (d) {
+                window.__MATERIALS_DATA__ = d || window.__MATERIALS_DATA__;
+                return window.__MATERIALS_DATA__;
+            })
+            .catch(function (e) {
+                // 退化：列表为空，页面仍可用（可以新建/蒸馏）
+                console.error('materials bootstrap failed: ' + (e && e.message ? e.message : e));
+                return window.__MATERIALS_DATA__;
+            });
+    }
+    return window.__materialsDataPromise;
+};
 </script>
 
 <header id="site-nav"></header>
@@ -149,7 +161,24 @@ window.__MATERIALS_DATA__ = (function () {
             <strong><i class="bi bi-collection"></i> 素材列表</strong>
             <small class="text-muted ms-2">可在工作流页面"蒸馏素材"按钮提取，也可手动管理</small>
         </div>
-        <div class="card-body p-0" id="listArea"></div>
+        <!-- 引导数据还在路上：先出 4 行骨架（renderList 会整块替换这个容器） -->
+        <div class="card-body p-0" id="listArea">
+            <div class="p-3 sc-skel-row">
+                <div class="sc-skel sc-skel-line" style="width: 22%;"></div>
+                <div class="sc-skel sc-skel-line w-75"></div>
+                <div class="sc-skel sc-skel-line w-50"></div>
+            </div>
+            <div class="p-3 sc-skel-row">
+                <div class="sc-skel sc-skel-line" style="width: 28%;"></div>
+                <div class="sc-skel sc-skel-line w-75"></div>
+                <div class="sc-skel sc-skel-line w-50"></div>
+            </div>
+            <div class="p-3 sc-skel-row">
+                <div class="sc-skel sc-skel-line" style="width: 24%;"></div>
+                <div class="sc-skel sc-skel-line w-75"></div>
+                <div class="sc-skel sc-skel-line w-50"></div>
+            </div>
+        </div>
     </div>
 </main>
 
@@ -161,10 +190,16 @@ window.__MATERIALS_DATA__ = (function () {
     'use strict';
 
     var data = window.__MATERIALS_DATA__ || { items: [], categories: [], modelConfigs: [] };
-    var items = data.items || [];
-    var categories = data.categories || [];
+    // 引导数据是异步的：先空着，boot() await 之后再赋值（renderList/fillDistillSelects 都读这两个变量）
+    var items = [];
+    var categories = [];
     var main = document.getElementById('main');
     var listArea = document.getElementById('listArea');
+
+    function setBooting(on) {
+        if (on) document.body.setAttribute('data-booting', '1');
+        else document.body.removeAttribute('data-booting');
+    }
 
     function categoryOptionsHtml() {
         return categories.map(function (c) {
@@ -198,11 +233,13 @@ window.__MATERIALS_DATA__ = (function () {
         }).join('');
 
         listArea.innerHTML =
+            // 6 列的宽表在 375px 上会把**整页**撑出横向滚动条，交给 table-responsive 只滚卡片内部
+            '<div class="table-responsive">' +
             '<table class="table table-sm table-hover mb-0">' +
             '<thead><tr>' +
             '<th>名称</th><th style="width:100px;">分类</th><th style="width:200px;">内容预览</th>' +
             '<th style="width:160px;">来源</th><th style="width:140px;">更新时间</th><th style="width:120px;">操作</th>' +
-            '</tr></thead><tbody>' + rows + '</tbody></table>';
+            '</tr></thead><tbody>' + rows + '</tbody></table></div>';
     }
 
     /* ===================== 蒸馏弹窗 ===================== */
@@ -359,11 +396,25 @@ window.__MATERIALS_DATA__ = (function () {
         if (form && !confirm(form.dataset.confirm)) e.preventDefault();
     });
 
-    /* ===================== 初始化 ===================== */
-    document.getElementById('addCategory').innerHTML = categoryOptionsHtml();
-    fillDistillSelects();
-    loadProjects();
-    renderList();
+    /* ===================== 初始化：引导数据是异步的 ===================== */
+    async function boot() {
+        try {
+            data = (typeof window.loadMaterialsData === 'function')
+                ? await window.loadMaterialsData()
+                : (window.__MATERIALS_DATA__ || {});
+            items = (data && data.items) || [];
+            categories = (data && data.categories) || [];
+            document.getElementById('addCategory').innerHTML = categoryOptionsHtml();
+            fillDistillSelects();
+            renderList();
+            await loadProjects();
+        } finally {
+            // ★ 渲染铺完才收骨架（先收的话空列表会闪一下「暂无素材」）
+            setBooting(false);
+        }
+    }
+
+    boot();
 })();
 </script>
 </body>
