@@ -96,4 +96,17 @@
         <view class="ix-entry-go">进入 ›</view>
     </view>
 
+    <!-- ==================== 序列配对（有序词群） ====================
+         玩法与趣味配对完全一样，差别只在发牌：左列英文保持 1→10、周一→周日、
+         一月→十二月 的原始顺序，只打乱中文（数字一乱就没法按序列背了）。
+         一册 6 个主题，点这里先弹一行让用户选主题。 -->
+    <view class="ix-entry ix-entry-seq" wx:if="{{hasTopic}}" hover-class="wm-tap" bindtap="gotoTopic">
+        <view class="ix-entry-icon">🔢</view>
+        <view class="ix-entry-main">
+            <view class="ix-entry-title">序列配对</view>
+            <view class="ix-entry-desc">{{topicDesc}}</view>
+        </view>
+        <view class="ix-entry-go">选择 ›</view>
+    </view>
+
 </view>

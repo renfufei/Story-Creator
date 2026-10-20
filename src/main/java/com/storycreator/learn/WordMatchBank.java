@@ -44,6 +44,17 @@ public class WordMatchBank {
 
     private static final String RESOURCE = "learn/pep-words.json";
 
+    /**
+     * 「序列配对」册（原名「专题练习」）：从上面 24 册里抽取的**有序词群**（数字 / 序数 / 星期 / 月份 / 季节 / 时间）。
+     * 结构与 pep-words.json 完全一致，所以加载逻辑一行都不用分叉；它单独成文件是为了
+     * ① 不被 PEP 生成链覆盖 ② 人工可读可改（见 scripts/learn/build_topic_book.py）。
+     * 前端据 stage == {@link #TOPIC_STAGE} 判定「本册左列英文不洗牌」。←stage 名与前端是硬约定。
+     */
+    private static final String TOPIC_RESOURCE = "learn/topic-words.json";
+
+    /** 专题册的学段名。前端 bookGroups 按它分组、buildCards 按它锁左列。 */
+    public static final String TOPIC_STAGE = "专题";
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /** 册元信息（前端年级选择器用）。stage 为学段（小学 / 初中 / 高中），选择器按它分组。 */
@@ -120,7 +131,18 @@ public class WordMatchBank {
     }
 
     private void load() {
-        try (InputStream in = new ClassPathResource(RESOURCE).getInputStream()) {
+        loadBooks(RESOURCE);
+        loadBooks(TOPIC_RESOURCE);
+        log.info("单词库加载完成：{} 册 / {} 关 / {} 词（每关 {}~{} 对，目标 {}）",
+                books.size(),
+                levelsByBook.values().stream().mapToInt(List::size).sum(),
+                books.stream().mapToInt(BookInfo::wordCount).sum(),
+                MIN_PAIRS, MAX_PAIRS, TARGET_PAIRS);
+    }
+
+    /** 加载一份「册 → 主题 → 单词」词库。PEP 24 册与专题册共用，形状相同。 */
+    private void loadBooks(String resource) {
+        try (InputStream in = new ClassPathResource(resource).getInputStream()) {
             JsonNode root = objectMapper.readTree(in);
             for (JsonNode bookNode : root.path("books")) {
                 String bookId = bookNode.path("id").asText();
@@ -171,13 +193,8 @@ public class WordMatchBank {
                 bookLabels.put(bookId, label);
                 levelsByBook.put(bookId, List.copyOf(levels));
             }
-            log.info("单词库加载完成：{} 册 / {} 关 / {} 词（每关 {}~{} 对，目标 {}）",
-                    books.size(),
-                    levelsByBook.values().stream().mapToInt(List::size).sum(),
-                    books.stream().mapToInt(BookInfo::wordCount).sum(),
-                    MIN_PAIRS, MAX_PAIRS, TARGET_PAIRS);
         } catch (Exception e) {
-            throw new IllegalStateException("加载单词库失败：" + RESOURCE, e);
+            throw new IllegalStateException("加载单词库失败：" + resource, e);
         }
     }
 }

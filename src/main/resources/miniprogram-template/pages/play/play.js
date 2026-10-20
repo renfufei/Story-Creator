@@ -408,10 +408,15 @@ Page({
 
     var sig = s.bookId + '#' + s.levelIndex;
     var lastSig = this._lastLayout[sig] || '';
-    var left = this._shuffle(enBase.slice());
+    /* 序列配对册（stage=专题）锁左列：数字 one→ten、星期一到日、一月到十二月，
+       英文一乱就没法「按序列背」了 —— 只打乱右列中文。
+       其余册（含教材）依旧两列都洗。防对齐循环不用改：它比的是 pair.key，
+       左列固定时只是右列在重试。 */
+    var lockLeft = bank.stageOf(s.bookId) === '专题';
+    var left = lockLeft ? enBase.slice() : this._shuffle(enBase.slice());
     var right = this._shuffle(zhBase.slice());
     for (var att = 0; att < 60; att++) {
-      var l = this._shuffle(enBase.slice());
+      var l = lockLeft ? enBase.slice() : this._shuffle(enBase.slice());
       var r = this._shuffle(zhBase.slice());
       var aligned = this._countAligned(l, r);
       var repeat = (att < 40) && lastSig && this._layoutSig(l, r) === lastSig;

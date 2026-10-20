@@ -347,3 +347,14 @@
   font-size: 28rpx;
   font-weight: 700;
 }
+
+/* 第二行入口：序列配对。用暖色与上面的趣味配对区分开 ——
+   两行长一样时用户容易点错（上面是随机乱序玩法，下面是锁序玩法，玩法不同）。 */
+.ix-entry-seq {
+  margin-top: 16rpx;
+  border-color: #f0b95b;
+  background: #fff9ec;
+}
+
+.ix-entry-seq .ix-entry-title { color: #a56500; }
+.ix-entry-seq .ix-entry-go { color: #a56500; }

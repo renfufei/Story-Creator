@@ -2419,6 +2419,25 @@ class PageRenderingIntegrationTest {
                         + "否则按钮写着「从第 1 关开始」，点下去却从别处开始（文案与行为不一致）")
                 .contains("autoStartTitle");
         assertThat(response.getBody())
+                .as("序列配对册（有序词群：数字 / 序数 / 星期 / 月份 / 季节 / 时间）"
+                        + "的发牌必须**左列英文保持词库顺序、只打乱中文** —— 这类词的价值就在按序列背，"
+                        + "左列一乱练的就不是同一个东西了；锁序只对 stage=专题 生效，别误伤普通册")
+                .contains("TOPIC_STAGE")
+                .contains("wm-home-topic")
+                .contains("topicThemes")
+                .contains("enterTopic")
+                .contains("stageOf(this.bookId) === TOPIC_STAGE")
+                .contains("lockLeft")
+                .contains("英文按顺序 · 中文打乱");
+        assertThat(response.getBody())
+                .as("首页【序列配对】入口只占一行（原来铺 6 张卡占了小半屏）："
+                        + "默认收起，点开才用 chips 露出各专题 —— 别再把卡片墙塞回检索页")
+                .contains("wm-home-entry")
+                .contains("序列配对")
+                .contains("topicOpen")
+                .contains("topicSummary")
+                .contains("wm-home-chip");
+        assertThat(response.getBody())
                 .as("移动端浮动胶囊按钮必须是白底，且**连 hover/active/focus 的文字色一起钉死**："
                         + "真机点完会留下粘滞 :hover，Bootstrap 的 btn-outline-secondary:hover "
                         + "会把文字切成 #fff，只改 background 就会出现「白字压白底 = 文字消失」")

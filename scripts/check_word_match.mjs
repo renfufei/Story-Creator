@@ -1573,16 +1573,18 @@ async function main() {
                  active: items.findIndex(e => e.classList.contains('is-active')) };
     })()`);
     check('点册次按钮弹出选择框', !!picker && /选择年级册次/.test(picker.title), picker ? picker.title : 'null');
-    check('弹出框列出全部 26 册（小学 8 + 初中 5 + 高中 11 + 大学 2）',
-        picker && picker.items.length === 26, picker ? `items=${picker.items.length}` : '');
+    check('弹出框列出全部 27 册（小学 8 + 初中 5 + 高中 11 + 专题 1 + 大学 2）',
+        picker && picker.items.length === 27, picker ? `items=${picker.items.length}` : '');
     check('弹出框标记了当前册', picker && picker.active === 0, picker ? `active=${picker.active}` : '');
-    check('册次按学段分组显示（小学 / 初中 / 高中 / 大学 四个分组）',
-        picker && picker.groups.length === 4 && /小学/.test(picker.groups[0]) && /初中/.test(picker.groups[1])
-        && /高中/.test(picker.groups[2]) && /大学/.test(picker.groups[3]),
+    check('册次按学段分组显示（小学 / 初中 / 高中 / 专题 / 大学 五个分组）',
+        picker && picker.groups.length === 5 && /小学/.test(picker.groups[0]) && /初中/.test(picker.groups[1])
+        && /高中/.test(picker.groups[2]) && /专题/.test(picker.groups[3]) && /大学/.test(picker.groups[4]),
         picker ? picker.groups.join(' | ') : '');
     check('大学分组标题是「大学 · 2 册 · 13159 词」',
-        picker && /大学/.test(picker.groups[3] || '') && /2 册 · 13159 词/.test(picker.groups[3] || ''),
-        picker ? picker.groups[3] : '');
+        picker && /大学/.test(picker.groups[4] || '') && /2 册 · 13159 词/.test(picker.groups[4] || ''),
+        picker ? picker.groups[4] : '');
+    check('专题分组标题是「专题 · 1 册 · 86 词」（有序词群，英文不洗牌那一册）',
+        picker && /1 册 · 86 词/.test(picker.groups[3] || ''), picker ? picker.groups[3] : '');
     /* 学段标题展示的是「N 册 · M 词（已学 K）」而不是关卡数：词汇量是用户关心的量级。
        注意两处前缀/后缀：① 含当前册的那个学段前面会挂一枚「当前册名 · 」标记；
        ② 末尾追加「（已学 K）」。所以下面用 /(\d+) 册 · (\d+) 词/ 取数，
@@ -1600,31 +1602,31 @@ async function main() {
         return { heads, stages, total: d.books.reduce((a, b) => a + b.wordCount, 0) };
     })()`);
     check('学段标题是「N 册 · M 词（已学 K）」（词汇量优先），不显示关卡数',
-        pickerWords.heads.length === 4
+        pickerWords.heads.length === 5
         && pickerWords.heads.every(h => /(\d+) 册 · (\d+) 词（已学 \d+）$/.test(h) && !/关/.test(h)),
         pickerWords.heads.join(' | '));
-    check('每个学段的册数与词汇量 = 该学段各册之和（小学 8 / 初中 5 / 高中 11 / 大学 2）',
-        ['小学', '初中', '高中', '大学'].every((s, i) => {
+    check('每个学段的册数与词汇量 = 该学段各册之和（小学 8 / 初中 5 / 高中 11 / 专题 1 / 大学 2）',
+        ['小学', '初中', '高中', '专题', '大学'].every((s, i) => {
             const m = (pickerWords.heads[i] || '').match(/(\d+) 册 · (\d+) 词/);
             const e = pickerWords.stages[s];
             return !!m && !!e && +m[1] === e.books && +m[2] === e.words;
         }) && pickerWords.total >= 20000,
         JSON.stringify(pickerWords));
-    check('每个学段标题都是可折叠按钮（带箭头图标）', picker && picker.carets === 4,
+    check('每个学段标题都是可折叠按钮（带箭头图标）', picker && picker.carets === 5,
         picker ? `carets=${picker.carets}` : '');
-    check('默认只展开当前册所在学段（小学），其余三个学段折叠',
-        picker && JSON.stringify(picker.open) === JSON.stringify([true, false, false, false]),
+    check('默认只展开当前册所在学段（小学），其余四个学段折叠',
+        picker && JSON.stringify(picker.open) === JSON.stringify([true, false, false, false, false]),
         picker ? JSON.stringify(picker.open) : '');
     const g0 = await pickerGroups();
-    check('折叠生效：初中 / 高中 / 大学三个组的册次一个都不可见',
+    check('折叠生效：初中 / 高中 / 专题 / 大学四个组的册次一个都不可见',
         picker && picker.shown === g0[0].shown && g0[1].shown === 0 && g0[2].shown === 0
-        && g0[3].shown === 0,
+        && g0[3].shown === 0 && g0[4].shown === 0,
         JSON.stringify(g0.map(x => x.shown)));
-    check('三个学段标题始终都在可视区内（不会被展开的册次顶出滚动区）',
+    check('五个学段标题始终都在可视区内（不会被展开的册次顶出滚动区）',
         g0.every(x => x.headTop >= x.listTop - 1 && x.headBottom <= x.listBottom + 1),
         JSON.stringify(g0.map(x => `${x.headTop}~${x.headBottom}/${x.listTop}~${x.listBottom}`)));
-    check('展开组的页码数正确（小学 8 / 初中 5 / 高中 11 / 大学 2）',
-        g0[0].total === 8 && g0[1].total === 5 && g0[2].total === 11 && g0[3].total === 2,
+    check('展开组的页码数正确（小学 8 / 初中 5 / 高中 11 / 专题 1 / 大学 2）',
+        g0[0].total === 8 && g0[1].total === 5 && g0[2].total === 11 && g0[3].total === 1 && g0[4].total === 2,
         JSON.stringify(g0.map(x => x.total)));
     check('折叠状态箭头未旋转（transform=none）', g0[1].caret === 'none', `caret=${g0[1].caret}`);
     check('初中 5 册在列（七年级上册 ~ 九年级全一册）',
@@ -1730,11 +1732,13 @@ async function main() {
     /* ---------- S6c. 大学独立词源（服务端契约 + 按需加载） ---------- */
     console.log('\n— S6c 大学独立词源 —');
     const boot = JSON.parse(await (await fetch(BASE + '/learn/word-match/data')).text());
-    check('S6c 首屏引导数据只带大学**册元信息**（extraBooks），一个关卡都不带',
-        boot.books.length === 24 && (boot.extraBooks || []).length === 2
+    check('S6c 首屏引导数据 = 24 教材册 + 1 专题册，大学只带**册元信息**（extraBooks），一个关卡都不带',
+        boot.books.length === 25 && (boot.extraBooks || []).length === 2
+        && boot.books.some(x => x.stage === '专题' && x.id === 'pep-topic')
         && !boot.levels['cet-4'] && !boot.levels['cet-6']
         && boot.extraBooks.every(x => x.stage === '大学'),
         `books=${boot.books.length} extra=${(boot.extraBooks || []).length}`
+        + ` hasTopic=${boot.books.some(x => x.stage === '专题')}`
         + ` hasCetLevels=${!!boot.levels['cet-4']}`);
     /* 域清单不写死在脚本里：直接读源清单同目录的细域树，免得两处各抄一遍然后漂掉。
        （68 个粗域里有 35 个已按语义细分成 98 个小分类，共 131 个细域。） */

@@ -42,6 +42,9 @@ STAGE_SLUG = {
     '小学': 'primary',
     '初中': 'junior',
     '高中': 'senior',
+    # 序列配对册（stage=专题，有序词群）。utils/bank.js 的 LOADERS 里必须有同名 key，
+    # 否则 ensureStage 找不到模块 ⇒ 这一册的关卡一个都读不出来。
+    '专题': 'topic',
     '大学': 'college',
 }
 

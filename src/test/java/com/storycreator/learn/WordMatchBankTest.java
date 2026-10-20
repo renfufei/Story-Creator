@@ -39,6 +39,8 @@ class WordMatchBankTest {
     private static final String SYN_PREFIX = "同义表达：";
     /** 源清单目录（人教分册词汇表 → 24 个 txt，`英文\t中文`）。 */
     private static final String SOURCE_DIR = "learn/pep-words-source/";
+    /** 专题册：从上面 24 册里抽出来的有序词群，没有对应的教材源清单。 */
+    private static final String TOPIC_BOOK_ID = "pep-topic";
 
     private final WordMatchBank bank = new WordMatchBank();
 
@@ -110,23 +112,26 @@ class WordMatchBankTest {
     }
 
     @Test
-    @DisplayName("词库加载：24 册（小学 8 + 初中 5 + 高中 11）、每册都有若干关")
+    @DisplayName("词库加载：24 册教材（小学 8 + 初中 5 + 高中 11）+ 1 册专题、每册都有若干关")
     void bank_containsAllBooks() {
         assertThat(bank.getBooks())
-                .as("人教版小学 3~6 年级 + 初中 7~9 年级 + 高中必修1-5/选修6-11 共 24 册")
-                .hasSize(24);
+                .as("人教版小学 3~6 年级 + 初中 7~9 年级 + 高中必修1-5/选修6-11 共 24 册，"
+                        + "另加从这些册里抽出来的「专题练习」1 册（有序词群，排在最后）")
+                .hasSize(25);
         assertThat(bank.getBooks()).extracting(WordMatchBank.BookInfo::label)
                 .containsExactly("三年级上册", "三年级下册", "四年级上册", "四年级下册",
                         "五年级上册", "五年级下册", "六年级上册", "六年级下册",
                         "七年级上册", "七年级下册", "八年级上册", "八年级下册", "九年级全一册",
                         "必修1", "必修2", "必修3", "必修4", "必修5",
-                        "选修6", "选修7", "选修8", "选修9", "选修10", "选修11");
-        // 学段：册次选择器按它分组，顺序必须是「小学 → 初中 → 高中」
+                        "选修6", "选修7", "选修8", "选修9", "选修10", "选修11",
+                        "序列配对");
+        // 学段：册次选择器按它分组，顺序必须是「小学 → 初中 → 高中 → 专题」
         assertThat(bank.getBooks()).extracting(WordMatchBank.BookInfo::stage)
                 .containsExactly("小学", "小学", "小学", "小学", "小学", "小学", "小学", "小学",
                         "初中", "初中", "初中", "初中", "初中",
                         "高中", "高中", "高中", "高中", "高中",
-                        "高中", "高中", "高中", "高中", "高中", "高中");
+                        "高中", "高中", "高中", "高中", "高中", "高中",
+                        "专题");
         for (WordMatchBank.BookInfo book : bank.getBooks()) {
             assertThat(book.levelCount()).as("%s 应有至少 8 关", book.label()).isGreaterThanOrEqualTo(8);
             assertThat(book.wordCount()).as("%s 应有足够单词", book.label()).isGreaterThanOrEqualTo(60);
@@ -218,6 +223,11 @@ class WordMatchBankTest {
     @DisplayName("零丢失：词库完整收录源清单（人教分册词汇表）的全部词条")
     void bank_coversSourceVocabularyExactly() throws Exception {
         for (WordMatchBank.BookInfo book : bank.getBooks()) {
+            /* 专题册是从这 24 册里「抽出来的派生词源」，没有自己的教材词汇表，
+               拿它去比源清单只会证明「找不到 pep-topic.txt」——直接跳过。 */
+            if (TOPIC_BOOK_ID.equals(book.id())) {
+                continue;
+            }
             ClassPathResource res = new ClassPathResource(SOURCE_DIR + book.id() + ".txt");
             assertThat(res.exists()).as("源清单 %s 必须存在", SOURCE_DIR + book.id() + ".txt").isTrue();
 
@@ -341,13 +351,13 @@ class WordMatchBankTest {
         Map<String, List<Map<String, Object>>> levels =
                 (Map<String, List<Map<String, Object>>>) data.get("levels");
 
-        assertThat(books).hasSize(24);
+        assertThat(books).hasSize(25);
         assertThat(levels.keySet()).containsExactlyElementsOf(
                 books.stream().map(b -> String.valueOf(b.get("id"))).toList());
         for (Map<String, Object> book : books) {
             String id = String.valueOf(book.get("id"));
             assertThat(String.valueOf(book.get("stage")))
-                    .as("%s 的学段（前端分组依据）", id).isIn("小学", "初中", "高中");
+                    .as("%s 的学段（前端分组依据）", id).isIn("小学", "初中", "高中", "专题");
             List<Map<String, Object>> bookLevels = levels.get(id);
             assertThat((Integer) book.get("levelCount")).as("%s levelCount", id).isEqualTo(bookLevels.size());
             for (Map<String, Object> level : bookLevels) {
@@ -356,6 +366,49 @@ class WordMatchBankTest {
                         .hasSizeBetween(WordMatchBank.MIN_PAIRS, WordMatchBank.MAX_PAIRS);
             }
         }
+    }
+
+    @Test
+    @DisplayName("专题册：6 个有序专题 / 86 词 / 15 关，且英文顺序就是词库顺序")
+    void topicBook_existsWithOrderedThemes() {
+        WordMatchBank.BookInfo topic = bank.getBooks().stream()
+                .filter(b -> TOPIC_BOOK_ID.equals(b.id()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("专题册 pep-topic 不存在"));
+
+        assertThat(topic.stage()).as("前端据这个学段名判定「本册左列不洗牌」")
+                .isEqualTo(WordMatchBank.TOPIC_STAGE);
+        assertThat(topic.label()).isEqualTo("序列配对");
+        assertThat(topic.wordCount()).as("专题总词数").isEqualTo(86);
+        assertThat(topic.levelCount()).as("切关数（35→6、10→2、11→2、14→2、6→1、10→2）")
+                .isEqualTo(15);
+
+        /* 主题顺序与词数：数字 → 序数 → 星期 → 月份 → 季节 → 时间。
+           顺序本身就是这册的功能（左列英文不乱序），所以逐条钉死。 */
+        List<WordMatchBank.Level> levels = bank.getLevels(TOPIC_BOOK_ID);
+        Map<String, Integer> byTheme = new LinkedHashMap<>();
+        for (WordMatchBank.Level level : levels) {
+            byTheme.merge(level.theme(), level.pairs().size(), Integer::sum);
+        }
+        assertThat(byTheme).as("专题名与词数").containsExactly(
+                Map.entry("数字", 35),
+                Map.entry("序数词", 10),
+                Map.entry("星期与周", 11),
+                Map.entry("月份与年", 14),
+                Map.entry("季节", 6),
+                Map.entry("时间与时刻", 10));
+
+        // 第 1 关必须是数字的打头 6 个，且**严格按序**（前端 lockLeft 依赖这个顺序）
+        assertThat(levels.get(0).pairs()).extracting(WordMatchBank.WordPair::en)
+                .containsExactly("zero", "one", "two", "three", "four", "five");
+        // 序数词关（第 7~8 关）第一个必须是 first，第二十/三十接在后面
+        assertThat(themeWords(TOPIC_BOOK_ID, "序数词"))
+                .containsExactly("first", "second", "third", "fourth", "fifth",
+                        "eighth", "ninth", "twelfth", "twentieth", "thirtieth");
+        assertThat(themeWords(TOPIC_BOOK_ID, "星期与周")).startsWith("Monday").contains("Sunday", "weekend");
+        assertThat(themeWords(TOPIC_BOOK_ID, "月份与年")).startsWith("January").contains("December", "month");
+        assertThat(themeWords(TOPIC_BOOK_ID, "季节"))
+                .containsExactly("spring", "summer", "autumn", "winter", "season", "seasonal");
     }
 
     /** 某册里主题名以 prefix 开头的所有主题的英文词（扁平）。 */

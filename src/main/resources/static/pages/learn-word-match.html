@@ -276,6 +276,71 @@
         .wm-home-guide { margin-top: .4rem; }
         .wm-home-guide-item { font-size: .83rem; color: #55606d; line-height: 1.9; }
 
+        /* 【序列配对】入口（首页底部）：**常驻只占一行**，点开才露出下面那排专题 chips。
+           一开始做成了 6 张两列卡片，占掉三行，把检索页压得太长 —— 改成入口行之后
+           默认高度和「怎么查」的一条说明差不多。
+           文字一律用显式 color，不走 .btn 的 --bs-btn-* 变量 —— 白底元素一旦被
+           bootstrap 的 :hover 规则接管，移动端粘滞 hover 会把文字刷成白的（这个坑踩过）。 */
+        .wm-home-entry {
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            width: 100%;
+            margin-top: .5rem;
+            padding: .55rem .7rem;
+            border: 1px solid #dbe3ec;
+            border-radius: 12px;
+            background: #fff;
+            text-align: left;
+            transition: border-color .16s, background .16s;
+        }
+
+        .wm-home-entry:hover { border-color: var(--wm-sel-line); background: #f5faff; }
+        .wm-home-entry:active { background: #eaf3fe; }
+        .wm-home-entry-icon {
+            flex: 0 0 auto;
+            width: 1.9rem;
+            height: 1.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 9px;
+            background: #eaf3fe;
+            color: var(--wm-sel-ink);
+            font-size: 1rem;
+        }
+        .wm-home-entry-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        .wm-home-entry-title { font-size: .9rem; font-weight: 600; color: var(--wm-ink); line-height: 1.3; }
+        .wm-home-entry-desc {
+            font-size: .74rem;
+            color: var(--wm-muted);
+            line-height: 1.35;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .wm-home-entry-go { flex: 0 0 auto; font-size: .78rem; color: var(--wm-sel-ink); }
+
+        /* 展开后的专题 chips：一行放得下就一行，放不下自动折行；比原来的卡片矮一半 */
+        .wm-home-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .45rem; }
+        .wm-home-chip {
+            display: inline-flex;
+            align-items: baseline;
+            gap: .3rem;
+            padding: .28rem .55rem;
+            border: 1px solid #dbe3ec;
+            border-radius: 999px;
+            background: #fff;
+            font-size: .8rem;
+            font-weight: 600;
+            color: var(--wm-ink);
+            line-height: 1.3;
+            transition: border-color .16s, background .16s;
+        }
+        .wm-home-chip:hover { border-color: var(--wm-sel-line); background: #f5faff; }
+        .wm-home-chip:active { background: #eaf3fe; }
+        .wm-home-chip-meta { font-size: .7rem; font-weight: 400; color: var(--wm-muted); font-variant-numeric: tabular-nums; }
+
         .wm-home-code {
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             font-size: .78rem;
@@ -1809,7 +1874,7 @@ window.loadWordMatchData = function () {
             </button>
             <div>
                 <h2 class="sc-page-title mb-0"><i class="bi bi-translate"></i> 英语单词匹配</h2>
-                <div class="wm-toolbar-sub">人教版小学 / 初中 / 高中 + 大学 · 同一主题的单词在同一关</div>
+                <div class="wm-toolbar-sub">人教版小学 / 初中 / 高中 + 大学 / 序列配对 · 同一主题的单词在同一关</div>
             </div>
         </div>
         <div class="wm-toolbar-actions">
@@ -2049,6 +2114,34 @@ window.loadWordMatchData = function () {
                 <div class="wm-home-guide-item">· 查中文：输入 <span class="wm-home-code">自由</span>，会剥掉 n. / v. 这类词性前缀再比</div>
                 <div class="wm-home-guide-item">· 边敲边看：每敲一下，下拉里最多列 5 个单词，点一行直接去那一关</div>
                 <div class="wm-home-guide-item">· 查不到就减字：只输前几个字母（如 <span class="wm-home-code">libe</span>）更容易命中</div>
+            </div>
+        </div>
+
+        <!-- ==================== 【序列配对】入口 ====================
+             从 PEP 24 册里抽出来的有序词群：数字 / 序数 / 星期 / 月份 / 季节 / 时间。
+             默认只占**一行**（原来铺 6 张卡占了小半屏），点这一行才展开专题 chips。
+             点一个 chip = 切到专题册 + 只在这个专题的关卡里练（复用 themeScope）。
+             这类词的玩法与普通册唯一的差别在发牌：左列英文保持原顺序、只打乱中文（buildCards 的 lockLeft）。 -->
+        <div class="wm-home-sec" id="wm-home-topic" x-show="topicThemes.length" x-cloak>
+            <button type="button" class="wm-home-entry" id="wm-topic-entry"
+                    @click="topicOpen = !topicOpen"
+                    :aria-expanded="topicOpen ? 'true' : 'false'"
+                    title="同类词按顺序排列，只打乱中文翻译">
+                <span class="wm-home-entry-icon"><i class="bi bi-list-ol"></i></span>
+                <span class="wm-home-entry-main">
+                    <span class="wm-home-entry-title">序列配对</span>
+                    <span class="wm-home-entry-desc" x-text="topicSummary"></span>
+                </span>
+                <span class="wm-home-entry-go" x-text="topicOpen ? '收起' : '展开'"></span>
+            </button>
+            <div class="wm-home-chips" id="wm-topic-chips" x-show="topicOpen" x-cloak>
+                <template x-for="t in topicThemes" :key="'tp-' + t.theme">
+                    <button type="button" class="wm-home-chip" @click="enterTopic(t.theme)"
+                            :title="'进入「' + t.theme + '」序列配对'">
+                        <span x-text="t.theme"></span>
+                        <span class="wm-home-chip-meta" x-text="t.wordCount + ' 词 · ' + t.levelCount + ' 关'"></span>
+                    </button>
+                </template>
             </div>
         </div>
     </section>
@@ -2817,6 +2910,10 @@ function wordMatchApp() {
     var HOME_DROP_MAX = 5;
     var SOUND_KEY = 'word_match_sound_v1';
     var MAX_WRONG = 300;
+    /* 专题册的学段名（与 WordMatchBank.TOPIC_STAGE 是硬约定）。
+       这类词是封闭序列（数字 / 星期 / 月份…），练的是「按顺序背」，
+       所以发牌时**左列英文保持原顺序、只打乱右列中文** —— 见 buildCards。 */
+    var TOPIC_STAGE = '专题';
 
     /* 搜索索引缓存：键 = 「大学词库是否已载入 + 册清单」。换册或载完大学后键会变，
        下次搜索自然重建（索引本身只读，不进 Alpine 响应式 —— 理由见 WM_SEARCH 上方说明）。 */
@@ -2887,6 +2984,8 @@ function wordMatchApp() {
     return {
         /* 引导数据还在路上：先空着，boot() 里填。骨架见模板里的 x-show="booting" */
         booting: true,
+        /* 首页【序列配对】入口的展开状态：默认收起，只占一行 */
+        topicOpen: false,
         /* 人教版 24 册 + 大学 2 册：后者首屏只带册元信息（extraBooks），
            关卡等真正选到大学时再拉，见 ensureCet */
         books: [],
@@ -3277,10 +3376,13 @@ function wordMatchApp() {
             }
             var sig = this.bookId + '#' + this.levelIndex;
             var lastSig = this.lastLayout[sig] || '';
-            var left = this.shuffle(enBase.slice());
+            /* 专题册锁左列：数字 1→100、星期一到日、一月到十二月，一乱就没法「按序列背」了。
+               其余册两列都洗牌（避免整片一一对应）。防对齐规则照旧，只是左侧不再参与随机。 */
+            var lockLeft = this.stageOf(this.bookId) === TOPIC_STAGE;
+            var left = lockLeft ? enBase.slice() : this.shuffle(enBase.slice());
             var right = this.shuffle(zhBase.slice());
             for (var att = 0; att < 60; att++) {
-                var l = this.shuffle(enBase.slice());
+                var l = lockLeft ? enBase.slice() : this.shuffle(enBase.slice());
                 var r = this.shuffle(zhBase.slice());
                 var aligned = this.countAligned(l, r);
                 var repeat = (att < 40) && lastSig && this.layoutSig(l, r) === lastSig;
@@ -4506,6 +4608,75 @@ function wordMatchApp() {
                 window.speechSynthesis.cancel();
                 window.speechSynthesis.speak(u);
             } catch (e) { /* 忽略：部分浏览器不支持 */ }
+        },
+
+        /* ==================== 序列配对（原「专题练习」） ====================
+           专题册（stage=专题）是从 PEP 24 册里抽出来的**有序词群**：数字、序数、星期、月份、季节、时间。
+           它的练习形态与普通册只有一处不同 —— 发牌时左列英文不洗牌（见 buildCards 的 lockLeft）。
+           下面几个 getter 只服务首页那一行入口；棋盘里的一切仍走原来的「册 → 关」逻辑。 */
+        get topicBooks() {
+            var out = [];
+            for (var i = 0; i < this.books.length; i++) {
+                if ((this.books[i].stage || '') === TOPIC_STAGE) out.push(this.books[i]);
+            }
+            return out;
+        },
+
+        /* 入口行副文案：把「为什么这册不一样」和体量一次说完（不放长句，窄屏会截断）。
+           例：英文按顺序 · 中文打乱 · 6 个专题 · 86 词 */
+        get topicSummary() {
+            var ts = this.topicThemes, words = 0;
+            for (var i = 0; i < ts.length; i++) words += ts[i].wordCount;
+            return '英文按顺序 · 中文打乱 · ' + ts.length + ' 个专题 · ' + words + ' 词';
+        },
+
+        /* 展开后的专题 chips：一个专题一条，带上词数/关数与所属册。
+           从 allLevels 现算（而不是另存一份），册次与关卡都是同一份数据，不会对不上。 */
+        get topicThemes() {
+            var out = [], seen = {};
+            for (var i = 0; i < this.books.length; i++) {
+                var b = this.books[i];
+                if ((b.stage || '') !== TOPIC_STAGE) continue;
+                var lvls = this.allLevels[b.id] || [];
+                for (var j = 0; j < lvls.length; j++) {
+                    var name = lvls[j].theme || '';
+                    if (!seen[name]) {
+                        seen[name] = { theme: name, bookId: b.id, levelCount: 0, wordCount: 0 };
+                        out.push(seen[name]);
+                    }
+                    seen[name].levelCount++;
+                    seen[name].wordCount += (lvls[j].pairs || []).length;
+                }
+            }
+            return out;
+        },
+
+        /* 【序列配对】点一个 chip：切到专题册 → 只在这一个专题的关卡里练（复用 themeScope）。
+           起点用「该专题第一个还没练过的关」，与 applyBook / startThemePractice 同一套口径。 */
+        enterTopic: function (theme) {
+            var book = this.topicBooks[0];
+            if (!book) return;
+            if (this.autoMode) this.stopAuto(true);
+            /* applyBook 会把 themeScope 清空（换册语义），所以作用域必须在它之后建 */
+            this.applyBook(book.id, true);
+            var idxs = [], wordCount = 0;
+            for (var i = 0; i < this.levels.length; i++) {
+                if ((this.levels[i].theme || '') !== theme) continue;
+                idxs.push(i);
+                wordCount += (this.levels[i].pairs || []).length;
+            }
+            if (!idxs.length) { this.view = 'play'; this.measureTop(); return; }
+            var done = this.progress[book.id] || [];
+            var start = idxs[0];
+            for (var k = 0; k < idxs.length; k++) {
+                if (done.indexOf(idxs[k]) < 0) { start = idxs[k]; break; }
+            }
+            this.themeScope = { theme: theme, indexes: idxs, wordCount: wordCount };
+            this.levelIndex = start;
+            this.loadLevel();
+            this.openStageOnly(TOPIC_STAGE);
+            this.view = 'play';
+            this.measureTop();
         },
 
         /* 册次按学段分组（小学 / 初中），册次选择器分组展示 */

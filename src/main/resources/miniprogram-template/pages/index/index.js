@@ -12,11 +12,45 @@
 
 var bank = require('../../utils/bank.js');
 var search = require('../../utils/search.js');
+var store = require('../../utils/store.js');
 var ui = require('../../utils/ui.js');
 
 /* 输入去抖：每敲一个字都查一次全库没必要（索引已缓存，但逐次 run 仍要过两万条）。
    140ms 是「肉眼看不出延迟、又不会每键一查」的折中。 */
 var DEBOUNCE = 140;
+
+/* 专题册（序列配对）的学段名，与网页端 TOPIC_STAGE / WordMatchBank.TOPIC_STAGE 是硬约定。 */
+var TOPIC_STAGE = '专题';
+
+/* 专题册按关卡顺序切主题：同一主题的关卡是连续排好的，
+   所以「主题名第一次出现」的下标就是该主题的第一关。
+   返回 [{ name, first, last, words }]；其中 last 用来找「这个主题里第一个还没练过的关」。 */
+function topicThemes(bookId) {
+  var out = [], seen = {};
+  var n = bank.levelCount(bookId);
+  for (var i = 0; i < n; i++) {
+    var lv = bank.levelAt(bookId, i);
+    if (!lv) continue;
+    var name = lv.theme || '';
+    if (!name) continue;
+    if (!seen[name]) {
+      seen[name] = { name: name, first: i, last: i, words: 0 };
+      out.push(seen[name]);
+    }
+    seen[name].last = i;
+    seen[name].words += (lv.pairs || []).length;
+  }
+  return out;
+}
+
+/* 找专题册（stage === '专题'）。正常只会有一册，多册也按第一册走。 */
+function topicBook() {
+  var books = bank.books();
+  for (var i = 0; i < books.length; i++) {
+    if (books[i].stage === TOPIC_STAGE) return books[i];
+  }
+  return null;
+}
 
 Page({
 
@@ -28,7 +62,9 @@ Page({
     searched: false,  // 是否已经点过「搜索」（决定下方显示结果还是用法说明）
     resultQ: '',      // 结果对应的关键词
     results: [],      // 结果列表
-    resultTip: ''     // 命中的匹配档位说明
+    resultTip: '',    // 命中的匹配档位说明
+    hasTopic: false,  // 词库里有没有【序列配对】那一册（旧数据没有 ⇒ 不挂死入口）
+    topicDesc: '英文按顺序 · 中文打乱'
   },
 
   onLoad: function () {
@@ -36,9 +72,24 @@ Page({
     this._dead = false;
 
     var t = bank.totals();
-    this.setData({
+    var patch = {
       stats: t.books + ' 个词库 · ' + t.levels + ' 组 · ' + t.words + ' 词'
-    });
+    };
+
+    /* 专题册与它的主题清单在首屏就定下来：入口描述要报体量，点进去还要选主题。
+       这一册只有 86 词，ensureStage 的解析成本可以忽略（也只解析它这一册）。 */
+    var tb = topicBook();
+    if (tb) {
+      var themes = topicThemes(tb.id);
+      if (themes.length) {
+        var words = 0;
+        for (var i = 0; i < themes.length; i++) words += themes[i].words;
+        patch.hasTopic = true;
+        patch.topicDesc = '英文按顺序 · 中文打乱 · ' + themes.length + ' 个专题 · ' + words + ' 词';
+      }
+    }
+
+    this.setData(patch);
 
     /* 预热检索索引：第一次搜索要把 4 个学段的数据模块 require 进来再摊平两万条，
        放在首屏渲染**之后**做，用户第一次敲字时就已经就绪，不会卡一下。
@@ -164,6 +215,39 @@ Page({
     wx.navigateTo({
       url: '/pages/play/play',
       fail: function () { ui.info('打开玩法页失败，请重试'); }
+    });
+  },
+
+  /* 【序列配对】：一册里 6 个主题共 15 关，直接进整册会从「数字」开始、用户未必想练那个
+     ⇒ 先弹一行让用户选主题（小程序原生 actionSheet，零额外页面）。
+     起点按网页端同一口径：该主题里第一个还没练过的关；全练完就从头再练。 */
+  gotoTopic: function () {
+    var book = topicBook();
+    if (!book) { ui.info('这一版还没有序列配对词库，更新后再试'); return; }
+
+    var themes = topicThemes(book.id);
+    if (!themes.length) { ui.info('序列配对词库还没有内容'); return; }
+
+    var done = store.readMap(store.KEYS.progress)[book.id] || [];
+    var names = [];
+    for (var i = 0; i < themes.length; i++) names.push(themes[i].name);
+
+    wx.showActionSheet({
+      itemList: names,
+      success: function (res) {
+        var t = themes[res.tapIndex];
+        if (!t) return;
+        var start = t.first;
+        for (var k = t.first; k <= t.last; k++) {
+          if (done.indexOf(k) < 0) { start = k; break; }
+        }
+        wx.navigateTo({
+          url: '/pages/play/play?bookId=' + encodeURIComponent(book.id) + '&level=' + start,
+          fail: function () { ui.info('打开玩法页失败，请重试'); }
+        });
+      },
+      /* 用户取消选择：什么都不做（不是错误，不弹提示） */
+      fail: function () { }
     });
   }
 });
