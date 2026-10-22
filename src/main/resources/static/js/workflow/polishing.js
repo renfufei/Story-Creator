@@ -30,12 +30,13 @@ function workflowPolishingMixin() {
             this.previewChapter(num);
         },
 
-        /** 把 {draft, content} 组装成面板要的数据：句级差异表 + 两侧字数 + 高亮开关 */
-        _polishPreview(draft, content, highlight) {
+        /** 把 {draft, content} 组装成面板要的数据：句级差异表 + 两侧字数 + 高亮/同步开关 */
+        _polishPreview(draft, content, highlight, syncScroll) {
             const d = draft || '';
             const c = content || '';
             const pair = SCCmp.preparePair(d, c, {
-                highlight: highlight === undefined ? true : highlight
+                highlight: highlight === undefined ? true : highlight,
+                syncScroll: syncScroll
             });
             return Object.assign({ draft: d, content: c }, pair);
         },
@@ -45,9 +46,11 @@ function workflowPolishingMixin() {
             const hl = highlight === undefined
                 ? (prev && prev.highlight !== undefined ? prev.highlight : true)
                 : highlight;
+            // 流式刷新会反复重建这份数据 —— 开关状态得跟着上一份走，否则用户一关就被打回去
+            const ss = prev && prev.syncScroll !== undefined ? prev.syncScroll : true;
             this.polishPreviews = {
                 ...this.polishPreviews,
-                [num]: this._polishPreview(draft, content, hl)
+                [num]: this._polishPreview(draft, content, hl, ss)
             };
         },
 

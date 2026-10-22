@@ -88,6 +88,9 @@ public class PromptTemplateEntity {
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 
+    /** 只给测试造数据用（正常写入由 {@code @PrePersist} / {@code @PreUpdate} 负责）。 */
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
     public String getDefaultTemplate() { return defaultTemplate; }
     public void setDefaultTemplate(String defaultTemplate) { this.defaultTemplate = defaultTemplate; }
 

@@ -142,12 +142,37 @@
             border-radius: 8px;
             padding: 0.75rem 1rem;
         }
+        /* 章节旁的 TTS 操作组：播放/暂停 + 停止，两个按钮之间留 6px 间隔。
+           ★ 子按钮不要挂 d-flex 之类带 !important 的显示类 —— 会顶掉 x-show 的 display:none */
+        .tts-chapter-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
         .tts-chapter-btn {
             opacity: 0.6;
+            /* 原来是纯图标按钮（宽约 31px），改成图标+两字后按 4.5rem 定宽，三态切换不跳动 */
+            min-width: 4.5rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+            white-space: nowrap;
             transition: opacity 0.2s;
         }
         .tts-chapter-btn:hover, .tts-chapter-btn.active {
             opacity: 1;
+        }
+        /* 正在播放 / 暂停的那一章：按钮整体实色，和旁边半透明的【播放】拉开层次 */
+        .tts-chapter-actions.is-active .tts-chapter-btn {
+            opacity: 1;
+        }
+        /* 一章播完到下一章之间的 3 秒空档：不给提示会让人以为播放已经结束 */
+        .tts-next-hint {
+            font-size: 0.78rem;
+            color: #6c757d;
+            white-space: nowrap;
+            margin-left: 2px;   /* 和【停止】拉开一点，6px 的 flex gap 贴得太紧 */
         }
         /* ===== 阅读背景色选择器（网文护眼配色）===== */
         /* 浮动按钮：紧贴折叠(☰)按钮下方，位置随侧边栏开合同步偏移 */
@@ -214,6 +239,10 @@
             color: #c9ccd1;
             border-color: #71767d;
         }
+        /* 章节旁的播放/停止按钮同理（primary/danger 深色底上也偏暗） */
+        body.reader-dark .reader-main .tts-chapter-btn.btn-outline-primary { color: #8ab4ff; border-color: #4a6ea8; }
+        body.reader-dark .reader-main .tts-chapter-btn.btn-outline-danger { color: #ff9b9b; border-color: #8d4a4a; }
+        body.reader-dark .reader-main .tts-next-hint { color: #9aa0a6; }
         @media (max-width: 768px) {
             .reader-sidebar { transform: translateX(-100%); }
             .reader-sidebar.show-mobile { transform: translateX(0); }
@@ -498,30 +527,42 @@
                         x-text="'第' + chapter.number + '章 ' + (chapter.title || '')">
                         章节标题
                     </h3>
-                    <!-- Per-chapter TTS button -->
+                    <!-- Per-chapter TTS controls
+                         停止态：只给【播放】；播放中：【暂停】【停止】；暂停中：【播放】【停止】。 -->
                     <span x-show="tts.configs.length > 0" x-cloak
-                          x-data="{ cn: chapter.number }">
-                        <button class="btn btn-sm tts-chapter-btn"
-                                :class="tts.playing === cn ? 'btn-outline-danger' : 'btn-outline-secondary'"
-                                @click="toggleChapter(cn)"
-                                :disabled="tts.loading === cn">
-                            <span x-show="tts.loading === cn">
-                                <span class="spinner-border spinner-border-sm"></span>
-                            </span>
-                            <span x-show="tts.loading !== cn">
-                                <i :class="tts.playing === cn ? 'bi bi-stop-fill' : 'bi bi-play-fill'"></i>
-                            </span>
+                          x-data="{ cn: chapter.number }"
+                          class="tts-chapter-actions"
+                          :class="{ 'is-active': tts.playing === cn }">
+                        <button class="btn btn-sm btn-outline-secondary tts-chapter-btn"
+                                x-show="tts.loading === cn"
+                                disabled>
+                            <span class="spinner-border spinner-border-sm"></span>
+                            <span>加载</span>
                         </button>
-                    </span>
-                    <!-- Expansion mark button -->
-                    <span>
-                        <button class="btn btn-sm"
-                                :class="chapter.expansionStatus != null ? 'btn-outline-warning' : 'btn-outline-secondary'"
-                                :data-chapter="chapter.number"
-                                :title="chapter.expansionStatus != null ? '已标记扩写' : '标记为扩写备选'"
-                                @click="toggleExpansionMark($event.currentTarget)">
-                            <i class="bi bi-arrows-angle-expand"></i>
+                        <button class="btn btn-sm btn-outline-primary tts-chapter-btn"
+                                x-show="tts.loading !== cn && tts.playing !== cn"
+                                @click="playChapter(cn)">
+                            <i class="bi bi-play-fill"></i><span>播放</span>
                         </button>
+                        <button class="btn btn-sm btn-outline-primary tts-chapter-btn"
+                                x-show="tts.loading !== cn && tts.playing === cn && !tts.paused"
+                                @click="pauseChapter()">
+                            <i class="bi bi-pause-fill"></i><span>暂停</span>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary tts-chapter-btn"
+                                x-show="tts.loading !== cn && tts.playing === cn && tts.paused"
+                                @click="resumeChapter()">
+                            <i class="bi bi-play-fill"></i><span>播放</span>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger tts-chapter-btn"
+                                x-show="tts.loading !== cn && tts.playing === cn"
+                                @click="stopChapter()">
+                            <i class="bi bi-stop-fill"></i><span>停止</span>
+                        </button>
+                        <!-- 已播完、等 3 秒自动续下一章时的提示（这一档是「暂停」态，随时可停止） -->
+                        <span class="tts-next-hint" x-cloak
+                              x-show="tts.playing === cn && tts.nextChapter != null"
+                              x-text="'即将播放第' + tts.nextChapter + '章…'"></span>
                     </span>
                 </div>
                 <div class="chapter-content mt-3" x-text="chapter.content || '（暂无内容）'">
@@ -706,12 +747,15 @@
                 speed: 1.0,
                 minLen: 10,
                 maxLen: 200,
-                playing: null,
-                loading: null,
+                playing: null,        // 正在播（或暂停中、或播完等续播）的章号
+                paused: false,        // 播放中是否暂停；「播完等下一章」的 3 秒空档也算暂停态
+                loading: null,        // 正在拉章节切片的章号
                 audio: null,
                 abortController: null,
                 preGeneratedFiles: {},
-                onChapterEndedCallback: null
+                autoNextTimer: null,  // 播完 → 下一章的 3 秒定时器
+                nextChapter: null,    // 待自动续播的章号（非 null 即处于续播倒计时）
+                pauseResolve: null    // 流式播放暂停在切片边界时的唤醒函数
             },
             playlist: {
                 isActive: false,
@@ -776,15 +820,117 @@
                     }));
                 } catch (e) {}
             },
-            toggleChapter(num) {
+            /* ===== 单章播放控制：停止态 / 播放中 / 暂停中 三态 ===== */
+            clearAutoNext() {
+                if (this.tts.autoNextTimer) {
+                    clearTimeout(this.tts.autoNextTimer);
+                    this.tts.autoNextTimer = null;
+                }
+                this.tts.nextChapter = null;
+            },
+            pauseChapter() {
+                if (this.tts.playing == null) return;
+                this.tts.paused = true;
+                if (this.playlist.isActive) {
+                    this.playlist.paused = true;
+                    this.savePlaylistState();
+                }
+                if (this.tts.audio && !this.tts.audio.paused) {
+                    this.tts.audio.pause();
+                }
+            },
+            resumeChapter() {
+                this.tts.paused = false;
+                if (this.playlist.isActive) {
+                    this.playlist.paused = false;
+                    this.savePlaylistState();
+                }
+                // 本章已播完、正在等那 3 秒 ⇒ 直接切下一章，不用把等待熬满
+                if (this.tts.nextChapter != null) {
+                    this.goNextChapter();
+                    return;
+                }
+                if (this.tts.audio && this.tts.audio.paused && !this.tts.audio.ended) {
+                    this.tts.audio.play().catch(() => {});
+                } else if (!this.tts.audio && this.tts.pauseResolve == null && this.tts.playing != null) {
+                    // 音频已经没了（切后台被回收 / 解码失败）：重播当前章，别让「继续」点了没反应
+                    const num = this.tts.playing;
+                    this.playChapter(num);
+                    return;
+                }
+                // 流式播放若正卡在切片边界（此刻没有 audio 在播），得唤醒它继续
+                if (this.tts.pauseResolve) {
+                    const wake = this.tts.pauseResolve;
+                    this.tts.pauseResolve = null;
+                    wake();
+                }
+            },
+            stopChapter() {
                 if (this.playlist.isActive) {
                     this.stopFullListen();
-                }
-                if (this.tts.playing === num) {
-                    this.stopAudio();
                 } else {
-                    this.playChapter(num);
+                    this.stopAudio();
                 }
+            },
+            /** 流式播放：暂停卡在切片边界时挂起，resumeChapter 负责唤醒 */
+            waitIfPaused(signal) {
+                if (!this.tts.paused) return Promise.resolve();
+                return new Promise(resolve => {
+                    this.tts.pauseResolve = resolve;
+                    if (signal) {
+                        signal.addEventListener('abort', () => {
+                            this.tts.pauseResolve = null;
+                            resolve();
+                        }, { once: true });
+                    }
+                });
+            },
+            /** 下一章：全文收听按播放列表顺序；单章连播按「有正文的章节」顺序 */
+            nextChapterNumber(num) {
+                if (this.playlist.isActive) {
+                    const idx = this.playlist.chapters.indexOf(num);
+                    return (idx >= 0 && idx < this.playlist.chapters.length - 1)
+                        ? this.playlist.chapters[idx + 1] : null;
+                }
+                const list = (this.chapters || [])
+                    .filter(c => c.content && String(c.content).trim())
+                    .map(c => c.number);
+                const i = list.indexOf(num);
+                return (i >= 0 && i < list.length - 1) ? list[i + 1] : null;
+            },
+            goNextChapter() {
+                const next = this.tts.nextChapter;
+                this.clearAutoNext();
+                if (next == null) return;
+                if (this.playlist.isActive) {
+                    const idx = this.playlist.chapters.indexOf(next);
+                    if (idx >= 0) {
+                        this.playlist.currentIndex = idx;
+                        this.savePlaylistState();
+                    }
+                }
+                this.playChapter(next);
+            },
+            /**
+             * 一章播完：停 3 秒再自动接下一章（单章连播与全文收听共用这一处）。
+             * 这 3 秒里保持「暂停态 + 停止按钮」，用户随时能掐掉续播、也能立刻续播。
+             */
+            onTtsChapterEnded(num) {
+                const next = this.nextChapterNumber(num);
+                if (next == null) {
+                    // 已经是最后一章：全文收听收摊，单章播放就停在停止态
+                    if (this.playlist.isActive) {
+                        this.stopFullListen();
+                    } else {
+                        this.stopAudio();
+                    }
+                    return;
+                }
+                this.clearAutoNext();
+                this.tts.playing = num;
+                this.tts.paused = true;
+                this.tts.nextChapter = next;
+                this.tts.autoNextTimer = setTimeout(() => this.goNextChapter(), 3000);
             },
             async playChapter(num) {
                 this.stopAudio();
@@ -797,11 +943,11 @@
                     this.tts.audio = audio;
                     audio.onended = () => {
                         this.tts.playing = null; this.tts.audio = null;
-                        if (this.tts.onChapterEndedCallback) this.tts.onChapterEndedCallback();
+                        this.onTtsChapterEnded(num);
                     };
                     audio.onerror = () => {
                         this.tts.playing = null; this.tts.audio = null;
-                        if (this.tts.onChapterEndedCallback) this.tts.onChapterEndedCallback();
+                        this.onTtsChapterEnded(num);
                     };
                     abortController.signal.addEventListener('abort', () => audio.pause(), { once: true });
                     audio.play().catch(() => { this.tts.playing = null; this.tts.audio = null; });
@@ -810,6 +956,7 @@
                 const abortController = new AbortController();
                 this.tts.abortController = abortController;
                 this.tts.loading = num;
+                let endedHandled = false;   // catch 与 finally 只能触发一次「本章播完」
                 try {
                     // 1. Fetch chunk list
                     const chunksRes = await fetch(`/projects/${projectId}/tts/chapter/${num}/chunks?minLen=${this.tts.minLen}&maxLen=${this.tts.maxLen}`, {
@@ -883,6 +1030,11 @@
                         if (!blob || abortController.signal.aborted) break;
                         audioBlobs.delete(i);
 
+                        // 暂停可能落在两个切片之间（上一段已 ended、下一段还没开始）：
+                        // 不在这里挂一下，paused 期间照样会继续播下一段
+                        await this.waitIfPaused(abortController.signal);
+                        if (abortController.signal.aborted) break;
+
                         const audioUrl = URL.createObjectURL(blob);
                         const audio = new Audio(audioUrl);
                         this.tts.audio = audio;
@@ -907,8 +1059,10 @@
                         // User cancelled - not an error
                     } else {
                         console.error('TTS playback failed', e);
-                        if (this.playlist.isActive && this.tts.onChapterEndedCallback) {
-                            this.tts.onChapterEndedCallback();
+                        if (this.playlist.isActive) {
+                            // 这一章合成失败：全文收听直接跳过，别把整条进度卡死
+                            endedHandled = true;
+                            this.onTtsChapterEnded(num);
                         } else {
                             alert('语音合成失败: ' + e.message);
                         }
@@ -918,9 +1072,10 @@
                     this.tts.playing = null;
                     this.tts.audio = null;
                     this.tts.abortController = null;
-                    // Call callback for non-abort completion of streaming path
-                    if (!abortController.signal.aborted && this.tts.onChapterEndedCallback) {
-                        this.tts.onChapterEndedCallback();
+                    this.tts.paused = false;
+                    // 正常播完（不是被 abort / 失败分支已处理过）才进入「3 秒后下一章」
+                    if (!abortController.signal.aborted && !endedHandled) {
+                        this.onTtsChapterEnded(num);
                     }
                 }
             },
@@ -939,38 +1094,15 @@
                 this.playlist.currentIndex = 0;
                 this.playlist.isActive = true;
                 this.playlist.paused = false;
-                this.tts.onChapterEndedCallback = () => this.onPlaylistChapterEnded();
                 this.savePlaylistState();
                 this.playChapter(this.playlist.chapters[0]);
             },
-            onPlaylistChapterEnded() {
-                if (!this.playlist.isActive) return;
-                if (this.playlist.currentIndex < this.playlist.chapters.length - 1) {
-                    this.playlist.currentIndex++;
-                    this.savePlaylistState();
-                    this.playChapter(this.playlist.chapters[this.playlist.currentIndex]);
-                } else {
-                    // Finished all chapters
-                    this.stopFullListen();
-                }
-            },
+            // 暂停/继续直接复用单章那套：否则「顶部按钮看 tts.audio、章节按钮看 tts.paused」两套状态会打架
             playlistPause() {
-                if (this.tts.audio) {
-                    this.tts.audio.pause();
-                }
-                this.playlist.paused = true;
-                this.savePlaylistState();
+                this.pauseChapter();
             },
             playlistResume() {
-                if (this.tts.audio) {
-                    this.tts.audio.play();
-                    this.playlist.paused = false;
-                } else {
-                    // Audio lost, restart current chapter
-                    this.playlist.paused = false;
-                    this.playChapter(this.playlist.chapters[this.playlist.currentIndex]);
-                }
-                this.savePlaylistState();
+                this.resumeChapter();
             },
             playlistPrev() {
                 if (!this.playlist.isActive || this.playlist.currentIndex <= 0) return;
@@ -994,7 +1126,6 @@
                 this.playlist.chapters = [];
                 this.playlist.currentIndex = -1;
                 this.playlist.paused = false;
-                this.tts.onChapterEndedCallback = null;
                 localStorage.removeItem('tts_playlist_' + projectId);
             },
             savePlaylistState() {
@@ -1027,7 +1158,6 @@
                     this.playlist.currentIndex = saved.currentIndex;
                     this.playlist.isActive = true;
                     this.playlist.paused = false;
-                    this.tts.onChapterEndedCallback = () => this.onPlaylistChapterEnded();
                     this.playChapter(this.playlist.chapters[this.playlist.currentIndex]);
                 } catch (e) {
                     this.stopFullListen();
@@ -1038,6 +1168,10 @@
                 localStorage.removeItem('tts_playlist_' + projectId);
             },
             stopAudio() {
+                // 先清「续播倒计时 / 暂停态」：否则 abort 触发的 finally 会把下一章又续上
+                this.clearAutoNext();
+                this.tts.paused = false;
+                this.tts.pauseResolve = null;
                 if (this.tts.abortController) {
                     this.tts.abortController.abort();
                     this.tts.abortController = null;
@@ -1164,32 +1298,6 @@
             }
         });
     };
-    </script>
-    <script>
-    // 从路径取（引导数据是异步的，解析期还没有 projectId）
-    const EXPANSION_PROJECT_ID = (function () {
-        const m = window.location.pathname.match(/\/projects\/(\d+)\/read/);
-        return m ? Number(m[1]) : null;
-    })();
-    function toggleExpansionMark(btn) {
-        const chapterNumber = parseInt(btn.dataset.chapter);
-        const isMarked = btn.classList.contains('btn-warning');
-        fetch('/projects/' + EXPANSION_PROJECT_ID + '/expansion/mark', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({chapterNumbers: [chapterNumber], marked: !isMarked})
-        }).then(resp => resp.json()).then(() => {
-            if (isMarked) {
-                btn.classList.remove('btn-warning');
-                btn.classList.add('btn-outline-warning');
-                btn.title = '标记为扩写备选';
-            } else {
-                btn.classList.remove('btn-outline-warning');
-                btn.classList.add('btn-warning');
-                btn.title = '已标记扩写';
-            }
-        });
-    }
     </script>
 </body>
 </html>

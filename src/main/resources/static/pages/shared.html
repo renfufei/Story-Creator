@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>资源共享 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+    <style>
+        /* 本页专用的一点点样式：面包屑、拖拽高亮、名称省略。
+           通用样式一律留在 app.css，别往这里堆。 */
+        .sc-share-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; font-size: .9rem; }
+        .sc-share-crumbs a { text-decoration: none; }
+        .sc-share-crumbs .sep { color: var(--bs-secondary-color, #adb5bd); }
+        .sc-share-crumbs .cur { color: var(--bs-body-color, #212529); font-weight: 600; }
+
+        #dropZone { position: relative; transition: border-color .15s, background-color .15s; }
+        #dropZone.is-drag { border: 2px dashed var(--bs-primary); background-color: rgba(13, 110, 253, .05); }
+        #dropZone.is-drag::after {
+            content: '松手即可上传到此目录';
+            position: absolute; inset: 0; z-index: 4;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 600; color: var(--bs-primary);
+            background-color: rgba(255, 255, 255, .72);
+            pointer-events: none;
+        }
+
+        .sc-share-name { display: inline-flex; align-items: center; gap: .5rem; min-width: 0; max-width: 100%; }
+        .sc-share-name .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sc-share-name .ico { flex: 0 0 auto; font-size: 1.05rem; }
+        .sc-share-name .ico.dir { color: #e0a800; }
+        .sc-share-link { text-decoration: none; color: inherit; }
+        .sc-share-link:hover .txt { text-decoration: underline; }
+
+        /* ---------- 工具栏：展示方式 + 排序 ---------- */
+        .sc-share-tools .form-select { width: auto; min-width: 7.5rem; }
+        /* 表头可点排序：整格都能点，别只让文字可点 */
+        .sc-share-sort-th { cursor: pointer; user-select: none; white-space: nowrap; }
+        .sc-share-sort-th:hover { color: var(--bs-primary, #0d6efd); }
+        .sc-share-sort-th .bi { font-size: .72rem; opacity: .45; }
+        .sc-share-sort-th.is-active { color: var(--bs-primary, #0d6efd); }
+        .sc-share-sort-th.is-active .bi { opacity: 1; }
+
+        /* ---------- 卡片视图 ---------- */
+        .sc-share-grid .sc-card {
+            height: 100%; display: flex; flex-direction: column; gap: .35rem;
+            padding: .8rem .6rem .6rem; background: var(--bs-body-bg, #fff);
+            border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .6rem;
+            transition: border-color .15s, box-shadow .15s;
+        }
+        .sc-share-grid .sc-card:hover {
+            border-color: var(--bs-primary, #0d6efd);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, .08);
+        }
+        .sc-share-grid .ico-big { font-size: 2rem; line-height: 1; }
+        .sc-share-grid .ico-big.dir { color: #e0a800; }
+        .sc-share-grid .nm {
+            font-size: .875rem; font-weight: 600; text-align: center; word-break: break-all;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+            overflow: hidden; min-height: 2.4em;
+        }
+        .sc-share-grid .meta {
+            font-size: .75rem; color: var(--bs-secondary-color, #6c757d);
+            text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .sc-share-grid .acts { margin-top: auto; display: flex; justify-content: center; gap: .25rem; }
+
+        /* 拖拽时别让浏览器把「打开文件」当成默认动作铺满整页 */
+        body.sc-share-dragging { user-select: none; }
+    </style>
+</head>
+<body class="sc-page" data-booting="1">
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4" id="main">
+
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-share"></i> 资源共享</h2>
+            <p class="text-muted small mb-0">
+                文件存放在服务端 <code>shared</code> 目录，可与本机其它程序共用；浏览器只能访问这个目录及其子目录。
+            </p>
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <button type="button" class="btn btn-sm btn-primary" id="btnUpload">
+                <i class="bi bi-upload"></i> 上传文件
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="btnMkdir">
+                <i class="bi bi-folder-plus"></i> 新建文件夹
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="btnRefresh" title="刷新当前目录">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+            <input type="file" id="fileInput" multiple hidden>
+        </div>
+    </div>
+
+    <nav class="sc-share-crumbs mb-3" id="crumbs" aria-label="目录路径"></nav>
+
+    <div class="progress d-none mb-2" id="progressWrap" style="height: 6px;" role="progressbar" aria-label="上传进度">
+        <div class="progress-bar progress-bar-striped progress-bar-animated" id="progressBar" style="width: 0%;"></div>
+    </div>
+
+    <div class="card" id="dropZone">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <strong id="dirTitle"><i class="bi bi-folder2-open"></i> 共享资源</strong>
+            <div class="d-flex flex-wrap align-items-center gap-2 sc-share-tools">
+                <small class="text-muted" id="dirStat"></small>
+                <!-- 展示方式：列表 / 卡片。小图标切换，选择记在 localStorage -->
+                <div class="btn-group btn-group-sm" role="group" aria-label="展示方式">
+                    <button type="button" class="btn btn-outline-secondary" id="btnViewList"
+                            title="列表视图" aria-pressed="true">
+                        <i class="bi bi-list-ul"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" id="btnViewGrid"
+                            title="卡片视图" aria-pressed="false">
+                        <i class="bi bi-grid-3x3-gap-fill"></i>
+                    </button>
+                </div>
+                <select class="form-select form-select-sm" id="sortField" title="排序字段"
+                        aria-label="排序字段">
+                    <option value="name">按名称</option>
+                    <option value="createdAt">按创建日期</option>
+                    <option value="modifiedAt">按修改日期</option>
+                    <option value="type">按类型</option>
+                </select>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnSortDir"
+                        title="切换正序 / 倒序">
+                    <i class="bi bi-arrow-down-up"></i><span class="ms-1" id="sortDirText">正序</span>
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0" id="listArea">
+            <!-- 引导数据还在路上：先摆 4 行骨架，renderList 会整块替换这个容器 -->
+            <div class="p-3 sc-skel-row">
+                <div class="sc-skel sc-skel-line" style="width: 26%;"></div>
+                <div class="sc-skel sc-skel-line w-50"></div>
+            </div>
+            <div class="p-3 sc-skel-row">
+                <div class="sc-skel sc-skel-line" style="width: 34%;"></div>
+                <div class="sc-skel sc-skel-line w-50"></div>
+            </div>
+            <div class="p-3 sc-skel-row">
+                <div class="sc-skel sc-skel-line" style="width: 22%;"></div>
+                <div class="sc-skel sc-skel-line w-50"></div>
+            </div>
+            <div class="p-3 sc-skel-row">
+                <div class="sc-skel sc-skel-line" style="width: 30%;"></div>
+                <div class="sc-skel sc-skel-line w-50"></div>
+            </div>
+        </div>
+    </div>
+
+    <p class="text-muted small mt-3 mb-0">
+        <i class="bi bi-info-circle"></i>
+        支持多选上传与拖拽；单个文件上限 50 MB。为安全起见，路径里不允许 <code>..</code>、绝对路径和符号链接，
+        非空文件夹需要先清空才能删除。
+    </p>
+
+</main>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    var API = '/shared/api';
+
+    var main = document.getElementById('main');
+    var listArea = document.getElementById('listArea');
+    var crumbsEl = document.getElementById('crumbs');
+    var dirTitle = document.getElementById('dirTitle');
+    var dirStat = document.getElementById('dirStat');
+    var dropZone = document.getElementById('dropZone');
+    var fileInput = document.getElementById('fileInput');
+    var progressWrap = document.getElementById('progressWrap');
+    var progressBar = document.getElementById('progressBar');
+
+    /* 当前目录（相对 shared 的路径，根为 ''）。只看 state.listing 里的服务端回执，
+       前端不自己拼路径 —— 少一处拼接就少一处越界的可能。 */
+    var state = { path: '', listing: null };
+
+    /* 展示方式与排序：纯前端偏好，记在 localStorage（换目录、刷新都要保持）。
+       默认「列表 + 名称正序」= 后端下发的顺序，页面行为和以前完全一致。 */
+    var PREF_KEY = 'sc-shared-prefs-v1';
+    var SORT_FIELDS = ['name', 'createdAt', 'modifiedAt', 'type'];
+    var view = 'list';
+    var sort = { field: 'name', dir: 'asc' };
+
+    function loadPrefs() {
+        try {
+            var p = JSON.parse(window.localStorage.getItem(PREF_KEY) || '{}') || {};
+            if (p.view === 'grid' || p.view === 'list') view = p.view;
+            if (SORT_FIELDS.indexOf(p.sort) >= 0) sort.field = p.sort;
+            if (p.dir === 'desc' || p.dir === 'asc') sort.dir = p.dir;
+        } catch (e) {
+            /* 隐私模式 / 存了脏数据：退回默认值，不影响使用 */
+        }
+    }
+
+    function savePrefs() {
+        try {
+            window.localStorage.setItem(PREF_KEY,
+                JSON.stringify({ view: view, sort: sort.field, dir: sort.dir }));
+        } catch (e) {
+            /* 存不进去就算了，只是下次打开回到默认 */
+        }
+    }
+
+    function setBooting(on) {
+        if (on) document.body.setAttribute('data-booting', '1');
+        else document.body.removeAttribute('data-booting');
+    }
+
+    /* ===================== 渲染 ===================== */
+
+    function fmtSize(bytes) {
+        var n = Number(bytes) || 0;
+        if (n < 1024) return n + ' B';
+        var units = ['KB', 'MB', 'GB', 'TB'];
+        var v = n / 1024, i = 0;
+        while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+        return (v >= 10 ? Math.round(v) : v.toFixed(1)) + ' ' + units[i];
+    }
+
+    var ICON_BY_EXT = {
+        png: 'bi-file-earmark-image', jpg: 'bi-file-earmark-image', jpeg: 'bi-file-earmark-image',
+        gif: 'bi-file-earmark-image', webp: 'bi-file-earmark-image', bmp: 'bi-file-earmark-image',
+        svg: 'bi-file-earmark-image', ico: 'bi-file-earmark-image',
+        mp3: 'bi-file-earmark-music', wav: 'bi-file-earmark-music', m4a: 'bi-file-earmark-music',
+        flac: 'bi-file-earmark-music', ogg: 'bi-file-earmark-music', aac: 'bi-file-earmark-music',
+        mp4: 'bi-file-earmark-play', mov: 'bi-file-earmark-play', mkv: 'bi-file-earmark-play',
+        webm: 'bi-file-earmark-play', avi: 'bi-file-earmark-play',
+        zip: 'bi-file-earmark-zip', rar: 'bi-file-earmark-zip', '7z': 'bi-file-earmark-zip',
+        gz: 'bi-file-earmark-zip', tar: 'bi-file-earmark-zip',
+        pdf: 'bi-file-earmark-pdf',
+        txt: 'bi-file-earmark-text', md: 'bi-file-earmark-text', log: 'bi-file-earmark-text',
+        json: 'bi-file-earmark-code', xml: 'bi-file-earmark-code', yml: 'bi-file-earmark-code',
+        yaml: 'bi-file-earmark-code', js: 'bi-file-earmark-code', css: 'bi-file-earmark-code',
+        html: 'bi-file-earmark-code', java: 'bi-file-earmark-code', py: 'bi-file-earmark-code',
+        doc: 'bi-file-earmark-word', docx: 'bi-file-earmark-word',
+        xls: 'bi-file-earmark-excel', xlsx: 'bi-file-earmark-excel', csv: 'bi-file-earmark-excel',
+        ppt: 'bi-file-earmark-slides', pptx: 'bi-file-earmark-slides'
+    };
+
+    function iconOf(item) {
+        if (item.directory) return 'bi-folder-fill dir';
+        return ICON_BY_EXT[item.ext] || 'bi-file-earmark';
+    }
+
+    function downloadUrl(path) {
+        return API + '/download?path=' + encodeURIComponent(path);
+    }
+
+    function renderCrumbs() {
+        var l = state.listing;
+        if (!l) { crumbsEl.innerHTML = ''; return; }
+        var parts = (l.crumbs || []).map(function (c, i, arr) {
+            var last = i === arr.length - 1;
+            if (last) {
+                return '<span class="cur">' + SC.escape(c.name) + '</span>';
+            }
+            return '<a href="#" data-act="go" data-path="' + SC.escape(c.path) + '">' +
+                (i === 0 ? '<i class="bi bi-hdd"></i> ' : '') + SC.escape(c.name) + '</a>';
+        });
+        crumbsEl.innerHTML = parts.join('<span class="sep">/</span>');
+    }
+
+    function renderHeader() {
+        var l = state.listing;
+        if (!l) return;
+        dirTitle.innerHTML = '<i class="bi ' + (l.path ? 'bi-folder2-open' : 'bi-share') + '"></i> ' +
+            SC.escape(l.name || '共享资源');
+        if (!l.fileCount && !l.dirCount) {
+            dirStat.textContent = '空目录';
+        } else {
+            dirStat.textContent = (l.dirCount ? l.dirCount + ' 个文件夹 · ' : '') +
+                l.fileCount + ' 个文件 · 共 ' + fmtSize(l.totalBytes);
+        }
+    }
+
+    /* ---------- 排序 ---------- */
+
+    /* 中文按自然顺序（String.compareTo 会把中文全排到 ASCII 后面，很难用）；
+       numeric 让「第2章」排在「第10章」前面。 */
+    var collator = new Intl.Collator('zh-Hans-CN', { numeric: true, sensitivity: 'base' });
+
+    /** ISO 时间串 → 毫秒；空 / 解析不了给 null（缺失值一律排最后） */
+    function tsOf(v) {
+        if (!v) return null;
+        var t = Date.parse(v);
+        return isNaN(t) ? null : t;
+    }
+
+    /** 排序用的「类型」键：文件用扩展名，目录给空串（配合「目录优先」） */
+    function typeOf(it) {
+        return it.directory ? '' : (it.ext || '');
+    }
+
+    function compareItems(a, b) {
+        // 文件夹始终在前：与后端默认顺序一致，也符合访达 / 资源管理器的习惯
+        if (a.directory !== b.directory) return a.directory ? -1 : 1;
+
+        var r;
+        if (sort.field === 'type') {
+            r = collator.compare(typeOf(a), typeOf(b));
+        } else if (sort.field === 'name') {
+            r = collator.compare(a.name, b.name);
+        } else {
+            var va = tsOf(a[sort.field]);
+            var vb = tsOf(b[sort.field]);
+            // ★ 缺失值不参与正反序：两个方向都排最后，否则倒序会把「没时间」的顶到最前
+            if (va === null && vb === null) return collator.compare(a.name, b.name);
+            if (va === null) return 1;
+            if (vb === null) return -1;
+            r = va - vb;
+        }
+        if (r === 0) r = collator.compare(a.name, b.name);   // 次键固定按名称，顺序才稳定可预期
+        return sort.dir === 'desc' ? -r : r;
+    }
+
+    function sortedItems() {
+        var arr = (state.listing && state.listing.items ? state.listing.items : []).slice();
+        arr.sort(compareItems);
+        return arr;
+    }
+
+    /* ---------- 渲染 ---------- */
+
+    function typeLabel(it) {
+        if (it.directory) return '文件夹';
+        return it.ext ? it.ext.toUpperCase() : '—';
+    }
+
+    function nameLinkOf(it) {
+        var inner = '<span class="sc-share-name"><i class="bi ' + iconOf(it) + ' ico"></i>' +
+            '<span class="txt">' + SC.escape(it.name) + '</span></span>';
+        if (it.directory) {
+            return '<a href="#" class="sc-share-link" data-act="enter" data-path="' +
+                SC.escape(it.path) + '">' + inner + '</a>';
+        }
+        return '<a href="' + SC.escape(downloadUrl(it.path)) + '" class="sc-share-link" ' +
+            'data-act="download" data-path="' + SC.escape(it.path) + '" title="下载">' + inner + '</a>';
+    }
+
+    /** 行内 / 卡片里的操作按钮（进入 or 下载 + 删除），align: end | center */
+    function actionButtons(it, align) {
+        return '<div class="d-flex justify-content-' + (align === 'center' ? 'center' : 'end') + ' gap-1">' +
+            (it.directory
+                ? '<a href="#" class="btn btn-sm btn-outline-primary" data-act="enter" data-path="' +
+                    SC.escape(it.path) + '" title="进入"><i class="bi bi-box-arrow-in-right"></i></a>'
+                : '<a href="' + SC.escape(downloadUrl(it.path)) + '" class="btn btn-sm btn-outline-primary" ' +
+                    'data-act="download" data-path="' + SC.escape(it.path) + '" title="下载">' +
+                    '<i class="bi bi-download"></i></a>') +
+            '<button type="button" class="btn btn-sm btn-outline-danger" data-act="del" ' +
+            'data-path="' + SC.escape(it.path) + '" data-name="' + SC.escape(it.name) + '" ' +
+            'data-dir="' + (it.directory ? '1' : '0') + '" title="删除"><i class="bi bi-trash"></i></button>' +
+            '</div>';
+    }
+
+    /** 可点排序的表头 */
+    function sortTh(field, label, extraCls) {
+        var active = sort.field === field;
+        var icon = active
+            ? (sort.dir === 'asc' ? 'bi-caret-up-fill' : 'bi-caret-down-fill')
+            : 'bi-arrow-down-up';
+        return '<th class="sc-share-sort-th' + (active ? ' is-active' : '') +
+            (extraCls ? ' ' + extraCls : '') + '" data-sort="' + field + '" ' +
+            'title="按' + label + '排序（点击可切换正序 / 倒序）">' +
+            label + ' <i class="bi ' + icon + '"></i></th>';
+    }
+
+    function renderTable(items) {
+        var rows = items.map(function (it) {
+            return '<tr>' +
+                '<td class="sc-c-name">' + nameLinkOf(it) + '</td>' +
+                '<td class="sc-c-type text-muted small d-none d-md-table-cell" style="width:90px;">' +
+                    SC.escape(typeLabel(it)) + '</td>' +
+                '<td class="sc-c-size text-muted small d-none d-sm-table-cell text-nowrap" style="width:100px;">' +
+                    (it.directory ? '—' : fmtSize(it.size)) + '</td>' +
+                '<td class="sc-c-ctime text-muted small d-none d-lg-table-cell text-nowrap" style="width:150px;">' +
+                    SC.escape(SC.fmt.datetime(it.createdAt)) + '</td>' +
+                '<td class="sc-c-time text-muted small d-none d-md-table-cell text-nowrap" style="width:150px;">' +
+                    SC.escape(SC.fmt.datetime(it.modifiedAt)) + '</td>' +
+                '<td class="sc-c-act" style="width:100px;">' + actionButtons(it, 'end') + '</td>' +
+                '</tr>';
+        }).join('');
+
+        return (
+            // 窄屏 6 列会把整页撑宽，交给 table-responsive 只滚卡片内部
+            '<div class="table-responsive">' +
+            '<table class="table table-sm table-hover align-middle mb-0">' +
+            '<thead><tr>' +
+            sortTh('name', '名称') +
+            sortTh('type', '类型', 'd-none d-md-table-cell') +
+            '<th class="d-none d-sm-table-cell" style="width:100px;">大小</th>' +
+            sortTh('createdAt', '创建时间', 'd-none d-lg-table-cell') +
+            sortTh('modifiedAt', '修改时间', 'd-none d-md-table-cell') +
+            '<th style="width:100px;"></th>' +
+            '</tr></thead><tbody>' + rows + '</tbody></table></div>');
+    }
+
+    function renderGrid(items) {
+        var cols = items.map(function (it) {
+            var act = it.directory ? 'enter' : 'download';
+            var href = it.directory ? '#' : SC.escape(downloadUrl(it.path));
+            var meta = it.directory ? '文件夹' : typeLabel(it) + ' · ' + fmtSize(it.size);
+            return '<div class="col"><div class="sc-card">' +
+                '<a href="' + href + '" class="sc-share-link d-flex justify-content-center" ' +
+                    'data-act="' + act + '" data-path="' + SC.escape(it.path) + '" title="' +
+                    (it.directory ? '进入' : '下载') + '">' +
+                    '<i class="bi ' + iconOf(it) + ' ico-big"></i></a>' +
+                '<a href="' + href + '" class="sc-share-link" data-act="' + act + '" ' +
+                    'data-path="' + SC.escape(it.path) + '">' +
+                    '<div class="nm">' + SC.escape(it.name) + '</div></a>' +
+                '<div class="meta">' + SC.escape(meta) + '</div>' +
+                '<div class="meta">' + SC.escape(SC.fmt.datetime(it.modifiedAt)) + '</div>' +
+                '<div class="acts">' + actionButtons(it, 'center') + '</div>' +
+                '</div></div>';
+        }).join('');
+
+        return '<div class="sc-share-grid row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-xl-5 g-3 p-3">' +
+            cols + '</div>';
+    }
+
+    /** 工具栏状态回写（按钮高亮 / 下拉值 / 方向文字） */
+    function syncTools() {
+        var listBtn = document.getElementById('btnViewList');
+        var gridBtn = document.getElementById('btnViewGrid');
+        if (listBtn && gridBtn) {
+            listBtn.classList.toggle('active', view === 'list');
+            gridBtn.classList.toggle('active', view === 'grid');
+            listBtn.setAttribute('aria-pressed', view === 'list' ? 'true' : 'false');
+            gridBtn.setAttribute('aria-pressed', view === 'grid' ? 'true' : 'false');
+        }
+        var sel = document.getElementById('sortField');
+        if (sel && sel.value !== sort.field) sel.value = sort.field;
+        var dirText = document.getElementById('sortDirText');
+        if (dirText) dirText.textContent = sort.dir === 'asc' ? '正序' : '倒序';
+        var dirBtn = document.getElementById('btnSortDir');
+        if (dirBtn) {
+            dirBtn.setAttribute('title',
+                sort.dir === 'asc' ? '当前正序，点击切为倒序' : '当前倒序，点击切为正序');
+        }
+    }
+
+    function renderList() {
+        var l = state.listing;
+        if (!l) return;
+        syncTools();
+        if (!l.items || !l.items.length) {
+            listArea.innerHTML = SC.skeleton.empty(
+                l.path ? '这个文件夹还是空的，可以上传文件或新建子文件夹' : '还没有共享文件，点右上角「上传文件」，或把文件拖进来',
+                'bi-folder2-open');
+            return;
+        }
+        var items = sortedItems();
+        listArea.innerHTML = (view === 'grid') ? renderGrid(items) : renderTable(items);
+    }
+
+    /* ===================== 展示方式 / 排序 ===================== */
+
+    function setView(v) {
+        if (v !== 'grid' && v !== 'list') return;
+        if (view === v) return;
+        view = v;
+        savePrefs();
+        renderList();
+    }
+
+    /**
+     * 设置排序字段。
+     * @param field 字段名（SORT_FIELDS 之一）
+     * @param dir   显式方向；不传时：同字段 = 切换正反，换字段 = 用该字段的默认方向
+     */
+    function setSort(field, dir) {
+        if (SORT_FIELDS.indexOf(field) < 0) return;
+        if (dir === 'asc' || dir === 'desc') {
+            sort.dir = dir;
+        } else if (sort.field === field) {
+            sort.dir = (sort.dir === 'asc') ? 'desc' : 'asc';
+        } else {
+            // 换字段的默认方向：时间类先看最新的，名称 / 类型先看 A→Z
+            sort.dir = (field === 'createdAt' || field === 'modifiedAt') ? 'desc' : 'asc';
+        }
+        sort.field = field;
+        savePrefs();
+        renderList();
+    }
+
+    /* ===================== 数据 ===================== */
+
+    function errMessage(res) {
+        return res.json().then(function (j) {
+            return (j && (j.error || j.message)) || ('HTTP ' + res.status);
+        }).catch(function () { return 'HTTP ' + res.status; });
+    }
+
+    function load(path) {
+        setBooting(true);
+        return fetch(API + '/list?path=' + encodeURIComponent(path || ''), { headers: { 'Accept': 'application/json' } })
+            .then(function (res) {
+                if (!res.ok) return errMessage(res).then(function (m) { throw new Error(m); });
+                return res.json();
+            })
+            .then(function (data) {
+                state.listing = data;
+                state.path = data.path || '';
+                renderCrumbs();
+                renderHeader();
+                renderList();
+            })
+            .catch(function (e) {
+                listArea.innerHTML = SC.skeleton.error('加载失败：' + (e && e.message ? e.message : e));
+            })
+            .finally(function () { setBooting(false); });
+    }
+
+    /* ===================== 上传 ===================== */
+
+    function showProgress(on) {
+        progressWrap.classList.toggle('d-none', !on);
+        if (!on) progressBar.style.width = '0%';
+    }
+    function setProgress(pct) {
+        progressBar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+    }
+
+    function parseErr(xhr) {
+        try {
+            var j = JSON.parse(xhr.responseText);
+            return (j && (j.error || j.message)) || ('HTTP ' + xhr.status);
+        } catch (e) {
+            return 'HTTP ' + xhr.status;
+        }
+    }
+
+    /* 逐个上传：进度可以按「第几个文件」精确显示，失败也只影响那一个。
+       共享场景一次通常几个文件，串行的速度损失可以忽略。 */
+    function uploadFiles(files) {
+        var list = Array.prototype.slice.call(files || []).filter(function (f) { return f && f.name; });
+        if (!list.length) return;
+        var i = 0, okCount = 0, failed = [];
+        showProgress(true);
+        setProgress(0);
+
+        function next() {
+            if (i >= list.length) return finish();
+            var f = list[i++];
+            var fd = new FormData();
+            fd.append('path', state.path);
+            fd.append('files', f);
+
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', API + '/upload');
+            xhr.upload.onprogress = function (e) {
+                if (e.lengthComputable) {
+                    setProgress(((i - 1) + e.loaded / e.total) / list.length * 100);
+                }
+            };
+            xhr.onload = function () {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    okCount++;
+                } else {
+                    failed.push(f.name + '：' + parseErr(xhr));
+                }
+                setProgress(i / list.length * 100);
+                next();
+            };
+            xhr.onerror = function () {
+                failed.push(f.name + '：网络错误');
+                setProgress(i / list.length * 100);
+                next();
+            };
+            xhr.send(fd);
+        }
+
+        function finish() {
+            showProgress(false);
+            if (okCount) SC.toast.success('已上传 ' + okCount + ' 个文件');
+            if (failed.length) {
+                SC.toast.error(failed.slice(0, 3).join('；') + (failed.length > 3 ? ' …（共 ' + failed.length + ' 个失败）' : ''));
+            }
+            load(state.path);
+        }
+
+        next();
+    }
+
+    /* 拖拽：文件夹用 webkitGetAsEntry 判掉（浏览器不会把整个目录塞进 DataTransfer.files，
+       递归读取属于另一个量级的功能，这里先明确跳过而不是静默忽略）。 */
+    function filesFromDrop(dt) {
+        var out = [], skippedDir = 0;
+        var items = dt.items;
+        if (items && items.length) {
+            for (var i = 0; i < items.length; i++) {
+                var it = items[i];
+                if (it.kind !== 'file') continue;
+                var entry = it.webkitGetAsEntry ? it.webkitGetAsEntry() : null;
+                if (entry && entry.isDirectory) { skippedDir++; continue; }
+                var f = it.getAsFile();
+                if (f) out.push(f);
+            }
+        } else if (dt.files) {
+            out = Array.prototype.slice.call(dt.files);
+        }
+        return { files: out, skippedDir: skippedDir };
+    }
+
+    /* ===================== 操作 ===================== */
+
+    function enter(path) {
+        if (path === state.path) return;
+        load(path);
+    }
+
+    function removeItem(path, name, isDir) {
+        SC.confirm({
+            title: '删除' + (isDir === '1' ? '文件夹' : '文件'),
+            message: (isDir === '1'
+                ? '确定删除空文件夹「' + name + '」？'
+                : '确定删除「' + name + '」？删除后无法恢复。'),
+            confirmText: '删除',
+            danger: true
+        }).then(function (ok) {
+            if (!ok) return;
+            SC.api.post(API + '/delete', { path: path }).then(function () {
+                SC.toast.success('已删除');
+                load(state.path);
+            }).catch(function () {
+                // SC.api 已经弹过错误提示（比如「目录不为空」）
+            });
+        });
+    }
+
+    function mkdir() {
+        SC.prompt({
+            title: '新建文件夹',
+            message: '将在「' + (state.listing ? state.listing.name : '共享资源') + '」下创建',
+            placeholder: '文件夹名称'
+        }).then(function (name) {
+            if (!name) return;
+            var target = (state.path ? state.path + '/' : '') + name;
+            SC.api.post(API + '/mkdir', { path: target }).then(function () {
+                SC.toast.success('已创建文件夹');
+                load(state.path);
+            }).catch(function () { /* 错误提示已由 SC.api 统一处理 */ });
+        });
+    }
+
+    /* ===================== 事件 ===================== */
+
+    crumbsEl.addEventListener('click', function (e) {
+        var el = e.target.closest('[data-act="go"]');
+        if (!el) return;
+        e.preventDefault();
+        load(el.getAttribute('data-path') || '');
+    });
+
+    listArea.addEventListener('click', function (e) {
+        // 表头排序（只列表视图有）；必须排在 [data-act] 之前判断
+        var th = e.target.closest('th[data-sort]');
+        if (th) {
+            e.preventDefault();
+            setSort(th.getAttribute('data-sort'));
+            return;
+        }
+        var el = e.target.closest('[data-act]');
+        if (!el) return;
+        var act = el.getAttribute('data-act');
+        if (act === 'enter') {
+            e.preventDefault();
+            enter(el.getAttribute('data-path'));
+        } else if (act === 'del') {
+            e.preventDefault();
+            removeItem(el.getAttribute('data-path'), el.getAttribute('data-name'), el.getAttribute('data-dir'));
+        } else if (act === 'download') {
+            // 走浏览器原生下载（后端带 Content-Disposition: attachment），
+            // 不 fetch 成 Blob —— 大文件不必在内存里再过一遍。
+            e.preventDefault();
+            window.location.href = downloadUrl(el.getAttribute('data-path'));
+        }
+    });
+
+    document.getElementById('btnUpload').addEventListener('click', function () { fileInput.click(); });
+    document.getElementById('btnMkdir').addEventListener('click', mkdir);
+    document.getElementById('btnRefresh').addEventListener('click', function () { load(state.path); });
+
+    /* 展示方式：两个小图标，纯前端切换（不发请求，数据已在 state.listing 里） */
+    document.getElementById('btnViewList').addEventListener('click', function () { setView('list'); });
+    document.getElementById('btnViewGrid').addEventListener('click', function () { setView('grid'); });
+
+    /* 排序：下拉选字段 + 按钮切正反 */
+    document.getElementById('sortField').addEventListener('change', function () {
+        if (this.value === sort.field) return;   // 只是重新选了一遍同一个字段，方向别动
+        setSort(this.value);
+    });
+    document.getElementById('btnSortDir').addEventListener('click', function () {
+        setSort(sort.field);                     // 同字段 ⇒ 切换正序 / 倒序
+    });
+    fileInput.addEventListener('change', function () {
+        uploadFiles(fileInput.files);
+        fileInput.value = '';        // 允许连续上传同一个文件
+    });
+
+    ['dragenter', 'dragover'].forEach(function (ev) {
+        dropZone.addEventListener(ev, function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add('is-drag');
+        });
+    });
+    ['dragleave', 'dragend'].forEach(function (ev) {
+        dropZone.addEventListener(ev, function (e) {
+            // 拖到子元素上也会触发 dragleave，只有真正离开卡片才取消高亮
+            if (e.relatedTarget && dropZone.contains(e.relatedTarget)) return;
+            dropZone.classList.remove('is-drag');
+        });
+    });
+    dropZone.addEventListener('drop', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove('is-drag');
+        var r = filesFromDrop(e.dataTransfer || {});
+        if (r.skippedDir) SC.toast.warn('已忽略 ' + r.skippedDir + ' 个文件夹（暂不支持整目录上传）');
+        if (r.files.length) uploadFiles(r.files);
+    });
+    // 拖到页面其它位置时别让浏览器直接打开文件、把当前页顶掉
+    ['dragover', 'drop'].forEach(function (ev) {
+        window.addEventListener(ev, function (e) {
+            if (!dropZone.contains(e.target)) e.preventDefault();
+        });
+    });
+
+    /* ===================== 启动 ===================== */
+
+    loadPrefs();          // 展示方式 / 排序是「上次用过的那个」，先套上再拉数据
+    syncTools();
+
+    // 支持 ?path=a/b 直接进子目录（方便从别处链接过来）
+    load(SC.params().path || '');
+})();
+</script>
+</body>
+</html>

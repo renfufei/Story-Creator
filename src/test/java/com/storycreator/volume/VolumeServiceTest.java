@@ -264,4 +264,76 @@ class VolumeServiceTest {
         assertThat(service.volumeNumberByChapter(projectId))
                 .containsEntry(1, 1).containsEntry(5, 1).containsEntry(6, 2).containsEntry(8, 2);
     }
+
+    // ==================================================================
+    // resolveForChapter：生成前就要知道「这一章属于哪一卷」
+    // ==================================================================
+
+    @Test
+    void resolveForChapter_usesVolumeRangeForChapterNotWrittenYet() {
+        chapters(8);
+        volume(1, 1, 4);
+        // 用户手工把第 2 卷扩到 5-12：第 10 章还没写，公式会算成第 3 卷（(10-1)/4+1），必须是第 2 卷
+        volume(2, 5, 12);
+
+        var resolved = service.resolveForChapter(projectId, 10).orElseThrow();
+
+        assertThat(resolved.volumeNumber()).isEqualTo(2);
+        assertThat(resolved.chapterStart()).isEqualTo(5);
+        assertThat(resolved.chapterEnd()).isEqualTo(12);
+        assertThat(resolved.volumeId()).isNotNull();
+    }
+
+    @Test
+    void resolveForChapter_fallsBackToFormulaWhenRangeIsEmpty() {
+        chapters(4);
+        // 新建的空卷没有区间（0-0），此时只能按 chaptersPerVolume(=4) 推算
+        service.createVolume(projectId, "开篇之卷");
+
+        var resolved = service.resolveForChapter(projectId, 3).orElseThrow();
+
+        assertThat(resolved.volumeNumber()).isEqualTo(1);
+        assertThat(resolved.title()).isEqualTo("开篇之卷");
+    }
+
+    @Test
+    void resolveForChapter_clampsToLastVolumeWhenFormulaOverflows() {
+        chapters(8);
+        volume(1, 1, 4);
+        volume(2, 5, 8);
+
+        // 第 20 章：公式算出第 5 卷，实际只有 2 卷 —— 落到最后一卷，不能返回空
+        assertThat(service.resolveForChapter(projectId, 20).orElseThrow().volumeNumber()).isEqualTo(2);
+    }
+
+    @Test
+    void resolveForChapter_emptyWhenProjectHasNoVolumes() {
+        chapters(4);
+        assertThat(service.resolveForChapter(projectId, 1)).isEmpty();
+        assertThat(service.resolveForChapter(projectId, 0)).isEmpty();
+    }
+
+    @Test
+    void stampChapterVolume_writesVolumeIdWithoutEnablingBinding() {
+        chapters(8);
+        volume(1, 1, 4);
+        VolumeOutlineEntity realVol2 = volume(2, 5, 8);
+
+        var resolved = service.stampChapterVolume(projectId, 6).orElseThrow();
+
+        assertThat(resolved.volumeNumber()).isEqualTo(2);
+        assertThat(chapterRepository.findByProjectIdAndChapterNumber(projectId, 6).orElseThrow().getVolumeId())
+                .isEqualTo(realVol2.getId());
+        // 只留痕、不改开关：老项目的分组行为不能被生成流程悄悄改掉
+        assertThat(projectRepository.findById(projectId).orElseThrow().isVolumeBindingEnabled()).isFalse();
+    }
+
+    @Test
+    void stampChapterVolume_ignoresMissingChapter() {
+        chapters(4);
+        volume(1, 1, 4);
+
+        // 章节还没落库（例如生成失败）：解析照常返回，但不该抛异常
+        assertThat(service.stampChapterVolume(projectId, 99)).isPresent();
+    }
 }

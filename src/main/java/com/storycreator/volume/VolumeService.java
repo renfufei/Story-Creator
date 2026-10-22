@@ -6,6 +6,8 @@ import com.storycreator.persistence.entity.VolumeOutlineEntity;
 import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.VolumeOutlineRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +16,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -45,8 +48,21 @@ import java.util.Optional;
 @Service
 public class VolumeService {
 
+    private static final Logger log = LoggerFactory.getLogger(VolumeService.class);
+
     /** 自动创作分卷的兜底大小（project.chapters_per_volume 未设置时使用）。 */
     public static final int DEFAULT_CHAPTERS_PER_VOLUME = 10;
+
+    /**
+     * 一章所属的分卷（生成提示词、正文落库、阅读分组共用同一份解析结果）。
+     *
+     * <p>{@code chapterStart/chapterEnd} 是<b>卷记录上的区间</b>，可能为 0（该卷还没有任何章节），
+     * 调用方需要自行判断是否可用于展示。{@code arcSummary} 可能为空。</p>
+     */
+    public record ChapterVolume(Long volumeId, int volumeNumber, String title,
+                                int chapterStart, int chapterEnd,
+                                String arcName, String arcSummary) {
+    }
 
     private ChapterRepository chapterRepository;
     private VolumeOutlineRepository volumeOutlineRepository;
@@ -184,6 +200,107 @@ public class VolumeService {
      */
     public Optional<Integer> volumeNumberOf(Long projectId, int chapterNumber) {
         return Optional.ofNullable(volumeNumberByChapter(projectId).get(chapterNumber));
+    }
+
+    /**
+     * 解析「第 N 章属于哪一卷」，是<b>生成 / 落库 / 展示</b>共用的唯一口径。
+     *
+     * <p>与 {@link #volumeNumberOf} 的区别：本方法对<b>还没写出来的章节</b>也能给出答案
+     * （靠卷记录区间 + 整除公式兜底），所以可以直接喂给大模型，不必等正文先落库；
+     * 而且它带回卷标题/区间/弧线，一次查询满足提示词的全部需要。</p>
+     *
+     * <p>解析顺序（前面的命中就返回）：</p>
+     * <ol>
+     *   <li>显式绑定：开关打开且该章已有 {@code chapters.volume_id}（用户手工调整过）</li>
+     *   <li>卷记录区间：{@code chapter_start <= N <= chapter_end}（用户划定的真实区间）</li>
+     *   <li>整除公式推算出的卷号，且该卷确实存在</li>
+     *   <li>兜底落到最后一卷（宁可归错也不让章节没有归属）</li>
+     * </ol>
+     *
+     * @return 没有任何分卷记录时返回 empty —— 调用方按老逻辑（无分卷、平铺）处理
+     */
+    public Optional<ChapterVolume> resolveForChapter(Long projectId, int chapterNumber) {
+        if (chapterNumber <= 0) {
+            return Optional.empty();
+        }
+        List<VolumeOutlineEntity> volumes = volumeOutlineRepository.findByProjectIdOrderByVolumeNumber(projectId);
+        if (volumes.isEmpty()) {
+            return Optional.empty();
+        }
+        Map<Integer, VolumeOutlineEntity> byNumber = new LinkedHashMap<>();
+        Map<Long, Integer> numberById = new LinkedHashMap<>();
+        for (VolumeOutlineEntity v : volumes) {
+            byNumber.put(v.getVolumeNumber(), v);
+            numberById.put(v.getId(), v.getVolumeNumber());
+        }
+
+        // 1) 显式绑定优先（只在开关打开时才认，保住存量项目的旧行为）
+        if (isBindingEnabled(projectId)) {
+            Integer boundVolumeNumber = chapterRepository
+                    .findByProjectIdAndChapterNumber(projectId, chapterNumber)
+                    .map(ChapterEntity::getVolumeId)
+                    .map(numberById::get)
+                    .orElse(null);
+            if (boundVolumeNumber != null) {
+                return Optional.of(toChapterVolume(byNumber.get(boundVolumeNumber)));
+            }
+        }
+
+        // 2) 卷记录区间：用户划的区间才是真相，优先于整除公式
+        for (VolumeOutlineEntity v : volumes) {
+            int start = v.getChapterStart();
+            int end = v.getChapterEnd();
+            if (start > 0 && end >= start && chapterNumber >= start && chapterNumber <= end) {
+                return Optional.of(toChapterVolume(v));
+            }
+        }
+
+        // 3) 整除公式（自动创作的默认切卷方式），卷存在才认
+        int perVolume = projectRepository.findById(projectId)
+                .map(this::effectivePerVolume)
+                .orElse(DEFAULT_CHAPTERS_PER_VOLUME);
+        int computed = (chapterNumber - 1) / perVolume + 1;
+        VolumeOutlineEntity computedVolume = byNumber.get(computed);
+        if (computedVolume != null) {
+            return Optional.of(toChapterVolume(computedVolume));
+        }
+
+        // 4) 推算出的卷号已超出实际分卷数 —— 落到最后一卷，不让章节「没有卷」
+        return Optional.of(toChapterVolume(volumes.get(volumes.size() - 1)));
+    }
+
+    /**
+     * 把「这一章属于哪一卷」写进 {@code chapters.volume_id}（生成内容落地后调用）。
+     *
+     * <p>只写绑定、<b>不改 {@code volume_binding_enabled}</b>：开关代表「用户是否用过分卷管理」，
+     * 这里只是把生成时用到的卷留痕，老项目的分组行为不会因此改变。</p>
+     *
+     * @return 解析出的分卷（无分卷记录时 empty）
+     */
+    @Transactional
+    public Optional<ChapterVolume> stampChapterVolume(Long projectId, int chapterNumber) {
+        Optional<ChapterVolume> resolved = resolveForChapter(projectId, chapterNumber);
+        if (resolved.isEmpty() || resolved.get().volumeId() == null) {
+            return resolved;
+        }
+        Long volumeId = resolved.get().volumeId();
+        chapterRepository.findByProjectIdAndChapterNumber(projectId, chapterNumber).ifPresent(ch -> {
+            if (!Objects.equals(ch.getVolumeId(), volumeId)) {
+                ch.setVolumeId(volumeId);
+                chapterRepository.save(ch);
+                log.info("[P{}] 第{}章归入第{}卷（volumeId={}）", projectId, chapterNumber,
+                        resolved.get().volumeNumber(), volumeId);
+            }
+        });
+        return resolved;
+    }
+
+    private ChapterVolume toChapterVolume(VolumeOutlineEntity v) {
+        return new ChapterVolume(v.getId(), v.getVolumeNumber(),
+                v.getTitle() != null ? v.getTitle() : "",
+                v.getChapterStart(), v.getChapterEnd(),
+                v.getArcName() != null ? v.getArcName() : "",
+                v.getArcSummary() != null ? v.getArcSummary() : "");
     }
 
     // ------------------------------------------------------------------

@@ -1,26 +1,27 @@
 #!/usr/bin/env node
 /**
- * 单词匹配 · 【序列配对】册（2026-10-20，原「专题练习」）
+ * 单词匹配 · 首页两个练习入口（趣味配对 / 序列配对），2026-10-20
  *
- * 专题册 = 从 PEP 24 册里抽出来的**有序词群**（数字 / 序数词 / 星期 / 月份 / 季节 / 时间）。
- * 它和普通册唯一的玩法差别：
- *   **左列英文保持词库顺序，只打乱右列中文。**
- * 因为这类词的价值就在「按序列背下来」——左列一乱，练的就不是同一个东西了。
+ * 形态（与小程序 pages/index 页尾一致）：
+ *   · 检索首页底部两个入口各占**一行**，右侧一个【进入】，点一次直接进棋盘；
+ *   · 趣味配对 = 普通册（小学 / 初中 / 高中 / 大学）；
+ *   · 序列配对 = 专题册（PEP 里的有序词群：数字 / 序数词 / 星期 / 月份 / 季节 / 时间），
+ *     玩法差别只在发牌：**左列英文保持词库顺序，只打乱右列中文**；
+ *   · 两者起点同口径：该册第一个还没通关的关，全通关则从第 1 关重来（applyBook(restore)）。
  *
  * 实现落点：
  *   · 后端 WordMatchBank 额外加载 learn/topic-words.json（stage = 专题），切关逻辑完全复用；
  *   · 前端 buildCards 用 lockLeft = stageOf(bookId) === '专题' 决定左列是否洗牌；
- *   · 首页底部按 theme 现算出一组快捷卡（topicThemes），点了 enterTopic(theme)
- *     → 展开入口出一排 chips，点 chip 切册 + themeScope 收窄到该专题 → 进棋盘。
+ *   · 入口：enterFunPlay() / enterTopicBook() → 共用 enterBook(bookId) → applyBook(id, true)。
  *
  * 本脚本逐条守护：
- *   T1 【核心】首页只有一个【序列配对】入口（默认收起，展开才出专题 chips）
- *   T2 【核心】点「数字」进棋盘：左列严格 zero→five，右列中文被随机打乱
- *   T3 【核心】下一关：左列继续 six→eleven（顺序延续，不是重新洗过）
- *   T4 【核心】点「序数词」：左列 first→fifth（另一专题同样锁序）
- *   T5 【核心】重复进入同一专题 3 次，左列顺序**每次都不变**
- *   T6 【核心】普通册左列仍会被打乱（锁序只对专题生效，没有误伤全站）
- *   T7 320px：首页与棋盘都无横向溢出，卡片仍两列
+ *   T1 首页两个入口：各一行、右侧【进入】、**不再展开专题 chips**
+ *   T2 点【沉浸式】序列配对进入：第 1 关，左列 zero→five，右列中文被打乱
+ *   T3 下一关：左列继续 six→eleven（顺序延续）
+ *   T4 有学习记录时进入：直接落到第一个**没通关**的关（第 3 关 first→fifth）
+ *   T5 反复发牌：左列顺序每次都不变
+ *   T6 趣味配对入口：落到普通册，左列照样洗牌（锁序没误伤全站）
+ *   T7 320px：两个入口仍各一行、无横向溢出
  *   T8 全程无 JS 运行时异常
  *
  * ★ 自带静态服务器，不依赖 1888（它的静态资源处理已坏，见记忆 dev-workflow）。
@@ -162,7 +163,7 @@ const waitSettled = () => waitFor(async () => {
 });
 
 /** 真实鼠标点击（Alpine @click 需要真实事件流；element.click() 会绕过一些指针状态）
- *  先 scrollIntoView —— 窄屏下专题区块可能在首屏视口之外，坐标落到视口外时 CDP 点击不生效。 */
+ *  先 scrollIntoView —— 窄屏下入口可能在首屏视口之外，坐标落到视口外时 CDP 点击不生效。 */
 async function clickSel(selector) {
     const box = await evalJs(`(() => {
         const el = document.querySelector(${JSON.stringify(selector)});
@@ -184,7 +185,7 @@ async function clickSel(selector) {
     await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
 }
 
-/* 按卡片可见顺序读两列文案 */
+/* 按可见顺序读两列文案 + 首页两个入口 */
 const BOARD = `(() => {
     const txt = (sel) => Array.from(document.querySelectorAll(sel))
         .filter(el => el.getClientRects().length > 0)
@@ -199,33 +200,29 @@ const BOARD = `(() => {
         bookId: st ? st.bookId : null,
         theme: st ? (st.currentLevel ? st.currentLevel.theme : null) : null,
         levelIndex: st ? st.levelIndex : -1,
+        levelCount: st ? st.levels.length : -1,
         scopeTheme: st && st.themeScope ? st.themeScope.theme : null,
-        scopeLevels: st && st.themeScope ? st.themeScope.indexes.length : 0,
-        scopeText: (() => { const el = document.querySelector('.wm-scope-name'); return el ? el.innerText.trim() : null; })(),
-        /* 【序列配对】入口：默认只占一行，点开才出 chips */
-        entry: (() => {
-            const el = document.querySelector('#wm-topic-entry');
-            if (!vis(el)) return null;
-            const q = (sel) => { const e = el.querySelector(sel); return e ? (e.innerText || '').trim() : ''; };
-            return {
-                title: q('.wm-home-entry-title'),
-                desc: q('.wm-home-entry-desc'),
-                go: q('.wm-home-entry-go'),
-                h: Math.round(el.getBoundingClientRect().height)
-            };
-        })(),
-        chipsVisible: vis(document.querySelector('#wm-topic-chips')),
-        chipsOverflow: (() => {
-            const el = document.querySelector('#wm-topic-chips');
-            return el ? el.scrollWidth - el.clientWidth : -1;
-        })(),
-        topicCards: Array.from(document.querySelectorAll('.wm-home-chip'))
+        /* 首页两个入口：各一行，右侧【进入】 */
+        entries: Array.from(document.querySelectorAll('.wm-home-entry'))
             .filter(vis)
-            .map(el => ({
-                name: el.firstElementChild ? (el.firstElementChild.innerText || '').trim() : '',
-                meta: (el.querySelector('.wm-home-chip-meta') || {}).innerText || ''
-            })),
-        topicSectionVisible: vis(document.querySelector('#wm-home-topic')),
+            .map(el => {
+                const q = (sel) => { const e = el.querySelector(sel); return e ? (e.innerText || '').replace(/\\s+/g, ' ').trim() : ''; };
+                const de = el.querySelector('.wm-home-entry-desc');
+                return {
+                    id: el.id,
+                    title: q('.wm-home-entry-title'),
+                    desc: q('.wm-home-entry-desc'),
+                    go: q('.wm-home-entry-go'),
+                    icon: q('.wm-home-entry-icon'),
+                    h: Math.round(el.getBoundingClientRect().height),
+                    /* 副文案是否被裁掉（桌面是 nowrap+ellipsis ⇒ 比 scrollWidth；窄屏是两行 clamp ⇒ 比 scrollHeight） */
+                    descFits: de ? (de.scrollWidth <= de.clientWidth + 1 && de.scrollHeight <= de.clientHeight + 1) : true
+                };
+            }),
+        /* 专题 chips 已经取消：这两个数必须恒为 0 / false */
+        chipCount: document.querySelectorAll('.wm-home-chip').length,
+        chipsEl: !!document.querySelector('#wm-topic-chips'),
+        entriesVisible: vis(document.querySelector('#wm-home-entries')),
         keysL: st ? Array.from(st.leftCards).map(c => c.key) : [],
         keysR: st ? Array.from(st.rightCards).map(c => c.key) : [],
         alignedNow: st ? st.countAligned(Array.from(st.leftCards), Array.from(st.rightCards)) : -1,
@@ -236,6 +233,7 @@ const BOARD = `(() => {
 const board = async (ms = 260) => { await sleep(ms); return evalJs(BOARD); };
 
 const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+const entryOf = (s, id) => s.entries.find(e => e.id === id) || null;
 
 /** 右列中文被「真打乱」的判据：位置对得上的不超过 1 个（页面本来就有这个防对齐规则） */
 function alignedCount(leftEn, rightZh) {
@@ -246,36 +244,6 @@ function alignedCount(leftEn, rightZh) {
         if (zhOf[leftEn[i]] === rightZh[i]) n++;
     }
     return n;
-}
-
-/** 按索引点第 n 个专题 chip（chips 默认收起，点之前先确保入口是展开的） */
-async function clickTopicCard(idx) {
-    const open = await evalJs(`(() => {
-        const el = document.querySelector('#wm-topic-chips');
-        return !!el && el.getClientRects().length > 0;
-    })()`);
-    if (!open) { await clickSel('#wm-topic-entry'); await sleep(240); }
-
-    const box = await evalJs(`(() => {
-        const els = Array.from(document.querySelectorAll('.wm-home-chip'))
-            .filter(e => e.getClientRects().length > 0);
-        const el = els[${idx}];
-        if (!el) return null;
-        el.scrollIntoView({ block: 'center' });
-        const r = el.getBoundingClientRect();
-        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-    })()`);
-    if (!box) throw new Error('专题 chip #' + idx + ' 不存在或不可见');
-    await sleep(120);
-    const pt = await evalJs(`(() => {
-        const els = Array.from(document.querySelectorAll('.wm-home-chip'))
-            .filter(e => e.getClientRects().length > 0);
-        const r = els[${idx}].getBoundingClientRect();
-        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-    })()`);
-    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: pt.x, y: pt.y, button: 'none', clickCount: 0 });
-    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
-    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
 }
 
 /* ==================== 主流程 ==================== */
@@ -302,43 +270,46 @@ async function main() {
     await send('Runtime.enable');
     await send('Page.enable');
 
-    /* ---------- T1 首页专题入口（一行，默认收起） ---------- */
-    console.log('\n— T1 检索首页的【序列配对】入口 —');
+    /* ---------- T1 首页两个入口 ---------- */
+    console.log('\n— T1 检索首页的两个练习入口 —');
     await goto();
     check('页面 boot 完成', (await waitSettled()) === true);
     let s = await board(400);
-    check('【核心】首页出现【序列配对】入口', s.topicSectionVisible === true && !!s.entry);
-    check('【核心】入口标题 = 序列配对', s.entry && s.entry.title === '序列配对', s.entry && s.entry.title);
-    check('入口描述报口径与体量（英文按顺序 · 中文打乱 · 3 个专题 · 20 词）',
-        s.entry && s.entry.desc === '英文按顺序 · 中文打乱 · 3 个专题 · 20 词', s.entry && s.entry.desc);
-    check('【核心】默认收起：chips 一个都不渲染', s.chipsVisible === false && s.topicCards.length === 0,
-        'chips=' + s.chipsVisible + ' n=' + s.topicCards.length);
-    check('【核心】入口只占一行（高度 ≤ 60px，不再是半屏卡片墙）', s.entry && s.entry.h <= 60,
-        'h=' + (s.entry && s.entry.h));
+    const fun = entryOf(s, 'wm-fun-entry');
+    const topic = entryOf(s, 'wm-topic-entry');
+    check('【核心】首页底部出现两个入口（趣味配对 + 序列配对）',
+        s.entriesVisible === true && !!fun && !!topic, 'entries=' + s.entries.length);
+    check('【核心】入口标题 = 趣味配对 / 序列配对',
+        !!fun && !!topic && fun.title === '趣味配对' && topic.title === '序列配对',
+        [fun && fun.title, topic && topic.title].join(' | '));
+    check('右侧都有【进入】按钮',
+        !!fun && /^进入/.test(fun.go) && !!topic && /^进入/.test(topic.go),
+        [fun && fun.go, topic && topic.go].join(' | '));
+    check('【核心】趣味配对图标 = 小程序的 🎯（不是 Bootstrap 图标）',
+        !!fun && fun.icon === '🎯', fun && fun.icon);
+    check('趣味配对副文案报「册数 + 接着练哪册」',
+        !!fun && fun.desc.indexOf('册') >= 0 && fun.desc.indexOf('英汉两列点选配对') === 0, fun && fun.desc);
+    check('序列配对副文案报口径与体量（英文按顺序 · 中文打乱 · 3 个专题 · 20 词）',
+        !!topic && topic.desc === '英文按顺序 · 中文打乱 · 3 个专题 · 20 词', topic && topic.desc);
+    check('【核心】不再展开：chips 元素与专题面板都不存在',
+        s.chipCount === 0 && s.chipsEl === false, 'chip=' + s.chipCount + ' el=' + s.chipsEl);
+    check('【核心】两个入口各只占一行（高度 ≤ 60px）',
+        !!fun && fun.h <= 60 && !!topic && topic.h <= 60,
+        'fun=' + (fun && fun.h) + ' topic=' + (topic && topic.h));
     check('首页本身无横向溢出', s.docScrollW <= s.docClientW + 1, `scrollW=${s.docScrollW} clientW=${s.docClientW}`);
+    await evalJs(`(() => { const el = document.querySelector('#wm-home-entries');
+        if (el) el.scrollIntoView({ block: 'center' }); return true; })()`);
+    await sleep(200);
     await shot('topic-01-home');
 
-    /* 点入口展开 */
+    /* ---------- T2 点序列配对【进入】 ---------- */
+    console.log('\n— T2 点「序列配对 · 进入」：直接进第 1 关，左列锁序、右列打乱 —');
     await clickSel('#wm-topic-entry');
-    s = await board(300);
-    check('点入口展开：出现 3 个专题 chip', s.chipsVisible === true && s.topicCards.length === 3,
-        'n=' + s.topicCards.length);
-    check('chip 名称与顺序正确',
-        s.topicCards.map(c => c.name).join('|') === '数字|序数词|季节',
-        s.topicCards.map(c => c.name).join('|'));
-    check('chip 带「词数 · 关数」',
-        s.topicCards[0] && s.topicCards[0].meta.indexOf('12 词') >= 0 && s.topicCards[0].meta.indexOf('2 关') >= 0,
-        s.topicCards[0] && s.topicCards[0].meta);
-    check('右侧提示已变成「收起」', s.entry && s.entry.go === '收起', s.entry && s.entry.go);
-    await shot('topic-01b-home-open');
-
-    /* ---------- T2 点「数字」 ---------- */
-    console.log('\n— T2 点「数字」：左列锁序、右列打乱 —');
-    await clickTopicCard(0);
     await sleep(400);
     s = await board(300);
     check('【核心】已切进棋盘', s.view === 'play', 'view=' + s.view);
     check('【核心】进的是专题册', s.bookId === 'pep-topic', 'bookId=' + s.bookId);
+    check('【核心】零进度 ⇒ 从第 1 关开始（levelIndex=0）', s.levelIndex === 0, 'idx=' + s.levelIndex);
     check('【核心】左列严格 = zero→five（词库原顺序）',
         same(s.left, NUM1.map(p => p.en)), s.left.join(','));
     check('右列 6 个中文都在，只是换了位置',
@@ -347,9 +318,9 @@ async function main() {
     check('【核心】右列确实被打乱（同位正确 ≤ 1 个）', al <= 1,
         `aligned=${al} pageAligned=${s.alignedNow} L=${s.keysL.join('/')} R=${s.keysR.join('/')}`);
     check('【核心】右列顺序不等于原顺序', !same(s.right, NUM1.map(p => p.zh)), s.right.join(','));
-    check('分类练习作用域 = 该专题的 2 关', s.scopeLevels === 2, 'levels=' + s.scopeLevels);
-    check('状态条显示专题名「数字」', s.scopeText === '数字', 'text=' + s.scopeText);
+    check('整册连续练：不再按专题收窄作用域', s.scopeTheme === null, 'scope=' + s.scopeTheme);
     check('页头类别 = 数字', s.theme === '数字', 'theme=' + s.theme);
+    check('本册共 4 关（数字 ×2 + 序数词 + 季节）', s.levelCount === 4, 'n=' + s.levelCount);
     await shot('topic-02-number');
 
     /* ---------- T3 下一关 ---------- */
@@ -357,24 +328,33 @@ async function main() {
     await evalJs(`(() => { const r = document.querySelector('.wm-root');
         const d = window.Alpine.$data(r); d.nextLevel(); return true; })()`);
     s = await board(320);
-    check('已到第 2 关（本册第 2 关）', s.levelIndex === 1, 'idx=' + s.levelIndex);
+    check('已到第 2 关', s.levelIndex === 1, 'idx=' + s.levelIndex);
     check('【核心】左列 = six→eleven（延续上一关）',
         same(s.left, NUM2.map(p => p.en)), s.left.join(','));
 
-    /* ---------- T4 另一个专题 ---------- */
-    console.log('\n— T4 点「序数词」：另一专题同样锁序 —');
-    /* goSearch 回检索页（exit() 是退出到 /learn，会把页面导航走） */
-    await evalJs(`(() => { const r = document.querySelector('.wm-root');
-        const d = window.Alpine.$data(r); d.goSearch(); return true; })()`);
-    await sleep(300);
-    await clickTopicCard(1);
-    s = await board(400);
-    check('【核心】左列 = first→fifth', same(s.left, ORD1.map(p => p.en)), s.left.join(','));
-    check('状态条换成「序数词」', s.scopeText === '序数词', 'text=' + s.scopeText);
-    check('作用域只有 1 关', s.scopeLevels === 1, 'levels=' + s.scopeLevels);
+    /* ---------- T4 有学习记录：落到第一个没通关的关 ---------- */
+    console.log('\n— T4 有学习记录时进入：直接从第一个没通关的关开始 —');
+    /* 指纹在 boot 时已经写好；这时往进度里塞「前两关通关」，reload 后指纹不变 ⇒ 不会被清。
+       （ensureDataVersion 只在指纹变化时清进度，所以必须在页面跑过一遍之后再写。） */
+    await evalJs(`(() => {
+        const sig = localStorage.getItem('word_match_data_sig_v1');
+        localStorage.setItem('word_match_progress_v2', JSON.stringify({ 'pep-topic': [0, 1] }));
+        return sig;
+    })()`);
+    await goto();
+    check('reload 后 boot 完成', (await waitSettled()) === true);
+    await clickSel('#wm-topic-entry');
+    await sleep(400);
+    s = await board(320);
+    check('【核心】直接从第 3 关开始（前两关已通关）', s.levelIndex === 2, 'idx=' + s.levelIndex);
+    check('【核心】左列 = first→fifth（该关仍在专题册里锁序）',
+        same(s.left, ORD1.map(p => p.en)), s.left.join(','));
+    check('页头类别换成「序数词」', s.theme === '序数词', 'theme=' + s.theme);
+    check('进度记录没有被词库指纹误清（仍能看到上次的关）',
+        (await evalJs(`JSON.stringify(JSON.parse(localStorage.getItem('word_match_progress_v2') || '{}')['pep-topic'] || [])`)) === '[0,1]');
 
-    /* ---------- T5 反复进入：顺序稳定 ---------- */
-    console.log('\n— T5 同一专题连进 3 次：左列每次都是原顺序 —');
+    /* ---------- T5 反复发牌：顺序稳定 ---------- */
+    console.log('\n— T5 同一关连发 3 次：左列每次都是原顺序 —');
     let stable = true, detail = [];
     for (let i = 0; i < 3; i++) {
         await evalJs(`(() => { const d = window.Alpine.$data(document.querySelector('.wm-root'));
@@ -385,19 +365,45 @@ async function main() {
     }
     check('【核心】重复发牌不会把左列打乱', stable, detail[0] + ' / ' + detail[2]);
 
-    /* ---------- T6 普通册仍打乱 ---------- */
-    console.log('\n— T6 普通册：左列照样洗牌（锁序只对专题生效）—');
+    /* ---------- T6 趣味配对入口 ---------- */
+    console.log('\n— T6 点「趣味配对 · 进入」：落到普通册，左列照样洗牌 —');
+    /* goSearch 回检索页（exit() 是退出到 /learn，会把页面导航走） */
+    await evalJs(`(() => { const d = window.Alpine.$data(document.querySelector('.wm-root'));
+        d.goSearch(); return true; })()`);
+    await sleep(300);
+    s = await board(240);
+    check('已回到检索首页', s.view === 'search', 'view=' + s.view);
+    const funNow = entryOf(s, 'wm-fun-entry');
+    check('上次停在专题册时，趣味配对副文案不报「接着练」（两入口不串册）',
+        !!funNow && funNow.desc.indexOf('接着练') < 0, funNow && funNow.desc);
+
+    await clickSel('#wm-fun-entry');
+    await sleep(400);
+    s = await board(300);
+    check('【核心】已切进棋盘', s.view === 'play', 'view=' + s.view);
+    check('【核心】进的是普通册（不是专题册）', s.bookId === 'pep-3a', 'bookId=' + s.bookId);
+    check('【核心】普通册第 1 关', s.levelIndex === 0, 'idx=' + s.levelIndex);
+
+    /* 普通册左列必须仍被洗牌（锁序只对专题生效） */
     let shuffledAtLeastOnce = false, seen = [];
     for (let i = 0; i < 8; i++) {
         await evalJs(`(() => { const d = window.Alpine.$data(document.querySelector('.wm-root'));
-            d.applyBook('pep-3a', false); d.view = 'play'; return true; })()`);
-        await sleep(150);
+            d.loadLevel(); return true; })()`);
+        await sleep(120);
         const b = await board(120);
         seen.push(b.left.join(','));
         if (!same(b.left, NORMAL.map(p => p.en))) { shuffledAtLeastOnce = true; break; }
     }
-    check('【核心】普通册左列会被打乱（至少 8 次里有一次不是原顺序）', shuffledAtLeastOnce,
-        seen[0]);
+    check('【核心】普通册左列会被打乱（至少 8 次里有一次不是原顺序）', shuffledAtLeastOnce, seen[0]);
+
+    /* 回到检索页，点趣味配对应当「接着练」这一册 */
+    await evalJs(`(() => { const d = window.Alpine.$data(document.querySelector('.wm-root'));
+        d.goSearch(); return true; })()`);
+    s = await board(240);
+    const funCur = entryOf(s, 'wm-fun-entry');
+    check('普通册成为当前册后，趣味配对副文案报「接着练「三年级上册」」',
+        !!funCur && funCur.desc.indexOf('接着练「三年级上册」') > 0, funCur && funCur.desc);
+    await shot('topic-03-home-fun');
 
     /* ---------- T7 320px ---------- */
     console.log('\n— T7 320px 窄屏 —');
@@ -405,36 +411,32 @@ async function main() {
     await waitSettled();
     s = await board(400);
     check('窄屏首页无横向溢出', s.docScrollW <= s.docClientW + 1, `scrollW=${s.docScrollW} clientW=${s.docClientW}`);
-    check('窄屏入口行仍只是一行（高度 ≤ 64px）', s.entry && s.entry.h <= 64, 'h=' + (s.entry && s.entry.h));
+    check('窄屏两个入口仍各一行（高度 ≤ 76px：副文案允许折两行）',
+        s.entries.length === 2 && s.entries.every(e => e.h <= 76),
+        s.entries.map(e => e.id + ':' + e.h).join(' '));
+    check('窄屏副文案没有被截断（折两行装得下「接着练哪册」）',
+        s.entries.every(e => e.descFits === true),
+        s.entries.map(e => e.id + '=' + e.desc + ' fit=' + e.descFits).join(' | '));
+    check('窄屏右侧【进入】没有被挤掉',
+        s.entries.every(e => /^进入/.test(e.go)), s.entries.map(e => e.go).join(' | '));
     /* 截图前滚到入口：320×568 一屏装不下整页，不滚的话截图里看不到入口 */
-    await evalJs(`(() => { const el = document.querySelector('#wm-topic-entry');
+    await evalJs(`(() => { const el = document.querySelector('#wm-home-entries');
         if (el) el.scrollIntoView({ block: 'center' }); return true; })()`);
     await sleep(200);
-    await shot('topic-03-mobile-home');
+    await shot('topic-04-mobile-home');
 
-    /* 展开后 chips 必须折行，不能把页面撑宽 */
+    /* 进度仍是 [0,1] ⇒ 窄屏进入同样落到第 3 关（first→fifth） */
     await clickSel('#wm-topic-entry');
-    s = await board(320);
-    check('窄屏展开后 chips 出现且自动折行（自身无横向溢出）',
-        s.chipsVisible === true && s.topicCards.length === 3 && s.chipsOverflow <= 1,
-        `n=${s.topicCards.length} overflow=${s.chipsOverflow}`);
-    check('窄屏展开后整页仍无横向溢出', s.docScrollW <= s.docClientW + 1,
-        `scrollW=${s.docScrollW} clientW=${s.docClientW}`);
-    await evalJs(`(() => { const el = document.querySelector('#wm-topic-chips');
-        if (el) el.scrollIntoView({ block: 'center' }); return true; })()`);
-    await sleep(200);
-    await shot('topic-03b-mobile-home-open');
-
-    await clickTopicCard(0);
     s = await board(400);
     check('窄屏棋盘无横向溢出', s.docScrollW <= s.docClientW + 1, `scrollW=${s.docScrollW} clientW=${s.docClientW}`);
-    check('窄屏下左列仍是 zero→five', same(s.left, NUM1.map(p => p.en)), s.left.join(','));
-    await shot('topic-04-mobile-board');
+    check('窄屏下仍从第一个没通关的关开始、左列锁序',
+        s.levelIndex === 2 && same(s.left, ORD1.map(p => p.en)), `idx=${s.levelIndex} L=${s.left.join(',')}`);
+    await shot('topic-05-mobile-board');
 
     /* ---------- T8 ---------- */
     console.log('\n— T8 全程 —');
     check('无 JS 运行时异常', runtimeErrors.length === 0, runtimeErrors.slice(0, 2).join(' | '));
-    check('两次加载各请求一次词库（共 2 次，没有重复拉）', dataRequests === 2, 'requests=' + dataRequests);
+    check('每次加载各请求一次词库（共 3 次，没有重复拉）', dataRequests === 3, 'requests=' + dataRequests);
 
     const failed = results.filter(x => !x.ok).length;
     console.log(`\n===== ${results.length - failed}/${results.length} 通过 =====`);

@@ -211,6 +211,7 @@ const ROWS_JS = `(() => {
         const del = panel ? Array.from(panel.querySelectorAll('.sc-cmp-del')).map(txt) : [];
         const add = panel ? Array.from(panel.querySelectorAll('.sc-cmp-add')).map(txt) : [];
         const hl = panel ? panel.querySelector('input[type=checkbox]') : null;
+        const sync = panel ? panel.querySelector('.sc-cmp-sync input') : null;
         const box = el.getBoundingClientRect();
         const pbox = panel ? panel.getBoundingClientRect() : null;
         return {
@@ -230,6 +231,9 @@ const ROWS_JS = `(() => {
             delSample: del.slice(0, 1).join(''),
             addSample: add.slice(0, 1).join(''),
             highlight: hl ? hl.checked : null,
+            syncOn: sync ? sync.checked : null,
+            anchorCount: panes.map(p => Array.from(p.querySelectorAll('[data-anc]'))
+                .filter(s => Number(s.getAttribute('data-anc')) >= 0).length),
             gap: (panel && pbox) ? Math.round(pbox.top - (el.querySelector('div').getBoundingClientRect().bottom)) : null,
             rowTop: Math.round(box.top),
             rowBottom: Math.round(box.bottom),
@@ -283,6 +287,42 @@ async function toggleHighlight(n) {
         hl.checked = !hl.checked;
         hl.dispatchEvent(new Event('change', { bubbles: true }));
         return hl.checked;
+    })()`);
+}
+
+/* 「同步滚动」开关（面板上第二个开关，包在 .sc-cmp-sync 里） */
+async function toggleSync(n) {
+    return evalJs(`(() => {
+        const el = Array.from(document.querySelectorAll('.list-group-item'))
+            .find(e => /^第${n}章/.test((e.innerText || '').trim()));
+        const box = el && el.querySelector('.sc-cmp-sync input');
+        if (!box) return false;
+        box.checked = !box.checked;
+        box.dispatchEvent(new Event('change', { bubbles: true }));
+        return box.checked;
+    })()`);
+}
+
+/* 某栏「压在顶边上的锚点句」：两侧同号才算同一句，off 是它离栏顶的像素 */
+async function topSentence(n, idx) {
+    return evalJs(`(() => {
+        const el = Array.from(document.querySelectorAll('.list-group-item'))
+            .find(e => /^第${n}章/.test((e.innerText || '').trim()));
+        const panel = el && el.querySelector('.sc-cmp-preview');
+        const p = panel ? Array.from(panel.querySelectorAll('.sc-cmp-pane'))[${idx}] : null;
+        if (!p) return null;
+        const pr = p.getBoundingClientRect();
+        const hit = Array.from(p.querySelectorAll('[data-anc]'))
+            .filter(s => Number(s.getAttribute('data-anc')) >= 0)
+            .find(s => s.getBoundingClientRect().bottom > pr.top + 1);
+        if (!hit) return null;
+        const max = p.scrollHeight - p.clientHeight;
+        return {
+            k: hit.getAttribute('data-anc'),
+            text: (hit.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 14),
+            off: Math.round(hit.getBoundingClientRect().top - pr.top),
+            ratio: max > 0 ? +(p.scrollTop / max).toFixed(3) : 0
+        };
     })()`);
 }
 
@@ -466,22 +506,63 @@ async function main() {
     check('收起第 1 章后只剩第 2 章面板',
         r.filter(x => x.open).length === 1 && r.find(x => x.n === 2).open === true && !r.find(x => x.n === 1).open);
 
-    /* ---------- P6 滚动同步 ---------- */
-    console.log('\n— P6 左右两栏滚动同步 —');
+    /* ---------- P6 滚动同步（按同一句话对齐） ---------- */
+    console.log('\n— P6 左右两栏滚动同步（内容对齐） —');
+    let r2 = (await rows()).find(x => x.n === 2);
+    check('两栏都渲染出锚点句（同一句两侧同号，同步靠它定位）',
+        r2.anchorCount.length === 2 && r2.anchorCount[0] >= 30
+        && r2.anchorCount[0] === r2.anchorCount[1], JSON.stringify(r2.anchorCount));
+    check('【核心】面板上默认开着「同步滚动」', r2.syncOn === true, 'sync=' + r2.syncOn);
+
     let sc = await scrollPane(2, 0, 0.5);
     await sleep(250);
     sc = await scrollPane(2, 0, 0.5);
     await sleep(250);
     check('两栏都有可滚动空间（同步前提）', sc.selfMax > 0 && sc.otherMax > 0,
         `self=${sc.selfMax} other=${sc.otherMax}`);
-    check('【核心】滚左栏到 50% → 右栏同步到相同占比（±2%）',
-        Math.abs(sc.self - sc.other) <= 0.02, `left=${sc.self} right=${sc.other}`);
+
+    const lt = await topSentence(2, 0);
+    const rt = await topSentence(2, 1);
+    check('【核心】滚左栏到一半 → 右栏把**同一句话**摆到同样的位置',
+        !!lt && !!rt && lt.k === rt.k && Math.abs(lt.off - rt.off) <= 4,
+        `left=k${lt && lt.k}「${lt && lt.text}」@${lt && lt.off}  right=k${rt && rt.k}「${rt && rt.text}」@${rt && rt.off}`);
+    check('【核心】两侧占比并不相等（按内容对齐，不是按百分比硬套）',
+        !!lt && !!rt && Math.abs(lt.ratio - rt.ratio) > 0.02,
+        `left=${lt && lt.ratio} right=${rt && rt.ratio}`);
+
+    await scrollPane(2, 1, 0.4);
+    await sleep(350);
+    const lt2 = await topSentence(2, 0);
+    const rt2 = await topSentence(2, 1);
+    check('【核心】反向同样按内容对齐（滚右栏 → 左栏跟到同一句）',
+        !!lt2 && !!rt2 && lt2.k === rt2.k && Math.abs(lt2.off - rt2.off) <= 4,
+        `left=k${lt2 && lt2.k}@${lt2 && lt2.off} right=k${rt2 && rt2.k}@${rt2 && rt2.off}`);
+
     let sc2 = await scrollPane(2, 1, 1);
     await sleep(300);
     sc2 = await scrollPane(2, 1, 1);
     await sleep(250);
     check('【核心】滚右栏到底 → 左栏也到底（反向同样同步）',
         sc2.self >= 0.98 && sc2.other >= 0.98, `left=${sc2.other} right=${sc2.self}`);
+
+    /* 关掉【同步滚动】→ 各滚各的；打开 → 立刻恢复对齐 */
+    await scrollPane(2, 0, 0);
+    await sleep(300);
+    check('关掉【同步滚动】开关', (await toggleSync(2)) === false);
+    await sleep(300);
+    sc = await scrollPane(2, 0, 0.3);
+    await sleep(350);
+    check('【核心】关掉后各滚各的（右栏留在原地）',
+        sc.self > 0.25 && sc.other <= 0.02, `left=${sc.self} right=${sc.other}`);
+    check('重新打开【同步滚动】', (await toggleSync(2)) === true);
+    await sleep(300);
+    await scrollPane(2, 0, 0.55);
+    await sleep(350);
+    const lt3 = await topSentence(2, 0);
+    const rt3 = await topSentence(2, 1);
+    check('重新打开后立刻恢复内容对齐',
+        !!lt3 && !!rt3 && lt3.k === rt3.k && Math.abs(lt3.off - rt3.off) <= 4,
+        `left=k${lt3 && lt3.k}@${lt3 && lt3.off} right=k${rt3 && rt3.k}@${rt3 && rt3.off}`);
     await shot('03-scroll-sync');
 
     /* ---------- P7 校对页 ---------- */
@@ -508,8 +589,13 @@ async function main() {
     await sleep(300);
     psc = await scrollPane(1, 0, 0.5);
     await sleep(250);
-    check('【核心】校对页两栏也同步滚动',
-        Math.abs(psc.self - psc.other) <= 0.02, `left=${psc.self} right=${psc.other}`);
+    const plt = await topSentence(1, 0);
+    const prt = await topSentence(1, 1);
+    check('【核心】校对页两栏也按同一句话同步（不是按百分比）',
+        !!plt && !!prt && plt.k === prt.k && Math.abs(plt.off - prt.off) <= 4,
+        `left=k${plt && plt.k}「${plt && plt.text}」@${plt && plt.off}  right=k${prt && prt.k}「${prt && prt.text}」@${prt && prt.off}`);
+    check('校对页两栏也有「同步滚动」开关且默认开',
+        (await rows()).find(x => x.n === 1).syncOn === true);
     await shot('04-proofreading-open');
 
     /* ---------- P8 390px ---------- */

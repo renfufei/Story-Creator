@@ -66,6 +66,7 @@ window.loadPromptsData = function () {
         <div class="btn-group" role="group">
             <button type="button" class="btn btn-sm btn-outline-secondary active" data-workflow="all">所有流程</button>
             <button type="button" class="btn btn-sm btn-outline-primary" data-workflow="STANDARD">标准</button>
+            <button type="button" class="btn btn-sm btn-outline-success" data-workflow="EXPANSION">扩写</button>
             <button type="button" class="btn btn-sm btn-outline-secondary" data-workflow="IMAGE">图像</button>
             <button type="button" class="btn btn-sm btn-outline-warning" data-workflow="SIDE_STORY">番外</button>
             <button type="button" class="btn btn-sm btn-outline-info" data-workflow="REVERSE">逆向</button>
@@ -246,6 +247,7 @@ window.loadPromptsData = function () {
 
     function tagClass(name) {
         if (name === 'STANDARD') return 'bg-primary';
+        if (name === 'EXPANSION') return 'bg-success';
         if (name === 'SIDE_STORY') return 'bg-warning text-dark';
         if (name === 'REVERSE') return 'bg-info text-dark';
         return 'bg-secondary';

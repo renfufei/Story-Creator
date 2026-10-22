@@ -5,6 +5,7 @@ import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.GuidanceLibraryStep;
 import com.storycreator.core.domain.MaterialCategory;
 import com.storycreator.core.domain.ModelType;
+import com.storycreator.core.domain.PromptSubStep;
 import com.storycreator.core.domain.StepStatus;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.persistence.entity.*;
@@ -258,11 +259,12 @@ class PageRenderingIntegrationTest {
                 .contains("id=\"site-nav\"")
                 .contains("/js/common.js")
                 .contains("/js/nav.js")
-                .as("首页应为四个模块的卡片墙（故事创作 / 教学 / 聊天 / 设置）")
+                .as("首页应为五个模块的卡片墙（故事创作 / 教学 / 聊天 / 设置 / 资源共享）")
                 .contains("故事创作")
                 .contains(">教学</h5>")
                 .contains(">聊天</h5>")
                 .contains(">设置</h5>")
+                .contains(">资源共享</h5>")
                 .as("首页只做模块分发，本身不再渲染项目列表")
                 .contains("href=\"/projects\"")
                 .doesNotContain("id=\"projectContainer\"");
@@ -504,7 +506,19 @@ class PageRenderingIntegrationTest {
                 .contains("--reader-sidebar-bg")
                 .contains("--reader-sidebar-muted")
                 .contains("mixHex(p.bg, p.fg")
-                .contains("class=\"btn btn-sm w-100 bg-reset-btn\"");
+                .contains("class=\"btn btn-sm w-100 bg-reset-btn\"")
+                .as("章节标题旁不再挂「标记为扩写」按钮（扩写备选统一在 /projects/{id}/expansion 管理）")
+                .doesNotContain("toggleExpansionMark")
+                .doesNotContain("标记为扩写备选")
+                .as("章节 TTS 是三态按钮组（播放/暂停/停止），不再是单个播放即停止的按钮")
+                .contains("tts-chapter-actions")
+                .contains("pauseChapter")
+                .contains("resumeChapter")
+                .contains("stopChapter")
+                .doesNotContain("toggleChapter(")
+                .as("一章播完等 3 秒再自动接下一章")
+                .contains("onTtsChapterEnded")
+                .contains("3000");
     }
 
     @Test
@@ -608,6 +622,10 @@ class PageRenderingIntegrationTest {
                 .contains("syncPreviewScroll(")
                 .contains("润色前后对照")
                 .contains("差异高亮")
+                .as("两个开关并排：差异高亮 + 同步滚动（同步靠 :data-anc 锚点句对齐）")
+                .contains("同步滚动")
+                .contains("sc-cmp-sync")
+                .contains(":data-anc=\"op.k\"")
                 .doesNotContain("split-view-container");
 
         ResponseEntity<String> proof = restTemplate.getForEntity(
@@ -620,16 +638,24 @@ class PageRenderingIntegrationTest {
                 .contains("sc-cmp-pane")
                 .contains("syncPreviewScroll(")
                 .contains("精修前后对照")
+                .contains("同步滚动")
+                .contains("sc-cmp-sync")
+                .contains(":data-anc=\"op.k\"")
                 .doesNotContain("split-view-container");
 
         ResponseEntity<String> shared = restTemplate.getForEntity(url("/js/compare-panel.js"), String.class);
         assertThat(shared.getStatusCode()).as("共享面板脚本应可直接访问").isEqualTo(HttpStatus.OK);
         assertThat(shared.getBody())
-                .as("共享脚本要提供句级差异、增量文案与滚动同步三个能力")
+                .as("共享脚本要提供句级差异、增量文案与按内容对齐的同步滚动")
                 .contains("preparePair")
                 .contains("deltaText")
                 .contains("syncScroll")
-                .contains("sc-cmp-pane");
+                .contains("sc-cmp-pane")
+                .as("同步滚动按锚点句对齐，不是按百分比")
+                .contains("measureAnchors")
+                .contains("anchorTarget")
+                .as("开关归一：面板上没有【同步滚动】输入框时按「开」处理")
+                .contains("sc-cmp-sync");
     }
 
     /** 按步骤拆分的数据接口返回合法引导 JSON，且 currentStep 与路由一致。 */
@@ -774,6 +800,59 @@ class PageRenderingIntegrationTest {
                 .contains("sc-skel")
                 .as("骨架收得晚一点：等章节数据铺完再置 booting=false")
                 .contains("applyBootstrap");
+        assertThat(response.getBody())
+                .as("扩写队列必须限高滚动（约 12 行）：队列标记几十章时，"
+                        + "以前会把下面的「全部章节」推到几屏之外，想回队列点个「确认」得先滚过整条队列")
+                .contains("exp-queue-scroll")
+                .contains("--exp-queue-rows: 12")
+                .contains("--exp-queue-maxvh")
+                .contains("position: sticky")
+                .contains("exp-queue-hint")
+                // 提示条的阈值与 CSS 的行数必须对得上，否则「列表内可滚动」会误报/漏报
+                .contains("queueVisibleRows");
+        assertThat(response.getBody())
+                .as("队列按分卷分组 + 可折叠：与下方「全部章节」同一套卷划分（queueVolumes 复用 "
+                        + "groupedVolumes），卷头吸顶，折叠时连卷内的预览对比一起收起")
+                .contains("queueVolumes")
+                .contains("exp-queue-vol-head")
+                .contains("toggleQueueVolume")
+                .contains("collapseCompareInVolume")
+                .contains("toggleAllQueueVolumes")
+                .contains("isQueueVolumeExpanded");
+        assertThat(response.getBody())
+                .as("★ 有预览面板打开时队列必须换成 .exp-queue-flow（max-height:none）："
+                        + "「队列小窗」和「面板内左右两栏」两个滚动容器套在一起时，"
+                        + "在面板里滚到底会接力把队列滚走，右侧还并排两条滚动条，面板下半截也被裁掉")
+                .contains("exp-queue-flow")
+                .contains("anyCompareOpen")
+                .contains("max-height: none");
+        assertThat(response.getBody())
+                .as("扩写指导：只读态限高 20 行（420px）内滚、编辑框默认 20 行，"
+                        + "并给【展开】按内容自动撑高 —— 指导写长了会把下面的队列整块推走，"
+                        + "但压到 8 行（原 10rem）又太窄，读一段几百字的指导得来回滚")
+                .contains("exp-guidance-view")
+                .contains("--exp-guidance-rows: 20")
+                .contains("max-height: calc(var(--exp-guidance-rows, 20)")
+                .contains("exp-guidance-edit")
+                .contains("rows=\"20\"")
+                .contains("toggleGuidanceExpand")
+                .contains("syncGuidanceHeight");
+        assertThat(response.getBody())
+                .as("单章扩写完成后前端必须**自己**翻状态：后端每章落库后补发 chapter-saved，"
+                        + "前端据此把该行从「扩写中」变「已扩写」并刷新字数。"
+                        + "以前只靠整批 done 触发整页刷新，几十章要跑一小时，期间一直显示「扩写中」")
+                .contains("chapter-saved")
+                // 页面里是正则 /\[\[EXPAND:SAVED:(\d+)…/，字面量带转义，别断言带方括号的原串
+                .contains("EXPAND:SAVED:")
+                .contains("resyncChapters");
+        assertThat(response.getBody())
+                .as("轮询兜底：服务器计数与本地行对不上时要补拉章节状态 "
+                        + "（原来直接把服务器计数写进徽标、行状态不动 ⇒「5 已扩写」和满屏「扩写中」并存）")
+                .contains("applyChapterStates")
+                .contains("localExpanded !== data.expandedCount");
+        assertThat(response.getBody())
+                .as("整批结束不再整页 reload（会把实时日志、勾选、展开的分卷和对照面板一起丢掉）")
+                .doesNotContain("window.location.reload()");
     }
 
     @Test
@@ -809,10 +888,15 @@ class PageRenderingIntegrationTest {
                 // 面板与润色/精修页共用一套（.sc-cmp*，实现在 js/compare-panel.js）
                 .contains("sc-cmp-pane")
                 .contains("/js/compare-panel.js")
-                // 左右两栏滚动同步
+                // 左右两栏按「同一句话」同步滚动（不是按百分比）：:data-anc 就是锚点号
                 .contains("syncCompareScroll(")
+                .contains(":data-anc=\"op.k\"")
                 .contains("扩写前（原文）")
                 .contains("差异高亮")
+                .as("差异高亮旁边还有【同步滚动】开关，两个都默认开")
+                .contains("同步滚动")
+                .contains("sc-cmp-sync")
+                .contains("cmpSyncScroll")
                 .as("按钮文案已从「对比」改成「预览」").contains("'收起' : '预览'");
     }
 
@@ -1353,6 +1437,10 @@ class PageRenderingIntegrationTest {
                 .contains("sc-skel")
                 .contains("data-booting")
                 .doesNotContain("xhr.open(");
+        assertThat(response.getBody())
+                .as("流程筛选应有【扩写】按钮，且 CHAPTER_EXPANSION 的标签配色已登记")
+                .contains("data-workflow=\"EXPANSION\"")
+                .contains("name === 'EXPANSION'");
     }
 
     @Test
@@ -1367,6 +1455,45 @@ class PageRenderingIntegrationTest {
                 .contains("\"subSteps\"")
                 .contains("stepDisplayName")
                 .contains("workflowTagNamesCsv");
+    }
+
+    /**
+     * 回归：同一步骤存在**多条**默认模板时 /prompts/data 必须正常返回。
+     * <p>真实库里就是这种情况 —— CHAPTER_WRITING 同时有「写作核心」和「章节扩写」两条默认。
+     * 老实现按 step 用 {@code Optional} 查默认，碰上两条直接抛 {@code NonUniqueResultException}，
+     * 整页 500；同样的查询还用在正文生成上，写作流程会跟着一起崩。
+     */
+    @Test
+    void promptsData_toleratesMultipleDefaultsForSameStep() {
+        PromptTemplateEntity mainDefault = new PromptTemplateEntity();
+        mainDefault.setStep(WorkflowStep.CHAPTER_WRITING);
+        mainDefault.setSubStep(PromptSubStep.CHAPTER_WRITING_PRIMARY);
+        mainDefault.setName("__probe_writing_default__");
+        mainDefault.setTemplate("probe 正文 {{content}}");
+        mainDefault.setDefault(true);
+
+        PromptTemplateEntity expansionDefault = new PromptTemplateEntity();
+        expansionDefault.setStep(WorkflowStep.CHAPTER_WRITING);
+        expansionDefault.setSubStep(PromptSubStep.CHAPTER_EXPANSION);
+        expansionDefault.setName("__probe_expansion_default__");
+        expansionDefault.setTemplate("probe 扩写 {{content}}");
+        expansionDefault.setDefault(true);
+
+        List<Long> ids = transactionTemplate.execute(st -> List.of(
+                promptTemplateRepository.save(mainDefault).getId(),
+                promptTemplateRepository.save(expansionDefault).getId()));
+        try {
+            ResponseEntity<String> response = restTemplate.getForEntity(url("/prompts/data"), String.class);
+            assertThat(response.getStatusCode())
+                    .as("同一步骤多条默认模板时 /prompts/data 仍应 200")
+                    .isEqualTo(HttpStatus.OK);
+            assertThat(response.getBody())
+                    .as("两条自定义默认都应出现在列表里")
+                    .contains("__probe_writing_default__")
+                    .contains("__probe_expansion_default__");
+        } finally {
+            transactionTemplate.executeWithoutResult(st -> ids.forEach(promptTemplateRepository::deleteById));
+        }
     }
 
     /**
@@ -1393,6 +1520,31 @@ class PageRenderingIntegrationTest {
         assertThat(response.getBody())
                 .as("/prompts/data 应下发【逆向】标签的展示名")
                 .contains("\"displayName\":\"逆向\"");
+    }
+
+    /**
+     * 章节扩写（CHAPTER_EXPANSION）原先没有登记流程标签，
+     * /prompts 页面的【流程】列显示为空 —— 它不属于 auto-run 标准流程，独享【扩写】标签。
+     */
+    @Test
+    void promptsData_chapterExpansionCarriesExpansionWorkflowTag() throws Exception {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/prompts/data"), String.class);
+        assertThat(response.getStatusCode()).as("/prompts/data 应返回 200").isEqualTo(HttpStatus.OK);
+
+        var root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(response.getBody());
+        int expansionCount = 0;
+        for (var t : root.get("templates")) {
+            if (!"CHAPTER_EXPANSION".equals(t.path("subStep").asText(""))) continue;
+            expansionCount++;
+            assertThat(t.path("workflowTagNamesCsv").asText())
+                    .as("章节扩写模板应带 EXPANSION 流程标签（否则【流程】列为空）")
+                    .contains("EXPANSION");
+        }
+        assertThat(expansionCount).as("应存在章节扩写模板").isGreaterThan(0);
+
+        assertThat(response.getBody())
+                .as("/prompts/data 应下发【扩写】标签的展示名")
+                .contains("\"displayName\":\"扩写\"");
     }
 
     @Test
@@ -2200,6 +2352,36 @@ class PageRenderingIntegrationTest {
     }
 
     @Test
+    void chatMessages_haveSelectAndCopyMenu() {
+        ResponseEntity<String> page = restTemplate.getForEntity(url("/chat"), String.class);
+        assertThat(page.getBody())
+                .as("每条消息（用户输入和模型返回）旁边都要有「⋯」：点开是【全选】【复制】")
+                .contains("msg-line")
+                .contains("msg-more")
+                .contains("msg-menu")
+                .contains("data-msg-key")
+                .contains("openMsgMenu")
+                .contains("selectMsg")
+                .contains("copyMsg")
+                .contains("全选")
+                .contains("复制");
+        assertThat(page.getBody())
+                .as("菜单必须 fixed 定位：消息区是 overflow:auto，absolute 的浮层会被裁掉")
+                .contains(".msg-menu {")
+                .contains("min-width: 7.5rem")
+                .contains("position: fixed;");
+        assertThat(page.getBody())
+                .as("点另一个图标的 @click.stop 不能丢：否则 Alpine 的 .outside 会把刚打开的菜单立刻关掉")
+                .contains("@click.stop=\"openMsgMenu(msg, $event)\"")
+                .contains("@click.outside=\"closeMsgMenu()\"");
+        assertThat(page.getBody())
+                .as("剪贴板要有退路：非安全上下文（http 内网 IP）没有 navigator.clipboard")
+                .contains("navigator.clipboard")
+                .contains("legacyCopy")
+                .contains("execCommand");
+    }
+
+    @Test
     void chatLayout_hasMobileDrawer() {
         ResponseEntity<String> page = restTemplate.getForEntity(url("/chat"), String.class);
         assertThat(page.getBody())
@@ -2423,20 +2605,27 @@ class PageRenderingIntegrationTest {
                         + "的发牌必须**左列英文保持词库顺序、只打乱中文** —— 这类词的价值就在按序列背，"
                         + "左列一乱练的就不是同一个东西了；锁序只对 stage=专题 生效，别误伤普通册")
                 .contains("TOPIC_STAGE")
-                .contains("wm-home-topic")
+                .contains("wm-home-entries")
                 .contains("topicThemes")
-                .contains("enterTopic")
+                .contains("enterTopicBook")
                 .contains("stageOf(this.bookId) === TOPIC_STAGE")
                 .contains("lockLeft")
                 .contains("英文按顺序 · 中文打乱");
         assertThat(response.getBody())
-                .as("首页【序列配对】入口只占一行（原来铺 6 张卡占了小半屏）："
-                        + "默认收起，点开才用 chips 露出各专题 —— 别再把卡片墙塞回检索页")
+                .as("首页底部的两个练习入口（与小程序 pages/index 页尾对齐）：趣味配对 + 序列配对，"
+                        + "各占一行、右侧一个【进入】，点一次直接进棋盘 —— 起点是该册第一个没通关的关，"
+                        + "全通关则从第 1 关重来；别再展开专题 chips 做二次选择（那会把检索页拉长半屏）")
                 .contains("wm-home-entry")
-                .contains("序列配对")
-                .contains("topicOpen")
+                .contains("wm-fun-entry")
+                .contains("wm-topic-entry")
+                .contains("wm-home-entry-emoji")   // 趣味配对图标 = 小程序同款 🎯
+                .contains("🎯")
+                .contains("enterFunPlay")
+                .contains("enterTopicBook")
+                .contains("funSummary")
                 .contains("topicSummary")
-                .contains("wm-home-chip");
+                .doesNotContain("wm-home-chip")
+                .doesNotContain("topicOpen");
         assertThat(response.getBody())
                 .as("移动端浮动胶囊按钮必须是白底，且**连 hover/active/focus 的文字色一起钉死**："
                         + "真机点完会留下粘滞 :hover，Bootstrap 的 btn-outline-secondary:hover "
@@ -2606,6 +2795,100 @@ class PageRenderingIntegrationTest {
                 // 只看真实的 class 属性：注释里提了一句「别改回 col-md-4」，
                 // 直接 doesNotContain("col-md-4") 会把那句注释也判成违例
                 .doesNotContain("class=\"col-md-4\"");
+    }
+
+    // ==================== 数独 ====================
+
+    @Test
+    void learnSudoku_rendersSuccessfully() {
+        ResponseEntity<String> response = restTemplate.getForEntity(
+                url("/learn/sudoku"), String.class);
+        assertStaticPage(response, "learn-sudoku", "window.__sudoku");
+        assertNoSyncXhr(response.getBody(), "learn-sudoku");
+
+        assertThat(response.getBody())
+                .as("数独页应自包含：棋盘 / 数字键盘 / 工具条 三件套，且没有任何 /data 依赖"
+                        + "（题目现场生成，不该多一次白屏等待）")
+                .contains("id=\"sdBoard\"")
+                .contains("id=\"sdPad\"")
+                .contains("id=\"sdTools\"")
+                .contains("sd-cell")
+                .contains("sd-key")
+                .contains("sudoku_save_v2")
+                .doesNotContain("/learn/sudoku/data");
+
+        assertThat(response.getBody())
+                .as("★ 唯一解是硬约束：挖空时必须「数到 2 个解才停」，"
+                        + "只判断「有没有解」会发出多解的题 —— 玩家填出另一套合法答案却判错")
+                .contains("countSolutions")
+                .contains("countSolutions(puzzle, 2, deadline)")
+                .contains("fill: function (grid, deadline)");
+
+        assertThat(response.getBody())
+                .as("尺寸与规则：3/5/7 是素数、切不出等宽宫格 ⇒ 只有拉丁方规则；"
+                        + "4/6/8/9 才有宫（6 是 2 行 3 列、8 是 2 行 4 列，不是方宫）")
+                .contains("var BOX = { 4: [2, 2], 6: [2, 3], 8: [2, 4], 9: [3, 3] }")
+                .contains("拉丁方")
+                .contains("MINI_GIVENS");
+
+        assertThat(response.getBody())
+                .as("移动端键盘固定贴底（fixed 而不是 sticky：sticky 会停在正文中间），"
+                        + "正文要留出等高的 padding-bottom，否则最后一行被键盘盖住")
+                .contains("env(safe-area-inset-bottom")
+                .contains("padding-bottom: 8.4rem");
+
+        assertThat(response.getBody())
+                .as("尺寸选择是下拉面板（2026-10-21 从 7 个平铺 chip 改过来）："
+                        + "常玩只露 3×3 / 6×6，其余折叠进【更多尺寸】，"
+                        + "按钮上写的就是上次选的尺寸，最近用过的排在面板最前")
+                .contains("id=\"sdSizeBtn\"")
+                .contains("id=\"sdSizePop\"")
+                .contains("id=\"sdCommon\"")
+                .contains("id=\"sdMoreList\"")
+                .contains("var COMMON_N = [3, 6]")
+                .contains("recent: [], teachSeen: false")
+                .contains("function recentList()")
+                // 旧的平铺 chip 必须彻底消失，否则下拉与平铺会同时出现
+                .doesNotContain("sd-chip");
+
+        assertThat(response.getBody())
+                .as("教学关卡：固定 4×4 唯一解题目 + 6 步推演（数空格 → 列排除 → 换宫看），"
+                        + "教学盘独立于主棋盘；教学期间主局计时必须暂停，"
+                        + "否则玩家在看讲解也在被计时")
+                .contains("id=\"sdTeach\"")
+                .contains("id=\"sdTeachBoard\"")
+                .contains("var TEACH_PUZZLE = '1.3.' + '...2' + '.1..' + '.32.'")
+                .contains("var TEACH_STEPS = [")
+                .contains("数空格")
+                .contains("state.paused = true")
+                .contains("!state.running || state.paused || document.hidden || state.solved")
+                // 写死的教学题也要现场验一遍唯一解，不能自相矛盾
+                .contains("教学题不是唯一解");
+
+        assertThat(response.getBody())
+                .as("提示次数按「空格数 × 难度系数」分配（2026-10-21 从固定无限次改过来）："
+                        + "格子越多、难度越高给得越多；小盘按尺寸保底（3×3 按比例算是 0 次），"
+                        + "上限卡在空格数的一半，否则提示多到能把整盘填完")
+                .contains("var HINT_RATE = { easy: 0.09, normal: 0.14, hard: 0.17 }")
+                .contains("var HINT_FLOOR = { 3: 1, 4: 1, 5: 2, 6: 2, 7: 2, 8: 3, 9: 3 }")
+                .contains("function hintQuota(n, diffKey, givens)")
+                .contains("state.hintTotal = hintQuota(")
+                .contains("本局 ' + state.hintTotal + ' 次提示已用完")
+                .contains("id=\"sdHintBadge\"")
+                // 额度不进存档，读档时按题目重算 —— 旧存档没有这个字段，
+                // 而且旧版本的提示是无上限的，可能已经超过新额度
+                .contains("state.hints = Math.min(state.hintTotal");
+    }
+
+    @Test
+    void learnIndex_linksSudoku() {
+        ResponseEntity<String> response = restTemplate.getForEntity(url("/learn"), String.class);
+        assertThat(response.getBody())
+                .as("教学首页应有数独卡：第 7 张，强调色 indigo，图标不能用乘法口诀那张同款")
+                .contains("/learn/sudoku")
+                .contains("数独")
+                .contains("data-accent=\"indigo\"")
+                .contains("bi-grid-3x3\"");
     }
 
     // ==================== 近义词 / 反义词匹配 ====================
@@ -2879,7 +3162,11 @@ class PageRenderingIntegrationTest {
                 .contains("人物与称谓")           // 高中已按「跨学段统一语义域」重分类
                 .doesNotContain("\"theme\":\"Unit 1\"")  // 原先是课本单元 Unit 1~5，已退役
                 .contains("astronomy")
-                .contains("天文学");
+                .contains("天文学")
+                .contains("pep-topic")          // 第 25 册：序列配对（stage=专题）
+                .contains("亲人关系")             // 亲属称谓按辈分排（左列锁序才讲得通）
+                .contains("grandfather")
+                .contains("granddaughter");
     }
 
     @Test

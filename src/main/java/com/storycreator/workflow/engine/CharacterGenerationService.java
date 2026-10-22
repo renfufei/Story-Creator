@@ -191,15 +191,12 @@ public class CharacterGenerationService {
     }
 
     public Flux<String> refineAllCharacters(Long projectId) {
-        // Check project status
+        // 启动点判一次项目状态（已完本 / 已废弃不再允许改角色卡）
         ProjectEntity proj = projectRepository.findById(projectId).orElse(null);
-        if (proj != null && proj.getStatus() != null) {
-            if (proj.getStatus() == com.storycreator.core.domain.ProjectStatus.COMPLETED) {
-                return Flux.error(new IllegalStateException("项目状态为「已完本」，无法进行AI生成"));
-            }
-            if (proj.getStatus() == com.storycreator.core.domain.ProjectStatus.ABANDONED) {
-                return Flux.error(new IllegalStateException("项目状态为「已废弃」，无法进行AI生成"));
-            }
+        String denyMessage = proj == null ? null
+                : com.storycreator.core.service.ProjectWriteGuard.denyMessage(proj.getStatus(), "进行AI生成");
+        if (denyMessage != null) {
+            return Flux.error(new IllegalStateException(denyMessage));
         }
 
         List<CharacterEntity> allCards = characterRepository

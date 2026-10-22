@@ -545,11 +545,17 @@
                                                                           x-text="previewDeltaText(polishPreviews[ch.chapterNumber])"></span>
                                                                 </div>
                                                             </div>
-                                                            <div class="d-flex align-items-center gap-2">
+                                                            <div class="d-flex flex-wrap align-items-center gap-2">
                                                                 <div class="form-check form-switch mb-0" x-show="polishEditingChapter !== ch.chapterNumber">
                                                                     <input class="form-check-input" type="checkbox" :id="'polishHl' + ch.chapterNumber"
                                                                            x-model="polishPreviews[ch.chapterNumber].highlight">
                                                                     <label class="form-check-label small" :for="'polishHl' + ch.chapterNumber">差异高亮</label>
+                                                                </div>
+                                                                <!-- .sc-cmp-sync 的 input 就是「同步滚动」开关，js/compare-panel.js 直接读它 -->
+                                                                <div class="form-check form-switch mb-0 sc-cmp-sync" x-show="polishEditingChapter !== ch.chapterNumber">
+                                                                    <input class="form-check-input" type="checkbox" :id="'polishSync' + ch.chapterNumber"
+                                                                           x-model="polishPreviews[ch.chapterNumber].syncScroll">
+                                                                    <label class="form-check-label small" :for="'polishSync' + ch.chapterNumber">同步滚动</label>
                                                                 </div>
                                                                 <button type="button" class="btn btn-sm btn-outline-primary"
                                                                         @click="beginPolishEdit(ch.chapterNumber)" :disabled="fullAutoRunning"
@@ -568,13 +574,10 @@
                                                                     <span>原稿</span>
                                                                     <span class="text-muted fw-normal" x-text="polishPreviews[ch.chapterNumber].beforeCount + ' 字'"></span>
                                                                 </div>
+                                                                <!-- 逐句 span 一律渲染：`:data-anc` 是左右对齐锚点（同一句同号），
+                                                                     同步滚动靠它定位；高亮开关只控制上不上色 -->
                                                                 <div class="sc-cmp-pane" @scroll="syncPreviewScroll($event)">
-                                                                    <template x-if="polishPreviews[ch.chapterNumber].highlight">
-                                                                        <div><template x-for="(op, i) in polishPreviews[ch.chapterNumber].opsBefore" :key="'pb' + i"><span :class="diffClass(op.t)" x-text="op.s"></span></template></div>
-                                                                    </template>
-                                                                    <template x-if="!polishPreviews[ch.chapterNumber].highlight">
-                                                                        <div x-text="polishPreviews[ch.chapterNumber].beforeText"></div>
-                                                                    </template>
+                                                                    <div><template x-for="(op, i) in polishPreviews[ch.chapterNumber].opsBefore" :key="'pb' + i"><span :class="diffClass(op.t, polishPreviews[ch.chapterNumber].highlight)" :data-anc="op.k" x-text="op.s"></span></template></div>
                                                                 </div>
                                                             </div>
                                                             <div class="col-12 col-lg-6">
@@ -583,12 +586,7 @@
                                                                     <span class="text-muted fw-normal" x-text="polishPreviews[ch.chapterNumber].afterCount + ' 字'"></span>
                                                                 </div>
                                                                 <div class="sc-cmp-pane" @scroll="syncPreviewScroll($event)">
-                                                                    <template x-if="polishPreviews[ch.chapterNumber].highlight">
-                                                                        <div><template x-for="(op, i) in polishPreviews[ch.chapterNumber].opsAfter" :key="'pa' + i"><span :class="diffClass(op.t)" x-text="op.s"></span></template></div>
-                                                                    </template>
-                                                                    <template x-if="!polishPreviews[ch.chapterNumber].highlight">
-                                                                        <div x-text="polishPreviews[ch.chapterNumber].afterText"></div>
-                                                                    </template>
+                                                                    <div><template x-for="(op, i) in polishPreviews[ch.chapterNumber].opsAfter" :key="'pa' + i"><span :class="diffClass(op.t, polishPreviews[ch.chapterNumber].highlight)" :data-anc="op.k" x-text="op.s"></span></template></div>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -764,11 +762,17 @@
                                                   x-text="previewDeltaText(polishPreviews[ch.chapterNumber])"></span>
                                         </div>
                                     </div>
-                                    <div class="d-flex align-items-center gap-2">
+                                    <div class="d-flex flex-wrap align-items-center gap-2">
                                         <div class="form-check form-switch mb-0" x-show="polishEditingChapter !== ch.chapterNumber">
                                             <input class="form-check-input" type="checkbox" :id="'polishHl' + ch.chapterNumber"
                                                    x-model="polishPreviews[ch.chapterNumber].highlight">
                                             <label class="form-check-label small" :for="'polishHl' + ch.chapterNumber">差异高亮</label>
+                                        </div>
+                                        <!-- .sc-cmp-sync 的 input 就是「同步滚动」开关，js/compare-panel.js 直接读它 -->
+                                        <div class="form-check form-switch mb-0 sc-cmp-sync" x-show="polishEditingChapter !== ch.chapterNumber">
+                                            <input class="form-check-input" type="checkbox" :id="'polishSync' + ch.chapterNumber"
+                                                   x-model="polishPreviews[ch.chapterNumber].syncScroll">
+                                            <label class="form-check-label small" :for="'polishSync' + ch.chapterNumber">同步滚动</label>
                                         </div>
                                         <button type="button" class="btn btn-sm btn-outline-primary"
                                                 @click="beginPolishEdit(ch.chapterNumber)" :disabled="fullAutoRunning"
@@ -788,12 +792,7 @@
                                             <span class="text-muted fw-normal" x-text="polishPreviews[ch.chapterNumber].beforeCount + ' 字'"></span>
                                         </div>
                                         <div class="sc-cmp-pane" @scroll="syncPreviewScroll($event)">
-                                            <template x-if="polishPreviews[ch.chapterNumber].highlight">
-                                                <div><template x-for="(op, i) in polishPreviews[ch.chapterNumber].opsBefore" :key="'pb' + i"><span :class="diffClass(op.t)" x-text="op.s"></span></template></div>
-                                            </template>
-                                            <template x-if="!polishPreviews[ch.chapterNumber].highlight">
-                                                <div x-text="polishPreviews[ch.chapterNumber].beforeText"></div>
-                                            </template>
+                                            <div><template x-for="(op, i) in polishPreviews[ch.chapterNumber].opsBefore" :key="'pb' + i"><span :class="diffClass(op.t, polishPreviews[ch.chapterNumber].highlight)" :data-anc="op.k" x-text="op.s"></span></template></div>
                                         </div>
                                     </div>
                                     <div class="col-12 col-lg-6">
@@ -802,12 +801,7 @@
                                             <span class="text-muted fw-normal" x-text="polishPreviews[ch.chapterNumber].afterCount + ' 字'"></span>
                                         </div>
                                         <div class="sc-cmp-pane" @scroll="syncPreviewScroll($event)">
-                                            <template x-if="polishPreviews[ch.chapterNumber].highlight">
-                                                <div><template x-for="(op, i) in polishPreviews[ch.chapterNumber].opsAfter" :key="'pa' + i"><span :class="diffClass(op.t)" x-text="op.s"></span></template></div>
-                                            </template>
-                                            <template x-if="!polishPreviews[ch.chapterNumber].highlight">
-                                                <div x-text="polishPreviews[ch.chapterNumber].afterText"></div>
-                                            </template>
+                                            <div><template x-for="(op, i) in polishPreviews[ch.chapterNumber].opsAfter" :key="'pa' + i"><span :class="diffClass(op.t, polishPreviews[ch.chapterNumber].highlight)" :data-anc="op.k" x-text="op.s"></span></template></div>
                                         </div>
                                     </div>
                                 </div>

@@ -11,6 +11,7 @@ import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.core.port.ai.AiRequest;
 import com.storycreator.persistence.entity.*;
 import com.storycreator.persistence.repository.*;
+import com.storycreator.volume.VolumeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -40,6 +41,12 @@ public class OutlineGenerationService {
     private AiUsageTracker aiUsageTracker;
     private AutoRunStepConfigRepository autoRunStepConfigRepository;
     private WorldFacetElaborationService worldFacetElaborationService;
+    private VolumeService volumeService;
+
+    @Autowired
+    public void setVolumeService(VolumeService volumeService) {
+        this.volumeService = volumeService;
+    }
 
     @Autowired
     public void setProjectRepository(ProjectRepository projectRepository) {
@@ -401,11 +408,9 @@ public class OutlineGenerationService {
                 .map(sg -> "\n\n【创作指导】\n" + sg.getGuidance() + "\n请在生成时参考以上指导意见。")
                 .orElse("");
 
-        List<VolumeRange> volumes = computeVolumes(totalChapters, project.getChaptersPerVolume());
-        VolumeRange vol = volumes.stream()
-                .filter(v -> chapterNumber >= v.chapterStart() && chapterNumber <= v.chapterEnd())
-                .findFirst()
-                .orElse(new VolumeRange(1, 1, totalChapters));
+        // 这一章属于哪一卷：以现有分卷记录为准（用户可能调整过区间），公式只兜底。
+        // 旧实现一律按 chaptersPerVolume 整除推算，重算单章大纲时会把章节挂到不存在的卷号上。
+        VolumeRange vol = resolveVolumeRange(projectId, chapterNumber, totalChapters, project.getChaptersPerVolume());
 
         String volumeArc = volumeOutlineRepository.findByProjectIdAndVolumeNumber(projectId, vol.volumeNumber())
                 .map(VolumeOutlineEntity::getArcSummary)
@@ -527,11 +532,7 @@ public class OutlineGenerationService {
                 .map(sg -> "\n\n【创作指导】\n" + sg.getGuidance() + "\n请在生成时参考以上指导意见。")
                 .orElse("");
 
-        List<VolumeRange> volumes = computeVolumes(totalChapters, project.getChaptersPerVolume());
-        VolumeRange vol = volumes.stream()
-                .filter(v -> chapterNumber >= v.chapterStart() && chapterNumber <= v.chapterEnd())
-                .findFirst()
-                .orElse(new VolumeRange(1, 1, totalChapters));
+        VolumeRange vol = resolveVolumeRange(projectId, chapterNumber, totalChapters, project.getChaptersPerVolume());
 
         String volumeArc = volumeOutlineRepository.findByProjectIdAndVolumeNumber(projectId, vol.volumeNumber())
                 .map(VolumeOutlineEntity::getArcSummary).orElse("");
@@ -597,10 +598,7 @@ public class OutlineGenerationService {
         baseContext.setTotalChapters(totalChapters);
 
         List<VolumeRange> volumes = computeVolumes(totalChapters, project.getChaptersPerVolume());
-        VolumeRange vol = volumes.stream()
-                .filter(v -> chapterNumber >= v.chapterStart() && chapterNumber <= v.chapterEnd())
-                .findFirst()
-                .orElse(new VolumeRange(1, 1, totalChapters));
+        VolumeRange vol = resolveVolumeRange(projectId, chapterNumber, totalChapters, project.getChaptersPerVolume());
 
         String volumeArc = volumeOutlineRepository.findByProjectIdAndVolumeNumber(projectId, vol.volumeNumber())
                 .map(VolumeOutlineEntity::getArcSummary).orElse("");
@@ -728,6 +726,7 @@ public class OutlineGenerationService {
                 .maxTokens(2048)
                 .temperature(0.75)
                 .build();
+        request.applyScope(projectId, 0, vol.volumeNumber(), volumeTitleOf(projectId, vol.volumeNumber()));
         applyResolvedConfig(request, resolved);
 
         return resolved.provider().streamText(request);
@@ -819,6 +818,8 @@ public class OutlineGenerationService {
                 .maxTokens(1536)
                 .temperature(0.7)
                 .build();
+        // 卷归属是「调用参数」，不进提示词：内容接受/落库时按它确定分卷，不必再靠章号推算
+        request.applyScope(projectId, chapterNum, vol.volumeNumber(), volumeTitleOf(projectId, vol.volumeNumber()));
         applyResolvedConfig(request, resolved);
 
         return resolved.provider().streamText(request);
@@ -842,6 +843,8 @@ public class OutlineGenerationService {
 
         Genre genre = baseContext.getGenre();
         String template = promptRegistry.getSubStepTemplate(WorkflowStep.OUTLINE_GENERATION, PromptSubStep.CHAPTER_OUTLINE_REFINE, genre);
+        VolumeRange currentVol = ctx.getCurrentVolume();
+        int volumeNumber = currentVol != null ? currentVol.volumeNumber() : 0;
         Map<String, String> vars = Map.ofEntries(
                 Map.entry("title", baseContext.getTitle() != null ? baseContext.getTitle() : ""),
                 Map.entry("genre", genre != null ? genre.getDisplayName() : ""),
@@ -863,6 +866,8 @@ public class OutlineGenerationService {
                 .maxTokens(1536)
                 .temperature(0.65)
                 .build();
+        request.applyScope(projectId, chapterNum, volumeNumber,
+                volumeNumber > 0 ? volumeTitleOf(projectId, volumeNumber) : "");
         applyResolvedConfig(request, resolved);
 
         return resolved.provider().streamText(request);
@@ -1092,6 +1097,7 @@ public class OutlineGenerationService {
                 .maxTokens(2048)
                 .temperature(0.8)
                 .build();
+        request.applyScope(projectId, 0, vol.volumeNumber(), volumeTitleOf(projectId, vol.volumeNumber()));
         applyResolvedConfig(request, resolved);
 
         return resolved.provider().streamText(request);
@@ -1238,6 +1244,39 @@ public class OutlineGenerationService {
                 .map(StoryOutlineEntity::getContent)
                 .filter(c -> c != null && !c.isBlank())
                 .orElse("");
+    }
+
+    /** 卷标题（没有卷记录时返回空串，提示词里会省略）。 */
+    private String volumeTitleOf(Long projectId, int volumeNumber) {
+        return volumeOutlineRepository.findByProjectIdAndVolumeNumber(projectId, volumeNumber)
+                .map(VolumeOutlineEntity::getTitle)
+                .orElse("");
+    }
+
+    /**
+     * 解析「这一章属于哪一卷」并折算成 {@link VolumeRange}。
+     *
+     * <p>优先用现有分卷记录（{@link VolumeService#resolveForChapter}：手工绑定 → 卷区间 → 公式兜底），
+     * 这样单章重算/预览和正式全量生成对同一章会得到同一个卷号；
+     * 空卷（区间 0-0）没有可用区间时退回公式区间，仅用于提示词展示。</p>
+     */
+    private VolumeRange resolveVolumeRange(Long projectId, int chapterNumber, int totalChapters, int perVolume) {
+        VolumeService.ChapterVolume cv = volumeService.resolveForChapter(projectId, chapterNumber).orElse(null);
+        if (cv == null) {
+            return computeVolumes(totalChapters, perVolume).stream()
+                    .filter(v -> chapterNumber >= v.chapterStart() && chapterNumber <= v.chapterEnd())
+                    .findFirst()
+                    .orElse(new VolumeRange(1, 1, totalChapters));
+        }
+        int start = cv.chapterStart();
+        int end = cv.chapterEnd();
+        if (start > 0 && end >= start) {
+            return new VolumeRange(cv.volumeNumber(), start, end);
+        }
+        return computeVolumes(totalChapters, perVolume).stream()
+                .filter(v -> v.volumeNumber() == cv.volumeNumber())
+                .findFirst()
+                .orElse(new VolumeRange(cv.volumeNumber(), chapterNumber, chapterNumber));
     }
 
     // --- Persistence helpers ---

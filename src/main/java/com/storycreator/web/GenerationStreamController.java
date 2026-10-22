@@ -2,12 +2,16 @@ package com.storycreator.web;
 
 import com.storycreator.core.domain.StepStatus;
 import com.storycreator.core.domain.WorkflowStep;
+import com.storycreator.core.service.ProjectWriteGuard;
+import com.storycreator.persistence.entity.ProjectEntity;
+import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.WorkflowStateRepository;
 import com.storycreator.workflow.background.BackgroundGenerationService;
 import com.storycreator.workflow.background.BackgroundGenerationService.GenerationTask;
 import com.storycreator.workflow.engine.WorkflowEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -28,6 +32,7 @@ public class GenerationStreamController {
     private final BackgroundGenerationService bgService;
     private final WorkflowStateRepository workflowStateRepository;
     private final WorkflowEngine workflowEngine;
+    private ProjectRepository projectRepository;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     public GenerationStreamController(BackgroundGenerationService bgService,
@@ -38,12 +43,27 @@ public class GenerationStreamController {
         this.workflowEngine = workflowEngine;
     }
 
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
+        this.projectRepository = projectRepository;
+    }
+
     @PostMapping("/start")
     public ResponseEntity<Map<String, String>> start(@PathVariable Long projectId,
                                                       @RequestParam WorkflowStep step,
                                                       @RequestParam(defaultValue = "0") int chapter,
                                                       @RequestParam(required = false) java.util.List<Long> materialIds) {
         try {
+            /* 启动点拦一次：已完本 / 已废弃不再起新的后台生成。
+               放在这里而不是流内部 —— 已经在跑的任务改状态后仍要能跑完。 */
+            String deny = ProjectWriteGuard.denyMessage(
+                    projectId == null ? null
+                            : projectRepository.findById(projectId).map(ProjectEntity::getStatus).orElse(null),
+                    "进行AI生成");
+            if (deny != null) {
+                return ResponseEntity.ok(Map.of("status", "error", "message", deny));
+            }
+
             Runnable postHook = null;
             if (step == WorkflowStep.CHAPTER_WRITING && chapter > 0) {
                 final int chapterNum = chapter;

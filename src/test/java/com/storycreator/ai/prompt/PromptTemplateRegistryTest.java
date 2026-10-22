@@ -165,6 +165,60 @@ class PromptTemplateRegistryTest {
                 .hasMessageContaining("No template found for sub-step");
     }
 
+    // --- getTemplate / getSystemPrompt（主步骤）---
+
+    /**
+     * 回归：一步骤多条默认（写作核心 + 章节扩写）时，主步骤只能挑到写作核心那条。
+     * 老实现用「按 step 找唯一默认」的 Optional 查询，碰上两条直接抛
+     * NonUniqueResultException —— 正文生成和 /prompts/data 一起 500。
+     */
+    @Test
+    void getTemplate_picksPrimaryDefaultWhenStepHasMultipleDefaults() {
+        PromptTemplateEntity main = new PromptTemplateEntity();
+        main.setSubStep(PromptSubStep.CHAPTER_WRITING_PRIMARY);
+        main.setTemplate("主步骤模板");
+
+        PromptTemplateEntity expansion = new PromptTemplateEntity();
+        expansion.setSubStep(PromptSubStep.CHAPTER_EXPANSION);
+        expansion.setTemplate("章节扩写模板");
+
+        when(repository.findAllByStepAndIsDefaultTrue(WorkflowStep.CHAPTER_WRITING))
+                .thenReturn(java.util.List.of(main, expansion));
+
+        assertThat(registry.getTemplate(WorkflowStep.CHAPTER_WRITING, null)).isEqualTo("主步骤模板");
+    }
+
+    /** 子步骤为 null 的老数据（早期主步骤覆盖没写 sub_step）也算主步骤默认。 */
+    @Test
+    void getTemplate_treatsNullSubStepAsMainStepOverride() {
+        PromptTemplateEntity legacy = new PromptTemplateEntity();
+        legacy.setSubStep(null);
+        legacy.setTemplate("老数据主步骤模板");
+        when(repository.findAllByStepAndIsDefaultTrue(WorkflowStep.CHAPTER_WRITING))
+                .thenReturn(java.util.List.of(legacy));
+
+        assertThat(registry.getTemplate(WorkflowStep.CHAPTER_WRITING, null)).isEqualTo("老数据主步骤模板");
+    }
+
+    /** 同档重复时取最近更新的那条，结果稳定（不能每次随机挑一条）。 */
+    @Test
+    void getTemplate_picksLatestAmongDuplicateMainStepDefaults() {
+        PromptTemplateEntity older = new PromptTemplateEntity();
+        older.setSubStep(PromptSubStep.CHAPTER_WRITING_PRIMARY);
+        older.setTemplate("旧");
+        older.setUpdatedAt(java.time.LocalDateTime.of(2026, 1, 1, 0, 0));
+
+        PromptTemplateEntity newer = new PromptTemplateEntity();
+        newer.setSubStep(PromptSubStep.CHAPTER_WRITING_PRIMARY);
+        newer.setTemplate("新");
+        newer.setUpdatedAt(java.time.LocalDateTime.of(2026, 10, 1, 0, 0));
+
+        when(repository.findAllByStepAndIsDefaultTrue(WorkflowStep.CHAPTER_WRITING))
+                .thenReturn(java.util.List.of(older, newer));
+
+        assertThat(registry.getTemplate(WorkflowStep.CHAPTER_WRITING, null)).isEqualTo("新");
+    }
+
     // --- SUB_STEP_VARIABLES coverage ---
 
     @Test

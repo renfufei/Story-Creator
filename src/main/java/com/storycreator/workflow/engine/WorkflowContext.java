@@ -2,6 +2,7 @@ package com.storycreator.workflow.engine;
 
 import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.WorkflowStep;
+import com.storycreator.core.port.ai.AiRequest;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -34,6 +35,12 @@ public class WorkflowContext {
     private String stepGuidance;
     private String previousCharacterStates;
     private String referenceMaterials;
+    /**
+     * 本章所属分卷（0 = 未知 / 项目没有分卷）。生成前由 {@code VolumeService} 定下来，
+     * 只作为<b>调用参数</b>随请求走（见 {@code AiRequest#getVolumeNumber()}），不写进提示词。
+     */
+    private int volumeNumber;
+    private String volumeTitle;
 
     public Map<String, String> toTemplateVariables() {
         Map<String, String> vars = new HashMap<>();
@@ -146,4 +153,21 @@ public class WorkflowContext {
 
     public String getReferenceMaterials() { return referenceMaterials; }
     public void setReferenceMaterials(String referenceMaterials) { this.referenceMaterials = referenceMaterials; }
+
+    public int getVolumeNumber() { return volumeNumber; }
+    public void setVolumeNumber(int volumeNumber) { this.volumeNumber = volumeNumber; }
+
+    public String getVolumeTitle() { return volumeTitle; }
+    public void setVolumeTitle(String volumeTitle) { this.volumeTitle = volumeTitle; }
+
+    /**
+     * 把「项目 / 第几章 / 哪一卷」写进这次 AI 调用请求的参数里。
+     *
+     * <p>只是元数据：<b>不改提示词</b>，也不会发往模型服务端。目的是让返回内容天然带着卷归属，
+     * 接受/落库时不用再靠章号整除去猜。</p>
+     */
+    public AiRequest stampScope(AiRequest request) {
+        if (request == null) return null;
+        return request.applyScope(projectId, currentChapter, volumeNumber, volumeTitle);
+    }
 }

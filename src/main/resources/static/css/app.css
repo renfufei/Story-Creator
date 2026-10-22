@@ -660,6 +660,15 @@ a.list-group-item.sc-anchor-link:focus .bi {
     --accent-border: #e2e8f0;
 }
 
+/* 第八种强调色：靛蓝。数独卡专用 —— 蓝紫之间，与乘法口诀的纯蓝、
+   俄罗斯方块的紫都分得开，也正好是数独页自己的 --sd-accent。 */
+.sc-learn-card[data-accent="indigo"] {
+    --accent: #4f46e5;
+    --accent-strong: #3730a3;
+    --accent-soft: #eef1ff;
+    --accent-border: #d3d9fb;
+}
+
 .sc-learn-card:hover {
     border-color: var(--accent-border);
 }

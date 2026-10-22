@@ -101,11 +101,12 @@ public class AutoRunService {
         ProjectEntity project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
 
-        if (project.getStatus() == com.storycreator.core.domain.ProjectStatus.COMPLETED) {
-            throw new IllegalStateException("项目状态为「已完本」，无法启动自动创作");
-        }
-        if (project.getStatus() == com.storycreator.core.domain.ProjectStatus.ABANDONED) {
-            throw new IllegalStateException("项目状态为「已废弃」，无法启动自动创作");
+        if (project.getStatus() != null) {
+            String denyMessage = com.storycreator.core.service.ProjectWriteGuard
+                    .denyMessage(project.getStatus(), "启动自动创作");
+            if (denyMessage != null) {
+                throw new IllegalStateException(denyMessage);
+            }
         }
 
         // Atomic check-and-set to prevent double-start race condition

@@ -114,15 +114,23 @@ public class WorkflowContextBuilder {
         // Load characters - overview (sort_order=0) goes to characters field
         List<CharacterEntity> chars = characterRepository.findByProjectIdOrderBySortOrder(projectId);
 
-        // Determine current volume number for filtering (only when writing a specific chapter)
+        // 生成前就把「这一章属于哪一卷」定下来 —— 作为调用参数随 AiRequest 走，落库/展示共用同一结果。
+        // resolveForChapter 对还没写出来的章节也有效（卷记录区间 + 整除公式兜底），
+        // 所以不会像旧逻辑那样「正文还没落库 → 查不到卷 → 角色按错的卷过滤」。
         final int currentVolume;
-        if (chapterNumber > 0 && project.getChaptersPerVolume() > 0) {
-            int byFormula = (chapterNumber - 1) / project.getChaptersPerVolume() + 1;
-            // 分卷绑定开启时以绑定为准（用户在分卷管理页手工调整过），否则沿用整除公式 —— 兼容老数据。
-            // 只有开关打开才去查绑定：避免给存量项目（开关默认关闭）增加无谓的查询开销。
-            currentVolume = project.isVolumeBindingEnabled()
-                    ? volumeService.volumeNumberOf(projectId, chapterNumber).orElse(byFormula)
-                    : byFormula;
+        if (chapterNumber > 0) {
+            VolumeService.ChapterVolume chapterVolume =
+                    volumeService.resolveForChapter(projectId, chapterNumber).orElse(null);
+            if (chapterVolume != null) {
+                currentVolume = chapterVolume.volumeNumber();
+                context.setVolumeNumber(chapterVolume.volumeNumber());
+                context.setVolumeTitle(chapterVolume.title());
+            } else {
+                // 项目还没有分卷记录：行为与改造前一致，仅用于角色过滤
+                currentVolume = project.getChaptersPerVolume() > 0
+                        ? (chapterNumber - 1) / project.getChaptersPerVolume() + 1 : 0;
+                context.setVolumeNumber(currentVolume);
+            }
         } else {
             currentVolume = 0;
         }

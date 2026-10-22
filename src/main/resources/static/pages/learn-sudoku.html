@@ -1,0 +1,3540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>数独 - AI故事创作</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/app.css">
+    <style>
+        /* ==================== 数独（/learn/sudoku） ====================
+           与其它教学页的取舍不同：这一页**不用 Alpine**。
+           棋盘是 n×n 个格子（9×9 就是 81 个），每次落子都要改几十个格子的
+           class / 文本；Alpine 的 x-for + 响应式重渲染会把这 81 个节点的
+           比较开销摊到每一帧，而这里用「建一次 DOM + 只改差异」的
+           命令式绘制（见 paint()）更直接，也不吃 x-show/d-flex 那套坑。
+           站点里「俄罗斯方块」同样是纯 JS 页面，先例已有。
+
+           配色：整站教学模块只有蓝/绿/琥珀/青绿/玫红/紫六种强调色，
+           数独用**靛蓝**（indigo）—— 蓝紫之间，与乘法口诀的纯蓝分得开，
+           又天然带「逻辑/纸面演算」的气质。 */
+        /* 主题色变量挂在 body 上而不是 .sd-root 上：
+           结算浮层 / 规则弹层 / 撒花层是 body 的直接子元素（fixed 定位不能被
+           带 transform 的祖先关起来），如果变量只写在 .sd-root 里，
+           它们拿到的就是 undefined —— var() 没有兜底值 ⇒ 该条声明整条作废，
+           实测【再来一局】变成白字透明底、直接看不见。 */
+        body.sd-page {
+            --sd-ink: #1e293b;
+            --sd-muted: #7c8798;
+            --sd-line: #e4e9f2;
+            --sd-strong: #94a3b8;      /* 宫格粗线 */
+            --sd-accent: #4f46e5;
+            --sd-accent-deep: #3730a3;
+            --sd-accent-soft: #eef1ff;
+            --sd-accent-line: #c9cffb;
+            --sd-cell: #ffffff;
+            --sd-peer: #f1f4ff;
+            --sd-same: #dee4ff;
+            --sd-sel: #c9d1ff;
+            --sd-bad: #e11d48;
+            --sd-ok: #15803d;
+            /* 设置弹层（.lt-* 在 app.css，与其它教学页共用结构）的主题色注入点 */
+            --lt-accent: #4f46e5;
+            --lt-accent-deep: #3730a3;
+            --lt-accent-soft: #eef1ff;
+        }
+
+        /* ---------- 页面底色：淡靛蓝光晕 + 蓝图格线 ----------
+           两层都固定在视口上、只做背景，所以给 main 抬高一层，
+           否则 z-index:0 的固定层会盖在正文之上（虽然 pointer-events:none，
+           但浅色格线压在卡片上会显脏）。 */
+        body.sd-page {
+            background-color: #f4f6fb;
+            background-image:
+                radial-gradient(720px 420px at 6% -8%, rgba(99, 102, 241, .16), transparent 62%),
+                radial-gradient(620px 380px at 102% 2%, rgba(56, 189, 248, .13), transparent 60%),
+                radial-gradient(640px 520px at 50% 110%, rgba(167, 139, 250, .12), transparent 62%);
+            background-attachment: fixed;
+        }
+
+        body.sd-page::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            background-image:
+                linear-gradient(to right, rgba(79, 70, 229, .055) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(79, 70, 229, .055) 1px, transparent 1px);
+            background-size: 28px 28px;
+            -webkit-mask-image: radial-gradient(circle at 50% 18%, #000 0%, transparent 76%);
+            mask-image: radial-gradient(circle at 50% 18%, #000 0%, transparent 76%);
+        }
+
+        body.sd-page main.sc-main {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ---------- 工具栏 ---------- */
+        .sd-toolbar {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: .75rem;
+            flex-wrap: wrap;
+            margin-bottom: .85rem;
+        }
+
+        .sd-toolbar-title {
+            display: flex;
+            align-items: center;
+            gap: .55rem;
+            min-width: 0;
+        }
+
+        .sd-sub {
+            font-size: .8rem;
+            color: var(--sd-muted);
+            margin-top: .15rem;
+        }
+
+        .sd-toolbar-actions {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            flex-wrap: wrap;
+        }
+
+        .sd-toolbar-actions .btn-primary {
+            background: var(--sd-accent);
+            border-color: var(--sd-accent);
+        }
+
+        .sd-toolbar-actions .btn-primary:hover {
+            background: var(--sd-accent-deep);
+            border-color: var(--sd-accent-deep);
+        }
+
+        /* 设置弹层这一版有 8 个条目，手机上（667px 高的屏）会顶出视口：
+           限高并让弹层自己滚，而不是把页面撑出第二层滚动条 */
+        .sd-toolbar .lt-set-pop {
+            max-height: min(72vh, 30rem);
+            overflow: auto;
+            overscroll-behavior: contain;
+        }
+
+        /* ---------- 配置条：尺寸下拉 + 难度分段 ----------
+           以前是 7 个 chip（3/4/5/6/7/8/9）一字排开：手机上必须压字号才挤得下，
+           而 7 个里有 5 个是低频选择 —— 视觉噪音大于信息量。
+           现在收成一个下拉：按钮上直接显示「上次玩的尺寸」，面板里常玩只留
+           3×3 / 6×6，当前与最近用过的排最前，其余折叠进【更多尺寸】。 */
+        .sd-config {
+            display: flex;
+            align-items: center;
+            gap: .55rem;
+            flex-wrap: wrap;
+            margin-bottom: .85rem;
+        }
+
+        /* 触发按钮 */
+        .sd-size {
+            position: relative;
+            flex: 0 0 auto;
+        }
+
+        .sd-size-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: .45rem;
+            height: 2.3rem;
+            padding: 0 .55rem 0 .62rem;
+            border: 1px solid #dde3f0;
+            border-radius: .7rem;
+            background: #fff;
+            color: var(--sd-ink);
+            box-shadow: 0 1px 2px rgba(30, 41, 59, .05);
+            transition: border-color .15s ease, box-shadow .15s ease;
+        }
+
+        .sd-size-btn:hover {
+            border-color: var(--sd-accent-line);
+            box-shadow: 0 4px 12px -8px rgba(79, 70, 229, .75);
+        }
+
+        .sd-size-btn.is-open {
+            border-color: var(--sd-accent);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, .12);
+        }
+
+        .sd-size-btn > .bi-grid-3x3-gap-fill {
+            font-size: .95rem;
+            color: var(--sd-accent);
+        }
+
+        .sd-size-btn b {
+            font-size: .95rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: .01em;
+        }
+
+        .sd-size-tag {
+            padding: .05rem .34rem;
+            border-radius: .35rem;
+            background: var(--sd-accent-soft);
+            color: var(--sd-accent-deep);
+            font-size: .66rem;
+            font-weight: 600;
+            line-height: 1.6;
+        }
+
+        .sd-size-caret {
+            font-size: .6rem;
+            color: #9aa5b8;
+            transition: transform .18s ease;
+        }
+
+        .sd-size-btn.is-open .sd-size-caret { transform: rotate(180deg); }
+
+        /* 下拉面板 */
+        .sd-size-pop {
+            position: absolute;
+            z-index: 60;
+            top: calc(100% + .4rem);
+            left: 0;
+            width: min(20.5rem, calc(100vw - 2rem));
+            padding: .65rem .7rem .7rem;
+            border: 1px solid #e3e8f3;
+            border-radius: .9rem;
+            background: #fff;
+            box-shadow: 0 20px 44px -20px rgba(30, 41, 59, .38), 0 2px 8px rgba(30, 41, 59, .05);
+        }
+
+        .sd-size-pop[hidden] { display: none; }
+
+        .sd-size-pop:not([hidden]) { animation: sd-pop .15s ease-out; }
+
+        @keyframes sd-pop {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: none; }
+        }
+
+        .sd-size-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: .5rem;
+            padding: 0 .1rem .45rem;
+        }
+
+        .sd-size-head span:first-child {
+            font-size: .78rem;
+            font-weight: 700;
+            color: #3b4657;
+        }
+
+        .sd-size-head span:last-child {
+            font-size: .68rem;
+            color: #97a1b3;
+        }
+
+        .sd-size-group + .sd-size-group { margin-top: .5rem; }
+
+        .sd-size-group[hidden] { display: none; }
+
+        .sd-size-group-t {
+            display: flex;
+            align-items: center;
+            gap: .26rem;
+            padding: 0 .1rem .3rem;
+            font-size: .68rem;
+            color: #97a1b3;
+        }
+
+        .sd-size-group-t .bi { font-size: .72rem; }
+
+        .sd-size-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: .35rem;
+        }
+
+        .sd-size-opt {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .3rem;
+            padding: .42rem .52rem;
+            border: 1px solid #e6ebf5;
+            border-radius: .6rem;
+            background: #fcfdff;
+            color: #2b3648;
+            text-align: left;
+            transition: border-color .14s ease, background-color .14s ease, transform .1s ease;
+        }
+
+        .sd-size-opt:hover {
+            border-color: var(--sd-accent-line);
+            background: #fff;
+        }
+
+        .sd-size-opt:active { transform: scale(.985); }
+
+        .sd-size-opt b {
+            font-size: .86rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .sd-size-opt i {
+            display: inline-flex;
+            align-items: center;
+            gap: .18rem;
+            font-size: .64rem;
+            font-style: normal;
+            color: #98a3b5;
+            white-space: nowrap;
+        }
+
+        .sd-size-opt.is-on {
+            border-color: var(--sd-accent);
+            background: var(--sd-accent-soft);
+        }
+
+        .sd-size-opt.is-on b { color: var(--sd-accent-deep); }
+        .sd-size-opt.is-on i { color: var(--sd-accent); }
+
+        /* 【更多】折叠 */
+        .sd-size-more {
+            display: flex;
+            align-items: center;
+            gap: .3rem;
+            width: 100%;
+            margin-top: .5rem;
+            padding: .4rem .5rem;
+            border: 1px dashed #dbe2f0;
+            border-radius: .6rem;
+            background: #fafbff;
+            color: #5c6a80;
+            font-size: .74rem;
+            transition: border-color .14s ease, color .14s ease, background-color .14s ease;
+        }
+
+        .sd-size-more:hover {
+            border-color: var(--sd-accent-line);
+            background: #fff;
+            color: var(--sd-accent-deep);
+        }
+
+        .sd-size-more .bi-chevron-down {
+            margin-left: auto;
+            font-size: .6rem;
+            transition: transform .18s ease;
+        }
+
+        .sd-size-more.is-open .bi-chevron-down { transform: rotate(180deg); }
+
+        .sd-size-more-list { margin-top: .35rem; }
+
+        .sd-size-more-list[hidden] { display: none; }
+
+        /* 难度分段：浅灰槽 + 白色浮起块（比"白底 + 浅蓝块"层次更清楚） */
+        .sd-diffs {
+            display: inline-flex;
+            height: 2.3rem;
+            padding: .19rem;
+            gap: .12rem;
+            background: #eef1f8;
+            border: 1px solid #e4e9f4;
+            border-radius: .7rem;
+            flex: 0 0 auto;
+        }
+
+        .sd-diff {
+            display: inline-flex;
+            align-items: center;
+            border: 0;
+            background: transparent;
+            border-radius: .55rem;
+            padding: 0 .68rem;
+            font-size: .8rem;
+            color: #6b7789;
+            transition: background-color .14s ease, color .14s ease, box-shadow .14s ease;
+        }
+
+        .sd-diff:hover { color: var(--sd-accent-deep); }
+
+        .sd-diff.is-on {
+            background: #fff;
+            color: var(--sd-accent-deep);
+            font-weight: 600;
+            box-shadow: 0 1px 3px rgba(30, 41, 59, .13), 0 0 0 1px rgba(79, 70, 229, .07);
+        }
+
+        /* ---------- 工具栏按钮（自定义，替代 Bootstrap btn-sm） ---------- */
+        .sd-tbtn {
+            display: inline-flex;
+            align-items: center;
+            gap: .32rem;
+            height: 2.15rem;
+            padding: 0 .66rem;
+            border: 1px solid #dde3f0;
+            border-radius: .62rem;
+            background: #fff;
+            color: #46536a;
+            font-size: .8rem;
+            font-weight: 500;
+            white-space: nowrap;
+            transition: border-color .14s ease, color .14s ease, background-color .14s ease,
+                        box-shadow .14s ease, transform .1s ease;
+        }
+
+        .sd-tbtn .bi { font-size: .9rem; }
+
+        .sd-tbtn:hover {
+            border-color: var(--sd-accent-line);
+            background: #fdfdff;
+            color: var(--sd-accent-deep);
+        }
+
+        .sd-tbtn:active { transform: translateY(1px); }
+
+        .sd-tbtn.is-solid {
+            border-color: transparent;
+            background: linear-gradient(135deg, #5b52ea, #4338ca);
+            color: #fff;
+            box-shadow: 0 6px 16px -9px rgba(79, 70, 229, .95);
+        }
+
+        .sd-tbtn.is-solid:hover {
+            background: linear-gradient(135deg, #4f46e5, #3730a3);
+            color: #fff;
+        }
+
+        .sd-tbtn.is-accent {
+            border-color: var(--sd-accent-line);
+            background: var(--sd-accent-soft);
+            color: var(--sd-accent-deep);
+        }
+
+        .sd-tbtn.is-accent:hover { background: #e6eaff; }
+
+        /* ---------- 新手引导条（看没看过教学决定是否出现） ---------- */
+        .sd-coach {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            margin-bottom: .8rem;
+            padding: .45rem .5rem .45rem .7rem;
+            border: 1px solid #dfe3fb;
+            border-radius: .7rem;
+            background: linear-gradient(115deg, #f4f5ff, #eef5ff 55%, #f8fbff);
+        }
+
+        .sd-coach[hidden] { display: none; }
+
+        .sd-coach > .bi {
+            font-size: 1rem;
+            color: var(--sd-accent);
+        }
+
+        .sd-coach-t {
+            flex: 1 1 auto;
+            min-width: 0;
+            font-size: .78rem;
+            line-height: 1.5;
+            color: #4b5769;
+        }
+
+        .sd-coach-t b { color: var(--sd-accent-deep); }
+
+        .sd-coach .sd-tbtn {
+            height: 1.9rem;
+            padding: 0 .62rem;
+            font-size: .76rem;
+        }
+
+        .sd-coach-x {
+            flex: 0 0 auto;
+            border: 0;
+            background: transparent;
+            color: #97a1b3;
+            font-size: .8rem;
+            line-height: 1;
+            padding: .2rem .3rem;
+            border-radius: .35rem;
+        }
+
+        .sd-coach-x:hover { color: #5c6a80; background: rgba(148, 163, 184, .14); }
+
+        /* ---------- HUD 小胶囊 ---------- */
+        .sd-hud {
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            flex-wrap: wrap;
+            margin-bottom: .6rem;
+        }
+
+        .sd-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: .32rem;
+            padding: .22rem .62rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, .86);
+            border: 1px solid #e6ebf5;
+            box-shadow: 0 1px 2px rgba(30, 41, 59, .04);
+            font-size: .76rem;
+            color: #5c6a80;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .sd-pill b {
+            color: var(--sd-ink);
+            font-weight: 700;
+        }
+
+        .sd-pill .bi {
+            font-size: .78rem;
+            color: var(--sd-accent);
+            opacity: .85;
+        }
+
+        .sd-pill.is-warn {
+            border-color: #f7c6d1;
+            background: #fff5f8;
+            color: #be123c;
+        }
+
+        .sd-pill.is-warn .bi,
+        .sd-pill.is-warn b {
+            color: #be123c;
+        }
+
+        /* ---------- 棋盘 ---------- */
+        .sd-boardwrap {
+            position: relative;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .sd-frame {
+            position: relative;
+            padding: .5rem;
+            background: #fff;
+            border: 1px solid #e8ecf5;
+            border-radius: 1rem;
+            box-shadow:
+                0 18px 40px -22px rgba(49, 46, 129, .45),
+                0 2px 6px rgba(15, 23, 42, .05);
+        }
+
+        /* 格子边框一律画在格子自己的 box 内（border-box + 1fr），
+           所以宫格粗线只是在**边界那一条**上加粗 1px，
+           不会把某一列挤窄、也不会让整块棋盘溢出容器。 */
+        .sd-board {
+            display: grid;
+            grid-template-columns: repeat(var(--n, 9), minmax(0, 1fr));
+            grid-template-rows: repeat(var(--n, 9), minmax(0, 1fr));
+            aspect-ratio: 1 / 1;
+            width: 100%;
+            /* 四边都是 2px 深色：只画上/左、把右/下交给格子的话，
+               右边和下边会只剩 1px 浅线，整块棋盘看着像"贴纸没裁齐" */
+            border: 2px solid var(--sd-strong);
+            border-radius: .45rem;
+            overflow: hidden;
+            background: var(--sd-cell);
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        .sd-cell {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 0;
+            min-height: 0;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            border-right: 1px solid var(--sd-line);
+            border-bottom: 1px solid var(--sd-line);
+            border-radius: 0;
+            background: var(--sd-cell);
+            color: var(--sd-accent-deep);
+            font-size: var(--sd-font, 1.35rem);
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+            cursor: pointer;
+            transition: background-color .12s ease, color .12s ease;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .sd-cell:focus {
+            outline: none;
+        }
+
+        .sd-cell:focus-visible {
+            outline: 2px solid var(--sd-accent);
+            outline-offset: -3px;
+        }
+
+        /* 宫格边界（粗线）与外边框同色，视觉上才连成一体 */
+        .sd-cell.is-br { border-right: 2px solid var(--sd-strong); }
+        .sd-cell.is-bb { border-bottom: 2px solid var(--sd-strong); }
+
+        /* 拉丁方（3×3 / 5×5 / 7×7）没有宫格粗线，内线就是唯一的骨架：
+           必须加深，否则 100px 见方的大格子里，1px 的浅灰线几乎看不见，
+           整块棋盘会糊成「几个数字浮在白色里」。 */
+        .sd-board.is-latin .sd-cell {
+            border-right-color: var(--sd-strong);
+            border-bottom-color: var(--sd-strong);
+        }
+
+        /* 最右列 / 最下行交给棋盘自己的 2px 边框，格子不再画，
+           否则外框右侧会变成「2px + 1px」= 3px，跟左边对不上 */
+        .sd-cell.is-edge-r { border-right: 0; }
+        .sd-cell.is-edge-b { border-bottom: 0; }
+
+        /* 相邻宫格的浅色交替：只为「一眼看出宫在哪」，不能盖过下面几种状态 */
+        .sd-cell.is-alt { background: #fafbff; }
+
+        .sd-cell.is-given { color: #1f2937; font-weight: 700; }
+
+       /* 状态色序（后写的赢）：同行列/宫 → 同数字 → 选中 → 冲突 */
+        .sd-cell.is-peer { background: var(--sd-peer); }
+        .sd-cell.is-same { background: var(--sd-same); }
+        .sd-cell.is-sel {
+            background: var(--sd-sel);
+            box-shadow: inset 0 0 0 2px var(--sd-accent);
+        }
+        .sd-cell.is-hint { color: var(--sd-ok); }
+
+        .sd-cell.is-bad {
+            background: #ffe9ef;
+            color: var(--sd-bad);
+        }
+
+        .sd-cell.is-bad.is-sel {
+            box-shadow: inset 0 0 0 2px var(--sd-bad);
+        }
+
+        /* 候选数（笔记）：格子内再切一张小网格，1~n 各占一格 */
+        .sd-notes {
+            position: absolute;
+            inset: 7%;
+            display: grid;
+            grid-template-columns: repeat(var(--note-cols, 3), minmax(0, 1fr));
+            grid-auto-rows: minmax(0, 1fr);
+            font-size: var(--sd-note-font, .55rem);
+            font-weight: 500;
+            color: #97a3b6;
+            line-height: 1;
+            pointer-events: none;
+        }
+
+        .sd-cell.has-val .sd-notes { display: none; }
+
+        .sd-note {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 出题遮罩：生成一局 9×9 困难最多几百毫秒，必须给个明确的等待态 */
+        .sd-boot {
+            position: absolute;
+            inset: .5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: .5rem;
+            border-radius: .45rem;
+            background: rgba(255, 255, 255, .86);
+            -webkit-backdrop-filter: blur(2px);
+            backdrop-filter: blur(2px);
+            color: var(--sd-accent-deep);
+            font-size: .88rem;
+            z-index: 2;
+        }
+
+        .sd-boot[hidden] { display: none; }
+
+        .sd-legend {
+            display: flex;
+            align-items: flex-start;
+            gap: .35rem;
+            margin-top: .6rem;
+            font-size: .75rem;
+            line-height: 1.55;
+            color: #8a94a6;
+        }
+
+        .sd-legend .bi {
+            color: var(--sd-accent);
+            font-size: .8rem;
+            margin-top: .12rem;
+        }
+
+        /* ---------- 右侧：键盘 + 工具 ---------- */
+        .sd-side {
+            display: flex;
+            flex-direction: column;
+            gap: .55rem;
+        }
+
+        .sd-pad-hint {
+            font-size: .74rem;
+            color: var(--sd-muted);
+            padding-left: .1rem;
+        }
+
+        .sd-pad {
+            display: grid;
+            grid-template-columns: repeat(var(--pad-cols, 3), minmax(0, 1fr));
+            gap: .45rem;
+        }
+
+        .sd-key {
+            position: relative;
+            height: 3.05rem;
+            border: 1px solid #e4e9f4;
+            border-radius: .8rem;
+            background: #fff;
+            color: var(--sd-accent-deep);
+            font-size: 1.15rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+            box-shadow: 0 1px 2px rgba(30, 41, 59, .045);
+            transition: background-color .12s ease, border-color .12s ease,
+                        color .12s ease, box-shadow .12s ease, transform .08s ease;
+        }
+
+        .sd-key:hover {
+            background: #fdfdff;
+            border-color: var(--sd-accent-line);
+            color: var(--sd-accent);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px -12px rgba(79, 70, 229, .9);
+        }
+
+        .sd-key:active { transform: translateY(0) scale(.97); }
+
+        /* 该数字已经放满 n 个：变灰，但仍然可点（可能还要记笔记） */
+        .sd-key.is-full {
+            background: #f7f9fd;
+            color: #c2cad8;
+            border-color: #eceff6;
+        }
+
+        .sd-key-r {
+            position: absolute;
+            right: .3rem;
+            bottom: .14rem;
+            font-size: .58rem;
+            font-weight: 600;
+            color: #a9b4c4;
+        }
+
+        .sd-key.is-full .sd-key-r { color: #d3dae5; }
+
+        /* 5 个工具排一行：以前是 3 列，5 个会变成 3+2、第二行左边空一格，
+           看着像漏了两个按钮。侧栏 20rem 下每格 60px，图标+两字竖排正好。 */
+        .sd-tools {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: .4rem;
+        }
+
+        .sd-tool {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: .22rem;
+            padding: .5rem .2rem .44rem;
+            border: 1px solid #e4e9f4;
+            border-radius: .8rem;
+            background: #fff;
+            color: #47546b;
+            font-size: .7rem;
+            line-height: 1.1;
+            box-shadow: 0 1px 2px rgba(30, 41, 59, .045);
+            transition: background-color .14s ease, border-color .14s ease, color .14s ease,
+                        box-shadow .14s ease, transform .1s ease;
+        }
+
+        .sd-tool .bi {
+            font-size: 1.05rem;
+            color: var(--sd-accent);
+            opacity: .9;
+            transition: color .14s ease, opacity .14s ease;
+        }
+
+        .sd-tool:hover {
+            background: #fdfdff;
+            border-color: var(--sd-accent-line);
+            color: var(--sd-accent-deep);
+            transform: translateY(-1px);
+            box-shadow: 0 7px 16px -12px rgba(79, 70, 229, .85);
+        }
+
+        .sd-tool.is-on {
+            border-color: transparent;
+            background: linear-gradient(135deg, #5b52ea, #4338ca);
+            color: #fff;
+            box-shadow: 0 8px 18px -11px rgba(79, 70, 229, .95);
+        }
+
+        .sd-tool.is-on .bi { color: #fff; opacity: 1; }
+
+        .sd-tool.is-on:hover {
+            background: linear-gradient(135deg, #4f46e5, #3730a3);
+            transform: translateY(-1px);
+        }
+
+        .sd-tool[disabled] {
+            opacity: .45;
+            pointer-events: none;
+        }
+
+        /* 工具按钮改 5 列后只有 60px 宽，徽标必须收小、贴角，
+           否则会盖住「检查」两个字（手机上直接隐藏，见媒体查询） */
+        .sd-badge {
+            position: absolute;
+            top: .18rem;
+            right: .22rem;
+            min-width: .88rem;
+            height: .88rem;
+            padding: 0 .16rem;
+            border-radius: 999px;
+            background: var(--sd-accent-soft);
+            color: var(--sd-accent-deep);
+            font-size: .5rem;
+            font-style: normal;
+            font-weight: 700;
+            line-height: .88rem;
+        }
+
+        .sd-tool.is-on .sd-badge {
+            background: rgba(255, 255, 255, .28);
+            color: #fff;
+        }
+
+        .sd-badge[hidden] { display: none; }
+
+        .sd-tipcard {
+            margin-top: .1rem;
+            padding: .65rem .75rem;
+            border: 1px dashed #dbe2f0;
+            border-radius: .75rem;
+            background: rgba(255, 255, 255, .6);
+            font-size: .74rem;
+            line-height: 1.6;
+            color: var(--sd-muted);
+        }
+
+        .sd-tipcard-t {
+            font-weight: 600;
+            color: #4a586c;
+            margin-bottom: .15rem;
+        }
+
+        /* ---------- 教学关卡（6 步图文演示） ----------
+           教学盘是独立的 16 格迷你盘，不复用主棋盘：主盘的 paint() 绑着全局
+           state/cells，为了演示再去改它会把"玩到一半的局"搅乱。这里只是渲染
+           16 个 div，步骤切换时按索引重算 class —— 便宜且互不干扰。
+           教学期间主局计时会暂停（见 state.paused），不偷玩家的时间。 */
+        .sd-teach {
+            position: fixed;
+            inset: 0;
+            z-index: 1500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .sd-teach[hidden] { display: none; }
+
+        .sd-teach-mask {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, .44);
+            -webkit-backdrop-filter: blur(3px);
+            backdrop-filter: blur(3px);
+        }
+
+        .sd-teach-card {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            width: min(45rem, 100%);
+            max-height: min(90vh, 44rem);
+            border-radius: 1.1rem;
+            background: #fff;
+            box-shadow: 0 34px 70px -32px rgba(15, 23, 42, .6);
+            overflow: hidden;
+            animation: sd-teach-in .2s ease-out;
+        }
+
+        @keyframes sd-teach-in {
+            from { opacity: 0; transform: translateY(12px) scale(.985); }
+            to { opacity: 1; transform: none; }
+        }
+
+        .sd-teach-head {
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            padding: .8rem .9rem .8rem 1rem;
+            border-bottom: 1px solid #eef1f7;
+            background: linear-gradient(115deg, #f6f7ff, #fdfdff 62%);
+        }
+
+        .sd-teach-badge {
+            display: grid;
+            place-items: center;
+            flex: 0 0 auto;
+            width: 2.2rem;
+            height: 2.2rem;
+            border-radius: .7rem;
+            background: linear-gradient(135deg, #5b52ea, #4338ca);
+            color: #fff;
+            font-size: 1.05rem;
+            box-shadow: 0 8px 16px -10px rgba(79, 70, 229, .95);
+        }
+
+        .sd-teach-headmain {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .sd-teach-headmain h3 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--sd-ink);
+        }
+
+        .sd-teach-step {
+            margin-top: .1rem;
+            font-size: .72rem;
+            color: #8a94a6;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .sd-teach-body {
+            display: grid;
+            grid-template-columns: minmax(0, 14.5rem) minmax(0, 1fr);
+            gap: 1.1rem;
+            padding: 1rem;
+            overflow: auto;
+            overscroll-behavior: contain;
+        }
+
+        .sd-teach-board {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: .5rem;
+        }
+
+        .sd-teach-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            width: 100%;
+            max-width: 14.5rem;
+            border: 2px solid #8a94a8;
+            border-radius: .55rem;
+            overflow: hidden;
+            background: #fff;
+            box-shadow: 0 10px 24px -18px rgba(30, 41, 59, .8);
+        }
+
+        .sd-tc {
+            display: grid;
+            place-items: center;
+            aspect-ratio: 1 / 1;
+            border-right: 1px solid #e7ecf6;
+            border-bottom: 1px solid #e7ecf6;
+            background: #fff;
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #1f2937;
+            font-variant-numeric: tabular-nums;
+            transition: background-color .18s ease, color .18s ease, opacity .18s ease;
+        }
+
+        .sd-tc.is-br { border-right: 2px solid #8a94a8; }
+        .sd-tc.is-bb { border-bottom: 2px solid #8a94a8; }
+        .sd-tc.is-edge-r { border-right: 0; }
+        .sd-tc.is-edge-b { border-bottom: 0; }
+
+        .sd-tc.is-hl { background: #eef1ff; }
+
+        /* 淡化阈值别太低：.38 时被淡掉的已知数几乎看不清，
+           讲"这一行缺哪两个数"时玩家反而找不到参照物 */
+        .sd-tc.is-dim { opacity: .5; }
+
+        .sd-tc.is-focus {
+            position: relative;
+            z-index: 1;
+            background: #dfe4ff;
+            animation: sd-tc-pulse 1.7s ease-in-out infinite;
+        }
+
+        @keyframes sd-tc-pulse {
+            0%, 100% { box-shadow: inset 0 0 0 2px rgba(79, 70, 229, .85); }
+            50% { box-shadow: inset 0 0 0 3px rgba(79, 70, 229, .35); }
+        }
+
+        /* 教学里"刚填进去"的数用靛蓝 + 浅底，与题目给定的深灰区分开 */
+        .sd-tc.is-filled {
+            color: var(--sd-accent-deep);
+            background: #e7ebff;
+        }
+
+        .sd-teach-note {
+            font-size: .68rem;
+            line-height: 1.6;
+            color: #97a1b3;
+            text-align: center;
+        }
+
+        .sd-teach-text { min-width: 0; }
+
+        .sd-teach-kicker {
+            display: inline-block;
+            margin-bottom: .45rem;
+            padding: .1rem .42rem;
+            border-radius: .3rem;
+            background: var(--sd-accent-soft);
+            color: var(--sd-accent-deep);
+            font-size: .68rem;
+            font-weight: 600;
+        }
+
+        .sd-teach-text h4 {
+            margin: 0 0 .45rem;
+            font-size: 1rem;
+            font-weight: 700;
+            line-height: 1.5;
+            color: var(--sd-ink);
+        }
+
+        .sd-teach-text p {
+            margin: 0;
+            font-size: .84rem;
+            line-height: 1.8;
+            color: #4b5769;
+        }
+
+        .sd-teach-text b { color: var(--sd-accent-deep); }
+
+        .sd-teach-formula {
+            margin-top: .7rem;
+            padding: .5rem .65rem;
+            border-left: 3px solid var(--sd-accent);
+            border-radius: .15rem .5rem .5rem .15rem;
+            background: #f7f8ff;
+            font-size: .8rem;
+            line-height: 1.6;
+            color: var(--sd-accent-deep);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .sd-teach-formula[hidden] { display: none; }
+
+        .sd-teach-foot {
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            padding: .65rem 1rem;
+            border-top: 1px solid #eef1f7;
+            background: #fcfdff;
+        }
+
+        .sd-teach-dots {
+            display: flex;
+            align-items: center;
+            gap: .3rem;
+            flex: 1 1 auto;
+        }
+
+        .sd-teach-dots i {
+            width: .42rem;
+            height: .42rem;
+            border-radius: 50%;
+            background: #dfe4f0;
+            transition: background-color .2s ease, width .2s ease;
+        }
+
+        .sd-teach-dots i.is-on {
+            width: 1.15rem;
+            border-radius: 999px;
+            background: var(--sd-accent);
+        }
+
+        .sd-teach-acts {
+            display: flex;
+            gap: .4rem;
+            flex: 0 0 auto;
+        }
+
+        .sd-teach-acts .btn {
+            height: 2.1rem;
+            display: inline-flex;
+            align-items: center;
+            gap: .3rem;
+            padding: 0 .8rem;
+            border-radius: .6rem;
+            font-size: .8rem;
+        }
+
+        .sd-teach-acts .btn-primary {
+            background: linear-gradient(135deg, #5b52ea, #4338ca);
+            border-color: transparent;
+            box-shadow: 0 6px 16px -9px rgba(79, 70, 229, .95);
+        }
+
+        .sd-teach-acts .btn-primary:hover {
+            background: linear-gradient(135deg, #4f46e5, #3730a3);
+        }
+
+        .sd-teach-acts .btn:disabled {
+            opacity: .45;
+        }
+
+        /* ---------- 结算浮层 ---------- */
+        .sd-win {
+            position: fixed;
+            inset: 0;
+            z-index: 1400;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .sd-win[hidden] { display: none; }
+
+        .sd-win-mask {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, .38);
+            -webkit-backdrop-filter: blur(3px);
+            backdrop-filter: blur(3px);
+        }
+
+        .sd-win-card {
+            position: relative;
+            width: min(23rem, 100%);
+            padding: 1.5rem 1.3rem 1.2rem;
+            background: #fff;
+            border-radius: 1.15rem;
+            text-align: center;
+            box-shadow: 0 28px 64px -18px rgba(49, 46, 129, .55);
+            animation: sd-pop .3s cubic-bezier(.2, .9, .3, 1.25);
+        }
+
+        @keyframes sd-pop {
+            from { opacity: 0; transform: translateY(14px) scale(.96); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .sd-win-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 3.4rem;
+            height: 3.4rem;
+            margin: 0 auto .7rem;
+            border-radius: 1rem;
+            background: linear-gradient(140deg, #6d66f0, #4f46e5);
+            color: #fff;
+            font-size: 1.6rem;
+            box-shadow: 0 12px 24px -12px rgba(79, 70, 229, .9);
+        }
+
+        .sd-win-title {
+            margin: 0 0 .2rem;
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--sd-ink);
+        }
+
+        .sd-win-sub {
+            margin: 0 0 .9rem;
+            font-size: .8rem;
+            color: var(--sd-muted);
+        }
+
+        .sd-win-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: .5rem;
+            padding: .7rem .3rem;
+            border-radius: .8rem;
+            background: #f7f9fd;
+            border: 1px solid #eaeef7;
+        }
+
+        .sd-win-stats b {
+            display: block;
+            font-size: 1.05rem;
+            color: var(--sd-accent-deep);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .sd-win-stats span {
+            font-size: .7rem;
+            color: var(--sd-muted);
+        }
+
+        .sd-win-best {
+            min-height: 1.2rem;
+            margin: .7rem 0 .2rem;
+            font-size: .78rem;
+            color: #15803d;
+        }
+
+        .sd-win-actions {
+            display: flex;
+            gap: .5rem;
+            margin-top: .9rem;
+        }
+
+        .sd-win-actions .btn { flex: 1 1 0; }
+
+        .sd-win-actions .btn-primary {
+            background: var(--sd-accent);
+            border-color: var(--sd-accent);
+        }
+
+        /* ---------- 撒花（纯 CSS 动画，不引第三方库） ---------- */
+        .sd-confetti {
+            position: fixed;
+            inset: 0;
+            z-index: 1500;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .sd-confetti[hidden] { display: none; }
+
+        .sd-confetti i {
+            position: absolute;
+            top: -14px;
+            width: .45rem;
+            height: .8rem;
+            border-radius: 2px;
+            opacity: .95;
+            animation: sd-fall 2.3s linear forwards;
+        }
+
+        @keyframes sd-fall {
+            0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+            100% { transform: translate3d(var(--dx, 0), 108vh, 0) rotate(760deg); opacity: .85; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .sd-confetti { display: none; }
+            .sd-win-card { animation: none; }
+        }
+
+        /* ---------- 帮助 / 规则弹层 ---------- */
+        .sd-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1450;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .sd-modal[hidden] { display: none; }
+
+        .sd-modal-mask {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, .38);
+            -webkit-backdrop-filter: blur(2px);
+            backdrop-filter: blur(2px);
+        }
+
+        .sd-modal-card {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            width: min(30rem, 100%);
+            max-height: min(80vh, 40rem);
+            background: #fff;
+            border-radius: 1.1rem;
+            box-shadow: 0 28px 64px -18px rgba(49, 46, 129, .5);
+            overflow: hidden;
+            animation: sd-pop .24s ease;
+        }
+
+        .sd-modal-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .6rem;
+            padding: .9rem 1.1rem;
+            border-bottom: 1px solid #eef1f7;
+        }
+
+        .sd-modal-head h3 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--sd-ink);
+        }
+
+        .sd-modal-head h3 .bi { color: var(--sd-accent); }
+
+        .sd-modal-x {
+            border: 0;
+            background: transparent;
+            color: #9aa4b4;
+            font-size: .95rem;
+            padding: .2rem .35rem;
+            border-radius: .5rem;
+        }
+
+        .sd-modal-x:hover { background: #f3f5fa; color: #4a586c; }
+
+        .sd-modal-body {
+            padding: .9rem 1.1rem 1.1rem;
+            overflow: auto;
+            font-size: .84rem;
+            line-height: 1.7;
+            color: #475467;
+        }
+
+        .sd-modal-body h4 {
+            margin: .9rem 0 .35rem;
+            font-size: .86rem;
+            font-weight: 700;
+            color: var(--sd-ink);
+        }
+
+        .sd-modal-body h4:first-child { margin-top: 0; }
+
+        .sd-modal-body p { margin: 0 0 .45rem; }
+
+        .sd-modal-body b { color: var(--sd-accent-deep); }
+
+        .sd-kbd {
+            display: inline-block;
+            min-width: 1.4rem;
+            padding: .05rem .35rem;
+            margin: 0 .1rem;
+            border: 1px solid #dfe4ee;
+            border-bottom-width: 2px;
+            border-radius: .35rem;
+            background: #fbfcfe;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: .76rem;
+            color: #4a586c;
+            text-align: center;
+        }
+
+        /* ---------- 响应式 ----------
+           桌面：棋盘在左、键盘与工具在右（aside 一列）。
+           移动端：**aside 整块变成底部固定条**（工具一行 + 数字一行），
+           键盘永远在手边、不用为了点数字来回滚；正文给 padding-bottom 让位。
+           之所以用 fixed 而不是 sticky：sticky 在长页面里会随着滚动停在
+           正文中间（成语填空踩过），手感很奇怪。 */
+        @media (min-width: 992px) {
+            .sd-layout {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 20rem;
+                gap: 1.5rem;
+                align-items: start;
+            }
+
+            .sd-side { gap: .6rem; }
+
+            .sd-pad { order: 1; }
+            .sd-tools { order: 3; }
+            .sd-pad-hint { order: 0; }
+            .sd-tipcard { order: 4; }
+        }
+
+        @media (max-width: 991.98px) {
+            .sd-layout { display: block; }
+
+            .sd-side {
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                z-index: 40;
+                display: flex;
+                flex-direction: column;
+                gap: .4rem;
+                padding: .45rem .6rem calc(.45rem + env(safe-area-inset-bottom, 0px));
+                background: rgba(255, 255, 255, .95);
+                -webkit-backdrop-filter: blur(12px);
+                backdrop-filter: blur(12px);
+                border-top: 1px solid #e4e9f2;
+                box-shadow: 0 -10px 26px -18px rgba(30, 41, 59, .55);
+            }
+
+            .sd-tools {
+                order: 1;
+                grid-template-columns: repeat(5, minmax(0, 1fr));
+                gap: .3rem;
+            }
+
+            .sd-tool {
+                flex-direction: row;
+                gap: .28rem;
+                padding: .34rem .1rem;
+                font-size: .72rem;
+                border-radius: .6rem;
+            }
+
+            .sd-tool .bi { font-size: .92rem; }
+
+            /* 手机上的工具按钮只有 68px 宽、34px 高，右上角的次数徽标会压到
+               「检查」两个字上（实测截图就是这个鬼样子）。HUD 里本来就有
+               「检查 3」，这一格就不重复显示了。 */
+            .sd-badge { display: none; }
+
+            .sd-pad {
+                order: 2;
+                grid-template-columns: repeat(var(--pad-cols-m, 9), minmax(0, 1fr));
+                gap: .28rem;
+                /* 3×3 / 4×4 只有 3~4 个键，直接铺满整行会变成三块巨大的砖。
+                   这里按"每键最多 4.6rem"反算宽度上限再居中；
+                   9 键时算出来远大于屏宽（≈698px），不会影响一行排开。
+                   ⚠️ `width: 100%` 不能省：flex 列里的子项一旦有了 auto 左右外边距，
+                   就从「拉伸」变成「按内容收缩」（实测 9 个键被压成 25px/个），
+                   必须显式给宽度，让 max-width 只在窄的时候生效。 */
+                width: 100%;
+                max-width: calc(var(--pad-cols-m, 9) * 4.6rem + (var(--pad-cols-m, 9) - 1) * .28rem);
+                margin: 0 auto;
+            }
+
+            .sd-key {
+                height: 2.85rem;
+                border-radius: .6rem;
+                font-size: 1.02rem;
+            }
+
+            .sd-key-r { right: .16rem; bottom: .06rem; }
+
+            .sd-main { padding-bottom: 8.4rem; }
+
+            .sd-pad-hint,
+            .sd-tipcard { display: none; }
+
+            .sd-frame { padding: .35rem; }
+            .sd-boot { inset: .35rem; }
+        }
+
+        /* 教学浮层在平板/手机上从底部弹出、内容上下堆叠：
+           左右并排要 14.5rem + 文字列，窄屏会把解说挤成一列两三个字。 */
+        @media (max-width: 767.98px) {
+            .sd-teach { padding: 0; align-items: flex-end; }
+            .sd-teach-card {
+                width: 100%;
+                max-height: 92vh;
+                border-radius: 1.15rem 1.15rem 0 0;
+                animation: sd-teach-up .22s ease-out;
+            }
+            .sd-teach-body {
+                grid-template-columns: minmax(0, 1fr);
+                gap: .75rem;
+                padding: .8rem;
+            }
+            .sd-teach-grid { max-width: 11.5rem; margin: 0 auto; }
+            .sd-teach-text h4 { font-size: .95rem; }
+            .sd-teach-text p { font-size: .82rem; }
+            .sd-teach-foot { padding: .6rem .8rem; }
+        }
+
+        @keyframes sd-teach-up {
+            from { opacity: 0; transform: translateY(24px); }
+            to { opacity: 1; transform: none; }
+        }
+
+        /* 手机窄屏：把顶部压扁 —— 375×667 上棋盘本来就是"看得见、但要滚一点"
+           的状态，配置区要是再占两行，第一屏就只剩半块棋盘。
+           尺寸收成一个下拉按钮（约 120px）+ 难度三段（约 140px），一行放得下，
+           所以这里不用再压字号，只把高度与内边距收窄。 */
+        @media (max-width: 575.98px) {
+            .sd-sub { display: none; }
+            .sd-config { gap: .4rem; margin-bottom: .7rem; }
+            .sd-size-btn { height: 2.1rem; padding: 0 .42rem 0 .5rem; gap: .35rem; }
+            .sd-size-btn b { font-size: .88rem; }
+            .sd-size-tag { display: none; }
+            .sd-diffs { height: 2.1rem; flex: 1 1 auto; }
+            .sd-diff { flex: 1 1 0; justify-content: center; padding: 0 .2rem; font-size: .78rem; }
+            .sd-hud { gap: .35rem; }
+            .sd-pill { padding: .18rem .5rem; font-size: .74rem; }
+            /* 工具栏按钮在手机上只留图标（文案靠 title） */
+            .sd-toolbar-actions .sd-tbtn { padding: 0 .5rem; }
+            .sd-toolbar-actions .sd-tbtn > span { display: none; }
+        }
+    </style>
+</head>
+<body class="sc-page sd-page" data-nav="learn">
+
+<header id="site-nav"></header>
+
+<main class="sc-main container py-4">
+
+<div class="sd-root">
+
+    <!-- ==================== 工具栏 ==================== -->
+    <div class="sd-toolbar">
+        <div class="sd-toolbar-title">
+            <a href="/learn" class="btn btn-sm btn-outline-secondary" title="返回教学模块">
+                <i class="bi bi-arrow-left"></i>
+                <span class="d-none d-sm-inline ms-1">返回</span>
+            </a>
+            <div>
+                <h2 class="sc-page-title mb-0"><i class="bi bi-grid-3x3"></i> 数独</h2>
+                <div class="sd-sub">7 种尺寸 · 3 档难度 · 每局现场出题，且保证唯一解</div>
+            </div>
+        </div>
+        <div class="sd-toolbar-actions">
+            <button type="button" class="sd-tbtn is-solid" id="sdNew" title="换一道新题（当前尺寸与难度）">
+                <i class="bi bi-shuffle"></i><span>新局</span>
+            </button>
+
+            <button type="button" class="sd-tbtn is-accent" id="sdTeachBtn"
+                    title="6 步图文演示：怎么数空格、怎么用行 / 列 / 宫排除">
+                <i class="bi bi-mortarboard"></i><span>教学</span>
+            </button>
+
+            <div class="lt-set-wrap" id="sdSetWrap">
+                <button type="button" class="sd-tbtn lt-set-btn" id="sdSetBtn"
+                        title="设置：规则说明 / 重来 / 显示选项 / 统计" aria-haspopup="true" aria-expanded="false">
+                    <i class="bi bi-sliders"></i><span class="d-none d-sm-inline">设置</span>
+                </button>
+
+                <div class="lt-set-pop" id="sdSetPop" hidden aria-label="设置">
+                    <div class="lt-set-head">
+                        <span><i class="bi bi-sliders"></i> 设置</span>
+                        <span>保存在本机浏览器</span>
+                    </div>
+
+                    <button type="button" class="lt-set-item" data-set="help" title="看玩法、尺寸规则与快捷键">
+                        <i class="bi bi-question-circle lt-set-icon"></i>
+                        <span class="lt-set-main">
+                            <span class="lt-set-title">规则说明</span>
+                            <span class="lt-set-desc">行列 / 宫格的要求，以及 3×3、5×5、7×7 为什么没有宫</span>
+                        </span>
+                        <i class="bi bi-chevron-right lt-set-arrow"></i>
+                    </button>
+
+                    <button type="button" class="lt-set-item" data-set="restart" title="清空输入，同一道题重来">
+                        <i class="bi bi-arrow-repeat lt-set-icon"></i>
+                        <span class="lt-set-main">
+                            <span class="lt-set-title">重来本局</span>
+                            <span class="lt-set-desc">清空自己填的数字与笔记，题目本身不变</span>
+                        </span>
+                        <i class="bi bi-chevron-right lt-set-arrow"></i>
+                    </button>
+
+                    <button type="button" class="lt-set-item" data-set="same" title="选中格子时高亮棋盘上相同的数字">
+                        <i class="bi bi-bounding-box lt-set-icon"></i>
+                        <span class="lt-set-main">
+                            <span class="lt-set-title">高亮相同数字</span>
+                            <span class="lt-set-desc">选中一格时，棋盘上同一个数字一起变深</span>
+                        </span>
+                        <span class="lt-set-switch" id="sdSameSw"><i class="bi bi-toggle-on"></i><span>开</span></span>
+                    </button>
+
+                    <button type="button" class="lt-set-item" data-set="autonotes" title="填入数字后自动清掉同行列宫的相关候选数">
+                        <i class="bi bi-eraser lt-set-icon"></i>
+                        <span class="lt-set-main">
+                            <span class="lt-set-title">自动清理笔记</span>
+                            <span class="lt-set-desc">填一个数字后，同行列宫的候选数里自动去掉它</span>
+                        </span>
+                        <span class="lt-set-switch" id="sdAutoSw"><i class="bi bi-toggle-on"></i><span>开</span></span>
+                    </button>
+
+                    <button type="button" class="lt-set-item" data-set="stats" title="查看当前尺寸难度的完成记录">
+                        <i class="bi bi-trophy lt-set-icon"></i>
+                        <span class="lt-set-main">
+                            <span class="lt-set-title">成绩</span>
+                            <span class="lt-set-desc" id="sdStatDesc">还没有完成记录</span>
+                        </span>
+                        <i class="bi bi-chevron-right lt-set-arrow"></i>
+                    </button>
+
+                    <button type="button" class="lt-set-item is-danger" data-set="clear" title="清空全部尺寸/难度的成绩记录">
+                        <i class="bi bi-trash3 lt-set-icon"></i>
+                        <span class="lt-set-main">
+                            <span class="lt-set-title">清空成绩</span>
+                            <span class="lt-set-desc">只删完成记录，不影响正在下的这局</span>
+                        </span>
+                        <i class="bi bi-chevron-right lt-set-arrow"></i>
+                    </button>
+
+                    <a class="lt-set-item is-source" href="https://github.com/renfufei/Story-Creator"
+                       target="_blank" rel="noopener noreferrer" data-set="source"
+                       title="在新标签页打开项目源码仓库（GitHub）">
+                        <i class="bi bi-github lt-set-icon"></i>
+                        <span class="lt-set-main">
+                            <span class="lt-set-title">源码</span>
+                            <span class="lt-set-desc">在 GitHub 上查看这个项目</span>
+                        </span>
+                        <i class="bi bi-box-arrow-up-right lt-set-arrow"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 尺寸 / 难度 ==================== -->
+    <div class="sd-config">
+
+        <!-- 尺寸：当前值写在按钮上（= 上次玩的那一档），点开才是完整面板 -->
+        <div class="sd-size" id="sdSizeWrap">
+            <button type="button" class="sd-size-btn" id="sdSizeBtn"
+                    aria-haspopup="true" aria-expanded="false" title="选择棋盘尺寸">
+                <i class="bi bi-grid-3x3-gap-fill"></i>
+                <b id="sdSizeLabel">9×9</b>
+                <span class="sd-size-tag" id="sdSizeTag">经典</span>
+                <i class="bi bi-chevron-down sd-size-caret"></i>
+            </button>
+
+            <div class="sd-size-pop" id="sdSizePop" hidden aria-label="选择棋盘尺寸">
+                <div class="sd-size-head">
+                    <span>棋盘尺寸</span>
+                    <span>格子越多越难</span>
+                </div>
+
+                <!-- 当前值 + 最近两次，永远排在面板最上面 -->
+                <div class="sd-size-group" id="sdRecentGroup" hidden>
+                    <div class="sd-size-group-t"><i class="bi bi-clock-history"></i> 当前 / 最近用过</div>
+                    <div class="sd-size-grid" id="sdRecent"></div>
+                </div>
+
+                <div class="sd-size-group">
+                    <div class="sd-size-group-t"><i class="bi bi-star"></i> 常玩</div>
+                    <div class="sd-size-grid" id="sdCommon"></div>
+                </div>
+
+                <button type="button" class="sd-size-more" id="sdMoreBtn"
+                        aria-expanded="false" aria-controls="sdMoreList">
+                    <i class="bi bi-plus-circle"></i> 更多尺寸
+                    <i class="bi bi-chevron-down"></i>
+                </button>
+                <div class="sd-size-grid sd-size-more-list" id="sdMoreList" hidden></div>
+            </div>
+        </div>
+
+        <div class="sd-diffs" id="sdDiffs" role="group" aria-label="难度"></div>
+    </div>
+
+    <!-- 首次访问的引导条：看过教学、或点过「不再提示」就不再出现 -->
+    <div class="sd-coach" id="sdCoach" hidden>
+        <i class="bi bi-mortarboard-fill"></i>
+        <div class="sd-coach-t">第一次玩？<b>6 步图文演示</b>带你看懂「怎么数空格、怎么用行 / 列 / 宫排除」。</div>
+        <button type="button" class="sd-tbtn is-accent" id="sdCoachGo">看教学</button>
+        <button type="button" class="sd-coach-x" id="sdCoachX" aria-label="不再提示" title="不再提示">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+
+    <div class="sd-layout">
+
+        <!-- ---------- 左：HUD + 棋盘 ---------- -->
+        <div class="sd-main">
+            <div class="sd-hud">
+                <span class="sd-pill"><i class="bi bi-stopwatch"></i> <b id="sdClock">00:00</b></span>
+                <span class="sd-pill"><i class="bi bi-grid-3x3-gap-fill"></i> 空格 <b id="sdEmpty">0</b></span>
+                <span class="sd-pill" id="sdHintPill"><i class="bi bi-lightbulb"></i> 提示 <b id="sdHints">—</b></span>
+                <span class="sd-pill" id="sdCheckPill"><i class="bi bi-clipboard-check"></i> 检查 <b id="sdChecks">3</b></span>
+            </div>
+
+            <div class="sd-boardwrap" id="sdWrap">
+                <div class="sd-frame">
+                    <div class="sd-board" id="sdBoard" role="grid" aria-label="数独棋盘"></div>
+                    <div class="sd-boot" id="sdBoot" hidden>
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        <span>正在出题…</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sd-legend">
+                <i class="bi bi-info-circle"></i>
+                <span id="sdLegendText"></span>
+            </div>
+        </div>
+
+        <!-- ---------- 右（移动端＝底部固定条）：键盘 + 工具 ---------- -->
+        <aside class="sd-side">
+            <div class="sd-pad-hint" id="sdPadHint">点格子 → 点数字；按【笔记】改记候选数</div>
+
+            <div class="sd-pad" id="sdPad"></div>
+
+            <div class="sd-tools" id="sdTools">
+                <button type="button" class="sd-tool" data-act="undo" title="撤销上一步（Ctrl+Z）">
+                    <i class="bi bi-arrow-counterclockwise"></i><span>撤销</span>
+                </button>
+                <button type="button" class="sd-tool" data-act="erase" title="清空选中格（退格 / 0）">
+                    <i class="bi bi-eraser"></i><span>擦除</span>
+                </button>
+                <button type="button" class="sd-tool" data-act="notes" title="笔记模式：数字记成候选数（N）">
+                    <i class="bi bi-pencil-square"></i><span>笔记</span>
+                </button>
+                <button type="button" class="sd-tool" data-act="hint" title="提示：帮你填对一个格子（H）">
+                    <i class="bi bi-lightbulb"></i><span>提示</span>
+                    <i class="sd-badge" id="sdHintBadge">—</i>
+                </button>
+                <button type="button" class="sd-tool" data-act="check" title="检查：标出填错的格子，每局 3 次">
+                    <i class="bi bi-clipboard-check"></i><span>检查</span>
+                    <i class="sd-badge" id="sdCheckBadge">3</i>
+                </button>
+            </div>
+
+            <div class="sd-tipcard">
+                <div class="sd-tipcard-t"><i class="bi bi-keyboard"></i> 键盘也能玩</div>
+                <div>
+                    <span class="sd-kbd">1</span>~<span class="sd-kbd">9</span> 填数 ·
+                    <span class="sd-kbd">0</span>/<span class="sd-kbd">⌫</span> 擦除 ·
+                    方向键移动 · <span class="sd-kbd">N</span> 笔记 ·
+                    <span class="sd-kbd">H</span> 提示 · <span class="sd-kbd">Ctrl</span>+<span class="sd-kbd">Z</span> 撤销
+                </div>
+            </div>
+        </aside>
+
+    </div>
+</div>
+
+</main>
+
+<!-- ==================== 结算浮层 ==================== -->
+<div class="sd-win" id="sdWin" hidden>
+    <div class="sd-win-mask"></div>
+    <div class="sd-win-card" role="dialog" aria-modal="true" aria-labelledby="sdWinTitle">
+        <div class="sd-win-icon"><i class="bi bi-trophy-fill"></i></div>
+        <h3 class="sd-win-title" id="sdWinTitle">全部填对！</h3>
+        <p class="sd-win-sub" id="sdWinSub"></p>
+        <div class="sd-win-stats">
+            <div><b id="sdWinTime">00:00</b><span>用时</span></div>
+            <div><b id="sdWinHints">0</b><span>提示</span></div>
+            <div><b id="sdWinChecks">0</b><span>检查</span></div>
+        </div>
+        <div class="sd-win-best" id="sdWinBest"></div>
+        <div class="sd-win-actions">
+            <button type="button" class="btn btn-primary" id="sdWinAgain">
+                <i class="bi bi-arrow-repeat"></i> 再来一局
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="sdWinClose">看看棋盘</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== 规则说明 ==================== -->
+<div class="sd-modal" id="sdHelp" hidden>
+    <div class="sd-modal-mask" data-close="help"></div>
+    <div class="sd-modal-card" role="dialog" aria-modal="true" aria-labelledby="sdHelpTitle">
+        <div class="sd-modal-head">
+            <h3 id="sdHelpTitle"><i class="bi bi-question-circle"></i> 数独怎么玩</h3>
+            <button type="button" class="sd-modal-x" data-close="help" aria-label="关闭">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="sd-modal-body">
+            <h4>目标</h4>
+            <p>把空格填满，让<b>每一行、每一列</b>都恰好出现一次 1~N；带宫格的尺寸还要求每个宫也恰好一次。
+               题目保证<b>只有一个解</b>，所以不需要猜，慢慢推都能推出来。</p>
+
+            <h4>尺寸与规则</h4>
+            <p><b>4×4 / 6×6 / 8×8 / 9×9</b> 是标准数独：除行列外还有粗线划出的宫
+                （4×4 是 2×2 宫，6×6 是 2 行 3 列，8×8 是 2 行 4 列，9×9 是 3×3 宫）。</p>
+            <p><b>3×3 / 5×5 / 7×7</b> 是拉丁方：尺寸是素数，切不出等宽的宫格，
+                所以只要求行列不重复。规则更简单，但题目给的数字更少，一样需要推理。</p>
+
+            <h4>工具</h4>
+            <p><b>笔记</b>：把数字记成格子角落的小候选数，用来做排除法。<br>
+                <b>提示</b>：直接帮你填对一个格子。每局的提示次数按<b>棋盘尺寸和难度</b>自动分配
+                —— 格子越多、难度越高给得越多（3×3 只有 1 次，9×9 困难最多 10 次），用掉几次会记进成绩。<br>
+                <b>检查</b>：标出与答案不符的格子，每局 3 次 —— 留到实在卡住时再用。</p>
+
+            <h4>键盘</h4>
+            <p><span class="sd-kbd">1</span>~<span class="sd-kbd">9</span> 填数 ·
+                <span class="sd-kbd">0</span> 或 <span class="sd-kbd">⌫</span> 擦除 ·
+                方向键移动选中格 · <span class="sd-kbd">N</span> 切笔记 ·
+                <span class="sd-kbd">H</span> 提示 · <span class="sd-kbd">Ctrl</span>+<span class="sd-kbd">Z</span> 撤销 ·
+                <span class="sd-kbd">Esc</span> 取消选中</p>
+
+            <h4>存档</h4>
+            <p>每一步都会存在本机浏览器里：关掉页面、换尺寸再换回来都还在，
+                点【新局】才会换成新题。</p>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== 教学关卡 ==================== -->
+<div class="sd-teach" id="sdTeach" hidden>
+    <div class="sd-teach-mask" data-teach-close></div>
+    <div class="sd-teach-card" role="dialog" aria-modal="true" aria-labelledby="sdTeachTitle">
+        <div class="sd-teach-head">
+            <div class="sd-teach-badge"><i class="bi bi-mortarboard-fill"></i></div>
+            <div class="sd-teach-headmain">
+                <h3 id="sdTeachTitle">新手教学 · 4×4 实例</h3>
+                <div class="sd-teach-step" id="sdTeachStep">第 1 步 / 共 6 步</div>
+            </div>
+            <button type="button" class="sd-modal-x" data-teach-close aria-label="关闭教学">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+
+        <div class="sd-teach-body">
+            <div class="sd-teach-board">
+                <div class="sd-teach-grid" id="sdTeachBoard" aria-label="教学棋盘（4×4）"></div>
+                <div class="sd-teach-note">深灰 = 题目给的 · 靛蓝 = 演示填的</div>
+            </div>
+
+            <div class="sd-teach-text">
+                <div class="sd-teach-kicker" id="sdTeachKicker"></div>
+                <h4 id="sdTeachHead"></h4>
+                <p id="sdTeachBody"></p>
+                <div class="sd-teach-formula" id="sdTeachFormula" hidden></div>
+            </div>
+        </div>
+
+        <div class="sd-teach-foot">
+            <div class="sd-teach-dots" id="sdTeachDots"></div>
+            <div class="sd-teach-acts">
+                <button type="button" class="btn btn-outline-secondary" id="sdTeachPrev">上一步</button>
+                <button type="button" class="btn btn-primary" id="sdTeachNext">
+                    下一步 <i class="bi bi-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="sd-confetti" id="sdConfetti" hidden></div>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/nav.js"></script>
+<script>
+/* ============================================================================
+ * 数独（/learn/sudoku）
+ *
+ * 为什么整页自包含、且没有任何 /data 端点：
+ *   数独的「题目」不该是题库 —— 每局现场生成才有重玩价值，而生成只需要
+ *   n×n 的随机回溯 + 唯一解校验，几十到几百毫秒就能算完。没有词库要下发的页面
+ *   再挂一个接口只会变成「多一次白屏等待」。所以这一页与「俄罗斯方块」同类：
+ *   forward 过来即可，数据全在浏览器里。
+ *
+ * 两个容易写歪的地方，先记在这里：
+ *   ① **唯一解校验不能用限次回溯的"找到就到"**：必须数到 2 个解才停，
+ *      否则会把多解的题当唯一解发出去（玩家会填出另一套合法答案却判错）。
+ *   ② **出题有硬性时间预算**：困难 9×9 想挖到 23 个已知数可能挖不动，
+ *      超时只是"少挖几个"，题目仍然唯一（只在唯一时才接受挖空），
+ *      绝不会生成一道坏题。
+ * ========================================================================== */
+(function () {
+    'use strict';
+
+    /* ---------------- 常量 ---------------- */
+
+    /** 尺寸预设：3~9 全给。tag 是给新手看的难度暗示，不参与算法。 */
+    var PRESETS = [
+        { n: 3, tag: '热身' },
+        { n: 4, tag: '入门' },
+        { n: 5, tag: '轻松' },
+        { n: 6, tag: '进阶' },
+        { n: 7, tag: '烧脑' },
+        { n: 8, tag: '挑战' },
+        { n: 9, tag: '经典' }
+    ];
+
+    /**
+     * 常玩尺寸：只有这两个在下拉面板里直接露出，其余 5 种折叠进【更多尺寸】。
+     * 3×3 是热身、6×6 是"标准宫格 + 时长合适"的甜点，其余（尤其 5/7 那种
+     * 素数拉丁方）属于"想换口味时才会点"，摆在第一层只是噪音。
+     */
+    var COMMON_N = [3, 6];
+
+    /**
+     * 三档难度 = 已知数的占比目标（占格子总数的比例）。
+     * box = 有宫格的标准数独；latin = 拉丁方（无宫格，约束更松，所以挖得更狠一点）。
+     */
+    var DIFFS = [
+        { key: 'easy', name: '简单', box: 0.46, latin: 0.42 },
+        { key: 'normal', name: '普通', box: 0.36, latin: 0.33 },
+        { key: 'hard', name: '困难', box: 0.28, latin: 0.26 }
+    ];
+
+    /**
+     * 哪些尺寸有宫格，以及宫的切法 [行数, 列数]。
+     * 3/5/7 是素数 ⇒ 没有等宽宫格，只能玩拉丁方（只查行列）。
+     * 6 是 2 行 × 3 列、8 是 2 行 × 4 列，都不是正方形宫 —— 同样合法且常见。
+     */
+    var BOX = { 4: [2, 2], 6: [2, 3], 8: [2, 4], 9: [3, 3] };
+
+    var CHECK_TOTAL = 3;          // 每局检查次数
+
+    /**
+     * 提示次数：按「空格数 × 难度系数」算，再按尺寸给保底下限。
+     *
+     * 为什么按空格数而不是格子总数：提示解决的是「空格」，一盘 9×9 要是只挖了 20 格，
+     * 就不该比 3×3 给更多次。用实际已知数算，也能自动适应「这盘挖得深还是浅」
+     * —— 每盘都是现挖的，已知数本来就在目标值上下浮动。
+     *
+     * 难度系数：简单档 4×4 都能一眼看完，给多了反而在鼓励乱点；困难档才是提示的主力场景。
+     * 尺寸保底：3×3 简单只有 2 个空格，按比例算出来是 0 次 —— 「一次都不给」比给 1 次更难受。
+     * 上限卡在空格数的一半：否则提示数量足够把整盘填完，等于自动通关。
+     */
+    var HINT_RATE = { easy: 0.09, normal: 0.14, hard: 0.17 };
+    var HINT_FLOOR = { 3: 1, 4: 1, 5: 2, 6: 2, 7: 2, 8: 3, 9: 3 };
+
+    var GEN_BUDGET_MS = 2600;     // 单局出题总预算（超时就少挖几格）
+    var LS_SAVE = 'sudoku_save_v2';
+    var LS_STATS = 'sudoku_stats_v1';
+    var LS_OPTS = 'sudoku_opts_v1';
+    var MAX_SAVES = 6;
+
+    /* ---------------- 小工具 ---------------- */
+
+    function $(sel) { return document.querySelector(sel); }
+
+    function shuffle(a) {
+        for (var i = a.length - 1; i > 0; i--) {
+            var j = Math.floor(Math.random() * (i + 1));
+            var t = a[i]; a[i] = a[j]; a[j] = t;
+        }
+        return a;
+    }
+
+    /** 12 位以内的 popcount（n ≤ 9，够用） */
+    var PC = new Uint8Array(1 << 12);
+    for (var _i = 1; _i < PC.length; _i++) PC[_i] = PC[_i >> 1] + (_i & 1);
+    function popcount(x) { return PC[x & 4095] + PC[(x >> 12) & 4095]; }
+
+    function fmtTime(sec) {
+        var s = Math.max(0, sec | 0);
+        var h = (s / 3600) | 0, m = ((s % 3600) / 60) | 0, t = s % 60;
+        var p = function (x) { return (x < 10 ? '0' : '') + x; };
+        return h ? (h + ':' + p(m) + ':' + p(t)) : (p(m) + ':' + p(t));
+    }
+
+    /** 题目已知数（非空格）的个数 */
+    function countGivens(arr) {
+        var c = 0;
+        for (var i = 0; i < arr.length; i++) if (arr[i]) c++;
+        return c;
+    }
+
+    /** 本局提示额度：见 HINT_RATE / HINT_FLOOR 的注释 */
+    function hintQuota(n, diffKey, givens) {
+        var blanks = n * n - givens;
+        var rate = HINT_RATE[diffKey];
+        if (rate === undefined) rate = HINT_RATE.normal;
+        var cap = Math.max(1, Math.floor(blanks / 2));
+        var floor = HINT_FLOOR[n] || 2;
+        return Math.min(cap, Math.max(floor, Math.round(blanks * rate)));
+    }
+
+    function toast(msg, kind) {
+        if (window.SC && SC.toast) {
+            (SC.toast[kind] || SC.toast.info)(msg);
+        } else {
+            console.log('[sudoku] ' + msg);
+        }
+    }
+
+    function geomFor(n) {
+        var g = BOX[n];
+        return g ? { bh: g[0], bw: g[1] } : null;
+    }
+
+    function presetOf(n) {
+        for (var i = 0; i < PRESETS.length; i++) if (PRESETS[i].n === n) return PRESETS[i];
+        return PRESETS[PRESETS.length - 1];
+    }
+
+    function diffOf(key) {
+        for (var i = 0; i < DIFFS.length; i++) if (DIFFS[i].key === key) return DIFFS[i];
+        return DIFFS[1];
+    }
+
+    /* ---------------- 求解器 ----------------
+       countSolutions：数到 limit 个解就停（唯一解校验传 2）；超时返回 -1，
+                       调用方按"不唯一"处理 —— 宁可少挖一格，也不发坏题。
+       fill          ：随机顺序填满整盘，用来造一个合法终盘。 */
+    function makeSolver(n, geom) {
+        var N = n * n;
+        var FULL = (1 << n) - 1;
+        var boxCols = geom ? n / geom.bw : 0;
+        var boxIdx = new Int16Array(N);
+        var nb = geom ? n : 1;
+
+        for (var i = 0; i < N; i++) {
+            var r = (i / n) | 0, c = i % n;
+            boxIdx[i] = geom ? (((r / geom.bh) | 0) * boxCols + ((c / geom.bw) | 0)) : -1;
+        }
+
+        function search(grid, limit, deadline, random, out) {
+            var g = Int8Array.from(grid);
+            var rowM = new Int32Array(n), colM = new Int32Array(n), boxM = new Int32Array(nb);
+            for (var i = 0; i < N; i++) {
+                var v = g[i];
+                if (!v) continue;
+                var bit = 1 << (v - 1), r = (i / n) | 0, c = i % n, b = boxIdx[i];
+                rowM[r] |= bit; colM[c] |= bit; if (b >= 0) boxM[b] |= bit;
+            }
+
+            var found = 0, timedOut = false, steps = 0;
+
+            function rec() {
+                if (found >= limit || timedOut) return;
+                /* 每 512 个节点看一次表：Date.now() 本身不便宜，逐节点调用会明显变慢 */
+                if (((++steps) & 511) === 0 && Date.now() > deadline) { timedOut = true; return; }
+
+                /* MRV：先填候选数最少的格子，回溯树能小一个量级 */
+                var best = -1, bestMask = 0, bestCnt = 99;
+                for (var i = 0; i < N; i++) {
+                    if (g[i]) continue;
+                    var r = (i / n) | 0, c = i % n, b = boxIdx[i];
+                    var mask = FULL & ~(rowM[r] | colM[c] | (b >= 0 ? boxM[b] : 0));
+                    if (!mask) return;                       // 死路
+                    var cnt = popcount(mask);
+                    if (cnt < bestCnt) {
+                        best = i; bestMask = mask; bestCnt = cnt;
+                        if (cnt === 1) break;
+                    }
+                }
+
+                if (best < 0) {                              // 全填满了 ⇒ 一个解
+                    found++;
+                    if (out) out.set(g);
+                    return;
+                }
+
+                var br = (best / n) | 0, bc = best % n, bb = boxIdx[best];
+                var vals = [];
+                for (var v = 1; v <= n; v++) if (bestMask & (1 << (v - 1))) vals.push(v);
+                if (random) shuffle(vals);
+
+                for (var k = 0; k < vals.length; k++) {
+                    var val = vals[k], bit = 1 << (val - 1);
+                    g[best] = val;
+                    rowM[br] |= bit; colM[bc] |= bit; if (bb >= 0) boxM[bb] |= bit;
+                    rec();
+                    g[best] = 0;
+                    rowM[br] ^= bit; colM[bc] ^= bit; if (bb >= 0) boxM[bb] ^= bit;
+                    if (found >= limit || timedOut) return;
+                }
+            }
+
+            rec();
+            return { count: found, timedOut: timedOut };
+        }
+
+        return {
+            countSolutions: function (grid, limit, deadline) {
+                var r = search(grid, limit, deadline, false, null);
+                return r.timedOut ? -1 : r.count;
+            },
+            /** 从 grid 出发随机填满（grid 全 0 ⇒ 造一个随机终盘；带已知数 ⇒ 还原唯一解） */
+            fill: function (grid, deadline) {
+                var out = new Int8Array(N);
+                var r = search(grid || new Int8Array(N), 1, deadline, true, out);
+                return r.count > 0 ? out : null;
+            }
+        };
+    }
+
+    /* ---------------- 生成一局 ---------------- */
+
+    /**
+     * 小盘（3×3 / 4×4）**直接给已知数个数**，不用比例：
+     * 9 格、16 格按百分比算出来的目标都挤在一起（9×0.42≈4、9×0.26≈2），
+     * 而唯一解的下限本来就在 4~5 个已知数，三档难度会算出同一道题。
+     * 手写三个数之后，简单档明显更"满"、困难档贴着唯一解的极限。
+     */
+    var MINI_GIVENS = {
+        3: { easy: 7, normal: 5, hard: 4 },
+        4: { easy: 9, normal: 7, hard: 5 }
+    };
+
+    /**
+     * 挖空到目标已知数。
+     *   ① 先按对称成对挖（i 与 n²-1-i）：棋盘视觉规整，也不会出现整角被挖光；
+     *   ② 成对挖不动了再单格补挖：奇数目标、以及"再挖一对就超了"的情况只能靠它，
+     *      9×9 的困难档能不能真的挖到 24 个已知数，差别就在这里。
+     * 每次挖空都要求「解唯一」（countSolutions 数到 2 就停）；不唯一就立刻填回去。
+     */
+    function carve(puzzle, solver, n, target, deadline) {
+        var N = n * n, givens = 0;
+        for (var i = 0; i < N; i++) if (puzzle[i]) givens++;
+
+        function attempt(victims) {
+            var saved = victims.map(function (x) { return puzzle[x]; });
+            victims.forEach(function (x) { puzzle[x] = 0; });
+            if (solver.countSolutions(puzzle, 2, deadline) === 1) {
+                givens -= victims.length;
+                return true;
+            }
+            victims.forEach(function (x, t) { puzzle[x] = saved[t]; });
+            return false;
+        }
+
+        function pass(order, size) {
+            var removed = 0;
+            for (var k = 0; k < order.length && givens - size >= target; k++) {
+                if (Date.now() > deadline) break;
+                var i = order[k], vs = [];
+                if (puzzle[i]) vs.push(i);
+                if (size > 1) {
+                    var j = N - 1 - i;
+                    if (j !== i && puzzle[j]) vs.push(j);
+                }
+                if (vs.length < size) continue;
+                if (attempt(vs)) removed += vs.length;
+            }
+            return removed;
+        }
+
+        var order = shuffle(Array.from({ length: N }, function (_, k) { return k; }));
+
+        for (var p1 = 0; p1 < 3 && givens - 2 >= target; p1++) {
+            if (!pass(order, 2)) break;
+        }
+        for (var p2 = 0; p2 < 2 && givens - 1 >= target; p2++) {
+            if (!pass(shuffle(order.slice()), 1)) break;
+        }
+        return givens;
+    }
+
+    /** 出一盘：随机终盘 → 挖空 → 返回题目与答案 */
+    function buildOnce(n, diffKey, deadline) {
+        var geom = geomFor(n);
+        var solver = makeSolver(n, geom);
+        var solution = solver.fill(new Int8Array(n * n), deadline);
+        if (!solution) throw new Error('终盘生成失败');
+
+        var diff = diffOf(diffKey);
+        var target;
+        if (MINI_GIVENS[n]) {
+            target = MINI_GIVENS[n][diff.key];
+        } else {
+            target = Math.round(n * n * (geom ? diff.box : diff.latin));
+            target = Math.max(n + 2, target);
+        }
+
+        var puzzle = Int8Array.from(solution);
+        var givens = carve(puzzle, solver, n, target, deadline);
+        return { puzzle: puzzle, solution: solution, geom: geom, givens: givens, target: target };
+    }
+
+    /**
+     * 出题入口。
+     * 为什么要重试：挖空是贪心的，某些终盘挖到一半就"再也挖不动"，
+     * 结果困难档的已知数比普通档还多（7×7 实测踩到过）。所以最多试 3 盘、
+     * 取已知数最少的那盘；达标（target+1 以内）就提前收手，别浪费用户时间。
+     */
+    function generate(n, diffKey) {
+        var deadline = Date.now() + GEN_BUDGET_MS;
+        var best = null;
+        for (var attempt = 0; attempt < 3; attempt++) {
+            var g = buildOnce(n, diffKey, deadline);
+            if (!best || g.givens < best.givens) best = g;
+            if (g.givens <= g.target + 1) break;
+            if (Date.now() > deadline) break;
+        }
+        return best;
+    }
+
+    /** 存档里没有答案：用求解器从题目唯一还原（题目是唯一解，填出来的就是它） */
+    function solvePuzzle(puzzle, n, geom) {
+        return makeSolver(n, geom).fill(puzzle, Date.now() + 1500);
+    }
+
+    /* ---------------- 状态 ---------------- */
+
+    var state = {
+        n: 9,
+        diff: 'normal',
+        geom: null,
+        puzzle: null,      // Int8Array 题目（0 = 空）
+        solution: null,    // Int8Array 答案
+        value: null,       // Int8Array 当前盘面（题目 + 玩家输入）
+        notes: null,       // Int16Array 位掩码候选数
+        hinted: new Set(), // 被【提示】填出来的格子
+        wrong: null,       // 检查标出的错误格（Set，几秒后自动消失）
+        sel: -1,
+        notesMode: false,
+        undo: [],
+        elapsed: 0,
+        running: false,
+        solved: false,
+        hints: 0,          // 已用提示次数（额度见 hintTotal，结算里显示「已用/额度」）
+        hintTotal: 0,      // 本局提示额度 = hintQuota(n, diff, 已知数)
+        checks: CHECK_TOTAL,
+        /* recent = 最近用过的尺寸（新→旧，最多 3 个），只用来排下拉面板的顺序；
+           teachSeen = 是否已经打开过教学（决定新手引导条还出不出现）。 */
+        opts: { sameNum: true, autoNotes: true, recent: [], teachSeen: false },
+        paused: false,     // 教学浮层打开时暂停计时
+        booting: false
+    };
+
+    var cells = [];       // 格子 DOM
+    var baseCls = [];     // 每格的静态 class（宫格粗线 / 交替底色）
+    var valEls = [];
+    var noteEls = [];
+    var cache = [];       // 每格上次绘制的 { cls, val, notes }，只改差异
+    var peers = [];       // 每格同行/同列/同宫的下标
+    var padKeys = [];
+    var wrongTimer = 0;
+    var saveTimer = 0;
+
+    var boardEl, padEl, toolsEl, diffsEl, wrapEl, bootEl, legendEl;
+    var sizeWrapEl, sizeBtnEl, sizePopEl, sizeRecentEl, sizeCommonEl, sizeMoreBtnEl, sizeMoreListEl;
+
+    /* ---------------- 索引 ---------------- */
+
+    function boxOf(i) {
+        var g = state.geom;
+        if (!g) return -1;
+        var n = state.n, r = (i / n) | 0, c = i % n;
+        return ((r / g.bh) | 0) * (n / g.bw) + ((c / g.bw) | 0);
+    }
+
+    function buildPeers() {
+        var n = state.n, N = n * n;
+        peers = new Array(N);
+        for (var i = 0; i < N; i++) {
+            var r = (i / n) | 0, c = i % n, b = boxOf(i), list = [];
+            for (var j = 0; j < N; j++) {
+                if (j === i) continue;
+                var r2 = (j / n) | 0, c2 = j % n;
+                if (r2 === r || c2 === c || (b >= 0 && boxOf(j) === b)) list.push(j);
+            }
+            peers[i] = list;
+        }
+    }
+
+    /* ---------------- 建棋盘 / 键盘 ---------------- */
+
+    function buildBoard() {
+        var n = state.n, N = n * n, g = state.geom;
+        boardEl.style.setProperty('--n', n);
+        boardEl.style.setProperty('--note-cols', Math.ceil(Math.sqrt(n)));
+        boardEl.classList.toggle('is-latin', !g);
+        boardEl.innerHTML = '';
+
+        cells = []; baseCls = []; valEls = []; noteEls = []; cache = [];
+
+        var frag = document.createDocumentFragment();
+        for (var i = 0; i < N; i++) {
+            var r = (i / n) | 0, c = i % n;
+            var cls = 'sd-cell';
+
+            if (g) {
+                if (c % g.bw === g.bw - 1 && c !== n - 1) cls += ' is-br';
+                if (r % g.bh === g.bh - 1 && r !== n - 1) cls += ' is-bb';
+                if ((((r / g.bh) | 0) + ((c / g.bw) | 0)) % 2 === 1) cls += ' is-alt';
+            } else if (r % 2 === 1) {
+                /* 拉丁方没有宫格，用隔行浅底代替宫格交替，棋盘才不至于糊成一片 */
+                cls += ' is-alt';
+            }
+
+            /* 最右列 / 最下行不画右边框和下边框（交给棋盘的 2px 外框） */
+            if (c === n - 1) cls += ' is-edge-r';
+            if (r === n - 1) cls += ' is-edge-b';
+
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = cls;
+            btn.dataset.i = String(i);
+
+            var notes = document.createElement('span');
+            notes.className = 'sd-notes';
+            var slots = [];
+            for (var v = 1; v <= n; v++) {
+                var s = document.createElement('span');
+                s.className = 'sd-note';
+                notes.appendChild(s);
+                slots.push(s);
+            }
+
+            var val = document.createElement('span');
+            val.className = 'sd-val';
+
+            btn.appendChild(notes);
+            btn.appendChild(val);
+            btn.addEventListener('click', onCellClick);
+
+            frag.appendChild(btn);
+            cells.push(btn);
+            baseCls.push(cls);
+            valEls.push(val);
+            noteEls.push(slots);
+            cache.push({ cls: cls, val: '', notes: 0 });
+        }
+        boardEl.appendChild(frag);
+
+        /* 棋盘上限跟着尺寸走：3×3 铺满 520px 会变成三个巨型格子，很难看 */
+        wrapEl.style.maxWidth = n <= 4 ? '21rem' : (n <= 6 ? '26rem' : '33rem');
+        fitFont();
+    }
+
+    function buildPad() {
+        var n = state.n;
+        padEl.innerHTML = '';
+        padKeys = [];
+        /* 9 个数字排 3 列（3×3 更像电话键盘）；6~8 排 4 列；3~5 就一排 */
+        var cols = n <= 5 ? n : (n <= 8 ? 4 : 3);
+        padEl.style.setProperty('--pad-cols', cols);
+        padEl.style.setProperty('--pad-cols-m', n);
+
+        for (var v = 1; v <= n; v++) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'sd-key';
+            b.dataset.v = String(v);
+            b.innerHTML = '<span>' + v + '</span><span class="sd-key-r"></span>';
+            b.addEventListener('click', function (ev) {
+                onKey(Number(ev.currentTarget.dataset.v));
+            });
+            padEl.appendChild(b);
+            padKeys.push(b);
+        }
+    }
+
+    /** 字号跟着格子宽度走：不写死 px，换尺寸 / 转屏 / 缩放都不会溢出 */
+    function fitFont() {
+        if (!cells.length) return;
+        var w = cells[0].getBoundingClientRect().width;
+        if (!w) return;
+        var f = Math.min(w * (state.n > 6 ? 0.50 : 0.54), 64);
+        boardEl.style.setProperty('--sd-font', f.toFixed(1) + 'px');
+        boardEl.style.setProperty('--sd-note-font', Math.max(8, Math.round(w * 0.23)) + 'px');
+    }
+
+    /* ---------------- 绘制 ---------------- */
+
+    function conflicts() {
+        var n = state.n, v = state.value, out = new Set();
+        for (var i = 0; i < v.length; i++) {
+            if (!v[i]) continue;
+            var r = (i / n) | 0, c = i % n, b = boxOf(i);
+            for (var j = i + 1; j < v.length; j++) {
+                if (v[j] !== v[i]) continue;
+                var r2 = (j / n) | 0, c2 = j % n;
+                if (r2 === r || c2 === c || (b >= 0 && boxOf(j) === b)) { out.add(i); out.add(j); }
+            }
+        }
+        return out;
+    }
+
+    function paint() {
+        var n = state.n, sel = state.sel;
+        var selR = sel >= 0 ? (sel / n) | 0 : -1;
+        var selC = sel >= 0 ? sel % n : -1;
+        var selV = sel >= 0 ? state.value[sel] : 0;
+        var selB = sel >= 0 ? boxOf(sel) : -2;
+        var bad = conflicts();
+        var wrong = state.wrong;
+        var sameOn = state.opts.sameNum;
+
+        for (var i = 0; i < cells.length; i++) {
+            var v = state.value[i], c = cache[i];
+            var r = (i / n) | 0, col = i % n;
+            var cls = baseCls[i];
+
+            if (v) cls += ' has-val';
+            if (state.puzzle[i]) cls += ' is-given';
+            if (state.hinted.has(i)) cls += ' is-hint';
+
+            if (sel >= 0 && i !== sel) {
+                if (r === selR || col === selC || (selB >= 0 && boxOf(i) === selB)) cls += ' is-peer';
+            }
+            if (sameOn && selV && v === selV) cls += ' is-same';
+            if (i === sel) cls += ' is-sel';
+            if (bad.has(i) || (wrong && wrong.has(i))) cls += ' is-bad';
+
+            if (cls !== c.cls) { cells[i].className = cls; c.cls = cls; }
+
+            var txt = v ? String(v) : '';
+            if (txt !== c.val) { valEls[i].textContent = txt; c.val = txt; }
+
+            /* 笔记只在「空格 + 有候选数」时可见；CSS 用 .has-val 收起 */
+            var mask = v ? 0 : state.notes[i];
+            if (mask !== c.notes) {
+                var slots = noteEls[i];
+                for (var d = 0; d < slots.length; d++) {
+                    slots[d].textContent = (mask & (1 << d)) ? String(d + 1) : '';
+                }
+                c.notes = mask;
+            }
+        }
+
+        updateHud();
+    }
+
+    function updateHud() {
+        var n = state.n, empty = 0;
+        for (var i = 0; i < state.value.length; i++) if (!state.value[i]) empty++;
+        $('#sdEmpty').textContent = empty;
+        $('#sdClock').textContent = fmtTime(state.elapsed);
+
+        /* 提示 / 检查在 HUD 里都显示「还剩几次」（玩家关心的是还能用几次）；
+           结算浮层里才写成「已用/额度」，那是复盘这一局用的。 */
+        var hintLeft = Math.max(0, state.hintTotal - state.hints);
+        $('#sdHints').textContent = hintLeft;
+        $('#sdChecks').textContent = state.checks;
+
+        $('#sdHintPill').classList.toggle('is-warn', hintLeft <= 0);
+        $('#sdHintPill').title = '本局共 ' + state.hintTotal + ' 次提示，还剩 ' + hintLeft + ' 次'
+            + '（按棋盘尺寸与难度自动分配）';
+
+        var hintBadge = $('#sdHintBadge');
+        hintBadge.textContent = hintLeft;
+        hintBadge.hidden = hintLeft <= 0;
+
+        var hintBtn = toolsEl.querySelector('[data-act="hint"]');
+        if (hintBtn) {
+            hintBtn.disabled = hintLeft <= 0;
+            hintBtn.title = '提示：帮你填对一个格子（H）· 本局 ' + state.hintTotal + ' 次，还剩 ' + hintLeft + ' 次';
+        }
+
+        var checkPill = $('#sdCheckPill');
+        checkPill.classList.toggle('is-warn', state.checks <= 0 || !!(state.wrong && state.wrong.size));
+
+        var badge = $('#sdCheckBadge');
+        badge.textContent = state.checks;
+        badge.hidden = state.checks <= 0;
+
+        var checkBtn = toolsEl.querySelector('[data-act="check"]');
+        if (checkBtn) checkBtn.disabled = state.checks <= 0;
+        var undoBtn = toolsEl.querySelector('[data-act="undo"]');
+        if (undoBtn) undoBtn.disabled = state.undo.length === 0;
+
+        updatePad();
+    }
+
+    function updatePad() {
+        var n = state.n, cnt = new Int32Array(n + 1);
+        for (var i = 0; i < state.value.length; i++) if (state.value[i]) cnt[state.value[i]]++;
+        for (var v = 1; v <= n; v++) {
+            var key = padKeys[v - 1];
+            if (!key) continue;
+            var left = n - cnt[v];
+            key.querySelector('.sd-key-r').textContent = String(left);
+            key.classList.toggle('is-full', left <= 0);
+        }
+    }
+
+    /* ---------------- 交互 ---------------- */
+
+    function onCellClick(ev) {
+        select(Number(ev.currentTarget.dataset.i), true);
+    }
+
+    function select(i, focus) {
+        if (state.booting) return;
+        state.sel = i;
+        paint();
+        if (focus && cells[i]) {
+            try { cells[i].focus({ preventScroll: true }); } catch (e) { /* 老浏览器忽略 */ }
+        }
+    }
+
+    function onKey(v) {
+        if (state.booting) return;
+        var i = state.sel;
+        if (i < 0) { toast('先点一个格子，再点数字'); return; }
+        if (state.puzzle[i]) { toast('题目给的数字不能改'); return; }
+        if (state.notesMode) { toggleNote(i, v); return; }
+        place(i, v);
+    }
+
+    function pushUndo(i) {
+        state.undo.push({ i: i, v: state.value[i], notes: state.notes[i], hinted: state.hinted.has(i) });
+        if (state.undo.length > 400) state.undo.shift();
+    }
+
+    function place(i, v) {
+        /* 再点一次同一个数字＝擦掉：手机上少一个动作 */
+        if (state.value[i] === v) { erase(i); return; }
+
+        pushUndo(i);
+        state.value[i] = v;
+        state.notes[i] = 0;
+        state.hinted.delete(i);
+        if (state.wrong) state.wrong.delete(i);
+
+        if (state.opts.autoNotes) {
+            var list = peers[i], bit = ~(1 << (v - 1));
+            for (var k = 0; k < list.length; k++) state.notes[list[k]] &= bit;
+        }
+
+        state.sel = i;
+        afterChange();
+    }
+
+    function erase(i) {
+        if (state.puzzle[i]) { toast('题目给的数字不能改'); return; }
+        if (!state.value[i] && !state.notes[i]) return;
+        pushUndo(i);
+        state.value[i] = 0;
+        state.notes[i] = 0;
+        state.hinted.delete(i);
+        if (state.wrong) state.wrong.delete(i);
+        afterChange();
+    }
+
+    function toggleNote(i, v) {
+        if (state.value[i]) { toast('这一格已经有数字了，先擦掉再记笔记'); return; }
+        pushUndo(i);
+        state.notes[i] ^= (1 << (v - 1));
+        afterChange();
+    }
+
+    function undo() {
+        var last = state.undo.pop();
+        if (!last) { toast('没有可撤销的步骤'); return; }
+        state.value[last.i] = last.v;
+        state.notes[last.i] = last.notes;
+        if (last.hinted) state.hinted.add(last.i); else state.hinted.delete(last.i);
+        if (state.wrong) state.wrong.delete(last.i);
+        state.sel = last.i;
+        afterChange();
+    }
+
+    function hint() {
+        var i = -1, N = state.n * state.n;
+        if (state.sel >= 0 && !state.value[state.sel] && !state.puzzle[state.sel]) {
+            i = state.sel;
+        } else {
+            for (var k = 0; k < N; k++) if (!state.value[k]) { i = k; break; }
+        }
+        if (i < 0) { toast('已经填满了'); return; }
+
+        /* 额度用完就别再填了 —— 否则「提示」等于无限复活，成绩里的提示次数也没意义 */
+        if (state.hints >= state.hintTotal) {
+            toast('本局 ' + state.hintTotal + ' 次提示已用完，靠推理继续吧', 'warn');
+            return;
+        }
+
+        pushUndo(i);
+        state.value[i] = state.solution[i];
+        state.notes[i] = 0;
+        state.hinted.add(i);
+        if (state.wrong) state.wrong.delete(i);
+        state.hints++;
+        state.sel = i;
+        afterChange();
+    }
+
+    function check() {
+        if (state.checks <= 0) { toast('检查次数用完了，靠推理继续吧'); return; }
+        state.checks--;
+
+        var wrong = new Set();
+        for (var i = 0; i < state.value.length; i++) {
+            var v = state.value[i];
+            if (v && !state.puzzle[i] && v !== state.solution[i]) wrong.add(i);
+        }
+
+        state.wrong = wrong;
+        paint();
+
+        if (!wrong.size) {
+            toast('目前填的都对 ✓', 'success');
+        } else {
+            toast('标出了 ' + wrong.size + ' 个不对的格子', 'warn');
+        }
+
+        clearTimeout(wrongTimer);
+        wrongTimer = setTimeout(function () {
+            state.wrong = null;
+            paint();
+        }, 2800);
+    }
+
+    function toggleNotesMode() {
+        state.notesMode = !state.notesMode;
+        var btn = toolsEl.querySelector('[data-act="notes"]');
+        if (btn) btn.classList.toggle('is-on', state.notesMode);
+        $('#sdPadHint').textContent = state.notesMode
+            ? '笔记模式：点数字记候选数，再点一次去掉'
+            : '点格子 → 点数字；按【笔记】改记候选数';
+    }
+
+    function afterChange() {
+        paint();
+        checkWin();
+        scheduleSave();
+    }
+
+    /* ---------------- 完成判定 ---------------- */
+
+    function checkWin() {
+        if (state.solved) return;
+        for (var i = 0; i < state.value.length; i++) {
+            if (state.value[i] !== state.solution[i]) return;
+        }
+        win();
+    }
+
+    function win() {
+        state.solved = true;
+        state.running = false;
+        state.sel = -1;
+        state.wrong = null;
+        paint();
+
+        var stats = loadStats();
+        var key = state.n + '-' + state.diff;
+        var rec = stats[key] || { done: 0, best: 0 };
+        rec.done++;
+        /* 用时至少记 1 秒：0 会被当成"没有记录"（下面的 !rec.best 判断），
+           于是刷屏式秒破的 3×3 每次都显示"新的最好成绩"，成绩也存成 0 */
+        var used = Math.max(1, state.elapsed);
+        var isBest = !rec.best || used < rec.best;
+        if (isBest) rec.best = used;
+        stats[key] = rec;
+        saveStats(stats);
+
+        /* 这局结束了，存档清掉：下一次刷新不该回到一盘已完成的棋 */
+        var all = loadSaves();
+        delete all[key];
+        all.__last = key;
+        try { localStorage.setItem(LS_SAVE, JSON.stringify(all)); } catch (e) { /* ignore */ }
+
+        $('#sdWinSub').textContent = state.n + '×' + state.n + ' · ' + diffOf(state.diff).name
+            + (state.geom ? ' · 标准数独' : ' · 拉丁方');
+        $('#sdWinTime').textContent = fmtTime(state.elapsed);
+        /* 「已用/额度」—— 单独写个 3 看不出来这 3 次算多还是算少 */
+        $('#sdWinHints').textContent = state.hints + '/' + state.hintTotal;
+        $('#sdWinChecks').textContent = (CHECK_TOTAL - state.checks);
+        $('#sdWinBest').textContent = isBest
+            ? '新的最好成绩！'
+            : ('本档最好成绩 ' + fmtTime(rec.best) + '（已完成 ' + rec.done + ' 局）');
+        $('#sdWin').hidden = false;
+
+        confetti();
+        syncSettings();
+    }
+
+    function confetti() {
+        var host = $('#sdConfetti');
+        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        var colors = ['#4f46e5', '#6366f1', '#22d3ee', '#34d399', '#fbbf24', '#f472b6'];
+        host.innerHTML = '';
+        host.hidden = false;
+        for (var i = 0; i < 34; i++) {
+            var s = document.createElement('i');
+            s.style.left = (Math.random() * 100) + '%';
+            s.style.background = colors[i % colors.length];
+            s.style.setProperty('--dx', ((Math.random() - 0.5) * 140).toFixed(0) + 'px');
+            s.style.animationDelay = (Math.random() * 0.35).toFixed(2) + 's';
+            s.style.animationDuration = (1.9 + Math.random() * 0.9).toFixed(2) + 's';
+            host.appendChild(s);
+        }
+        setTimeout(function () { host.hidden = true; host.innerHTML = ''; }, 3200);
+    }
+
+    /* ---------------- 存档 / 成绩 ---------------- */
+
+    function loadSaves() {
+        try {
+            var d = JSON.parse(localStorage.getItem(LS_SAVE) || '{}');
+            return (d && typeof d === 'object') ? d : {};
+        } catch (e) { return {}; }
+    }
+
+    function saveNow() {
+        if (state.solved || !state.puzzle) return;
+        var all = loadSaves();
+        var key = state.n + '-' + state.diff;
+        all[key] = {
+            n: state.n, diff: state.diff, ts: Date.now(),
+            el: state.elapsed, hints: state.hints, checks: state.checks,
+            p: state.puzzle.join(''),
+            u: state.value.join(''),
+            c: Array.prototype.join.call(state.notes, ',')
+        };
+        all.__last = key;
+
+        /* 只留最近 6 局，免得 localStorage 被这玩意占满 */
+        var keys = Object.keys(all).filter(function (k) { return k !== '__last'; });
+        if (keys.length > MAX_SAVES) {
+            keys.sort(function (a, b) { return (all[a].ts || 0) - (all[b].ts || 0); });
+            for (var i = 0; i < keys.length - MAX_SAVES; i++) delete all[keys[i]];
+        }
+
+        try { localStorage.setItem(LS_SAVE, JSON.stringify(all)); } catch (e) { /* ignore */ }
+    }
+
+    function scheduleSave() {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(saveNow, 400);
+    }
+
+    function loadStats() {
+        try { return JSON.parse(localStorage.getItem(LS_STATS) || '{}') || {}; } catch (e) { return {}; }
+    }
+
+    function saveStats(s) {
+        try { localStorage.setItem(LS_STATS, JSON.stringify(s)); } catch (e) { /* ignore */ }
+    }
+
+    function loadOpts() {
+        try {
+            var d = JSON.parse(localStorage.getItem(LS_OPTS) || '{}') || {};
+            if (typeof d.sameNum === 'boolean') state.opts.sameNum = d.sameNum;
+            if (typeof d.autoNotes === 'boolean') state.opts.autoNotes = d.autoNotes;
+            if (typeof d.teachSeen === 'boolean') state.opts.teachSeen = d.teachSeen;
+
+            /* 存档可能来自旧版本（或被手改过），尺寸只认 PRESETS 里有的，
+               难度只认 DIFFS 里有的 —— 否则后面 presetOf/diffOf 会拿到 undefined。 */
+            if (d.lastN && presetOf(d.lastN)) state.n = d.lastN;
+            if (d.lastDiff && DIFFS.some(function (x) { return x.key === d.lastDiff; })) {
+                state.diff = d.lastDiff;
+            }
+
+            if (Array.isArray(d.recent)) {
+                state.opts.recent = d.recent
+                    .filter(function (n) { return typeof n === 'number' && !!presetOf(n); })
+                    .slice(0, 3);
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    function saveOpts() {
+        try {
+            localStorage.setItem(LS_OPTS, JSON.stringify({
+                sameNum: state.opts.sameNum,
+                autoNotes: state.opts.autoNotes,
+                recent: state.opts.recent,
+                teachSeen: state.opts.teachSeen,
+                lastN: state.n,
+                lastDiff: state.diff
+            }));
+        } catch (e) { /* ignore */ }
+    }
+
+    /**
+     * 刷新后接着上一局：存档只带题目、玩家盘面、笔记与用时，
+     * **不带答案** —— 答案由求解器从题目还原（唯一解 ⇒ 还原出来的就是那一个）。
+     * 这样存档小一半，也不会因为"答案字段格式变了"把老存档全废掉。
+     */
+    function restore() {
+        var all = loadSaves();
+        var key = all.__last;
+        var d = key ? all[key] : null;
+        if (!d || !d.n) return false;
+
+        var n = d.n, N = n * n;
+        if (!presetOf(n) || presetOf(n).n !== n) return false;
+        if (String(d.p || '').length !== N || String(d.u || '').length !== N) return false;
+
+        var notes = String(d.c || '').split(',').map(Number);
+        if (notes.length !== N || notes.some(function (x) { return !isFinite(x); })) return false;
+
+        var puzzle = new Int8Array(N), value = new Int8Array(N);
+        for (var i = 0; i < N; i++) {
+            puzzle[i] = Number(d.p.charAt(i)) || 0;
+            value[i] = Number(d.u.charAt(i)) || 0;
+        }
+
+        /* 已完成 / 无题目的存档不接受 */
+        var empty = 0;
+        for (var k = 0; k < N; k++) if (!value[k]) empty++;
+        if (!empty) return false;
+
+        var geom = geomFor(n);
+        var solution = solvePuzzle(puzzle, n, geom);
+        if (!solution) return false;
+
+        state.n = n;
+        state.diff = diffOf(d.diff).key;
+        state.geom = geom;
+        state.puzzle = puzzle;
+        state.solution = solution;
+        state.value = value;
+        state.notes = Int16Array.from(notes);
+        state.hinted = new Set();
+        state.elapsed = Math.max(0, d.el || 0);
+        /* 额度不读存档、按题目重算：旧存档里没有这个字段，
+           而且旧版本的 hints 是无上限的，可能已经超过新额度（用 Math.min 夹住）。 */
+        state.hintTotal = hintQuota(n, state.diff, countGivens(puzzle));
+        state.hints = Math.min(state.hintTotal, Math.max(0, d.hints || 0));
+        state.checks = Math.min(CHECK_TOTAL, Math.max(0, d.checks === undefined ? CHECK_TOTAL : d.checks));
+        state.running = true;
+        return true;
+    }
+
+    /* ---------------- 出题 / 换局 ---------------- */
+
+    function showBoot(on, text) {
+        state.booting = !!on;
+        bootEl.hidden = !on;
+        if (text) bootEl.querySelector('span:last-child').textContent = text;
+        padEl.style.opacity = on ? '.45' : '';
+        padEl.style.pointerEvents = on ? 'none' : '';
+    }
+
+    /* 出题序号：连点尺寸 chip 会排进多个 rAF/timeout，
+       只认最后一次 —— 否则先排的那盘算出得慢一点，就会把后点的尺寸顶掉。 */
+    var genSeq = 0;
+
+    function newGame(n, diff) {
+        if (state.puzzle) saveNow();
+        state.n = n;
+        state.diff = diff;
+        state.geom = geomFor(n);
+        syncConfigUi();
+        showBoot(true, '正在出题…');
+
+        var mySeq = ++genSeq;
+        /* 先让浏览器把"生成中"画出来，再进同步的重活 */
+        requestAnimationFrame(function () {
+            setTimeout(function () {
+                if (mySeq !== genSeq) return;
+                try {
+                    applyPuzzle(generate(state.n, state.diff));
+                } catch (e) {
+                    console.error(e);
+                    showBoot(false);
+                    toast('出题失败，请再点一次【新局】', 'error');
+                }
+            }, 20);
+        });
+    }
+
+    function applyPuzzle(g) {
+        var N = state.n * state.n;
+        state.puzzle = g.puzzle;
+        state.solution = g.solution;
+        state.geom = g.geom;
+        state.value = Int8Array.from(g.puzzle);
+        state.notes = new Int16Array(N);
+        state.hinted = new Set();
+        state.wrong = null;
+        state.undo = [];
+        state.sel = -1;
+        state.notesMode = false;
+        state.elapsed = 0;
+        state.hints = 0;
+        /* 额度跟着这一盘的实际空格数走：同一档难度挖出来的已知数会浮动，
+           所以不能按「尺寸 × 难度」查死表，必须用真实题目算。 */
+        state.hintTotal = hintQuota(state.n, state.diff, countGivens(g.puzzle));
+        state.checks = CHECK_TOTAL;
+        state.solved = false;
+        state.running = true;
+
+        var notesBtn = toolsEl.querySelector('[data-act="notes"]');
+        if (notesBtn) notesBtn.classList.remove('is-on');
+        toggleNotesHintText();
+
+        buildPeers();
+        buildBoard();
+        buildPad();
+        paint();
+        showBoot(false);
+        saveOpts();
+        saveNow();
+        syncConfigUi();
+        syncSettings();
+        $('#sdWin').hidden = true;
+    }
+
+    /** 重来本局：清空自己的输入，题目不变、计时归零 */
+    function restartSame() {
+        if (!state.puzzle) return;
+        state.value = Int8Array.from(state.puzzle);
+        state.notes = new Int16Array(state.n * state.n);
+        state.hinted = new Set();
+        state.wrong = null;
+        state.undo = [];
+        state.sel = -1;
+        state.elapsed = 0;
+        state.hints = 0;
+        /* 题目没变 ⇒ 额度也不变，重算一遍拿到同一个值（同题同额） */
+        state.hintTotal = hintQuota(state.n, state.diff, countGivens(state.puzzle));
+        state.checks = CHECK_TOTAL;
+        state.solved = false;
+        state.running = true;
+        paint();
+        saveNow();
+    }
+
+    function toggleNotesHintText() {
+        $('#sdPadHint').textContent = state.notesMode
+            ? '笔记模式：点数字记候选数，再点一次去掉'
+            : '点格子 → 点数字；按【笔记】改记候选数';
+    }
+
+    /* ---------------- 配置区 UI：尺寸下拉 + 难度分段 ---------------- */
+
+    /** 一个尺寸选项卡片（下拉面板里到处复用：最近、常玩、更多） */
+    function sizeOpt(n) {
+        var p = presetOf(n), g = geomFor(n);
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'sd-size-opt';
+        b.dataset.n = String(n);
+        b.innerHTML = '<b>' + n + '×' + n + '</b><i>' + p.tag + '</i>';
+        b.title = n + '×' + n + '（' + (g ? '标准数独 · ' + g.bh + '×' + g.bw + ' 宫' : '拉丁方 · 无宫格')
+            + '）· 换档前当前这局会先存档';
+        b.addEventListener('click', function () { pickSize(n); });
+        return b;
+    }
+
+    /**
+     * 「当前 / 最近用过」列表：当前尺寸永远排第一，其次是最近点过的。
+     * 已经出现在【常玩】区（3、6）的不重复列，最多两格。
+     * 这样即使玩家选了折叠在【更多】里的 9×9，一打开面板也能立刻看到它。
+     */
+    function recentList() {
+        var list = [state.n].concat(state.opts.recent || []);
+        var out = [];
+        list.forEach(function (n) {
+            if (!presetOf(n) || COMMON_N.indexOf(n) >= 0) return;
+            if (out.indexOf(n) >= 0) return;
+            out.push(n);
+        });
+        return out.slice(0, 2);
+    }
+
+    function renderRecent() {
+        var list = recentList();
+        var group = $('#sdRecentGroup');
+        if (!list.length) {
+            group.hidden = true;
+            sizeRecentEl.innerHTML = '';
+            return;
+        }
+        group.hidden = false;
+        sizeRecentEl.innerHTML = '';
+        list.forEach(function (n) { sizeRecentEl.appendChild(sizeOpt(n)); });
+    }
+
+    function buildSizeMenu() {
+        sizeCommonEl.innerHTML = '';
+        COMMON_N.forEach(function (n) { sizeCommonEl.appendChild(sizeOpt(n)); });
+
+        sizeMoreListEl.innerHTML = '';
+        PRESETS.forEach(function (p) {
+            if (COMMON_N.indexOf(p.n) >= 0) return;
+            sizeMoreListEl.appendChild(sizeOpt(p.n));
+        });
+
+        renderRecent();
+        syncSizeMenu();
+    }
+
+    /** 只更新按钮文案与选中态（不重建节点，避免把玩家的点击目标换掉） */
+    function syncSizeMenu() {
+        var n = state.n, p = presetOf(n);
+        $('#sdSizeLabel').textContent = n + '×' + n;
+        $('#sdSizeTag').textContent = p ? p.tag : '';
+        Array.prototype.forEach.call(sizePopEl.querySelectorAll('.sd-size-opt'), function (el) {
+            var on = Number(el.dataset.n) === n;
+            el.classList.toggle('is-on', on);
+            el.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+    }
+
+    /** 记一次"用过"（新→旧，最多 3 个）；只落盘，DOM 在下次打开面板时重排 */
+    function pushRecent(n) {
+        var out = [];
+        [n].concat(state.opts.recent || []).forEach(function (x) {
+            if (presetOf(x) && out.indexOf(x) < 0) out.push(x);
+        });
+        state.opts.recent = out.slice(0, 3);
+        saveOpts();
+    }
+
+    function pickSize(n) {
+        openSizePop(false);
+        if (!presetOf(n)) return;
+        pushRecent(n);
+        if (n === state.n) { syncSizeMenu(); return; }
+        newGame(n, state.diff);
+    }
+
+    function openSizePop(open) {
+        sizePopEl.hidden = !open;
+        sizeBtnEl.classList.toggle('is-open', open);
+        sizeBtnEl.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) {
+            /* 每次打开重排：上次点过的尺寸要立刻顶到「最近用过」第一位 */
+            renderRecent();
+            syncSizeMenu();
+        }
+    }
+
+    function bindSizeMenu() {
+        sizeBtnEl.addEventListener('click', function (e) {
+            e.stopPropagation();
+            openSizePop(sizePopEl.hidden);
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!sizeWrapEl.contains(e.target)) openSizePop(false);
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') openSizePop(false);
+        });
+
+        sizeMoreBtnEl.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var open = sizeMoreListEl.hidden;
+            sizeMoreListEl.hidden = !open;
+            sizeMoreBtnEl.classList.toggle('is-open', open);
+            sizeMoreBtnEl.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+    }
+
+    function buildConfig() {
+        buildSizeMenu();
+
+        diffsEl.innerHTML = '';
+        DIFFS.forEach(function (d) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'sd-diff';
+            b.dataset.k = d.key;
+            b.textContent = d.name;
+            b.title = d.name + '：已知数约占 ' + Math.round((d.box * 100)) + '%（拉丁方 ' + Math.round(d.latin * 100) + '%）';
+            b.addEventListener('click', function () {
+                if (d.key === state.diff) return;
+                newGame(state.n, d.key);
+            });
+            diffsEl.appendChild(b);
+        });
+    }
+
+    function syncConfigUi() {
+        var n = state.n;
+        syncSizeMenu();
+        Array.prototype.forEach.call(diffsEl.children, function (el) {
+            el.classList.toggle('is-on', el.dataset.k === state.diff);
+            el.setAttribute('aria-pressed', el.dataset.k === state.diff ? 'true' : 'false');
+        });
+
+        var g = geomFor(n);
+        var rule = g
+            ? '标准数独（' + g.bh + '×' + g.bw + ' 宫）：每行、每列、每个宫都要有 1~' + n + '，各一次'
+            : '拉丁方（无宫格）：只要求每行、每列都有 1~' + n + '，各一次 —— '
+              + n + ' 是素数，切不出等宽宫格';
+        legendEl.textContent = n + '×' + n + ' · ' + diffOf(state.diff).name + ' · ' + rule;
+    }
+
+    /* ---------------- 教学关卡 ----------------
+       固定的 4×4 教学题。6 个已知数刚好够演示三种推法，而且每一步都只有
+       一个"该看的范围"——讲数独最怕的就是满盘一起看：
+
+         ① 数空格：一行 4 格、给了 2 个数 ⇒ 还剩 2 个空格，缺的就是没出现过的那两个数
+         ② 列排除：行内剩 {2,4}，但这一列已有 2 ⇒ 只能填 4
+         ③ 换宫看：右上宫已有 {2,3,4} ⇒ 剩下的空格直接是 1
+
+       教学盘是独立的 16 个 div，不复用主棋盘 —— 主盘的 paint() 绑着全局
+       state/cells，为了演示去改它会把"玩到一半的局"搅乱。 */
+
+    var TEACH_N = 4;
+    var TEACH_BOX = [2, 2];                        // 2×2 宫
+    var TEACH_PUZZLE = '1.3.' + '...2' + '.1..' + '.32.';
+
+    var TEACH_STEPS = [
+        {
+            kicker: '规则',
+            title: '每一行、每一列、每一个宫都要齐 1~4',
+            body: '4×4 的盘面被粗线切成 <b>4 个 2×2 的宫</b>。规则只有一句：每一行、每一列、'
+                + '每一个宫里，<b>1、2、3、4 各出现一次</b> —— 不能重复，也不能漏。',
+            hl: { all: true }
+        },
+        {
+            kicker: '第 1 步 · 数空格',
+            title: '这一行还差几个数，空格就有几个',
+            body: '先看第 1 行：一共 <b>4 个格子</b>，题目已经给了 1 和 3，剩下 2 个空格。'
+                + '要填的就是这一行还没出现过的 <b>2 和 4</b>。空格数量不用猜，减一下就出来。',
+            formula: '4 格 − 2 个已知 = 2 个空格 → 第 1 行缺 2、4',
+            hl: { rows: [0] }
+        },
+        {
+            kicker: '第 2 步 · 排除',
+            title: '列里已经有的数字，这个空格就不能填',
+            body: '右上角这个空格，在本行里只能填 2 或 4。可它所在的 <b>第 4 列最上面已经有一个 2</b>'
+                + ' —— 一列里不能出现两个 2，所以它只能是 <b>4</b>。填进去。',
+            formula: '行内候选 {2, 4} − 列里已有 2 = 只能填 4',
+            hl: { rows: [0], cols: [3], cell: 3 },
+            fill: { i: 3, v: 4 }
+        },
+        {
+            kicker: '第 3 步 · 收尾',
+            title: '一行只剩一个空格时，答案自己就出来了',
+            body: '4 填进右边那格后，第 1 行只剩下第 2 格空着 —— 缺的 2 无处可去，直接填 <b>2</b>。'
+                + '第 1 行完成：<b>1 2 3 4</b>，四个数各一次，没有重复。',
+            formula: '第 1 行：1 · 2 · 3 · 4 ✓',
+            hl: { rows: [0], cell: 1 },
+            fill: { i: 1, v: 2 }
+        },
+        {
+            kicker: '第 4 步 · 换宫看',
+            title: '同一个空格，从宫的角度看也只有一个答案',
+            body: '右上这个 2×2 宫现在有 3、4、2，<b>1~4 里只差 1</b>。所以第 2 行第 3 列这个空格'
+                + '必定是 <b>1</b> —— 这一次完全不用管它所在的行和列。',
+            formula: '宫内有 {2, 3, 4} → 只缺 1',
+            hl: { box: 1, cell: 6 },
+            fill: { i: 6, v: 1 }
+        },
+        {
+            kicker: '工具',
+            title: '卡住的时候，别硬猜',
+            body: '<b>笔记</b>把候选数记在格子角落，排除几轮就能看出「这格只能填 X」；'
+                + '<b>提示</b>直接帮你填对一格 —— 每局给几次看尺寸和难度（格子越多、越难给得越多），'
+                + '用掉几次会记进成绩；'
+                + '<b>检查</b>标出填错的格子，每局 3 次，留到实在没辙再用。剩下的格子，交给你自己推。',
+            hl: {}
+        }
+    ];
+
+    var teachPuzzleArr = null;
+    var teachCells = [];
+    var teachBaseCls = [];
+    var teachIdx = -1;
+    var teachReady = false;
+
+    function teachInit() {
+        teachPuzzleArr = new Int8Array(TEACH_N * TEACH_N);
+        for (var i = 0; i < teachPuzzleArr.length; i++) {
+            teachPuzzleArr[i] = Number(TEACH_PUZZLE.charAt(i)) || 0;
+        }
+
+        /* 写死的题也要验一遍唯一解：教学要是自相矛盾，比不做教学更糟 */
+        var solver = makeSolver(TEACH_N, { bh: TEACH_BOX[0], bw: TEACH_BOX[1] });
+        if (solver.countSolutions(teachPuzzleArr, 2, Date.now() + 1500) !== 1) {
+            console.error('[sudoku] 教学题不是唯一解，演示步骤可能互相矛盾');
+        }
+
+        var board = $('#sdTeachBoard');
+        board.innerHTML = '';
+        teachCells = [];
+        teachBaseCls = [];
+        var n = TEACH_N, bh = TEACH_BOX[0], bw = TEACH_BOX[1];
+        for (var k = 0; k < n * n; k++) {
+            var r = (k / n) | 0, c = k % n;
+            var cls = 'sd-tc';
+            if (c % bw === bw - 1 && c !== n - 1) cls += ' is-br';
+            if (r % bh === bh - 1 && r !== n - 1) cls += ' is-bb';
+            if (c === n - 1) cls += ' is-edge-r';
+            if (r === n - 1) cls += ' is-edge-b';
+            var d = document.createElement('div');
+            d.className = cls;
+            board.appendChild(d);
+            teachCells.push(d);
+            teachBaseCls.push(cls);
+        }
+        teachReady = true;
+    }
+
+    /** 已经演示到第 idx 步时，盘面长什么样（题目 + 前 idx 步填进去的数） */
+    function teachValuesAt(idx) {
+        var value = Int8Array.from(teachPuzzleArr);
+        var filled = new Set();
+        for (var k = 0; k <= idx; k++) {
+            var f = TEACH_STEPS[k].fill;
+            if (f && !teachPuzzleArr[f.i]) { value[f.i] = f.v; filled.add(f.i); }
+        }
+        return { value: value, filled: filled };
+    }
+
+    function teachHLSet(hl) {
+        var set = new Set(), n = TEACH_N;
+        if (hl.all) {
+            for (var i = 0; i < n * n; i++) set.add(i);
+            return set;
+        }
+        (hl.rows || []).forEach(function (r) {
+            for (var c = 0; c < n; c++) set.add(r * n + c);
+        });
+        (hl.cols || []).forEach(function (c) {
+            for (var r = 0; r < n; r++) set.add(r * n + c);
+        });
+        if (hl.box !== undefined) {
+            var perRow = n / TEACH_BOX[1];
+            var br = ((hl.box / perRow) | 0) * TEACH_BOX[0];
+            var bc = (hl.box % perRow) * TEACH_BOX[1];
+            for (var dr = 0; dr < TEACH_BOX[0]; dr++) {
+                for (var dc = 0; dc < TEACH_BOX[1]; dc++) set.add((br + dr) * n + bc + dc);
+            }
+        }
+        return set;
+    }
+
+    function teachGo(idx) {
+        if (!teachReady) teachInit();
+        idx = Math.max(0, Math.min(TEACH_STEPS.length - 1, idx));
+        teachIdx = idx;
+
+        var st = TEACH_STEPS[idx];
+        var now = teachValuesAt(idx);
+        var hl = st.hl || {};
+        var hlSet = teachHLSet(hl);
+        var focus = hl.cell;
+        var hasHL = hlSet.size > 0 && !hl.all;
+
+        for (var i = 0; i < teachCells.length; i++) {
+            var cls = teachBaseCls[i];
+            if (hasHL && !hlSet.has(i) && i !== focus) cls += ' is-dim';
+            if (hlSet.has(i)) cls += ' is-hl';
+            if (i === focus) cls += ' is-focus';
+            if (now.filled.has(i)) cls += ' is-filled';
+            var cell = teachCells[i];
+            cell.className = cls;
+            cell.textContent = now.value[i] ? String(now.value[i]) : '';
+        }
+
+        $('#sdTeachKicker').textContent = st.kicker || '';
+        $('#sdTeachHead').textContent = st.title;
+        $('#sdTeachBody').innerHTML = st.body;
+
+        var fm = $('#sdTeachFormula');
+        if (st.formula) {
+            fm.textContent = st.formula;
+            fm.hidden = false;
+        } else {
+            fm.textContent = '';
+            fm.hidden = true;
+        }
+
+        $('#sdTeachStep').textContent = '第 ' + (idx + 1) + ' 步 / 共 ' + TEACH_STEPS.length + ' 步';
+
+        var dots = $('#sdTeachDots');
+        dots.innerHTML = '';
+        for (var k = 0; k < TEACH_STEPS.length; k++) {
+            var dot = document.createElement('i');
+            if (k === idx) dot.className = 'is-on';
+            dots.appendChild(dot);
+        }
+
+        var last = idx === TEACH_STEPS.length - 1;
+        $('#sdTeachPrev').disabled = idx === 0;
+        $('#sdTeachNext').innerHTML = last
+            ? '开始玩 <i class="bi bi-play-fill"></i>'
+            : '下一步 <i class="bi bi-arrow-right"></i>';
+    }
+
+    function openTeach(from) {
+        if (!teachReady) teachInit();
+        openSizePop(false);
+        openSettings(false);
+        $('#sdTeach').hidden = false;
+        state.paused = true;                  // 教学期间主局计时暂停，不偷玩家的时间
+        teachGo(typeof from === 'number' ? from : 0);
+
+        if (!state.opts.teachSeen) {
+            state.opts.teachSeen = true;      // 打开过就不再自动提示
+            saveOpts();
+            renderCoach();
+        }
+    }
+
+    function closeTeach() {
+        $('#sdTeach').hidden = true;
+        state.paused = false;
+    }
+
+    function renderCoach() {
+        $('#sdCoach').hidden = !!state.opts.teachSeen;
+    }
+
+    function bindTeach() {
+        $('#sdTeachBtn').addEventListener('click', function () { openTeach(0); });
+
+        /* 遮罩、右上角 × 都走 data-teach-close */
+        $('#sdTeach').addEventListener('click', function (e) {
+            if (e.target.closest('[data-teach-close]')) closeTeach();
+        });
+
+        $('#sdTeachPrev').addEventListener('click', function () { teachGo(teachIdx - 1); });
+
+        $('#sdTeachNext').addEventListener('click', function () {
+            if (teachIdx >= TEACH_STEPS.length - 1) { closeTeach(); return; }
+            teachGo(teachIdx + 1);
+        });
+
+        $('#sdCoachGo').addEventListener('click', function () { openTeach(0); });
+        $('#sdCoachX').addEventListener('click', function () {
+            state.opts.teachSeen = true;
+            saveOpts();
+            renderCoach();
+        });
+
+        /* 教学开着时键盘也归它：左右翻页、Esc 关掉 */
+        document.addEventListener('keydown', function (e) {
+            if ($('#sdTeach').hidden) return;
+            if (e.key === 'ArrowRight') { e.preventDefault(); teachGo(teachIdx + 1); }
+            else if (e.key === 'ArrowLeft') { e.preventDefault(); teachGo(teachIdx - 1); }
+            else if (e.key === 'Escape') { e.preventDefault(); closeTeach(); }
+        });
+    }
+
+    /* ---------------- 设置弹层 ---------------- */
+
+    function openSettings(open) {
+        $('#sdSetPop').hidden = !open;
+        $('#sdSetBtn').classList.toggle('is-open', open);
+        $('#sdSetBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) syncSettings();
+    }
+
+    function syncSettings() {
+        var same = $('#sdSameSw'), auto = $('#sdAutoSw');
+        same.classList.toggle('is-on', state.opts.sameNum);
+        same.querySelector('i').className = 'bi ' + (state.opts.sameNum ? 'bi-toggle-on' : 'bi-toggle-off');
+        same.querySelector('span').textContent = state.opts.sameNum ? '开' : '关';
+
+        auto.classList.toggle('is-on', state.opts.autoNotes);
+        auto.querySelector('i').className = 'bi ' + (state.opts.autoNotes ? 'bi-toggle-on' : 'bi-toggle-off');
+        auto.querySelector('span').textContent = state.opts.autoNotes ? '开' : '关';
+
+        var stats = loadStats();
+        var rec = stats[state.n + '-' + state.diff];
+        $('#sdStatDesc').textContent = rec && rec.done
+            ? (state.n + '×' + state.n + ' · ' + diffOf(state.diff).name + '：完成 ' + rec.done
+               + ' 局，最快 ' + fmtTime(rec.best))
+            : (state.n + '×' + state.n + ' · ' + diffOf(state.diff).name + '：还没有完成记录');
+    }
+
+    function bindSettings() {
+        var wrap = $('#sdSetWrap'), btn = $('#sdSetBtn');
+
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            openSettings($('#sdSetPop').hidden);
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!wrap.contains(e.target)) openSettings(false);
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') openSettings(false);
+        });
+
+        $('#sdSetPop').addEventListener('click', function (e) {
+            var item = e.target.closest('[data-set]');
+            if (!item) return;
+            var act = item.dataset.set;
+
+            if (act === 'help') { openSettings(false); $('#sdHelp').hidden = false; return; }
+            if (act === 'restart') { openSettings(false); restartSame(); return; }
+            if (act === 'same') { state.opts.sameNum = !state.opts.sameNum; saveOpts(); syncSettings(); paint(); return; }
+            if (act === 'autonotes') { state.opts.autoNotes = !state.opts.autoNotes; saveOpts(); syncSettings(); return; }
+            if (act === 'stats') { openSettings(false); toast($('#sdStatDesc').textContent, 'info'); return; }
+            if (act === 'clear') {
+                openSettings(false);
+                if (window.SC && SC.confirm) {
+                    SC.confirm({
+                        title: '清空成绩',
+                        message: '所有尺寸与难度的完成记录都会删除，正在下的这局不受影响。',
+                        confirmText: '清空',
+                        danger: true
+                    }).then(function (ok) {
+                        if (!ok) return;
+                        saveStats({});
+                        syncSettings();
+                        toast('成绩已清空', 'success');
+                    });
+                }
+            }
+        });
+
+        /* 帮助弹层的关闭：遮罩、右上角 × 都走 data-close */
+        $('#sdHelp').addEventListener('click', function (e) {
+            if (e.target.closest('[data-close="help"]')) $('#sdHelp').hidden = true;
+        });
+    }
+
+    /* ---------------- 键盘 ---------------- */
+
+    function moveSel(key) {
+        var n = state.n, N = n * n;
+        if (state.sel < 0) {
+            for (var k = 0; k < N; k++) if (!state.value[k]) { select(k, true); return; }
+            select(0, true);
+            return;
+        }
+        var r = (state.sel / n) | 0, c = state.sel % n;
+        if (key === 'ArrowUp') r = (r + n - 1) % n;
+        if (key === 'ArrowDown') r = (r + 1) % n;
+        if (key === 'ArrowLeft') c = (c + n - 1) % n;
+        if (key === 'ArrowRight') c = (c + 1) % n;
+        select(r * n + c, true);
+    }
+
+    function bindKeyboard() {
+        document.addEventListener('keydown', function (e) {
+            /* 教学浮层开着时键盘归它（左右翻页 / Esc 关闭），别动棋盘 */
+            if (!$('#sdTeach').hidden) return;
+            /* 弹层打开时，键盘只留给 Esc */
+            if (!$('#sdHelp').hidden) {
+                if (e.key === 'Escape') $('#sdHelp').hidden = true;
+                return;
+            }
+            if (!$('#sdWin').hidden && e.key !== 'Escape') return;
+
+            var k = e.key;
+
+            if (e.ctrlKey || e.metaKey) {
+                if (k.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+                return;
+            }
+
+            if (k >= '1' && k <= '9') {
+                if (Number(k) <= state.n) { e.preventDefault(); onKey(Number(k)); }
+                return;
+            }
+            if (k === '0' || k === 'Backspace' || k === 'Delete') {
+                e.preventDefault();
+                if (state.sel >= 0) erase(state.sel);
+                return;
+            }
+            if (k === 'n' || k === 'N') { e.preventDefault(); toggleNotesMode(); return; }
+            if (k === 'h' || k === 'H') { e.preventDefault(); hint(); return; }
+            if (k.indexOf('Arrow') === 0) { e.preventDefault(); moveSel(k); return; }
+            if (k === 'Escape') { state.sel = -1; paint(); }
+        });
+    }
+
+    /* ---------------- 启动 ---------------- */
+
+    function init() {
+        boardEl = $('#sdBoard');
+        padEl = $('#sdPad');
+        toolsEl = $('#sdTools');
+        diffsEl = $('#sdDiffs');
+        wrapEl = $('#sdWrap');
+        bootEl = $('#sdBoot');
+        legendEl = $('#sdLegendText');
+
+        sizeWrapEl = $('#sdSizeWrap');
+        sizeBtnEl = $('#sdSizeBtn');
+        sizePopEl = $('#sdSizePop');
+        sizeRecentEl = $('#sdRecent');
+        sizeCommonEl = $('#sdCommon');
+        sizeMoreBtnEl = $('#sdMoreBtn');
+        sizeMoreListEl = $('#sdMoreList');
+
+        loadOpts();
+        buildConfig();
+        bindSizeMenu();
+        bindSettings();
+        bindKeyboard();
+        bindTeach();
+        renderCoach();
+
+        /* 工具按钮 */
+        toolsEl.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-act]');
+            if (!btn) return;
+            var act = btn.dataset.act;
+            if (act === 'undo') undo();
+            else if (act === 'erase') { if (state.sel >= 0) erase(state.sel); else toast('先点一个格子'); }
+            else if (act === 'notes') toggleNotesMode();
+            else if (act === 'hint') hint();
+            else if (act === 'check') check();
+        });
+
+        $('#sdNew').addEventListener('click', function () { newGame(state.n, state.diff); });
+        $('#sdWinAgain').addEventListener('click', function () {
+            $('#sdWin').hidden = true;
+            newGame(state.n, state.diff);
+        });
+        $('#sdWinClose').addEventListener('click', function () { $('#sdWin').hidden = true; });
+
+        /* 计时：只在页面可见时走表（切走不白算时间）；教学浮层打开时也停 */
+        setInterval(function () {
+            if (!state.running || state.paused || document.hidden || state.solved) return;
+            state.elapsed++;
+            $('#sdClock').textContent = fmtTime(state.elapsed);
+            if (state.elapsed % 15 === 0) saveNow();
+        }, 1000);
+
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) saveNow();
+        });
+
+        if (window.ResizeObserver) {
+            new ResizeObserver(fitFont).observe(boardEl);
+        } else {
+            window.addEventListener('resize', fitFont);
+        }
+
+        /* 场景：刷新接着上一局；没有存档就按上次的尺寸/难度出新题 */
+        if (restore()) {
+            buildPeers();
+            buildBoard();
+            buildPad();
+            paint();
+            syncConfigUi();
+            syncSettings();
+            showBoot(false);
+        } else {
+            state.geom = geomFor(state.n);
+            newGame(state.n, state.diff);
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+
+    /* 排障 / 探针钩子：页面本身不依赖它，但探针要能直接调出题器，
+       验证「每种尺寸×难度都唯一解」这条硬约束（光靠点界面验不出来）。
+       只暴露纯函数与状态引用，不暴露 DOM 改造能力。 */
+    window.__sudoku = {
+        state: state,
+        generate: generate,
+        solvePuzzle: solvePuzzle,
+        geomFor: geomFor,
+        makeSolver: makeSolver,
+        newGame: newGame,
+        hintQuota: hintQuota,
+        countGivens: countGivens,
+        checkWin: checkWin,
+        pickSize: pickSize,
+        recentList: recentList,
+        teach: {
+            open: openTeach,
+            close: closeTeach,
+            go: teachGo,
+            total: TEACH_STEPS.length,
+            idx: function () { return teachIdx; },
+            puzzle: TEACH_PUZZLE
+        }
+    };
+})();
+</script>
+</body>
+</html>

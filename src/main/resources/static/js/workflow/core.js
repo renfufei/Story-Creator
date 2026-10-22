@@ -1,5 +1,22 @@
-function checkResponse(r) {
-    if (!r.ok) throw new Error('请求失败: ' + r.status);
+/**
+ * 统一响应检查：非 2xx 一律抛 Error。
+ *
+ * ★ 业务拒绝的 body 是 `{"error": "..."}`（GlobalExceptionHandler 约定，409/400/500 都是）。
+ *   原来只抛 `请求失败: 409`，用户看不到真实原因 —— 比如项目「已完本 / 已废弃」时
+ *   一键自动创作会被闸门拒掉，界面上却只剩一个状态码。
+ *   这里把 body 里的 error / message 取出来当异常文案（非 JSON 就退回状态码）。
+ */
+async function checkResponse(r) {
+    if (!r.ok) {
+        let msg = '请求失败: ' + r.status;
+        try {
+            const body = await r.json();
+            if (body && (body.error || body.message)) msg = body.error || body.message;
+        } catch (e) {
+            /* 非 JSON（HTML 错误页 / 空 body）⇒ 保留状态码文案 */
+        }
+        throw new Error(msg);
+    }
     return r.json();
 }
 
@@ -630,9 +647,9 @@ function workflowCoreMixin() {
 
         /* ===== 前后对照面板的通用封装（实现见 js/compare-panel.js） =====
            扩写 / 润色 / 精修 三个页面用的是同一套面板：句级差异高亮、字数增量徽标、
-           左右栏按占比同步滚动。这里只做薄封装，算法只有一份，别在页面里重写。 */
-        diffClass(kind) {
-            return window.SCCmp ? SCCmp.diffClass(kind) : '';
+           左右栏按「同一句话」对齐的同步滚动。这里只做薄封装，算法只有一份，别在页面里重写。 */
+        diffClass(kind, enabled) {
+            return window.SCCmp ? SCCmp.diffClass(kind, enabled) : '';
         },
 
         syncPreviewScroll(ev) {

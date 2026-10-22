@@ -3,6 +3,7 @@ package com.storycreator.workflow.engine;
 import com.storycreator.ai.router.AiProviderRouter;
 import com.storycreator.core.domain.StepStatus;
 import com.storycreator.core.domain.WorkflowStep;
+import com.storycreator.core.service.ProjectWriteGuard;
 import com.storycreator.persistence.entity.ProjectEntity;
 import com.storycreator.persistence.entity.AutoRunStepConfigEntity;
 import com.storycreator.persistence.repository.AutoRunStepConfigRepository;
@@ -176,15 +177,13 @@ public class WorkflowEngine {
     }
 
     public Flux<String> generate(Long projectId, WorkflowStep step, int chapterNumber, List<Long> materialIds) {
-        // Check project status
+        // 已完本 / 已废弃的项目不再允许启动 AI 生成。
+        // 只在这里判一次（启动点），流内部绝不再查 —— 跑到一半把项目改成已完本时，
+        // 正在写的章节必须能安然跑完，否则状态机会卡在 GENERATING。
         ProjectEntity proj = projectRepository.findById(projectId).orElse(null);
-        if (proj != null && proj.getStatus() != null) {
-            if (proj.getStatus() == com.storycreator.core.domain.ProjectStatus.COMPLETED) {
-                return Flux.error(new IllegalStateException("项目状态为「已完本」，无法进行AI生成"));
-            }
-            if (proj.getStatus() == com.storycreator.core.domain.ProjectStatus.ABANDONED) {
-                return Flux.error(new IllegalStateException("项目状态为「已废弃」，无法进行AI生成"));
-            }
+        String denyMessage = proj == null ? null : ProjectWriteGuard.denyMessage(proj.getStatus(), "进行AI生成");
+        if (denyMessage != null) {
+            return Flux.error(new IllegalStateException(denyMessage));
         }
 
         log.info("[P{}] Generate START step={} chapter={}", projectId, step, chapterNumber);
@@ -255,6 +254,8 @@ public class WorkflowEngine {
         }
 
         AiRequest request = handler.buildRequest(context);
+        // 卷归属只作为调用参数随请求走（提示词里没有它），便于内容接受后确定分卷
+        context.stampScope(request);
 
         AiProviderRouter.ResolvedModel resolved = providerRouter.resolveModel(projectId, step);
         applyResolvedConfig(request, resolved);
@@ -262,8 +263,8 @@ public class WorkflowEngine {
         return resolved.provider().streamText(request)
                 .doOnComplete(() -> {
                     long elapsed = System.currentTimeMillis() - startTime;
-                    log.info("[P{}] Generate DONE step={} chapter={} elapsed={}s",
-                            projectId, step, chapterNumber, elapsed / 1000);
+                    log.info("[P{}] Generate DONE step={} chapter={} volume={} elapsed={}s",
+                            projectId, step, chapterNumber, request.getVolumeNumber(), elapsed / 1000);
                     aiUsageTracker.record(projectId, resolved.modelId(), resolved.provider().getProviderName(), elapsed);
                 })
                 .doOnError(e -> log.error("[P{}] Generate FAILED step={} chapter={} elapsed={}s error={}",

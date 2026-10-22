@@ -85,6 +85,9 @@ public class SubStepExecutor {
                 .maxTokens(maxTokens)
                 .temperature(temperature)
                 .build();
+        // 调用参数（不进提示词）：变量里有卷号就带上，落库时能直接确定这一章属于哪一卷
+        request.applyScope(projectId, intOf(variables.get("chapterNumber")),
+                intOf(variables.get("volumeNumber")), variables.get("volumeTitle"));
         applyResolvedConfig(request, resolved);
 
         // 5. Stream and collect (blocking), forwarding tokens if sink provided
@@ -123,5 +126,15 @@ public class SubStepExecutor {
     public String generateContextBriefing(Long projectId, Map<String, String> variables, Genre genre, Consumer<String> tokenSink) {
         return executeSubStep(projectId, WorkflowStep.CHAPTER_WRITING,
                 PromptSubStep.CHAPTER_CONTEXT_BRIEFING, variables, 1024, 0.3, genre, tokenSink);
+    }
+
+    /** 变量值 → int；缺失或非数字一律 0（0 表示「不知道」，调用参数里就不带这一段）。 */
+    private static int intOf(String raw) {
+        if (raw == null || raw.isBlank()) return 0;
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 }

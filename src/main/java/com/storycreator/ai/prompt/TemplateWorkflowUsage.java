@@ -46,6 +46,9 @@ public final class TemplateWorkflowUsage {
         map.put(PromptSubStep.IMAGE_PROMPT_AVATAR, Set.of(IMAGE));
         map.put(PromptSubStep.IMAGE_PROMPT_PORTRAIT, Set.of(IMAGE));
 
+        // 章节扩写：只在 /projects/{id}/expansion 手动触发，不走 auto-run，因此不打 STANDARD
+        map.put(PromptSubStep.CHAPTER_EXPANSION, Set.of(EXPANSION));
+
         // Side story sub-steps
         map.put(PromptSubStep.SIDE_STORY_OUTLINE, Set.of(SIDE_STORY));
         map.put(PromptSubStep.SIDE_STORY_CHAPTER_OUTLINE, Set.of(SIDE_STORY));

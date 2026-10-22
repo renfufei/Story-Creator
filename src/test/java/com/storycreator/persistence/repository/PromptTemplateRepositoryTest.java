@@ -72,6 +72,44 @@ class PromptTemplateRepositoryTest {
         assertThat(result.get().getTemplate()).contains("仙侠专用");
     }
 
+    /**
+     * 一步骤多条默认是**正常**状态（每个子步骤各一条），所以按 step 取默认必须用 List 版。
+     * 这里钉住这个语义：两条都返回，调用方自己按子步骤挑。
+     */
+    @Test
+    void findAllByStepAndIsDefaultTrue_returnsEverySubStepDefault() {
+        PromptTemplateEntity main = new PromptTemplateEntity();
+        main.setStep(WorkflowStep.CHAPTER_WRITING);
+        main.setSubStep(PromptSubStep.CHAPTER_WRITING_PRIMARY);
+        main.setName("写作核心默认");
+        main.setTemplate("主步骤 {{content}}");
+        main.setDefault(true);
+        repository.save(main);
+
+        PromptTemplateEntity expansion = new PromptTemplateEntity();
+        expansion.setStep(WorkflowStep.CHAPTER_WRITING);
+        expansion.setSubStep(PromptSubStep.CHAPTER_EXPANSION);
+        expansion.setName("章节扩写默认");
+        expansion.setTemplate("扩写 {{content}}");
+        expansion.setDefault(true);
+        repository.save(expansion);
+
+        // 非默认的一条不应出现
+        PromptTemplateEntity notDefault = new PromptTemplateEntity();
+        notDefault.setStep(WorkflowStep.CHAPTER_WRITING);
+        notDefault.setSubStep(PromptSubStep.CHAPTER_CONTEXT_BRIEFING);
+        notDefault.setName("非默认");
+        notDefault.setTemplate("x");
+        notDefault.setDefault(false);
+        repository.save(notDefault);
+
+        var defaults = repository.findAllByStepAndIsDefaultTrue(WorkflowStep.CHAPTER_WRITING);
+
+        assertThat(defaults).hasSize(2);
+        assertThat(defaults).extracting(PromptTemplateEntity::getSubStep)
+                .containsExactlyInAnyOrder(PromptSubStep.CHAPTER_WRITING_PRIMARY, PromptSubStep.CHAPTER_EXPANSION);
+    }
+
     @Test
     void customTemplatesSurviveV31Migration() {
         // Insert a custom template (no default_template) — these survive V31

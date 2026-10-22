@@ -7,6 +7,7 @@ import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.persistence.entity.*;
 import com.storycreator.persistence.repository.*;
 import com.storycreator.workflow.background.BackgroundGenerationService;
+import com.storycreator.volume.VolumeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -35,6 +36,12 @@ public class WorkflowStateService {
     private BackgroundGenerationService backgroundGenerationService;
     private ContextSummaryService contextSummaryService;
     private WorldFacetElaborationService worldFacetElaborationService;
+    private VolumeService volumeService;
+
+    @Autowired
+    public void setVolumeService(VolumeService volumeService) {
+        this.volumeService = volumeService;
+    }
 
     @Autowired
     public void setWorkflowStateRepository(WorkflowStateRepository workflowStateRepository) {
@@ -339,6 +346,9 @@ public class WorkflowStateService {
             }
         }
         chapterRepository.save(chapter);
+        // 落库时把「这一章属于哪一卷」留痕：与生成时解析卷归属用的是同一个入口（VolumeService），
+        // 之后无论是正文写作、润色还是手工编辑进来，章节的卷归属都不必再靠整除公式猜。
+        volumeService.stampChapterVolume(projectId, chapterNumber);
     }
 
     private void saveCharacterOverviewOnly(Long projectId, String content) {

@@ -252,8 +252,8 @@ class PromptControllerTest {
         when(repository.findAll()).thenReturn(List.of(customDefault));
 
         // When custom default exists for same step+genre(null)
-        when(repository.findByStepAndGenreIsNullAndIsDefaultTrue(WorkflowStep.WORLD_BUILDING))
-                .thenReturn(Optional.of(customDefault));
+        when(repository.findAllByStepAndIsDefaultTrue(WorkflowStep.WORLD_BUILDING))
+                .thenReturn(List.of(customDefault));
 
         Map<String, Object> data = controller.listData();
 
@@ -262,5 +262,73 @@ class PromptControllerTest {
         // First item is the builtin
         assertThat(templates.get(0)).containsEntry("builtin", true);
         assertThat(templates.get(0)).containsEntry("isDefault", false);
+    }
+
+    /**
+     * 回归：一步骤多条默认（每个子步骤一条）曾经让 /prompts/data 直接 500 ——
+     * 按 step 用 Optional 查询碰上两条就抛 NonUniqueResultException。
+     * 真实数据里就是 CHAPTER_WRITING 同时有「写作核心」和「章节扩写」两条默认。
+     */
+    @Test
+    void listData_toleratesMultipleDefaultsForSameStep() {
+        BuiltinTemplate primary = new BuiltinTemplate("CHAPTER_WRITING|CHAPTER_WRITING_PRIMARY|",
+                WorkflowStep.CHAPTER_WRITING, PromptSubStep.CHAPTER_WRITING_PRIMARY, null,
+                "写作核心", "sys", "tmpl");
+        BuiltinTemplate expansion = new BuiltinTemplate("CHAPTER_WRITING|CHAPTER_EXPANSION|",
+                WorkflowStep.CHAPTER_WRITING, PromptSubStep.CHAPTER_EXPANSION, null,
+                "章节扩写", "sys", "tmpl");
+        when(builtinLoader.getAll()).thenReturn(List.of(primary, expansion));
+
+        PromptTemplateEntity mainDefault = new PromptTemplateEntity();
+        mainDefault.setStep(WorkflowStep.CHAPTER_WRITING);
+        mainDefault.setSubStep(PromptSubStep.CHAPTER_WRITING_PRIMARY);
+        mainDefault.setName("H通用章节写作模板");
+        mainDefault.setDefault(true);
+
+        PromptTemplateEntity expansionDefault = new PromptTemplateEntity();
+        expansionDefault.setStep(WorkflowStep.CHAPTER_WRITING);
+        expansionDefault.setSubStep(PromptSubStep.CHAPTER_EXPANSION);
+        expansionDefault.setName("H章节扩写模板");
+        expansionDefault.setDefault(true);
+
+        when(repository.findAllByStepAndIsDefaultTrue(WorkflowStep.CHAPTER_WRITING))
+                .thenReturn(List.of(mainDefault, expansionDefault));
+        when(repository.findAll()).thenReturn(List.of(mainDefault, expansionDefault));
+
+        Map<String, Object> data = controller.listData();
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> templates = (List<Map<String, Object>>) data.get("templates");
+        assertThat(templates).hasSize(4);
+        // 两条内置都已有自己的自定义默认 ⇒ 都不再标「默认」
+        assertThat(templates).filteredOn(t -> Boolean.TRUE.equals(t.get("builtin")))
+                .allSatisfy(t -> assertThat(t).containsEntry("isDefault", false));
+    }
+
+    /**
+     * 回归：只有「章节扩写」有自定义默认时，写作核心内置模板**不能**被误判成被覆盖。
+     * 老实现按 step 查默认（不看子步骤），这里会返回 true。
+     */
+    @Test
+    void listData_expansionDefaultDoesNotShadowPrimaryBuiltin() {
+        BuiltinTemplate primary = new BuiltinTemplate("CHAPTER_WRITING|CHAPTER_WRITING_PRIMARY|",
+                WorkflowStep.CHAPTER_WRITING, PromptSubStep.CHAPTER_WRITING_PRIMARY, null,
+                "写作核心", "sys", "tmpl");
+        when(builtinLoader.getAll()).thenReturn(List.of(primary));
+
+        PromptTemplateEntity expansionDefault = new PromptTemplateEntity();
+        expansionDefault.setStep(WorkflowStep.CHAPTER_WRITING);
+        expansionDefault.setSubStep(PromptSubStep.CHAPTER_EXPANSION);
+        expansionDefault.setDefault(true);
+        when(repository.findAllByStepAndIsDefaultTrue(WorkflowStep.CHAPTER_WRITING))
+                .thenReturn(List.of(expansionDefault));
+        when(repository.findAll()).thenReturn(List.of(expansionDefault));
+
+        Map<String, Object> data = controller.listData();
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> templates = (List<Map<String, Object>>) data.get("templates");
+        assertThat(templates.get(0)).containsEntry("builtin", true);
+        assertThat(templates.get(0)).containsEntry("isDefault", true);
     }
 }

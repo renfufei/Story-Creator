@@ -17,6 +17,74 @@
             color: #adb5bd; /* 灰色，浅色主题下仍可读 */
         }
 
+        /* ==================== 每条消息的「⋯」操作菜单（全选 / 复制） ====================
+           图标放在气泡**外侧**：用户消息的气泡靠右、图标在它左边；助手消息反过来。
+           这样正文宽度不变（图标占的是原来就空着的对侧留白），也不会让人分不清
+           这行字是「我说的」还是「模型说的」。
+           ★ 按钮的 display 只在 CSS 里写（inline-flex），**不加 d-flex 之类的 !important 显示类**，
+             否则 x-show 的 display:none 会被顶掉，两个图标会同时出现（本仓库踩过）。 */
+        .msg-line { display: flex; align-items: flex-start; gap: .3rem; }
+        .msg-bubble { max-width: min(80%, calc(100% - 40px)); }
+        /* 蓝底白字的用户气泡里，默认选区高亮几乎看不见；反色一下，全选后能看清选中范围 */
+        .msg-bubble.bg-primary ::selection { background: #fff; color: #0d6efd; }
+
+        .msg-more {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            width: 28px;
+            height: 26px;
+            margin-top: 2px;
+            padding: 0;
+            border: 0;
+            border-radius: .375rem;
+            background: transparent;
+            color: #adb5bd;
+            line-height: 1;
+            /* 常显（不靠 hover 才出现）：触屏没有 hover，纯 hover 等于「这个入口不存在」；
+               桌面端 .7 的不透明度已足够低调，不会盖过正文。 */
+            opacity: .7;
+            transition: opacity .15s, background .15s, color .15s;
+        }
+        .msg-more:hover, .msg-more:focus-visible {
+            opacity: 1;
+            color: #495057;
+            background: rgba(0, 0, 0, .06);
+        }
+
+        /* 菜单本体：position: fixed —— 消息区是 overflow:auto，
+           绝对定位的浮层会被容器裁掉（最后一条消息的下方尤其明显）。
+           位置由 openMsgMenu() 按图标的 getBoundingClientRect 现算，滚动时直接关掉。 */
+        .msg-menu {
+            position: fixed;
+            z-index: 1080;
+            min-width: 7.5rem;
+            padding: .2rem;
+            border: 1px solid rgba(0, 0, 0, .12);
+            border-radius: .5rem;
+            background: #fff;
+            box-shadow: 0 .5rem 1.25rem rgba(0, 0, 0, .16);
+        }
+        .msg-menu button {
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            width: 100%;
+            padding: .38rem .55rem;
+            border: 0;
+            border-radius: .35rem;
+            background: transparent;
+            color: #212529;
+            font-size: .84rem;
+            text-align: left;
+            white-space: nowrap;
+        }
+        .msg-menu button:hover { background: #f1f3f5; }
+        .msg-menu button i { color: #6c757d; font-size: .9rem; }
+
+        .msg-text { white-space: pre-wrap; word-break: break-word; }
+
         /* 外壳高度：桌面按视口减掉导航；移动端用 dvh（100vh 在地址栏收放时会溢出） */
         .chat-shell { height: calc(100vh - 200px); }
         @media (max-width: 767.98px) {
@@ -149,7 +217,8 @@ window.loadChatData = function () {
             </div>
 
             <!-- Messages -->
-            <div class="flex-grow-1 overflow-auto p-3" x-ref="messageContainer">
+            <div class="flex-grow-1 overflow-auto p-3" x-ref="messageContainer"
+                 @scroll.passive="closeMsgMenu()">
                 <!-- 引导数据在路上的骨架（原来同步 XHR 会把这段时间变成白屏） -->
                 <template x-if="booting">
                     <div class="text-center text-muted mt-5">
@@ -174,29 +243,46 @@ window.loadChatData = function () {
                         </p>
                     </div>
                 </template>
-                <template x-for="msg in messages" :key="msg.id || msg.tempId">
+                <template x-for="msg in messages" :key="msgKey(msg)">
                     <div class="mb-3" :class="{'text-end': msg.role === 'user'}">
                         <div class="msg-time" x-text="fmtTime(msg.createdAt)"></div>
-                        <div class="d-inline-block p-2 rounded-3" style="max-width: 80%;"
-                             :class="msg.role === 'user' ? 'bg-primary text-white' : 'bg-light border'">
-                            <!-- Text content -->
-                            <template x-if="!msg.mediaFilePath">
-                                <div style="white-space: pre-wrap; word-break: break-word;" x-text="msg.content"></div>
-                            </template>
-                            <!-- Image -->
-                            <template x-if="msg.mediaFilePath && msg.modelType === 'IMAGE'">
-                                <div>
-                                    <img :src="'/api/chat/media/' + msg.mediaFilePath" style="max-width: 100%; max-height: 400px; border-radius: 8px;" loading="lazy">
-                                    <div x-show="msg.content" class="mt-1 small" x-text="msg.content"></div>
-                                </div>
-                            </template>
-                            <!-- Audio -->
-                            <template x-if="msg.mediaFilePath && msg.modelType === 'TTS'">
-                                <div>
-                                    <audio controls :src="'/api/chat/media/' + msg.mediaFilePath" style="max-width: 100%;"></audio>
-                                    <div x-show="msg.content" class="mt-1 small" x-text="msg.content"></div>
-                                </div>
-                            </template>
+                        <div class="msg-line"
+                             :class="msg.role === 'user' ? 'justify-content-end' : 'justify-content-start'">
+                            <!-- 用户消息：图标在气泡左侧（气泡靠右）。@click.stop 必须留：
+                                 Alpine 的 .outside 监听在 document 上，不拦冒泡就会「刚开就被关」。 -->
+                            <button type="button" class="msg-more" x-cloak x-show="msg.role === 'user'"
+                                    @click.stop="openMsgMenu(msg, $event)"
+                                    title="消息操作：全选 / 复制" aria-label="消息操作">
+                                <i class="bi bi-three-dots"></i>
+                            </button>
+                            <div class="msg-bubble p-2 rounded-3"
+                                 :data-msg-key="msgKey(msg)"
+                                 :class="msg.role === 'user' ? 'bg-primary text-white' : 'bg-light border'">
+                                <!-- Text content -->
+                                <template x-if="!msg.mediaFilePath">
+                                    <div class="msg-text" x-text="msg.content"></div>
+                                </template>
+                                <!-- Image -->
+                                <template x-if="msg.mediaFilePath && msg.modelType === 'IMAGE'">
+                                    <div>
+                                        <img :src="'/api/chat/media/' + msg.mediaFilePath" style="max-width: 100%; max-height: 400px; border-radius: 8px;" loading="lazy">
+                                        <div x-show="msg.content" class="msg-text mt-1 small" x-text="msg.content"></div>
+                                    </div>
+                                </template>
+                                <!-- Audio -->
+                                <template x-if="msg.mediaFilePath && msg.modelType === 'TTS'">
+                                    <div>
+                                        <audio controls :src="'/api/chat/media/' + msg.mediaFilePath" style="max-width: 100%;"></audio>
+                                        <div x-show="msg.content" class="msg-text mt-1 small" x-text="msg.content"></div>
+                                    </div>
+                                </template>
+                            </div>
+                            <!-- 助手消息：图标在气泡右侧 -->
+                            <button type="button" class="msg-more" x-cloak x-show="msg.role !== 'user'"
+                                    @click.stop="openMsgMenu(msg, $event)"
+                                    title="消息操作：全选 / 复制" aria-label="消息操作">
+                                <i class="bi bi-three-dots"></i>
+                            </button>
                         </div>
                     </div>
                 </template>
@@ -258,6 +344,26 @@ window.loadChatData = function () {
 
     <!-- 抽屉遮罩：点空白处收起（桌面端由 CSS 屏蔽，见 .chat-sidebar-backdrop） -->
     <div class="chat-sidebar-backdrop" x-show="sidebarOpen" x-cloak @click="sidebarOpen = false"></div>
+
+    <!-- 消息操作菜单：**全局只一个**（每条消息各挂一个浮层会多出几十个节点和定位状态）。
+         fixed 定位 + 位置由 openMsgMenu() 按图标实际坐标现算（消息区是 overflow:auto，
+         绝对定位会被裁掉）。点外部 / Esc / 消息区滚动都会关掉。
+         ★ 位置用对象形式的 :style（逐属性 setProperty）——字符串形式会 setAttribute('style')，
+           把 x-show 写进去的 display:none 一起抹掉。 -->
+    <div class="msg-menu" id="msg-menu" x-ref="msgMenu" x-show="msgMenu.open" x-cloak
+         :style="{ top: msgMenu.top + 'px', left: msgMenu.left + 'px' }"
+         @click.outside="closeMsgMenu()"
+         @keydown.escape.window="closeMsgMenu()"
+         role="menu" aria-label="消息操作">
+        <button type="button" role="menuitem" @click="selectMsg()">
+            <!-- bi-cursor-text 是这套 icons 里真实存在的（bi-textarea-select 不存在，
+                 会渲染成一片空白 —— 图标名别凭印象写） -->
+            <i class="bi bi-cursor-text"></i>全选
+        </button>
+        <button type="button" role="menuitem" @click="copyMsg()">
+            <i class="bi bi-clipboard"></i>复制
+        </button>
+    </div>
 </div>
 </main>
 
@@ -289,6 +395,8 @@ function chatApp() {
         currentConfigs: [],
         editingSessionId: null,
         editingTitle: '',
+        /* 消息操作菜单（全选 / 复制）：全局只渲染一个浮层，这里记录它当前对准哪条消息 */
+        msgMenu: { open: false, key: '', text: '', top: 0, left: 0 },
         _textConfigs: [],
         _ttsConfigs: [],
         _imageConfigs: [],
@@ -731,6 +839,107 @@ function chatApp() {
         dropPendingTokens: function() {
             this.flushTokens();
             this._pendingTokens = '';
+        },
+
+        /* ==================== 每条消息的「全选 / 复制」 ====================
+           为什么不做成「整段文本可拖选」就够了：气泡里的正文能拖选，但长消息要全选得从
+           第一个字拖到最后一个字；触屏上更是几乎没法精确选中。这里给一个显式入口。 */
+
+        /* 消息稳定 key：服务端消息有 id，本地乐观插入的只有 tempId（两者都可能有 0 值，别用 || 兜底） */
+        msgKey: function (msg) {
+            if (!msg) return '';
+            if (msg.id !== undefined && msg.id !== null) return 'm' + msg.id;
+            return 't' + (msg.tempId !== undefined && msg.tempId !== null ? msg.tempId : '');
+        },
+
+        /* 打开菜单：按图标**实际坐标**算 fixed 位置（消息区是 overflow:auto，绝对定位会被裁）。
+           图标在右侧（助手）时菜单右对齐图标右边，在左侧（用户）时左对齐 —— 都夹在视口内；
+           下方放不下就翻到图标上方，尺寸量真实的那个（$nextTick 之后才有）。 */
+        openMsgMenu: function (msg, ev) {
+            var self = this;
+            var btn = ev && ev.currentTarget;
+            if (!btn) return;
+            var r = btn.getBoundingClientRect();
+            var W = 128, H = 84;
+            var isUser = msg.role === 'user';
+            self.msgMenu = {
+                open: true,
+                key: self.msgKey(msg),
+                text: msg.content || '',
+                top: r.bottom + 6,
+                left: Math.max(8, Math.min(isUser ? r.left : r.right - W, window.innerWidth - W - 8))
+            };
+            self.$nextTick(function () {
+                var el = self.$refs.msgMenu;
+                var st = self.msgMenu;
+                if (!st.open || !el) return;
+                var w = el.offsetWidth || W;
+                var h = el.offsetHeight || H;
+                if (st.top + h > window.innerHeight - 8) st.top = Math.max(8, r.top - h - 6);
+                st.left = Math.max(8, Math.min(isUser ? r.left : r.right - w, window.innerWidth - w - 8));
+            });
+        },
+
+        closeMsgMenu: function () {
+            if (this.msgMenu.open) this.msgMenu.open = false;
+        },
+
+        /* 【全选】：选中这条消息的正文，用户随后按 Ctrl/⌘+C 即可。
+           比「复制」更适合想截取/引用一部分内容的场景。 */
+        selectMsg: function () {
+            var key = this.msgMenu.key;
+            this.closeMsgMenu();
+            if (!key) return;
+            /* 按 data-msg-key 找，不拼选择器 —— id 里万一带引号/方括号，拼出来的选择器会抛异常 */
+            var bubble = null;
+            var all = document.querySelectorAll('.msg-bubble');
+            for (var i = 0; i < all.length; i++) {
+                if (all[i].getAttribute('data-msg-key') === key) { bubble = all[i]; break; }
+            }
+            if (!bubble) return;
+            var target = bubble.querySelector('.msg-text') || bubble;
+            var sel = window.getSelection();
+            if (!sel) return;
+            var range = document.createRange();
+            range.selectNodeContents(target);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            SC.toast.info('已选中本条消息，按 Ctrl/⌘+C 复制');
+        },
+
+        /* 【复制】：整条消息正文进剪贴板 */
+        copyMsg: function () {
+            var self = this;
+            var text = self.msgMenu.text || '';
+            self.closeMsgMenu();
+            if (!text) { SC.toast.error('这条消息没有可复制的文字'); return; }
+            var ok = function () { SC.toast.success('已复制到剪贴板'); };
+            var bad = function () { SC.toast.error('复制失败，请用「全选」后手动复制'); };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(ok).catch(function () {
+                    if (self.legacyCopy(text)) ok(); else bad();
+                });
+            } else if (self.legacyCopy(text)) {
+                ok();
+            } else {
+                bad();
+            }
+        },
+
+        /* 非安全上下文（http:// 内网 IP 等）没有 navigator.clipboard，退回 execCommand */
+        legacyCopy: function (text) {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.cssText = 'position:fixed;top:0;left:-9999px;opacity:0;';
+            document.body.appendChild(ta);
+            var ok = false;
+            try {
+                ta.select();
+                ok = document.execCommand('copy');
+            } catch (e) { ok = false; }
+            document.body.removeChild(ta);
+            return ok;
         },
 
         /* 时间展示：本地临时消息没有 createdAt 时取当前时间（仅首次渲染求值，之后不会跳动） */

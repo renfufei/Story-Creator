@@ -141,6 +141,8 @@ public class ExpansionService {
 
         StringBuilder expandedContent = new StringBuilder();
         long startTime = System.currentTimeMillis();
+        // doOnComplete 里才知道落库后的字数；lambda 只能捕获 final，所以用单元素数组带出来
+        final int[] savedWords = {0};
 
         return Flux.just("[[EXPAND:CHAPTER:" + chNum + "]]")
                 .concatWith(resolved.provider().streamText(request)
@@ -155,6 +157,7 @@ public class ExpansionService {
                                 ch.setWordCount(cleaned.length());
                                 ch.setExpansionStatus("EXPANDED");
                                 chapterRepository.save(ch);
+                                savedWords[0] = cleaned.length();
                             });
                             log.info("[P{}] Expansion completed for chapter {}", projectId, chNum);
                         })
@@ -164,6 +167,11 @@ public class ExpansionService {
                                 chapterRepository.save(ch);
                             });
                             log.error("[P{}] Expansion failed for chapter {}: {}", projectId, chNum, e.getMessage());
-                        }));
+                        }))
+                // ★ 这一章落库后单独补一条事件。前端据此当场把该行从「扩写中」翻成「已扩写」
+                //   （以前整批跑完才发 done，期间前端只能一直显示「扩写中」，必须手动刷新）。
+                //   Flux.defer 保证 token 是在上游 onComplete 之后才求值 —— 那时 savedWords 已经写好。
+                .concatWith(Flux.defer(() -> Flux.just(
+                        "[[EXPAND:SAVED:" + chNum + ":" + savedWords[0] + "]]")));
     }
 }

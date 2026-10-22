@@ -67,13 +67,18 @@ public class ExpansionBackgroundService {
                 task.disposable = flux
                         .doOnNext(token -> {
                             task.contentBuffer.append(token);
-                            synchronized (task.displayBuffer) {
-                                task.displayBuffer.append(token);
-                                if (task.displayBuffer.length() > DISPLAY_BUFFER_MAX) {
-                                    int start = task.displayBuffer.length() - DISPLAY_BUFFER_TRIM_TO;
-                                    String tail = task.displayBuffer.substring(start);
-                                    task.displayBuffer.setLength(0);
-                                    task.displayBuffer.append(tail);
+                            /* 控制标记（[[EXPAND:...]] / [[BG_...]]）只走 SSE 事件通道。
+                               以前连它一起塞进回放缓冲，中途刷新页面重连的人在实时日志里会看到
+                               [[EXPAND:CHAPTER:3]]、[[EXPAND:SAVED:3:4200]] 这种原始串。 */
+                            if (!token.startsWith("[[")) {
+                                synchronized (task.displayBuffer) {
+                                    task.displayBuffer.append(token);
+                                    if (task.displayBuffer.length() > DISPLAY_BUFFER_MAX) {
+                                        int start = task.displayBuffer.length() - DISPLAY_BUFFER_TRIM_TO;
+                                        String tail = task.displayBuffer.substring(start);
+                                        task.displayBuffer.setLength(0);
+                                        task.displayBuffer.append(tail);
+                                    }
                                 }
                             }
                             task.sink.tryEmitNext(token);

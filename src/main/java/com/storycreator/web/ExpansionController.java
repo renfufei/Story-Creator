@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import com.storycreator.persistence.entity.ChapterEntity;
 import com.storycreator.persistence.entity.ProjectEntity;
+import com.storycreator.core.service.ProjectWriteGuard;
 import com.storycreator.persistence.repository.ChapterRepository;
 import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.workflow.background.ExpansionBackgroundService;
@@ -170,6 +171,14 @@ public class ExpansionController {
             return ResponseEntity.badRequest().body(Map.of("error", "扩写任务已在运行中"));
         }
 
+        /* 已完本 / 已废弃：扩写会重写正文 ⇒ 不许启动新批次。
+           注意这里判在 isActive 之后 —— 已经在跑的批次不受影响（用户改状态也不会打断它）。 */
+        String deny = ProjectWriteGuard.denyMessage(
+                projectRepository.findById(projectId).map(ProjectEntity::getStatus).orElse(null), "启动扩写");
+        if (deny != null) {
+            return ResponseEntity.badRequest().body(Map.of("error", deny));
+        }
+
         Flux<String> flux = expansionService.runBatchExpansion(projectId);
         bgService.startExpansion(projectId, flux, null, null);
 
@@ -244,7 +253,11 @@ public class ExpansionController {
                 subscription = task.getSink().asFlux()
                         .doOnNext(token -> {
                             try {
-                                if (token.startsWith("[[EXPAND:")) {
+                                // 单章落库（ExpansionService 在每章 onComplete 后补发）：
+                                // 必须排在下面那条 [[EXPAND: 之前，否则会被当成「开始扩写第 N 章」
+                                if (token.startsWith("[[EXPAND:SAVED:")) {
+                                    emitter.send(SseEmitter.event().name("chapter-saved").data(token));
+                                } else if (token.startsWith("[[EXPAND:")) {
                                     emitter.send(SseEmitter.event().name("expand-section").data(token));
                                 } else if (token.equals("[[BG_STOPPED]]")) {
                                     emitter.send(SseEmitter.event().name("stopped").data("stopped"));

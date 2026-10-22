@@ -2,8 +2,11 @@ package com.storycreator.web;
 
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.storycreator.core.service.ProjectWriteGuard;
+import com.storycreator.persistence.entity.ProjectEntity;
 import com.storycreator.persistence.entity.TxtImportChapterEntity;
 import com.storycreator.persistence.entity.TxtImportJobEntity;
+import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.txtimport.ChapterSplitConfigService;
 import com.storycreator.txtimport.ReProtocol;
 import com.storycreator.txtimport.TxtFilenameParser;
@@ -41,7 +44,13 @@ public class TxtImportApiController {
     private TxtReverseEngineeringService reverseService;
     private TxtImportBackgroundService bgService;
     private ChapterSplitConfigService configService;
+    private ProjectRepository projectRepository;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
+        this.projectRepository = projectRepository;
+    }
 
     @Autowired
     public void setImportService(TxtImportService importService) {
@@ -176,6 +185,19 @@ public class TxtImportApiController {
         }
 
         TxtImportJobEntity job = importService.getJob(jobId);
+
+        /* 断点续跑：job 已经绑定过项目时先看项目状态。
+           首次导入（projectId 为 null）不受影响 —— 那时项目还没建出来。 */
+        if (job.getProjectId() != null) {
+            String deny = ProjectWriteGuard.denyMessage(
+                    projectRepository.findById(job.getProjectId())
+                            .map(ProjectEntity::getStatus).orElse(null),
+                    "重新执行逆向工程");
+            if (deny != null) {
+                return ResponseEntity.badRequest().body(Map.of("error", deny));
+            }
+        }
+
         if (body != null) {
             if (body.containsKey("runWorldBuilding")) {
                 job.setRunWorldBuilding(Boolean.TRUE.equals(body.get("runWorldBuilding")));

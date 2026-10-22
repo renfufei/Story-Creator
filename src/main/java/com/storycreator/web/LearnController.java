@@ -225,4 +225,20 @@ public class LearnController {
     public String blockBlast() {
         return "forward:/pages/learn-block-blast.html";
     }
+
+    // ==================== 数独 ====================
+
+    /**
+     * 数独（3×3 ~ 9×9 / 三档难度）。
+     *
+     * <p>与成语填空等模块不同，这里**没有 {@code /data} 端点**：数独的题目不该是题库 ——
+     * 每局现场用「随机终盘 + 唯一解校验」算出来（最慢的 9×9 困难也就十几毫秒），
+     * 进度与存档全在 localStorage。多挂一个接口只会多一次白屏等待。
+     *
+     * <p>玩法细节（为什么 3/5/7 只有拉丁方规则）见页面里的注释与【规则说明】弹层。
+     */
+    @GetMapping("/learn/sudoku")
+    public String sudoku() {
+        return "forward:/pages/learn-sudoku.html";
+    }
 }

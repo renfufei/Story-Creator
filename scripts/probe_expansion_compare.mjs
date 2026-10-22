@@ -12,10 +12,10 @@
  *      按钮变「收起」+ aria-expanded=true + 该行高亮
  *   P2 面板头：章号/标题 + 「原文 n 字 → 扩写后 m 字」+ 增幅徽标；两栏标题
  *   P3 【核心】句级差异：只在单边出现的句子标红/标绿，未改动句不染色
- *   P4 「差异高亮」开关只影响自己那份面板
+ *   P4 「差异高亮」「同步滚动」两个开关默认开、且只影响自己那份面板
  *   P5 【核心】多面板共存：再开第 2 章 → 两个面板各贴各自的行，互不顶掉
  *   P6 收起其中一个 → 另一个仍展开
- *   P7 【核心】左右两栏滚动同步（按占比，双向）
+ *   P7 【核心】左右两栏滚动同步 = **按同一句话对齐**（双向；关掉开关就各滚各的）
  *   P8 没有原文备份 / 接口失败 → 面板里给提示，不静默空白
  *   P9 390px 窄屏：面板仍贴行、宽度不超视口、整页无横向滚动、两栏上下堆叠
  *   P10 运行期无 JS 异常 / console.error
@@ -182,6 +182,7 @@ const SNAP = `(() => {
         const del = open ? Array.from(panel.querySelectorAll('.sc-cmp-del')).map(e => e.innerText) : [];
         const add = open ? Array.from(panel.querySelectorAll('.sc-cmp-add')).map(e => e.innerText) : [];
         const sw = open ? panel.querySelector('.form-switch input') : null;
+        const syncSw = open ? panel.querySelector('.sc-cmp-sync input') : null;
         const alertEl = open ? Array.from(panel.querySelectorAll('.alert')).filter(vis)[0] : null;
         return {
             chapter: main && main.querySelector('td') ? main.querySelector('td').innerText.trim() : '',
@@ -215,6 +216,11 @@ const SNAP = `(() => {
             addCount: add.length,
             hasSwitch: !!sw,
             switchOn: sw ? sw.checked : null,
+            hasSyncSwitch: !!syncSw,
+            syncSwitchOn: syncSw ? syncSw.checked : null,
+            // 锚点句（两侧同号 = 同一句），同步滚动靠它定位；data-anc=-1 的是单边独有的句子
+            anchorCount: open ? paneEls.map(e => Array.from(e.querySelectorAll('[data-anc]'))
+                .filter(s => Number(s.getAttribute('data-anc')) >= 0).length) : [],
             alertText: alertEl ? txt(alertEl) : '',
             paneBoxes: paneEls.map(rect)
         };
@@ -262,16 +268,17 @@ async function clickInGroup(idx, sel, label) {
         return tb ? tb.querySelector(${JSON.stringify(sel)}) : null; })()`, label || sel);
 }
 
-/* 差异高亮开关是 toggle：先读状态，只有不一致才点，避免「点一次读旧值」的假失败 */
-async function ensureSwitch(idx, expected) {
+/* 开关是 toggle：先读状态，只有不一致才点，避免「点一次读旧值」的假失败。
+   sel 默认是「差异高亮」，传 '.sc-cmp-sync input' 就是「同步滚动」。 */
+async function ensureSwitch(idx, expected, sel = '.form-switch input') {
     const read = () => evalJs(`(() => {
         const tb = document.querySelectorAll('table.exp-table tbody.exp-chapter-group')[${idx}];
-        const box = tb ? tb.querySelector('.form-switch input') : null;
+        const box = tb ? tb.querySelector(${JSON.stringify(sel)}) : null;
         return box ? box.checked : null;
     })()`);
     for (let i = 0; i < 5; i++) {
         if (await read() === expected) return true;
-        await clickInGroup(idx, '.form-switch input', '第 ' + idx + ' 章的差异高亮开关');
+        await clickInGroup(idx, sel, '第 ' + idx + ' 章的开关 ' + sel);
         await sleep(320);
     }
     return await read() === expected;
@@ -399,6 +406,13 @@ async function main() {
     /* ---------- P4 每份面板的开关互不影响 ---------- */
     console.log('\n— P4 差异高亮开关（各面板独立） —');
     check('面板上默认开着「差异高亮」', g0.hasSwitch === true && g0.switchOn === true);
+    check('【核心】差异高亮旁边还有「同步滚动」开关，默认也是开的',
+        g0.hasSyncSwitch === true && g0.syncSwitchOn === true,
+        `has=${g0.hasSyncSwitch} on=${g0.syncSwitchOn}`);
+    check('两栏都渲染出锚点句（同一句在两侧同号，同步靠它定位）',
+        g0.anchorCount.length === 2 && g0.anchorCount[0] >= 2
+        && g0.anchorCount[0] === g0.anchorCount[1],
+        JSON.stringify(g0.anchorCount));
     await ensureSwitch(0, false);
     s = await snap(400);
     g0 = s.groups[0];
@@ -441,8 +455,8 @@ async function main() {
         && s.groups[0].active === false,
         `${s.groups[0].compareLabel}/${s.groups[0].compareAria}`);
 
-    /* ---------- P7 左右两栏滚动同步 ---------- */
-    console.log('\n— P7 左右两栏滚动同步 —');
+    /* ---------- P7 左右两栏滚动同步（按同一句话对齐） ---------- */
+    console.log('\n— P7 左右两栏滚动同步（内容对齐） —');
     const paneState = (idx) => evalJs(`(() => {
         const tb = document.querySelectorAll('table.exp-table tbody.exp-chapter-group')[${idx}];
         if (!tb) return null;
@@ -459,25 +473,64 @@ async function main() {
         p.scrollTop = Math.round((p.scrollHeight - p.clientHeight) * ${ratio});
         return true;
     })()`);
+    /* 某栏「压在顶边上的那句话」是谁、离栏顶多少像素 —— 同步对不对就看这个。
+       只认 [data-anc] 的锚点句：它们两侧同号，才能判断是不是同一句。 */
+    const topSentence = (idx, which) => evalJs(`(() => {
+        const tb = document.querySelectorAll('table.exp-table tbody.exp-chapter-group')[${idx}];
+        const p = tb ? tb.querySelectorAll('.sc-cmp-pane')[${which}] : null;
+        if (!p) return null;
+        const pr = p.getBoundingClientRect();
+        const hit = Array.from(p.querySelectorAll('[data-anc]'))
+            .filter(s => Number(s.getAttribute('data-anc')) >= 0)
+            .find(s => s.getBoundingClientRect().bottom > pr.top + 1);
+        if (!hit) return null;
+        const max = p.scrollHeight - p.clientHeight;
+        return {
+            k: hit.getAttribute('data-anc'),
+            text: hit.innerText.replace(/\\s+/g, ' ').trim().slice(0, 14),
+            off: Math.round(hit.getBoundingClientRect().top - pr.top),
+            ratio: max > 0 ? +(p.scrollTop / max).toFixed(3) : 0
+        };
+    })()`);
 
     await clickCompareOfRow(3);      // 第五章 长夜（40 段，两栏都超出行高，能滚）
     await snap(600);
     let ps = await paneState(3);
     check('长章两栏都出现纵向滚动（同步的前提）',
         Array.isArray(ps) && ps.length === 2 && ps.every(x => x.max > 60), JSON.stringify(ps));
+    const anc = await evalJs(`(() => {
+        const tb = document.querySelectorAll('table.exp-table tbody.exp-chapter-group')[3];
+        return Array.from(tb.querySelectorAll('.sc-cmp-pane')).map(p =>
+            Array.from(p.querySelectorAll('[data-anc]'))
+                .filter(s => Number(s.getAttribute('data-anc')) >= 0).length);
+    })()`);
+    check('长章两栏的锚点句数量一致（同一批句号，两侧同号）',
+        anc[0] >= 40 && anc[0] === anc[1], JSON.stringify(anc));
 
     await scrollPane(3, 0, 0.5);     // 左栏滚到一半
     await sleep(450);
-    ps = await paneState(3);
-    check('【核心】滚左栏到一半 → 右栏同步到相同占比（±2%）',
-        Math.abs(ps[0].ratio - 0.5) <= 0.02 && Math.abs(ps[1].ratio - 0.5) <= 0.02,
-        `left=${ps[0].ratio} right=${ps[1].ratio}`);
+    const lt = await topSentence(3, 0);
+    const rt = await topSentence(3, 1);
+    check('【核心】滚左栏到一半 → 右栏把**同一句话**摆到同样的位置',
+        !!lt && !!rt && lt.k === rt.k && Math.abs(lt.off - rt.off) <= 4,
+        `left=k${lt && lt.k}「${lt && lt.text}」@${lt && lt.off}  right=k${rt && rt.k}「${rt && rt.text}」@${rt && rt.off}`);
+    check('【核心】两侧滚动占比**并不相等**（证明是按内容对齐，不是按百分比硬套）',
+        !!lt && !!rt && Math.abs(lt.ratio - rt.ratio) > 0.02,
+        `left=${lt && lt.ratio} right=${rt && rt.ratio}`);
+
+    await scrollPane(3, 1, 0.62);    // 反向：滚右栏
+    await sleep(450);
+    const lt2 = await topSentence(3, 0);
+    const rt2 = await topSentence(3, 1);
+    check('【核心】反向同样按内容对齐（滚右栏 → 左栏跟到同一句、同一位置）',
+        !!lt2 && !!rt2 && lt2.k === rt2.k && Math.abs(lt2.off - rt2.off) <= 4,
+        `left=k${lt2 && lt2.k}「${lt2 && lt2.text}」@${lt2 && lt2.off}  right=k${rt2 && rt2.k}「${rt2 && rt2.text}」@${rt2 && rt2.off}`);
 
     await scrollPane(3, 1, 1);       // 右栏滚到底
     await sleep(450);
     ps = await paneState(3);
-    check('【核心】滚右栏到底 → 左栏也到底（反向同样同步）',
-        ps[1].ratio >= 0.98 && ps[0].ratio >= 0.98, `left=${ps[0].ratio} right=${ps[1].ratio}`);
+    check('滚右栏到底 → 左栏也到底', ps[1].ratio >= 0.98 && ps[0].ratio >= 0.98,
+        `left=${ps[0].ratio} right=${ps[1].ratio}`);
 
     await scrollPane(3, 0, 0);       // 左栏回顶
     await sleep(450);
@@ -485,19 +538,46 @@ async function main() {
     check('滚回顶部时两栏一起回顶', ps[0].ratio <= 0.01 && ps[1].ratio <= 0.01,
         `left=${ps[0].ratio} right=${ps[1].ratio}`);
 
-    // 两侧高度本来就不一样：像素值不必相等，占比必须相等（证明按占比同步）
-    await scrollPane(3, 0, 0.4);
-    await sleep(450);
-    const ps1 = await paneState(3);
-    check('两侧高度不同也按占比对齐（不是按像素硬对）',
-        Math.abs(ps1[0].ratio - 0.4) <= 0.02 && Math.abs(ps1[1].ratio - 0.4) <= 0.02,
-        `left=${ps1[0].ratio}(${ps1[0].st}px/${ps1[0].max}) right=${ps1[1].ratio}(${ps1[1].st}px/${ps1[1].max})`);
-
     await sleep(400);
     const ps2 = await paneState(3);
     check('同步后位置稳定（连读两拍不抖动，没有互相触发的死循环）',
-        ps1[0].st === ps2[0].st && ps1[1].st === ps2[1].st,
-        `${ps1[0].st}/${ps1[1].st} → ${ps2[0].st}/${ps2[1].st}`);
+        ps[0].st === ps2[0].st && ps[1].st === ps2[1].st,
+        `${ps[0].st}/${ps[1].st} → ${ps2[0].st}/${ps2[1].st}`);
+
+    /* 关掉「差异高亮」也不该丢掉锚点：句子仍然逐句渲染，同步照旧按内容对齐 */
+    await ensureSwitch(3, false);
+    await scrollPane(3, 0, 0.45);
+    await sleep(450);
+    const lt4 = await topSentence(3, 0);
+    const rt4 = await topSentence(3, 1);
+    const colored = await evalJs(`(() => {
+        const tb = document.querySelectorAll('table.exp-table tbody.exp-chapter-group')[3];
+        return tb.querySelectorAll('.sc-cmp-del, .sc-cmp-add').length;
+    })()`);
+    check('关掉【差异高亮】后不再染色', colored === 0, 'colored=' + colored);
+    check('【核心】关掉高亮后同步仍按内容对齐（句子 span 没退化成整段文本）',
+        !!lt4 && !!rt4 && lt4.k === rt4.k && Math.abs(lt4.off - rt4.off) <= 4,
+        `left=k${lt4 && lt4.k}@${lt4 && lt4.off} right=k${rt4 && rt4.k}@${rt4 && rt4.off}`);
+    await ensureSwitch(3, true);
+
+    /* 【同步滚动】开关：关掉就彻底各滚各的，重新打开立刻接上 */
+    await scrollPane(3, 0, 0);       // 先两栏一起回顶，下面才好判断「另一栏没动」
+    await sleep(400);
+    await ensureSwitch(3, false, '.sc-cmp-sync input');
+    await scrollPane(3, 0, 0.3);
+    await sleep(450);
+    ps = await paneState(3);
+    check('【核心】关掉【同步滚动】后各滚各的（右栏留在原地）',
+        Math.abs(ps[0].ratio - 0.3) <= 0.03 && ps[1].ratio <= 0.02,
+        `left=${ps[0].ratio} right=${ps[1].ratio}`);
+    await ensureSwitch(3, true, '.sc-cmp-sync input');
+    await scrollPane(3, 0, 0.55);
+    await sleep(450);
+    const lt3 = await topSentence(3, 0);
+    const rt3 = await topSentence(3, 1);
+    check('重新打开【同步滚动】后立刻恢复内容对齐',
+        !!lt3 && !!rt3 && lt3.k === rt3.k && Math.abs(lt3.off - rt3.off) <= 4,
+        `left=k${lt3 && lt3.k}@${lt3 && lt3.off} right=k${rt3 && rt3.k}@${rt3 && rt3.off}`);
     await shot('05-sync');
 
     await clickInGroup(3, '.exp-close-compare', '第五章的收起按钮');

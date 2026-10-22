@@ -27,6 +27,96 @@
         .exp-table .exp-col-actions { width: 240px; }
         .exp-table .exp-title-cell { max-width: 420px; }
 
+        /* ===== 扩写队列：按分卷分组 + 限高滚动（面板打开时自动放开） =====
+           队列以前是全平铺：标记 50 章就把下面的「全部章节」推到几百行之外，
+           想回队列点个「确认」得先滚过整条队列。所以队列自己滚，**约 12 行**为上限
+           （一行 ≈ 40px，取决于按钮高；卷头 ≈ 34px）。另给一道 88vh 兜底：屏幕矮的时候
+           宁可少露几行，也别让容器比视口还高。
+           ⚠️ 改 `--exp-queue-rows` 时同步改 JS 里的 `queueVisibleRows`（提示条的显示阈值）。
+
+           **两张皮：有预览面板打开时切成 .exp-queue-flow（不限高）**。
+           原来「队列小窗」和「面板内左右两栏」是两个独立的滚动容器套在一起：在面板里滚到底，
+           滚轮会接力把队列整个滚走；面板比小窗高，下半截被裁掉；右边还并排两条滚动条。
+           现在同一时刻只有一层滚动 —— 读面板时队列放开限高、跟随整页滚；全部面板收起后
+           队列回到 12 行的小窗（导航仍在一屏内）。 */
+        .exp-queue-scroll {
+            --exp-queue-row: 40px;
+            --exp-queue-head: 42px;
+            --exp-queue-rows: 12;
+            --exp-queue-maxvh: 88vh;
+            max-height: min(calc(var(--exp-queue-rows) * var(--exp-queue-row) + var(--exp-queue-head)), var(--exp-queue-maxvh));
+            overflow-y: auto;
+            overscroll-behavior: contain;   /* 滚到底别把整页一起带走 */
+        }
+        /* 阅读态：不限高。overflow-x 仍要 auto —— 窄屏整表横向溢出，得能横滑看全；
+           纵向没有溢出，浏览器不会因此长出纵向滚动条。 */
+        .exp-queue-flow {
+            max-height: none;
+            overflow-x: auto;
+            overflow-y: auto;
+            overscroll-behavior: auto;
+        }
+
+        /* 卷头（与下方「全部章节」的卷头同款浅底）：折叠时整卷的章节行**和预览面板**一起收起 */
+        .exp-queue-vol { border-top: 1px solid var(--bs-border-color, #dee2e6); }
+        .exp-queue-vol:first-child { border-top: 0; }
+        .exp-queue-vol-head {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            padding: .4rem .85rem;
+            background: var(--bs-tertiary-bg, #f8f9fa);
+            border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+        }
+        .exp-queue-vol-head .exp-vol-caret { text-decoration: none; flex: 0 0 auto; }
+        /* 卷头吸顶只在小窗（真的有滚动）时才有意义：阅读态是整页滚，吸顶在那种情况下没作用，
+           还会让卷头压住页头导航。所以用 :not(.exp-queue-flow) 把阅读态排除掉。 */
+        .exp-queue-scroll:not(.exp-queue-flow) .exp-queue-vol-head {
+            position: sticky;
+            top: 0;
+            z-index: 3;
+            box-shadow: inset 0 -1px 0 var(--bs-border-color, #dee2e6);
+        }
+
+        @media (max-width: 575.98px) {
+            /* 窄屏行更高、视口更矮：8 行 ≈ 桌面 12 行的观感 */
+            .exp-queue-scroll { --exp-queue-rows: 8; --exp-queue-maxvh: 80vh; }
+            /* 窄屏这张表本来是横向溢出的（已扩写行的「预览 / 回滚 / 确认」三键就有 108px），
+               试过 table-layout:fixed 硬塞 —— 标题列被压到几十像素、按钮还是被裁，
+               反而更差，所以保留整表横滑的老行为，只把纵向锁在 8 行以内。 */
+        }
+
+        /* ===== 扩写指导：只读限高 20 行 / 编辑框默认 20 行 / 可【展开】按内容撑高 =====
+           指导写长了（几千字很常见）会把下面的队列整块推走，而这一屏的主角是队列；
+           但 8 行（原 10rem）又太窄 —— 常见的一段指导就得来回滚，读不全也不好对照。
+           取 20 行小字：.875rem × 1.5 = 1.3125rem/行，20 行 ≈ 420px，超出的才在框内滚。
+
+           行数用 CSS 变量算出来（只读态 max-height、编辑态 height 共用同一份），
+           窄屏收到 12 行 —— 手机上 420px 的框已经比可视区还高。
+           只读态用 pre-line 保留换行，所以只能限高、不能用 line-clamp 截断。 */
+        .sc-main {
+            --exp-guidance-rows: 20;
+            --exp-guidance-line: 1.3125rem;   /* .875rem × 1.5 */
+        }
+        .exp-guidance-view {
+            max-height: calc(var(--exp-guidance-rows, 20) * var(--exp-guidance-line, 1.3125rem));
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            white-space: pre-line;   /* 指导正文里的换行要保留（原来是行内 style） */
+            padding-right: .25rem;   /* 滚动条压住最后一列字时不至于贴边 */
+            font-size: .875rem;      /* 与 .small 一致，但写死才能让上面的行数算式成立 */
+            line-height: 1.5;
+        }
+        /* 编辑框默认同样 20 行（rows 属性兜底，height 由变量算，窄屏才好一起收）；
+           【展开】撑高时写的是行内 height，会把这条覆盖掉，收起时清空行内值即还原。 */
+        .exp-guidance-edit {
+            height: calc(var(--exp-guidance-rows, 20) * var(--exp-guidance-line, 1.3125rem) + .75rem);
+            resize: vertical;        /* 手动也能拉，但【展开】才是按内容自适应 */
+        }
+        @media (max-width: 575.98px) {
+            .sc-main { --exp-guidance-rows: 12; }
+        }
+
         /* ===== 扩写前后预览（贴在各自章节行的**正下方**） =====
            面板本体（.sc-cmp / .sc-cmp-pane / 差异高亮）是三个页面共用的，
            样式在 app.css、逻辑在 js/compare-panel.js；这里只留本页特有的两件事：
@@ -145,7 +235,7 @@
                         <span class="sc-skel sc-skel-line w-75"></span>
                     </div>
                     <div x-show="!booting">
-                        <p class="mb-0 small text-body-secondary" style="white-space: pre-line;" x-text="guidance"></p>
+                        <p class="mb-0 small text-body-secondary exp-guidance-view" x-text="guidance"></p>
                         <p class="mb-0 small text-body-secondary fst-italic" x-show="!guidance" x-cloak>
                             尚未设置。点「配置」填写扩写方向（如：加强环境描写与人物心理，补充对话细节与伏笔），
                             也可从指导库「复用指导」挑一份现成的。
@@ -156,11 +246,22 @@
             <!-- 编辑态 -->
             <template x-if="editingGuidance">
                 <div>
-                    <textarea class="form-control form-control-sm" rows="4" x-model="guidanceEdit"
+                    <!-- rows 20（窄屏由 .exp-guidance-edit 的变量收到 12 行）：
+                         指导通常要写十几行，小框里改长文得一直滚。
+                         内容比 20 行还长时点【展开】，按内容自动撑到合适高度（见 toggleGuidanceExpand）。 -->
+                    <textarea class="form-control form-control-sm exp-guidance-edit" rows="20"
+                              x-ref="guidanceTextarea" x-model="guidanceEdit"
+                              @input="syncGuidanceHeight()"
                               placeholder="输入扩写方向，例如：丰富环境描写和心理活动，补充更多对话细节..."></textarea>
                     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-2">
                         <small class="text-muted" x-text="'当前 ' + guidanceEdit.length + ' 字'"></small>
                         <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    @click="toggleGuidanceExpand()"
+                                    :title="guidanceExpanded ? '收回到默认行数' : '按内容自动撑高，不用在小框里滚'">
+                                <i class="bi" :class="guidanceExpanded ? 'bi-arrows-angle-contract' : 'bi-arrows-angle-expand'"></i>
+                                <span x-text="guidanceExpanded ? '收起' : '展开'"></span>
+                            </button>
                             <button type="button" class="btn btn-sm btn-outline-secondary" @click="cancelEditGuidance()">
                                 <i class="bi bi-x-lg"></i> 取消
                             </button>
@@ -186,12 +287,24 @@
                 <span x-show="booting" class="sc-skel sc-skel-badge"></span>
                 <span x-show="!booting" class="badge rounded-pill bg-warning text-dark" x-text="pendingCount + ' 待扩写'"></span>
                 <span x-show="!booting" class="badge rounded-pill bg-success" x-text="expandedCount + ' 已扩写'"></span>
+                <!-- 两处列表各管一段，先说清楚免得来回找：这里只列已标记的章节 -->
+                <small class="text-muted d-none d-xl-inline">仅含已标记的章节，全部章节见下方</small>
             </span>
-            <button type="button" class="btn btn-sm btn-outline-secondary" @click="refreshStatus()"
-                    :disabled="refreshing" title="重新拉取任务状态与章节">
-                <span x-show="!refreshing"><i class="bi bi-arrow-clockwise"></i> 刷新</span>
-                <span x-show="refreshing" x-cloak><span class="spinner-border spinner-border-sm me-1"></span>刷新中</span>
-            </button>
+            <div class="d-flex flex-wrap gap-2">
+                <!-- 全部折叠/展开：队列按卷分组后，折叠是「控制队列高度」的主要手段
+                     （面板一收起，队列就回到 12 行小窗，折叠则再省一整卷） -->
+                <button type="button" class="btn btn-sm btn-outline-secondary" @click="toggleAllQueueVolumes()"
+                        x-show="!booting && queueVolumes.length > 0" x-cloak
+                        :title="allQueueVolumesExpanded ? '折叠所有分卷（卷内的预览对比一起收起）' : '展开所有分卷'">
+                    <i class="bi" :class="allQueueVolumesExpanded ? 'bi-chevron-contract' : 'bi-chevron-expand'"></i>
+                    <span x-text="allQueueVolumesExpanded ? '全部折叠' : '全部展开'"></span>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @click="refreshStatus()"
+                        :disabled="refreshing" title="重新拉取任务状态与章节">
+                    <span x-show="!refreshing"><i class="bi bi-arrow-clockwise"></i> 刷新</span>
+                    <span x-show="refreshing" x-cloak><span class="spinner-border spinner-border-sm me-1"></span>刷新中</span>
+                </button>
+            </div>
         </div>
         <div class="card-body">
             <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
@@ -233,9 +346,33 @@
                 </div>
             </div>
 
-            <!-- 队列表格 -->
-            <div class="table-responsive">
-                <table class="table table-sm table-hover align-middle exp-table mb-0">
+            <!-- 队列头信息：章数 / 卷数。macOS 的滚动条默认是浮层、不滚不显示，
+                 不说的话很多人会以为队列里只有露出来这些。
+                 面板打开时队列不再限高（见 .exp-queue-flow），所以「列表内可滚动」也跟着藏起来。 -->
+            <!-- ⚠️ 别用 d-flex 承载 x-show：Bootstrap 的 .d-flex 带 !important，
+                 x-show 设的 display:none 会被它顶掉、永远隐藏不掉（全站踩过的坑）。
+                 靠右用 text-end 就行。 -->
+            <div class="mb-1 text-end exp-queue-hint"
+                 x-show="!booting && filteredChapters.length > 0" x-cloak>
+                <small class="text-muted">
+                    <i class="bi bi-collection"></i>
+                    共 <span x-text="filteredChapters.length"></span> 章
+                    · <span x-text="queueVolumes.length"></span> 卷
+                    <span x-show="!anyCompareOpen && filteredChapters.length > queueVisibleRows"> · 列表内可滚动</span>
+                    <span class="d-none d-xl-inline"> · 点卷名可折叠</span>
+                </small>
+            </div>
+
+            <!-- 队列表格：按**分卷**分组（卷划分与卷名和下方「全部章节」完全同源），
+                 每卷一张表、卷头可折叠；折叠时**整卷的章节行与预览面板一起收起**。
+                 外层是限高滚动框（约 12 行）；只要有预览面板打开就切成 .exp-queue-flow 放开限高 ——
+                 这样「队列小窗」和「面板内左右两栏」永远不会同时是滚动容器。 -->
+            <div class="table-responsive exp-queue-scroll"
+                 :class="anyCompareOpen ? 'exp-queue-flow' : ''">
+
+                <!-- 引导数据还在路上：先给三行骨架。
+                     没有这段，异步改造后用户会先看到「队列为空」再突然冒出章节。 -->
+                <table class="table table-sm table-hover align-middle exp-table mb-0" x-show="booting" x-cloak>
                     <thead class="table-light">
                         <tr>
                             <th class="text-nowrap exp-col-chapter">章节</th>
@@ -245,9 +382,7 @@
                             <th class="text-nowrap exp-col-actions">操作</th>
                         </tr>
                     </thead>
-                    <!-- 引导数据还在路上：先给三行骨架。
-                         没有这段，异步改造后用户会先看到「队列为空」再突然冒出章节。 -->
-                    <tbody x-show="booting">
+                    <tbody>
                         <template x-for="i in 3" :key="'skel' + i">
                             <tr>
                                 <td><span class="sc-skel sc-skel-line w-50"></span></td>
@@ -258,10 +393,56 @@
                             </tr>
                         </template>
                     </tbody>
-                    <!-- ★ 每章一个 tbody：主行 + **紧贴在这行下面**的预览面板行。
-                         多面板要能同时展开、各自贴自己那行，就只能一章一组 tbody；
-                         x-for 只认单根节点，所以模板的根是 tbody 而不是 tr。 -->
-                    <template x-for="ch in filteredChapters" :key="ch.chapterNumber">
+                </table>
+
+                <!-- 空态 -->
+                <div class="text-center text-muted py-4"
+                     x-show="!booting && filteredChapters.length === 0" x-cloak>
+                    <i class="bi bi-inbox fs-4 d-block mb-1"></i>
+                    队列为空。到
+                    <a :href="readUrl" class="text-decoration-none">全文阅读页</a>
+                    标记需要扩写的章节，或在下方「全部章节」里勾选后加入队列。
+                </div>
+
+                <!-- 按卷分组：每卷一张表（列宽走 .exp-col-* 类，各卷之间对得齐） -->
+                <template x-for="vol in queueVolumes" :key="'qvol' + vol.volume">
+                    <div class="exp-queue-vol">
+                        <!-- 卷头：点箭头折叠；右侧是该卷的状态计数（只显示非 0 的） -->
+                        <div class="exp-queue-vol-head">
+                            <button type="button" class="btn btn-sm btn-link p-0 text-dark exp-vol-caret"
+                                    @click="toggleQueueVolume(vol.volume)"
+                                    :aria-expanded="isQueueVolumeExpanded(vol.volume) ? 'true' : 'false'"
+                                    :title="isQueueVolumeExpanded(vol.volume)
+                                            ? '折叠本卷（卷内的预览对比一起收起）' : '展开本卷'">
+                                <i class="bi" :class="isQueueVolumeExpanded(vol.volume) ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
+                            </button>
+                            <span class="fw-bold text-truncate" x-text="vol.label"></span>
+                            <span class="text-muted small text-nowrap"
+                                  x-text="'（' + vol.chapters.length + ' 章）'"></span>
+                            <span class="d-inline-flex flex-wrap align-items-center gap-1 ms-auto">
+                                <span class="badge rounded-pill bg-warning text-dark" x-show="vol.pending"
+                                      x-text="vol.pending + ' 待扩写'"></span>
+                                <span class="badge rounded-pill bg-info text-dark" x-show="vol.generating"
+                                      x-text="vol.generating + ' 扩写中'"></span>
+                                <span class="badge rounded-pill bg-success" x-show="vol.expanded"
+                                      x-text="vol.expanded + ' 已扩写'"></span>
+                            </span>
+                        </div>
+                        <div x-show="isQueueVolumeExpanded(vol.volume)">
+                            <table class="table table-sm table-hover align-middle exp-table mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-nowrap exp-col-chapter">章节</th>
+                                        <th class="text-nowrap">标题</th>
+                                        <th class="text-nowrap exp-col-words d-none d-sm-table-cell">字数</th>
+                                        <th class="text-nowrap exp-col-status">状态</th>
+                                        <th class="text-nowrap exp-col-actions">操作</th>
+                                    </tr>
+                                </thead>
+                                <!-- ★ 每章一个 tbody：主行 + **紧贴在这行下面**的预览面板行。
+                                     多面板要能同时展开、各自贴自己那行，就只能一章一组 tbody；
+                                     x-for 只认单根节点，所以模板的根是 tbody 而不是 tr。 -->
+                                <template x-for="ch in vol.chapters" :key="ch.chapterNumber">
                         <tbody class="exp-chapter-group">
                             <tr :class="ch.cmpOpen ? 'table-active' : ''">
                                 <td class="text-nowrap" x-text="'第' + ch.chapterNumber + '章'"></td>
@@ -332,7 +513,7 @@
                                                           x-text="deltaText(ch)"></span>
                                                 </div>
                                             </div>
-                                            <div class="d-flex align-items-center gap-2">
+                                            <div class="d-flex flex-wrap align-items-center gap-2">
                                                 <div class="form-check form-switch mb-0"
                                                      x-show="!ch.cmpLoading && !ch.cmpError && ch.cmp.hasBefore">
                                                     <input class="form-check-input" type="checkbox"
@@ -340,6 +521,17 @@
                                                            x-model="ch.cmpHighlight">
                                                     <label class="form-check-label small"
                                                            :for="'expCmpHighlight' + ch.chapterNumber">差异高亮</label>
+                                                </div>
+                                                <!-- 同步滚动：滚左栏时右栏按**同一句话**对齐（不是按百分比）。
+                                                     ⚠️ 包一层 .sc-cmp-sync 是给 js/compare-panel.js 找开关用的，
+                                                     它读这里的 input.checked 决定同不同步，别随手删。 -->
+                                                <div class="form-check form-switch mb-0 sc-cmp-sync"
+                                                     x-show="!ch.cmpLoading && !ch.cmpError && ch.cmp.hasBefore">
+                                                    <input class="form-check-input" type="checkbox"
+                                                           :id="'expCmpSync' + ch.chapterNumber"
+                                                           x-model="ch.cmpSyncScroll">
+                                                    <label class="form-check-label small"
+                                                           :for="'expCmpSync' + ch.chapterNumber">同步滚动</label>
                                                 </div>
                                                 <button type="button"
                                                         class="btn btn-sm btn-outline-secondary exp-close-compare"
@@ -364,6 +556,9 @@
                                             这一章没有可对比的原文备份（确认或回滚后备份会被清空）。
                                         </div>
 
+                                        <!-- 句子一律逐句渲染：`:data-anc` 是对齐锚点（左右同一句同号），
+                                             同步滚动靠它定位；关掉「差异高亮」只是不给上色 class，
+                                             不退回整段纯文本，否则同步就退化成按百分比了。 -->
                                         <div class="row g-2" x-show="!ch.cmpLoading && !ch.cmpError && ch.cmp.hasBefore">
                                             <div class="col-12 col-lg-6">
                                                 <div class="sc-cmp-pane-head">
@@ -371,12 +566,7 @@
                                                     <span class="text-muted fw-normal" x-text="ch.cmp.beforeCount + ' 字'"></span>
                                                 </div>
                                                 <div class="sc-cmp-pane" @scroll="syncCompareScroll($event)">
-                                                    <template x-if="ch.cmpHighlight">
-                                                        <div><template x-for="(op, i) in ch.cmp.opsBefore" :key="'b' + i"><span :class="diffClass(op.t)" x-text="op.s"></span></template></div>
-                                                    </template>
-                                                    <template x-if="!ch.cmpHighlight">
-                                                        <div x-text="ch.cmp.beforeText"></div>
-                                                    </template>
+                                                    <div><template x-for="(op, i) in ch.cmp.opsBefore" :key="'b' + i"><span :class="diffClass(op.t, ch.cmpHighlight)" :data-anc="op.k" x-text="op.s"></span></template></div>
                                                 </div>
                                             </div>
                                             <div class="col-12 col-lg-6">
@@ -385,12 +575,7 @@
                                                     <span class="text-muted fw-normal" x-text="ch.cmp.afterCount + ' 字'"></span>
                                                 </div>
                                                 <div class="sc-cmp-pane" @scroll="syncCompareScroll($event)">
-                                                    <template x-if="ch.cmpHighlight">
-                                                        <div><template x-for="(op, i) in ch.cmp.opsAfter" :key="'a' + i"><span :class="diffClass(op.t)" x-text="op.s"></span></template></div>
-                                                    </template>
-                                                    <template x-if="!ch.cmpHighlight">
-                                                        <div x-text="ch.cmp.afterText"></div>
-                                                    </template>
+                                                    <div><template x-for="(op, i) in ch.cmp.opsAfter" :key="'a' + i"><span :class="diffClass(op.t, ch.cmpHighlight)" :data-anc="op.k" x-text="op.s"></span></template></div>
                                                 </div>
                                             </div>
                                         </div>
@@ -399,17 +584,10 @@
                             </tr>
                         </tbody>
                     </template>
-                    <tbody x-show="!booting && filteredChapters.length === 0" x-cloak>
-                        <tr>
-                            <td colspan="5" class="text-center text-muted py-4">
-                                <i class="bi bi-inbox fs-4 d-block mb-1"></i>
-                                队列为空。到
-                                <a :href="readUrl" class="text-decoration-none">全文阅读页</a>
-                                标记需要扩写的章节，或在下方「全部章节」里勾选后加入队列。
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                            </table>
+                        </div>
+                    </div>
+                </template>
             </div>
         </div>
     </div>
@@ -589,6 +767,11 @@
         return {
             // 引导数据还在路上：页面骨架先顶上，避免「先闪一下空队列再冒出章节」
             booting: true,
+            /* 队列默认露出多少行（与 CSS 的 --exp-queue-rows 保持一致）：
+               超过这个数才提示「列表内可滚动」。
+               窄屏 CSS 收到 8 行，这里不跟着变 —— 阈值取宽屏那个值：
+               宁可少提示一次，也不要在宽屏上看着只有 10 行还挂一句「可滚动」。 */
+            queueVisibleRows: 12,
             projectTitle: '',
             readUrl: '/projects/' + PROJECT_ID + '/read',
             workflowUrl: '/projects/' + PROJECT_ID + '/workflow/world-building',
@@ -596,6 +779,10 @@
             // 指导编辑态
             editingGuidance: false,
             guidanceEdit: '',
+            /* 编辑框是否已点过【展开】按内容撑高；guidanceBaseHeight 记「默认行数」时的高度，
+               展开时取 max(内容高度, 默认高度) —— 内容比默认还短就保持原高，不做反向收缩。 */
+            guidanceExpanded: false,
+            guidanceBaseHeight: 0,
             savingGuidance: false,
             savingShared: false,
             // 复用指导
@@ -606,17 +793,22 @@
             // 任务态
             active: false,
             refreshing: false,
+            /* 正在背后补拉章节状态（见 resyncChapters）；同时只能跑一个，别叠请求 */
+            resyncing: false,
             pendingCount: 0,
             expandedCount: 0,
             streamContent: '',
             // 扩写前后预览：**每章一份状态**，可以同时展开多个面板。
-            // cmpOpen/cmpLoading/cmpError/cmpHighlight/cmp 都挂在章节对象上，
+            // cmpOpen/cmpLoading/cmpError/cmpHighlight/cmpSyncScroll/cmp 都挂在章节对象上，
             // 面板直接读 ch.cmp.*，不需要再按章号去查表，也不会互相串数据。
             allChapters: [],
             selectedChapters: [],
             volumeGroups: [],
             chaptersPerVolume: 10,
             expandedVolumes: {},
+            /* 队列里各分卷的折叠状态：**与上方「全部章节」的 expandedVolumes 分开**。
+               两处共用一份的话，在队列里折一卷会把下面「全部章节」同一卷也跟着折起来。 */
+            queueVolExpanded: {},
             eventSource: null,
             pollTimer: null,
 
@@ -652,6 +844,8 @@
                     cmpLoading: false,
                     cmpError: '',
                     cmpHighlight: true,
+                    // 同步滚动默认开：滚左栏时右栏按「同一句话」对齐（关掉就各滚各的）
+                    cmpSyncScroll: true,
                     cmp: this.emptyCompare()
                 }));
                 this.expandedVolumes = this.defaultExpandedVolumes();
@@ -678,12 +872,54 @@
 
             startEditGuidance() {
                 this.guidanceEdit = this.guidance || '';
+                this.guidanceExpanded = false;   // 每次进编辑态都从默认行数开始
                 this.editingGuidance = true;
             },
 
             cancelEditGuidance() {
                 this.editingGuidance = false;
+                this.guidanceExpanded = false;
                 this.guidanceEdit = this.guidance || '';
+            },
+
+            /**
+             * 【展开】/【收起】：按内容自动撑高编辑框（不用在固定高度里来回滚）。
+             * - 展开：先把 height 清成 auto 量 scrollHeight，再取 max(内容高, 默认高) —— 内容比 20 行还短就
+             *   保持默认高度，不做反向收缩（否则框会突然矮一截，像被压缩了）。
+             * - 收起：清掉行内 height，交回 CSS 变量算出的默认行数。
+             * 高度都写行内 style，与 .exp-guidance-edit 的 CSS 高度是覆盖关系，清空即还原。
+             */
+            toggleGuidanceExpand() {
+                const el = this.$refs.guidanceTextarea;
+                if (!el) return;
+                if (this.guidanceExpanded) {
+                    this.guidanceExpanded = false;
+                    el.style.height = '';
+                    el.style.overflowY = '';
+                    return;
+                }
+                // 此刻还是默认行数的高度，先记下来当展开后的下限
+                this.guidanceBaseHeight = el.clientHeight + 2;   // +2 = 上下各 1px 边框，clientHeight 不含边框
+                this.guidanceExpanded = true;
+                this.resizeGuidanceBox(true);
+            },
+
+            /** 展开态下内容变了就跟着长／缩；收起态什么都不做（交给 CSS） */
+            syncGuidanceHeight() {
+                if (!this.guidanceExpanded) return;
+                this.resizeGuidanceBox(false);
+            },
+
+            resizeGuidanceBox(measureBase) {
+                const el = this.$refs.guidanceTextarea;
+                if (!el) return;
+                const prev = el.style.height;
+                el.style.height = 'auto';           // 先解除固定高度，scrollHeight 才是内容的真实高度
+                const need = el.scrollHeight;       // 含上下内边距，正是 height 需要的值
+                el.style.height = prev;             // 还原，避免中间态被浏览器算进布局抖动
+                const base = measureBase ? this.guidanceBaseHeight : (this.guidanceBaseHeight || need);
+                el.style.height = Math.max(need, base) + 'px';
+                el.style.overflowY = 'hidden';      // 已经撑到内容高度，不该再出现内部滚动条
             },
 
             async saveGuidance() {
@@ -697,6 +933,7 @@
                     if (!resp.ok) throw new Error('HTTP ' + resp.status);
                     this.guidance = this.guidanceEdit;
                     this.editingGuidance = false;
+                    this.guidanceExpanded = false;   // 编辑框整块销毁，别把展开态带到下一次
                     SC.toast.success('扩写指导已保存');
                 } catch (e) {
                     SC.toast.error('保存失败：' + e.message);
@@ -763,6 +1000,7 @@
                     this.guidance = item.guidance;
                     this.guidanceEdit = item.guidance;
                     this.editingGuidance = false;
+                    this.guidanceExpanded = false;
                     const el = document.getElementById('reuseGuidanceModal');
                     const inst = el ? bootstrap.Modal.getInstance(el) : null;
                     if (inst) inst.hide();
@@ -776,6 +1014,67 @@
 
             get filteredChapters() {
                 return this.allChapters.filter(ch => ch.expansionStatus != null);
+            },
+
+            /**
+             * 队列按分卷分组：卷划分与卷名**直接复用 groupedVolumes**（后端分卷绑定优先，
+             * 没有绑定才退回「每 N 章一卷」），只把「已进队列」的章节留下。
+             * 空卷直接丢掉 —— 队列里出现一个「（0 章）」的卷头只会让人困惑。
+             */
+            get queueVolumes() {
+                const vols = [];
+                for (const g of this.groupedVolumes) {
+                    const chapters = g.chapters.filter(ch => ch.expansionStatus != null);
+                    if (chapters.length === 0) continue;
+                    vols.push({
+                        volume: g.volume,
+                        label: g.label,
+                        chapters: chapters,
+                        pending: chapters.filter(c => c.expansionStatus === 'PENDING').length,
+                        generating: chapters.filter(c => c.expansionStatus === 'GENERATING').length,
+                        expanded: chapters.filter(c => c.expansionStatus === 'EXPANDED').length
+                    });
+                }
+                return vols;
+            },
+
+            /** 有任意一章的预览面板开着 ⇒ 队列切成「不限高」的阅读态（同一时刻只留一层滚动） */
+            get anyCompareOpen() {
+                return this.allChapters.some(ch => ch.cmpOpen);
+            },
+
+            isQueueVolumeExpanded(vol) {
+                return this.queueVolExpanded[vol] === undefined ? true : this.queueVolExpanded[vol];
+            },
+
+            toggleQueueVolume(vol) {
+                const next = !this.isQueueVolumeExpanded(vol);
+                this.queueVolExpanded[vol] = next;
+                if (!next) this.collapseCompareInVolume(vol);
+            },
+
+            /**
+             * 折叠某卷时，把卷内已打开的预览面板一起收起。
+             * 面板是行内的，卷折起来时它跟着消失没关系；但状态留在 cmpOpen=true 的话，
+             * 下次展开这一卷所有面板会同时弹回来（还各自拉一次 diff），既慢又乱。
+             */
+            collapseCompareInVolume(vol) {
+                const g = this.groupedVolumes.find(v => v.volume === vol);
+                if (!g) return;
+                g.chapters.forEach(ch => { if (ch.cmpOpen) this.closeCompare(ch); });
+            },
+
+            get allQueueVolumesExpanded() {
+                const vols = this.queueVolumes;
+                return vols.length > 0 && vols.every(v => this.isQueueVolumeExpanded(v.volume));
+            },
+
+            toggleAllQueueVolumes() {
+                const expand = !this.allQueueVolumesExpanded;
+                this.queueVolumes.forEach(v => {
+                    this.queueVolExpanded[v.volume] = expand;
+                    if (!expand) this.collapseCompareInVolume(v.volume);
+                });
             },
 
             get selectableChapters() {
@@ -895,16 +1194,18 @@
                 }
             },
 
+            /* 卡片头那个【刷新】按钮：只补状态，不整页重载。
+               重载会把实时日志、勾选、展开的分卷和打开的对照面板一起丢掉，
+               而章节状态本来就能按需同步（先补章节再拉计数，避免补完计数又对不上）。 */
             async refreshStatus() {
                 if (this.refreshing) return;
                 this.refreshing = true;
                 try {
+                    await this.resyncChapters();
                     await this.pollStatus();
                 } finally {
                     this.refreshing = false;
                 }
-                // 完整重载以拿到最新章节状态
-                window.location.reload();
             },
 
             async pollStatus() {
@@ -912,8 +1213,6 @@
                     const resp = await fetch(`/projects/${PROJECT_ID}/expansion/status`);
                     const data = await resp.json();
                     this.active = data.active;
-                    this.pendingCount = data.pendingCount;
-                    this.expandedCount = data.expandedCount;
                     // 后台在跑但前端没连 SSE，补连
                     if (data.active && !this.eventSource) {
                         this.connectStream();
@@ -923,13 +1222,79 @@
                         this.eventSource.close();
                         this.eventSource = null;
                     }
+                    /* ★ 服务器计数和本地行对不上 ⇒ 漏了 chapter-saved 事件（断线重连、标签页在后台
+                       被节流、SSE 被中间层掐断都会漏）。以前这里直接把服务器计数写进徽标、行状态却不动，
+                       结果就是「5 已扩写」和满屏「扩写中」同时挂着，只能手动刷新。
+                       现在一旦对不上就地补一次章节状态：徽标与表格永远出自同一份数据。 */
+                    if (!this.booting && !this.resyncing) {
+                        const localPending = this.allChapters.filter(c => c.expansionStatus === 'PENDING').length;
+                        const localExpanded = this.allChapters.filter(c => c.expansionStatus === 'EXPANDED').length;
+                        if (localPending !== data.pendingCount || localExpanded !== data.expandedCount) {
+                            this.resyncChapters();
+                        }
+                    }
+                    this.pendingCount = data.pendingCount;
+                    this.expandedCount = data.expandedCount;
                 } catch (e) {
                     // 忽略瞬时网络错误，下次轮询重试
                 }
             },
 
+            /**
+             * 用服务器下发的章节状态就地修正本地行。
+             * 只动「扩写状态 / 字数 / 有没有正文」三样，不碰预览面板（ch.cmp*）、不动勾选 ——
+             * 用户正开着对照面板时被刷新一次、面板内容突然空掉，比看到旧状态还难受。
+             * @returns {boolean} 是否真的改了东西
+             */
+            applyChapterStates(list) {
+                if (!Array.isArray(list)) return false;
+                const byNum = new Map(list.map(c => [c.chapterNumber, c]));
+                let changed = false;
+                this.allChapters.forEach(ch => {
+                    const s = byNum.get(ch.chapterNumber);
+                    if (!s) return;
+                    if (ch.expansionStatus !== s.expansionStatus) {
+                        ch.expansionStatus = s.expansionStatus;
+                        // 章被确认/回滚（状态清空）后就离开了队列，撑开的面板要跟着收掉
+                        if (!s.expansionStatus) ch.cmpOpen = false;
+                        changed = true;
+                    }
+                    if (s.wordCount != null && ch.wordCount !== s.wordCount) ch.wordCount = s.wordCount;
+                    if (s.content != null) ch.hasContent = true;
+                });
+                if (changed) this.updateCounts();
+                return changed;
+            },
+
+            /** 补拉一次章节状态。走 /data：里面的 content 只是个「有没有正文」的标记，不会带正文。 */
+            async resyncChapters() {
+                if (this.resyncing) return;
+                this.resyncing = true;
+                try {
+                    const resp = await fetch(`/projects/${PROJECT_ID}/expansion/data`);
+                    if (!resp.ok) return;
+                    const data = await resp.json();
+                    this.applyChapterStates(data.chapters || []);
+                } catch (e) {
+                    // 拉不到就等下一轮轮询 / 下一次事件
+                } finally {
+                    this.resyncing = false;
+                }
+            },
+
             async startExpansion() {
-                await fetch(`/projects/${PROJECT_ID}/expansion/start`, {method: 'POST'});
+                /* 后端会直接拒绝（项目已完本 / 已废弃），这里必须看响应 ——
+                   原来不看返回值，被拒了也会「假装已开始」并去连一条根本不存在的流。 */
+                const resp = await fetch(`/projects/${PROJECT_ID}/expansion/start`, { method: 'POST' });
+                if (!resp.ok) {
+                    let msg = '启动失败';
+                    try {
+                        const data = await resp.json();
+                        msg = data.error || data.message || msg;
+                    } catch (e) { /* 非 JSON 响应就用默认文案 */ }
+                    SC.toast.warn(msg);
+                    return;
+                }
                 this.active = true;
                 this.streamContent = '';
                 this.connectStream();
@@ -985,17 +1350,37 @@
                     }
                     this.scrollStream();
                 });
+                /* ★ 单章落库：后端存完 EXPANDED 立刻发这条，行当场翻状态。
+                   没有它就只能等整批 done —— 几十章跑一小时，就一小时看不出进度。 */
+                this.eventSource.addEventListener('chapter-saved', (e) => {
+                    const m = String(e.data || '').match(/\[\[EXPAND:SAVED:(\d+)(?::(\d+))?\]\]/);
+                    if (!m) return;
+                    const num = parseInt(m[1], 10);
+                    const words = m[2] ? parseInt(m[2], 10) : 0;
+                    const ch = this.allChapters.find(c => c.chapterNumber === num);
+                    if (ch) {
+                        ch.expansionStatus = 'EXPANDED';
+                        if (words > 0) ch.wordCount = words;
+                        this.updateCounts();
+                    }
+                    this.streamContent += '\n--- 第' + num + '章 扩写完成'
+                        + (words > 0 ? '（' + words + ' 字）' : '') + ' ---\n';
+                    this.scrollStream();
+                });
+                /* 整批结束：不再整页重载。
+                   行状态已经是实时的了，重载只会把实时日志、勾选、展开的分卷和对照面板一起丢掉。
+                   这里补一次状态即可，兜住期间漏掉的事件。 */
                 this.eventSource.addEventListener('done', (e) => {
                     this.active = false;
                     this.eventSource.close();
                     this.eventSource = null;
-                    this.refreshStatus();
+                    this.resyncChapters();
                 });
                 this.eventSource.addEventListener('stopped', (e) => {
                     this.active = false;
                     this.eventSource.close();
                     this.eventSource = null;
-                    this.refreshStatus();
+                    this.resyncChapters();
                 });
                 this.eventSource.addEventListener('error', (e) => {
                     this.active = false;
@@ -1003,7 +1388,16 @@
                         this.eventSource.close();
                         this.eventSource = null;
                     }
-                    if (e.data) this.streamContent += '\n[错误] ' + e.data;
+                    if (e.data) {
+                        this.streamContent += '\n[错误] ' + e.data;
+                        /* 后端 doOnError 会把这一章退回 PENDING 并中止整批；前端不跟着退的话，
+                           这一行会永远停在「扩写中」转圈（批量是串行的，同时最多一个 GENERATING） */
+                        this.allChapters.forEach(c => {
+                            if (c.expansionStatus === 'GENERATING') c.expansionStatus = 'PENDING';
+                        });
+                        this.updateCounts();
+                        this.resyncChapters();
+                    }
                 });
             },
 
@@ -1200,8 +1594,9 @@
                 SCCmp.syncScroll(ev);
             },
 
-            diffClass(kind) {
-                return SCCmp.diffClass(kind);
+            /** 差异上色：第二个参数传 false 时一律不上色（「差异高亮」关掉，但句子 span 仍保留） */
+            diffClass(kind, enabled) {
+                return SCCmp.diffClass(kind, enabled);
             },
 
             deltaBadgeClass(ch) {

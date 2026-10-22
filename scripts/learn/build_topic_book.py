@@ -66,6 +66,25 @@ TOPICS = [
         ("clock", "时钟"), ("o'clock", "点钟"), ("past", "晚于"),
         ("century", "世纪"), ("decade", "十年"), ("daily", "每日的"),
     ]),
+    # 亲人关系：不是封闭序列，但有一条天然的「辈分轴」——
+    # 家（总纲）→ 祖辈 → 父母辈 → 夫妻 → 同辈 → 子辈 → 孙辈 → 旁系（长/同/幼）→ 亲属（收尾）。
+    # 每一代内部统一「男 → 女」，再「正式 → 口语」（father/dad、grandfather/grandpa、mum），
+    # 这样左列自上而下正好是一张家谱，顺序本身就是记忆线索。
+    ("亲人关系", [
+        ("family", "家"), ("parents", "父母"),
+        ("grandfather", "祖父"), ("grandpa", "爷爷"),
+        ("grandmother", "祖母"), ("grandma", "奶奶"), ("grandparent", "祖父母"),
+        ("father", "父亲"), ("dad", "爸爸"), ("mother", "母亲"), ("mum", "妈妈"),
+        ("couple", "夫妻"), ("husband", "丈夫"), ("wife", "妻子"),
+        ("brother", "哥/弟"), ("sister", "姐/妹"), ("twin", "双胞胎之一"),
+        ("son", "儿子"), ("daughter", "女儿"), ("child", "儿童"),
+        ("kid", "孩子"), ("baby", "婴儿"),
+        ("grandson", "孙子；外孙"), ("granddaughter", "孙女；外孙女"),
+        ("uncle", "叔叔"), ("aunt", "姑母"),
+        ("cousin", "同辈表亲"),
+        ("nephew", "侄子/外甥"), ("niece", "侄女；外甥女"),
+        ("relative", "亲属"),
+    ]),
 ]
 
 

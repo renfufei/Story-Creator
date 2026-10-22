@@ -7,8 +7,11 @@ import com.storycreator.persistence.entity.PromptTemplateEntity;
 import com.storycreator.persistence.repository.PromptTemplateRepository;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 @Component
@@ -71,8 +74,7 @@ public class PromptTemplateRegistry {
 
     public String getTemplate(WorkflowStep step, Genre genre) {
         // DB custom template first
-        return repository.findByStepAndGenreAndIsDefaultTrue(step, genre)
-                .or(() -> repository.findByStepAndGenreIsNullAndIsDefaultTrue(step))
+        return pickMainStepDefault(repository.findAllByStepAndIsDefaultTrue(step), genre)
                 .map(PromptTemplateEntity::getTemplate)
                 // Fallback to builtin
                 .or(() -> builtinLoader.findMainStep(step, genre).map(BuiltinTemplate::template))
@@ -80,12 +82,49 @@ public class PromptTemplateRegistry {
     }
 
     public String getSystemPrompt(WorkflowStep step, Genre genre) {
-        return repository.findByStepAndGenreAndIsDefaultTrue(step, genre)
-                .or(() -> repository.findByStepAndGenreIsNullAndIsDefaultTrue(step))
+        return pickMainStepDefault(repository.findAllByStepAndIsDefaultTrue(step), genre)
                 .map(PromptTemplateEntity::getSystemPrompt)
                 // Fallback to builtin
                 .or(() -> builtinLoader.findMainStep(step, genre).map(BuiltinTemplate::systemPrompt))
                 .orElse(null);
+    }
+
+    /**
+     * 从「该步骤的全部默认模板」里挑出**主步骤**那一条。
+     * <p>一步骤可以有多条默认（每个子步骤各一条）。主步骤的覆盖有两种历史写法：
+     * {@code subStep = 该步骤的 PRIMARY 子步骤}，或更早期数据里的 {@code subStep = null}。
+     * <p>挑法：题材完全匹配优先，其次通用（genre 为空）；同一档里取**最近更新**的那条。
+     * 即使历史遗留了重复默认，也只会挑出一条，不会让正文生成 / 模板列表整体 500。
+     */
+    public static Optional<PromptTemplateEntity> pickMainStepDefault(List<PromptTemplateEntity> candidates, Genre genre) {
+        if (candidates == null || candidates.isEmpty()) return Optional.empty();
+        List<PromptTemplateEntity> main = new ArrayList<>();
+        for (PromptTemplateEntity t : candidates) {
+            if (t == null) continue;
+            PromptSubStep ss = t.getSubStep();
+            if (ss == null || ss.isPrimary()) main.add(t);
+        }
+        if (genre != null) {
+            Optional<PromptTemplateEntity> exact = latestOf(main, genre);
+            if (exact.isPresent()) return exact;
+        }
+        return latestOf(main, null);
+    }
+
+    private static Optional<PromptTemplateEntity> latestOf(List<PromptTemplateEntity> list, Genre genre) {
+        PromptTemplateEntity best = null;
+        for (PromptTemplateEntity t : list) {
+            if (t.getGenre() != genre) continue;
+            if (best == null || isLater(t, best)) best = t;
+        }
+        return Optional.ofNullable(best);
+    }
+
+    private static boolean isLater(PromptTemplateEntity a, PromptTemplateEntity b) {
+        LocalDateTime ta = a.getUpdatedAt(), tb = b.getUpdatedAt();
+        if (ta == null) return false;
+        if (tb == null) return true;
+        return ta.isAfter(tb);
     }
 
     public String getSubStepTemplate(WorkflowStep step, PromptSubStep subStep, Genre genre) {

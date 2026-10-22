@@ -30,6 +30,7 @@ public class ChapterWritingHandler implements WorkflowStepHandler {
         // Estimate tokens needed: Chinese ~2 tokens/char, add buffer
         int estimatedTokens = Math.max(8192, context.getChapterWordCountMax() * 2 + 2000);
 
+        // 卷号不进提示词，只作为调用参数带走（引擎统一 stamp，见 WorkflowEngine#generateStream）
         return AiRequest.builder()
                 .systemPrompt(systemPrompt)
                 .userPrompt(prompt)

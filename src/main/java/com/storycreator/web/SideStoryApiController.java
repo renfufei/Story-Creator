@@ -2,8 +2,11 @@ package com.storycreator.web;
 
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.storycreator.core.service.ProjectWriteGuard;
+import com.storycreator.persistence.entity.ProjectEntity;
 import com.storycreator.persistence.entity.SideStoryChapterEntity;
 import com.storycreator.persistence.entity.SideStoryEntity;
+import com.storycreator.persistence.repository.ProjectRepository;
 import com.storycreator.persistence.repository.SideStoryChapterRepository;
 import com.storycreator.persistence.repository.SideStoryRepository;
 import com.storycreator.sidestory.SideStoryAutoRunService;
@@ -37,7 +40,27 @@ public class SideStoryApiController {
     private SideStoryWorkflowService workflowService;
     private SideStoryBackgroundService bgService;
     private SideStoryAutoRunService autoRunService;
+    private ProjectRepository projectRepository;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+
+    @Autowired
+    public void setProjectRepository(ProjectRepository projectRepository) {
+        this.projectRepository = projectRepository;
+    }
+
+    /**
+     * 已完本 / 已废弃的项目不许再启动番外的 AI 生成。
+     *
+     * <p>只拦「启动」：手动编辑番外章节、查看、删除不拦；已经在跑的任务也不打断
+     * （所以这里不做任何循环内/流内的二次判断）。
+     */
+    private void assertSealed(Long projectId, String action) {
+        String deny = ProjectWriteGuard.denyMessage(
+                projectRepository.findById(projectId).map(ProjectEntity::getStatus).orElse(null), action);
+        if (deny != null) {
+            throw new IllegalStateException(deny);
+        }
+    }
 
     @Autowired
     public void setSideStoryRepository(SideStoryRepository sideStoryRepository) {
@@ -218,6 +241,7 @@ public class SideStoryApiController {
     public ResponseEntity<Map<String, String>> startOutlineGeneration(@PathVariable Long projectId,
                                                                        @PathVariable Long id) {
         try {
+            assertSealed(projectId, "生成番外大纲");
             Flux<String> flux = workflowService.generateOutline(projectId, id);
             bgService.startGeneration(id, "OUTLINE", 0, flux,
                     () -> workflowService.saveOutline(id, bgService.getActiveTask(id, "OUTLINE", 0).getFullContent()),
@@ -234,6 +258,7 @@ public class SideStoryApiController {
                                                                               @PathVariable Long id,
                                                                               @PathVariable int chapterNumber) {
         try {
+            assertSealed(projectId, "生成番外章节大纲");
             Flux<String> flux = workflowService.generateChapterOutline(projectId, id, chapterNumber);
             bgService.startGeneration(id, "CHAPTER_OUTLINE", chapterNumber, flux,
                     () -> workflowService.saveChapterOutline(id, chapterNumber,
@@ -251,6 +276,7 @@ public class SideStoryApiController {
                                                              @PathVariable Long id,
                                                              @PathVariable int chapterNumber) {
         try {
+            assertSealed(projectId, "撰写番外正文");
             Flux<String> flux = workflowService.generateChapterContent(projectId, id, chapterNumber);
             bgService.startGeneration(id, "WRITING", chapterNumber, flux,
                     () -> workflowService.saveChapterContent(id, chapterNumber,
@@ -268,6 +294,7 @@ public class SideStoryApiController {
                                                             @PathVariable Long id,
                                                             @PathVariable int chapterNumber) {
         try {
+            assertSealed(projectId, "精修番外正文");
             Flux<String> flux = workflowService.polishChapter(projectId, id, chapterNumber);
             bgService.startGeneration(id, "POLISH", chapterNumber, flux,
                     () -> workflowService.savePolishedContent(id, chapterNumber,
@@ -386,6 +413,7 @@ public class SideStoryApiController {
     @PostMapping("/{id}/auto-run/start")
     public ResponseEntity<Map<String, String>> startAutoRun(@PathVariable Long projectId, @PathVariable Long id) {
         try {
+            assertSealed(projectId, "启动番外自动创作");
             autoRunService.startAutoRun(projectId, id);
             return ResponseEntity.ok(Map.of("status", "ok"));
         } catch (IllegalStateException e) {

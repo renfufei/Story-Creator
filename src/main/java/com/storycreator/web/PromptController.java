@@ -164,20 +164,30 @@ public class PromptController {
         return m;
     }
 
+    /**
+     * 该 (step, subStep, genre) 是否已有自定义「默认」模板 —— 有则对应的内置模板不再标「默认」。
+     * <p>★ 不能按 step 用 {@code Optional} 查询：一步骤有多条默认（每个子步骤一条，
+     * 例如 CHAPTER_WRITING 同时有写作核心与章节扩写两条），单条查询会抛
+     * {@code NonUniqueResultException}，整个 {@code /prompts/data} 直接 500。
+     * 这里先取该步骤的全部默认，再按子步骤/题材自己挑。
+     */
     private boolean hasCustomDefault(WorkflowStep step, PromptSubStep subStep, Genre genre) {
-        // Check if a DB (custom) template is set as default for the same step+subStep+genre.
-        // For PRIMARY sub-steps, DB overrides use subStep=null (main-step override convention).
+        List<PromptTemplateEntity> defaults = repository.findAllByStepAndIsDefaultTrue(step);
+        if (defaults == null || defaults.isEmpty()) return false;
+
+        // 主步骤（subStep 为空或 PRIMARY）的覆盖有两种历史写法：subStep=null 或 subStep=PRIMARY
         if (subStep == null || subStep.isPrimary()) {
-            if (genre != null) {
-                return repository.findByStepAndGenreAndIsDefaultTrue(step, genre).isPresent();
-            }
-            return repository.findByStepAndGenreIsNullAndIsDefaultTrue(step).isPresent();
-        } else {
-            if (genre != null) {
-                return repository.findByStepAndSubStepAndGenreAndIsDefaultTrue(step, subStep, genre).isPresent();
-            }
-            return repository.findByStepAndSubStepAndGenreIsNullAndIsDefaultTrue(step, subStep).isPresent();
+            return PromptTemplateRegistry.pickMainStepDefault(defaults, genre).isPresent();
         }
+
+        // 其余子步骤只认 subStep 完全一致的那条；题材专属优先，其次通用（与 registry 的回退口径一致）
+        boolean genericMatch = false;
+        for (PromptTemplateEntity t : defaults) {
+            if (t == null || t.getSubStep() != subStep) continue;
+            if (genre == null ? t.getGenre() == null : t.getGenre() == genre) return true;
+            if (t.getGenre() == null) genericMatch = true;
+        }
+        return genre != null && genericMatch;
     }
 
     /**

@@ -8,6 +8,7 @@ import com.storycreator.core.domain.StepStatus;
 import com.storycreator.core.domain.WorkflowStep;
 import com.storycreator.core.service.CharacterStateDimensionService;
 import com.storycreator.core.service.GlobalSettingService;
+import com.storycreator.core.service.ProjectWriteGuard;
 import com.storycreator.persistence.entity.*;
 import com.storycreator.persistence.repository.*;
 import com.storycreator.persistence.entity.AutoRunStepConfigEntity;
@@ -163,6 +164,29 @@ public class WorkflowController {
     @Autowired
     public void setWorldFacetElaborationService(WorldFacetElaborationService worldFacetElaborationService) {
         this.worldFacetElaborationService = worldFacetElaborationService;
+    }
+
+    // ==================== 「已完本 / 已废弃」写入闸门 ====================
+
+    /**
+     * 启动期拦截：已完本 / 已废弃的项目不允许再启动「会改动正文」的流程
+     * （AI 生成、校对修复、角色精炼、大纲重生成、全局替换、分面重展开）。
+     *
+     * <p>★ 只在「新任务开始」时调用一次：不放进 Flux 的 doOnNext、不放进循环。
+     * 否则跑到一半把项目改成已完本，正在写的章节会突然失败、状态机卡在 GENERATING。
+     *
+     * @return 非 {@code null} 表示已拒绝，直接 return 给前端（前端照旧收 SSE error 事件）
+     */
+    private SseEmitter rejectIfSealed(Long projectId, String action) {
+        ProjectEntity project = projectRepository.findById(projectId).orElse(null);
+        String deny = project == null ? null : ProjectWriteGuard.denyMessage(project.getStatus(), action);
+        return deny == null ? null : SseErrorHelper.rejected(deny);
+    }
+
+    /** JSON 端点版：返回拒绝文案，{@code null} 表示放行 */
+    private String sealedReason(Long projectId, String action) {
+        ProjectEntity project = projectRepository.findById(projectId).orElse(null);
+        return project == null ? null : ProjectWriteGuard.denyMessage(project.getStatus(), action);
     }
 
 
@@ -365,6 +389,10 @@ public class WorkflowController {
                                @RequestParam WorkflowStep step,
                                @RequestParam(defaultValue = "0") int chapter,
                                @RequestParam(required = false) List<Long> materialIds) {
+        /* 已完本 / 已废弃：立刻拒绝，不创建 emitter、不标 GENERATING */
+        SseEmitter sealed = rejectIfSealed(projectId, "进行AI生成");
+        if (sealed != null) return sealed;
+
         // Step order validation: reject requests for steps too far ahead of current progress
         // Allow CHAPTER_WRITING/POLISHING/PROOFREADING freely (they operate on individual chapters)
         if (step.getOrder() <= WorkflowStep.OUTLINE_GENERATION.getOrder()) {
@@ -554,6 +582,8 @@ public class WorkflowController {
         chapter.setWordCount(content.length());
         chapter.setStatus(StepStatus.CONFIRMED);
         chapterRepository.save(chapter);
+        // 接受/保存正文时把卷归属落下来（与生成提示词同一个解析口径）
+        volumeService.stampChapterVolume(projectId, chapterNumber);
         return "redirect:/projects/" + projectId + "/workflow";
     }
 
@@ -574,7 +604,10 @@ public class WorkflowController {
         chapter.setWordCount(content.length());
         chapter.setStatus(StepStatus.CONFIRMED);
         chapterRepository.save(chapter);
-        return ResponseEntity.ok(Map.of("status", "ok", "wordCount", content.length()));
+        // 接受/保存正文时把卷归属落下来（与生成提示词同一个解析口径）
+        var chapterVolume = volumeService.stampChapterVolume(projectId, chapterNumber).orElse(null);
+        return ResponseEntity.ok(Map.of("status", "ok", "wordCount", content.length(),
+                "volumeNumber", chapterVolume != null ? chapterVolume.volumeNumber() : 0));
     }
 
     /**
@@ -655,6 +688,10 @@ public class WorkflowController {
     @GetMapping(value = "/proofread-fix/{chapterNumber}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @ResponseBody
     public SseEmitter proofreadFix(@PathVariable Long projectId, @PathVariable int chapterNumber) {
+        /* 校对修复会把正文改写后落库 ⇒ 已完本 / 已废弃的不许启动 */
+        SseEmitter sealed = rejectIfSealed(projectId, "进行AI校对修复");
+        if (sealed != null) return sealed;
+
         long timeoutMs = globalSettingService.getAiTimeoutSeconds() * 10 * 1000L;
         log.info("[P{}] Proofread fix request chapter={} timeout={}s", projectId, chapterNumber, timeoutMs / 1000);
         SseEmitter emitter = new SseEmitter(timeoutMs);
@@ -768,6 +805,9 @@ public class WorkflowController {
     @GetMapping(value = "/characters/refine-all", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @ResponseBody
     public SseEmitter refineAllCharacters(@PathVariable Long projectId) {
+        SseEmitter sealed = rejectIfSealed(projectId, "精炼角色卡");
+        if (sealed != null) return sealed;
+
         long timeoutMs = 120 * 60 * 1000L; // 2 hours
         SseEmitter emitter = new SseEmitter(timeoutMs);
 
@@ -1062,6 +1102,8 @@ public class WorkflowController {
         List<VolumeOutlineEntity> volumes = volumeOutlineRepository.findByProjectIdOrderByVolumeNumber(projectId);
         List<ChapterOutlineEntity> allChapters = chapterOutlineRepository.findByProjectIdOrderByChapterNumber(projectId);
 
+        Map<Integer, List<ChapterOutlineEntity>> chaptersByVolume = groupChaptersByVolume(volumes, allChapters);
+
         List<Map<String, Object>> volumeList = new ArrayList<>();
         for (VolumeOutlineEntity vol : volumes) {
             Map<String, Object> volMap = new HashMap<>();
@@ -1069,13 +1111,16 @@ public class WorkflowController {
             volMap.put("title", vol.getTitle());
             volMap.put("arcName", vol.getArcName());
             volMap.put("arcSummary", vol.getArcSummary());
-            volMap.put("chapterStart", vol.getChapterStart());
-            volMap.put("chapterEnd", vol.getChapterEnd());
 
-            // Filter chapters for this volume
-            List<Map<String, Object>> chapterList = allChapters.stream()
-                    .filter(ch -> ch.getChapterNumber() >= vol.getChapterStart()
-                            && ch.getChapterNumber() <= vol.getChapterEnd())
+            List<ChapterOutlineEntity> mine = chaptersByVolume.get(vol.getVolumeNumber());
+            if (mine == null) {
+                mine = List.of();
+            }
+            // 卷的章范围用「实际归入本卷的章节」现算，而不是 volume_outlines 里那个可能过期的区间
+            volMap.put("chapterStart", mine.isEmpty() ? vol.getChapterStart() : mine.get(0).getChapterNumber());
+            volMap.put("chapterEnd", mine.isEmpty() ? vol.getChapterEnd() : mine.get(mine.size() - 1).getChapterNumber());
+
+            List<Map<String, Object>> chapterList = mine.stream()
                     .map(ch -> {
                         Map<String, Object> chMap = new HashMap<>();
                         chMap.put("chapterNumber", ch.getChapterNumber());
@@ -1113,6 +1158,72 @@ public class WorkflowController {
     }
 
     /**
+     * 把章节大纲按「所属分卷」分组。
+     *
+     * <p>以 {@code chapter_outlines.volume_number} 为主（逐章生成时写入的卷号，与大纲分卷一一对应），
+     * <b>而不是</b> {@code volume_outlines.chapter_start/chapter_end}：那两个字段的语义已经被
+     * {@link VolumeService#refreshRanges} 拿去表达<b>正文</b>（chapters）的分卷范围，而正文通常比大纲少
+     * （线上真实案例：正文 6 章、大纲已经写到 30 章）。一旦按区间过滤，区间外的新章节就全部被挡在卷外 ——
+     * 表现就是「库里明明有章节大纲，页面上却不显示在已有分卷下面」。
+     *
+     * <p>区间只作兜底：老数据的 {@code volume_number} 为空，或指向已被删掉的卷时使用。
+     * 任何章节都不会被静默丢弃 —— 区间也匹配不上时挂到最后一卷并打 warn。
+     *
+     * @return 卷号 → 按章号升序的章节大纲（没有章节的卷不会出现在 map 里）
+     */
+    private Map<Integer, List<ChapterOutlineEntity>> groupChaptersByVolume(List<VolumeOutlineEntity> volumes,
+                                                                          List<ChapterOutlineEntity> allChapters) {
+        Map<Integer, List<ChapterOutlineEntity>> grouped = new LinkedHashMap<>();
+        if (volumes.isEmpty()) {
+            return grouped;
+        }
+        Set<Integer> volumeNumbers = new LinkedHashSet<>();
+        for (VolumeOutlineEntity v : volumes) {
+            volumeNumbers.add(v.getVolumeNumber());
+        }
+        Set<Integer> taken = new HashSet<>();
+
+        // 1) 章节自带卷号、且该卷确实存在 —— 直接认领（权威来源）
+        for (ChapterOutlineEntity ch : allChapters) {
+            Integer vn = ch.getVolumeNumber();
+            if (vn != null && volumeNumbers.contains(vn)) {
+                grouped.computeIfAbsent(vn, k -> new ArrayList<>()).add(ch);
+                taken.add(ch.getChapterNumber());
+            }
+        }
+
+        // 2) 老数据没有卷号（或卷号指向已删除的卷）—— 退回区间匹配，已被认领的不重复归卷
+        for (ChapterOutlineEntity ch : allChapters) {
+            if (taken.contains(ch.getChapterNumber())) {
+                continue;
+            }
+            for (VolumeOutlineEntity vol : volumes) {
+                if (ch.getChapterNumber() >= vol.getChapterStart()
+                        && ch.getChapterNumber() <= vol.getChapterEnd()) {
+                    grouped.computeIfAbsent(vol.getVolumeNumber(), k -> new ArrayList<>()).add(ch);
+                    taken.add(ch.getChapterNumber());
+                    break;
+                }
+            }
+        }
+
+        // 3) 仍然没归上（章号超出所有卷区间）—— 挂到最后一卷，宁可多显示也不静默丢失
+        int lastVolumeNumber = volumes.get(volumes.size() - 1).getVolumeNumber();
+        for (ChapterOutlineEntity ch : allChapters) {
+            if (taken.contains(ch.getChapterNumber())) {
+                continue;
+            }
+            grouped.computeIfAbsent(lastVolumeNumber, k -> new ArrayList<>()).add(ch);
+            taken.add(ch.getChapterNumber());
+            log.warn("[P{}] 章节大纲 第{}章（volumeNumber={}）不落在任何分卷区间内，暂归到第{}卷",
+                    ch.getProjectId(), ch.getChapterNumber(), ch.getVolumeNumber(), lastVolumeNumber);
+        }
+
+        grouped.values().forEach(list -> list.sort(Comparator.comparingInt(ChapterOutlineEntity::getChapterNumber)));
+        return grouped;
+    }
+
+    /**
      * Edit a chapter outline
      */
     @PostMapping("/outline/edit-chapter")
@@ -1139,6 +1250,9 @@ public class WorkflowController {
     @ResponseBody
     public SseEmitter regenerateChapterOutline(@PathVariable Long projectId,
                                                @RequestParam int chapterNumber) {
+        SseEmitter sealed = rejectIfSealed(projectId, "重新生成章节大纲");
+        if (sealed != null) return sealed;
+
         long timeoutMs = globalSettingService.getAiTimeoutSeconds() * 1000L;
         SseEmitter emitter = new SseEmitter(timeoutMs);
 
@@ -1284,6 +1398,10 @@ public class WorkflowController {
     public SseEmitter globalReplace(@PathVariable Long projectId,
                                     @RequestParam List<String> oldTexts,
                                     @RequestParam List<String> newTexts) {
+        /* 全局替换会批量改正文 / 设定 / 角色卡 ⇒ 同样算「改文本的流程」 */
+        SseEmitter sealed = rejectIfSealed(projectId, "执行全局替换");
+        if (sealed != null) return sealed;
+
         SseEmitter emitter = new SseEmitter(300_000L); // 5 min timeout
 
         executor.submit(() -> {
@@ -1454,6 +1572,10 @@ public class WorkflowController {
     @PostMapping("/world-facets/regenerate")
     @ResponseBody
     public ResponseEntity<Map<String, String>> regenerateWorldFacets(@PathVariable Long projectId) {
+        String deny = sealedReason(projectId, "重新展开世界观分面");
+        if (deny != null) {
+            return ResponseEntity.badRequest().body(Map.of("error", deny));
+        }
         var ws = worldSettingRepository.findByProjectId(projectId).orElse(null);
         if (ws == null || ws.getContent() == null || ws.getContent().isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "世界观设定为空，无法生成分面"));

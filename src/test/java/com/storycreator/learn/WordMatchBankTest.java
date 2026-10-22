@@ -369,7 +369,7 @@ class WordMatchBankTest {
     }
 
     @Test
-    @DisplayName("专题册：6 个有序专题 / 86 词 / 15 关，且英文顺序就是词库顺序")
+    @DisplayName("专题册：7 个有序专题 / 116 词 / 20 关，且英文顺序就是词库顺序")
     void topicBook_existsWithOrderedThemes() {
         WordMatchBank.BookInfo topic = bank.getBooks().stream()
                 .filter(b -> TOPIC_BOOK_ID.equals(b.id()))
@@ -379,11 +379,11 @@ class WordMatchBankTest {
         assertThat(topic.stage()).as("前端据这个学段名判定「本册左列不洗牌」")
                 .isEqualTo(WordMatchBank.TOPIC_STAGE);
         assertThat(topic.label()).isEqualTo("序列配对");
-        assertThat(topic.wordCount()).as("专题总词数").isEqualTo(86);
-        assertThat(topic.levelCount()).as("切关数（35→6、10→2、11→2、14→2、6→1、10→2）")
-                .isEqualTo(15);
+        assertThat(topic.wordCount()).as("专题总词数").isEqualTo(116);
+        assertThat(topic.levelCount()).as("切关数（35→6、10→2、11→2、14→2、6→1、10→2、30→5）")
+                .isEqualTo(20);
 
-        /* 主题顺序与词数：数字 → 序数 → 星期 → 月份 → 季节 → 时间。
+        /* 主题顺序与词数：数字 → 序数 → 星期 → 月份 → 季节 → 时间 → 亲人关系。
            顺序本身就是这册的功能（左列英文不乱序），所以逐条钉死。 */
         List<WordMatchBank.Level> levels = bank.getLevels(TOPIC_BOOK_ID);
         Map<String, Integer> byTheme = new LinkedHashMap<>();
@@ -396,7 +396,8 @@ class WordMatchBankTest {
                 Map.entry("星期与周", 11),
                 Map.entry("月份与年", 14),
                 Map.entry("季节", 6),
-                Map.entry("时间与时刻", 10));
+                Map.entry("时间与时刻", 10),
+                Map.entry("亲人关系", 30));
 
         // 第 1 关必须是数字的打头 6 个，且**严格按序**（前端 lockLeft 依赖这个顺序）
         assertThat(levels.get(0).pairs()).extracting(WordMatchBank.WordPair::en)
@@ -409,6 +410,20 @@ class WordMatchBankTest {
         assertThat(themeWords(TOPIC_BOOK_ID, "月份与年")).startsWith("January").contains("December", "month");
         assertThat(themeWords(TOPIC_BOOK_ID, "季节"))
                 .containsExactly("spring", "summer", "autumn", "winter", "season", "seasonal");
+
+        /* 亲人关系：整条辈分轴**一字不差**钉死 —— 左列不洗牌，顺序即知识点
+           （家 → 祖辈 → 父母 → 夫妻 → 同辈 → 子辈 → 孙辈 → 旁系 → 亲属），
+           同代内男在女前、正式称呼在口语前。任何一次重排都必须显式改这条断言。 */
+        assertThat(themeWords(TOPIC_BOOK_ID, "亲人关系")).containsExactly(
+                "family", "parents",
+                "grandfather", "grandpa", "grandmother", "grandma", "grandparent",
+                "father", "dad", "mother", "mum",
+                "couple", "husband", "wife",
+                "brother", "sister", "twin",
+                "son", "daughter", "child", "kid", "baby",
+                "grandson", "granddaughter",
+                "uncle", "aunt", "cousin", "nephew", "niece",
+                "relative");
     }
 
     /** 某册里主题名以 prefix 开头的所有主题的英文词（扁平）。 */

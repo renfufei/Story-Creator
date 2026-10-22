@@ -280,6 +280,12 @@ function workflowOutlineMixin() {
                             }))
                         }];
                         this.outlineLoaded = true;
+                    } else {
+                        // 后端确实没有任何分卷 / 章节大纲：必须显式清空。
+                        // 原来这里什么都不做，流式生成期间临时 push 进去的空卷会一直留在页面上，
+                        // 看着像「分卷在、章节不显示」，其实库里根本没有。
+                        this.outlineVolumes = [];
+                        this.outlineLoaded = false;
                     }
                 })
                 .catch(err => {

@@ -232,9 +232,11 @@ function workflowProofreadingMixin() {
             const hl = highlight === undefined
                 ? (prev && prev.highlight !== undefined ? prev.highlight : true)
                 : highlight;
+            // 重新拉取/重算时保留「同步滚动」的开关状态（默认开）
+            const ss = prev && prev.syncScroll !== undefined ? prev.syncScroll : true;
             const b = beforeText || '';
             const a = afterText || '';
-            const pair = SCCmp.preparePair(b, a, { highlight: hl });
+            const pair = SCCmp.preparePair(b, a, { highlight: hl, syncScroll: ss });
             this.proofreadFixPreviews = {
                 ...this.proofreadFixPreviews,
                 [num]: Object.assign({ draft: b, content: a }, pair)

@@ -2,6 +2,7 @@ package com.storycreator.workflow.engine;
 
 import com.storycreator.core.domain.Genre;
 import com.storycreator.core.domain.WorkflowStep;
+import com.storycreator.core.port.ai.AiRequest;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -87,5 +88,42 @@ class WorkflowContextTest {
         WorkflowContext ctx = new WorkflowContext();
         ctx.setReferenceMaterials("素材内容");
         assertThat(ctx.getReferenceMaterials()).isEqualTo("素材内容");
+    }
+
+    // --- 分卷：只做调用参数，不进提示词 ---
+
+    @Test
+    void stampScope_carriesVolumeIntoRequest() {
+        WorkflowContext ctx = new WorkflowContext();
+        ctx.setProjectId(26L);
+        ctx.setCurrentChapter(7);
+        ctx.setVolumeNumber(2);
+        ctx.setVolumeTitle("风起云涌");
+
+        AiRequest request = ctx.stampScope(AiRequest.builder().userPrompt("USER").build());
+
+        assertThat(request.getProjectId()).isEqualTo(26L);
+        assertThat(request.getChapterNumber()).isEqualTo(7);
+        assertThat(request.getVolumeNumber()).isEqualTo(2);
+        assertThat(request.getVolumeTitle()).isEqualTo("风起云涌");
+        // 提示词一个字都不能变
+        assertThat(request.getUserPrompt()).isEqualTo("USER");
+    }
+
+    @Test
+    void toTemplateVariables_hasNoVolumeKeys() {
+        WorkflowContext ctx = new WorkflowContext();
+        ctx.setVolumeNumber(2);
+        ctx.setVolumeTitle("风起云涌");
+
+        Map<String, String> vars = ctx.toTemplateVariables();
+
+        // 刻意的：卷号走 AiRequest 参数，模板变量里不出现，避免模型读到「第几卷」
+        assertThat(vars).doesNotContainKeys("volumeNumber", "volumeTitle", "volumeRange", "volumeContext");
+    }
+
+    @Test
+    void stampScope_toleratesNullRequest() {
+        assertThat(new WorkflowContext().stampScope(null)).isNull();
     }
 }

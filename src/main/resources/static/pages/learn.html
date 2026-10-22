@@ -27,10 +27,12 @@
          按钮同形状高度、描述同字号行高、动作区贴底；齿轮这类次级入口一律用绝对定位浮层（z-index 脱流），
          不占排版位置，卡片之间就不会因它长短不一。
          每卡只通过 data-accent 声明自己的主题色；卡片整体可点，卡内链接一律 stopPropagation。
-         2026-10-18 依次加入成语填空、近义词匹配、反义词匹配，共 6 张卡，
-         栅格统一 col-12 col-sm-6 col-xl-4：手机一列、平板两列、1200px 以上一行三张 ⇒ 正好两行。
-         别改回 col-md-4（会在 768~991 提前变三列、文字挤成四行），也别用 col-xl-3
-         （6 张卡会排成 4+2，第二行左边空两格，看着像没加载完）。 -->
+         2026-10-18 依次加入成语填空、近义词匹配、反义词匹配；2026-10-21 加入数独，共 7 张卡。
+         栅格统一 col-12 col-sm-6 col-xl-4：手机一列、平板两列、1200px 以上一行三张。
+         7 张卡在大屏上是 3+3+1，最后一行只坐一张 —— 这是可接受的（卡片本身尺寸舒适），
+         **别改成 col-xl-3 想凑 4+3**：1200~1399 区间每张只剩不到 290px，
+         图标色块就占 112px，描述会被挤成四行，卡片高度随之参差。
+         也别改回 col-md-4（768~991 会提前变三列，同样挤）。 -->
     <div class="row g-4">
 
         <div class="col-12 col-sm-6 col-xl-4">
@@ -136,6 +138,22 @@
                     <p class="card-text">8×8 棋盘拖放消除，填满整行或整列即消除，连消还有额外加分</p>
                     <div class="sc-learn-actions mt-auto">
                         <a href="/learn/block-blast" class="btn" onclick="event.stopPropagation();">
+                            <i class="bi bi-play-circle"></i> 开始游戏
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-4">
+            <div class="card sc-card sc-learn-card h-100" data-accent="indigo" style="cursor: pointer;"
+                 onclick="window.location.href='/learn/sudoku'">
+                <div class="card-body d-flex flex-column text-center">
+                    <div class="sc-learn-icon"><i class="bi bi-grid-3x3"></i></div>
+                    <h5 class="card-title">数独</h5>
+                    <p class="card-text">3×3 到 9×9 七种尺寸，每局现算出唯一解；笔记 / 提示 / 检查齐全</p>
+                    <div class="sc-learn-actions mt-auto">
+                        <a href="/learn/sudoku" class="btn" onclick="event.stopPropagation();">
                             <i class="bi bi-play-circle"></i> 开始游戏
                         </a>
                     </div>

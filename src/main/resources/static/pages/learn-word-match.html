@@ -276,9 +276,10 @@
         .wm-home-guide { margin-top: .4rem; }
         .wm-home-guide-item { font-size: .83rem; color: #55606d; line-height: 1.9; }
 
-        /* 【序列配对】入口（首页底部）：**常驻只占一行**，点开才露出下面那排专题 chips。
+        /* 首页底部的两个练习入口（趣味配对 / 序列配对）：各**常驻一行**，右侧带【进入】。
            一开始做成了 6 张两列卡片，占掉三行，把检索页压得太长 —— 改成入口行之后
-           默认高度和「怎么查」的一条说明差不多。
+           默认高度和「怎么查」的一条说明差不多；后来连「展开专题 chips」也去掉了，
+           点一次就直接进棋盘（与小程序 pages/index 的两个入口对齐）。
            文字一律用显式 color，不走 .btn 的 --bs-btn-* 变量 —— 白底元素一旦被
            bootstrap 的 :hover 规则接管，移动端粘滞 hover 会把文字刷成白的（这个坑踩过）。 */
         .wm-home-entry {
@@ -309,6 +310,13 @@
             color: var(--wm-sel-ink);
             font-size: 1rem;
         }
+        /* 【趣味配对】的图标直接用小程序同款的 🎯（Bootstrap 里没有靶心，硬凑一个 bi-* 反而两端不一致）。
+           emoji 自带彩色字形，1rem 在方块里偏小、基线也不居中，所以单独给一点字号和 line-height。 */
+        .wm-home-entry-emoji {
+            font-size: 1.15rem;
+            line-height: 1;
+            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+        }
         .wm-home-entry-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
         .wm-home-entry-title { font-size: .9rem; font-weight: 600; color: var(--wm-ink); line-height: 1.3; }
         .wm-home-entry-desc {
@@ -319,27 +327,43 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
-        .wm-home-entry-go { flex: 0 0 auto; font-size: .78rem; color: var(--wm-sel-ink); }
-
-        /* 展开后的专题 chips：一行放得下就一行，放不下自动折行；比原来的卡片矮一半 */
-        .wm-home-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .45rem; }
-        .wm-home-chip {
-            display: inline-flex;
-            align-items: baseline;
-            gap: .3rem;
-            padding: .28rem .55rem;
-            border: 1px solid #dbe3ec;
-            border-radius: 999px;
-            background: #fff;
-            font-size: .8rem;
-            font-weight: 600;
-            color: var(--wm-ink);
-            line-height: 1.3;
-            transition: border-color .16s, background .16s;
+        /* 窄屏放不下一整句口径：允许折成两行（最多两行，超出省略），与小程序的 ix-entry-desc 一致。
+           只截成「1 册 · …」的话，「接着练哪册」这个最该看的信息反而先丢了。
+           ⚠️ 这里用 pre-line 而不是把空白模型整个放开（normal）：本页有一条哨兵断言
+           禁止出现那个取值（PageRenderingIntegrationTest#learnWordMatch_autoLearnAdvancesAcrossBooks，
+           当年防自动学习状态条被撑成两行），两者对这段无换行符的文案表现完全一样，
+           不必为了折行去放宽那条哨兵。 */
+        @media (max-width: 575.98px) {
+            .wm-home-entry-desc {
+                white-space: pre-line;
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+                line-clamp: 2;
+            }
         }
-        .wm-home-chip:hover { border-color: var(--wm-sel-line); background: #f5faff; }
-        .wm-home-chip:active { background: #eaf3fe; }
-        .wm-home-chip-meta { font-size: .7rem; font-weight: 400; color: var(--wm-muted); font-variant-numeric: tabular-nums; }
+
+        /* 右侧【进入】：视觉上是按钮、结构上是行内 span —— 整行本身是 <button>，
+           里面再套一个 <button> 是非法嵌套，某些浏览器会把内层摘出去。
+           因此点击热区是整行，用户点「进入」也落在同一行上，行为一致。 */
+        .wm-home-entry-go {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            gap: .1rem;
+            padding: .22rem .5rem;
+            border: 1px solid var(--wm-sel-line);
+            border-radius: 999px;
+            background: #f2f8ff;
+            font-size: .78rem;
+            font-weight: 600;
+            color: var(--wm-sel-ink);
+            line-height: 1.3;
+            white-space: nowrap;
+            transition: background .16s;
+        }
+
+        .wm-home-entry:hover .wm-home-entry-go { background: #e2f0fe; }
 
         .wm-home-code {
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -2031,7 +2055,7 @@ window.loadWordMatchData = function () {
                     <i class="bi bi-play-fill"></i> <span x-text="'继续练习 · ' + bookLabel"></span>
                 </button>
                 <span class="wm-home-tip" x-show="!bookId" x-cloak>
-                    还没选册：点右上角 <b>选择关卡练习</b> 挑一册开始
+                    还没选册：点底部 <b>趣味配对</b> 从第一册直接开始，或点右上角 <b>选择关卡练习</b> 挑一册
                 </span>
             </div>
         </div>
@@ -2117,32 +2141,35 @@ window.loadWordMatchData = function () {
             </div>
         </div>
 
-        <!-- ==================== 【序列配对】入口 ====================
-             从 PEP 24 册里抽出来的有序词群：数字 / 序数 / 星期 / 月份 / 季节 / 时间。
-             默认只占**一行**（原来铺 6 张卡占了小半屏），点这一行才展开专题 chips。
-             点一个 chip = 切到专题册 + 只在这个专题的关卡里练（复用 themeScope）。
-             这类词的玩法与普通册唯一的差别在发牌：左列英文保持原顺序、只打乱中文（buildCards 的 lockLeft）。 -->
-        <div class="wm-home-sec" id="wm-home-topic" x-show="topicThemes.length" x-cloak>
+        <!-- ==================== 练习入口（对齐小程序 pages/index 页尾） ====================
+             两个入口各占**一行**、右侧一个【进入】按钮，点了直接进棋盘，不再展开二级面板
+             （原来的专题 chips 一展开就把检索页拉长半屏，而「想只练某个专题」在棋盘里
+             点类别标签同样能做到，不必在这一层多做一次选择）：
+               · 趣味配对 = 普通册（小学 / 初中 / 高中 / 大学），上次练哪册就接着那册；
+               · 序列配对 = 专题册（PEP 里的有序词群：数字 / 序数 / 星期 / 月份 / 季节 / 时间 / 亲人关系），
+                 玩法差别只在发牌 —— 左列英文保持词库顺序、只打乱中文（buildCards 的 lockLeft）。
+             两者的起点口径一致：该册第一个还没通关的关；全通关了就从第 1 关重来。 -->
+        <div class="wm-home-sec" id="wm-home-entries">
+            <button type="button" class="wm-home-entry" id="wm-fun-entry"
+                    @click="enterFunPlay()" title="英汉两列点选配对，从上次停下的那一关继续">
+                <span class="wm-home-entry-icon"><span class="wm-home-entry-emoji" aria-hidden="true">🎯</span></span>
+                <span class="wm-home-entry-main">
+                    <span class="wm-home-entry-title">趣味配对</span>
+                    <span class="wm-home-entry-desc" x-text="funSummary"></span>
+                </span>
+                <span class="wm-home-entry-go">进入 <i class="bi bi-chevron-right"></i></span>
+            </button>
+
             <button type="button" class="wm-home-entry" id="wm-topic-entry"
-                    @click="topicOpen = !topicOpen"
-                    :aria-expanded="topicOpen ? 'true' : 'false'"
-                    title="同类词按顺序排列，只打乱中文翻译">
+                    x-show="topicBooks.length" x-cloak
+                    @click="enterTopicBook()" title="同类词按顺序排列，只打乱中文翻译">
                 <span class="wm-home-entry-icon"><i class="bi bi-list-ol"></i></span>
                 <span class="wm-home-entry-main">
                     <span class="wm-home-entry-title">序列配对</span>
                     <span class="wm-home-entry-desc" x-text="topicSummary"></span>
                 </span>
-                <span class="wm-home-entry-go" x-text="topicOpen ? '收起' : '展开'"></span>
+                <span class="wm-home-entry-go">进入 <i class="bi bi-chevron-right"></i></span>
             </button>
-            <div class="wm-home-chips" id="wm-topic-chips" x-show="topicOpen" x-cloak>
-                <template x-for="t in topicThemes" :key="'tp-' + t.theme">
-                    <button type="button" class="wm-home-chip" @click="enterTopic(t.theme)"
-                            :title="'进入「' + t.theme + '」序列配对'">
-                        <span x-text="t.theme"></span>
-                        <span class="wm-home-chip-meta" x-text="t.wordCount + ' 词 · ' + t.levelCount + ' 关'"></span>
-                    </button>
-                </template>
-            </div>
         </div>
     </section>
 
@@ -2984,8 +3011,6 @@ function wordMatchApp() {
     return {
         /* 引导数据还在路上：先空着，boot() 里填。骨架见模板里的 x-show="booting" */
         booting: true,
-        /* 首页【序列配对】入口的展开状态：默认收起，只占一行 */
-        topicOpen: false,
         /* 人教版 24 册 + 大学 2 册：后者首屏只带册元信息（extraBooks），
            关卡等真正选到大学时再拉，见 ensureCet */
         books: [],
@@ -4610,10 +4635,14 @@ function wordMatchApp() {
             } catch (e) { /* 忽略：部分浏览器不支持 */ }
         },
 
-        /* ==================== 序列配对（原「专题练习」） ====================
-           专题册（stage=专题）是从 PEP 24 册里抽出来的**有序词群**：数字、序数、星期、月份、季节、时间。
-           它的练习形态与普通册只有一处不同 —— 发牌时左列英文不洗牌（见 buildCards 的 lockLeft）。
-           下面几个 getter 只服务首页那一行入口；棋盘里的一切仍走原来的「册 → 关」逻辑。 */
+        /* ==================== 首页两个练习入口（趣味配对 / 序列配对） ====================
+           与小程序 pages/index 页尾的两个入口一一对应：
+             · 趣味配对 = 普通册（小学 / 初中 / 高中 / 大学）；
+             · 序列配对 = 专题册（stage=专题），PEP 里的**有序词群**：数字、序数、星期、月份、季节、时间，
+               以及按辈分从祖辈排到远亲的亲属称谓（亲人关系）。
+           专题册的练习形态与普通册只有一处不同 —— 发牌时左列英文不洗牌（见 buildCards 的 lockLeft）。
+           两个入口都只占一行、右侧一个【进入】，点一次直接进棋盘：起点是该册第一个还没通关的关
+           （即 applyBook 的 restore 口径），全通关则从第 1 关重来 —— 不再展开二级面板做二次选择。 */
         get topicBooks() {
             var out = [];
             for (var i = 0; i < this.books.length; i++) {
@@ -4622,16 +4651,37 @@ function wordMatchApp() {
             return out;
         },
 
-        /* 入口行副文案：把「为什么这册不一样」和体量一次说完（不放长句，窄屏会截断）。
-           例：英文按顺序 · 中文打乱 · 6 个专题 · 86 词 */
+        /* 普通册（不含专题册）：趣味配对入口的落点范围 */
+        get funBooks() {
+            var out = [];
+            for (var i = 0; i < this.books.length; i++) {
+                if ((this.books[i].stage || '') !== TOPIC_STAGE) out.push(this.books[i]);
+            }
+            return out;
+        },
+
+        /* 趣味配对入口副文案：必须说清「会进哪一册」—— 点【进入】不再经过册次弹层。
+           例：英汉两列点选配对 · 24 册 · 接着练「三年级上册」 */
+        get funSummary() {
+            var fs = this.funBooks;
+            if (!fs.length) return '英汉两列点选配对';
+            var cur = null;
+            for (var i = 0; i < fs.length; i++) {
+                if (fs[i].id === this.bookId) { cur = fs[i]; break; }
+            }
+            return '英汉两列点选配对 · ' + fs.length + ' 册' + (cur ? ' · 接着练「' + cur.label + '」' : '');
+        },
+
+        /* 序列配对入口副文案：把「为什么这册不一样」和体量一次说完（不放长句，窄屏会截断）。
+           例：英文按顺序 · 中文打乱 · 7 个专题 · 116 词 */
         get topicSummary() {
             var ts = this.topicThemes, words = 0;
             for (var i = 0; i < ts.length; i++) words += ts[i].wordCount;
             return '英文按顺序 · 中文打乱 · ' + ts.length + ' 个专题 · ' + words + ' 词';
         },
 
-        /* 展开后的专题 chips：一个专题一条，带上词数/关数与所属册。
-           从 allLevels 现算（而不是另存一份），册次与关卡都是同一份数据，不会对不上。 */
+        /* 专题清单：从 allLevels 现算（而不是另存一份），册次与关卡是同一份数据，不会对不上。
+           页面已经不再展开它，这里只用来算上面那句数量文案。 */
         get topicThemes() {
             var out = [], seen = {};
             for (var i = 0; i < this.books.length; i++) {
@@ -4651,31 +4701,37 @@ function wordMatchApp() {
             return out;
         },
 
-        /* 【序列配对】点一个 chip：切到专题册 → 只在这一个专题的关卡里练（复用 themeScope）。
-           起点用「该专题第一个还没练过的关」，与 applyBook / startThemePractice 同一套口径。 */
-        enterTopic: function (theme) {
+        /* 【趣味配对】进棋盘。上次练的是专题册、或压根没练过 ⇒ 落到第一册普通册，
+           而不是把用户丢回序列配对 —— 两个入口各走各的册，别互相串。 */
+        enterFunPlay: function () {
+            var fs = this.funBooks, pick = null;
+            for (var i = 0; i < fs.length; i++) {
+                if (fs[i].id === this.bookId) { pick = fs[i]; break; }
+            }
+            if (!pick) pick = fs[0];
+            if (!pick) return;
+            this.enterBook(pick.id);
+        },
+
+        /* 【序列配对】进棋盘：直接进专题册，起点同口径（第一个没通关的关）。
+           整册 6 个专题连着练；想只看某一个专题，棋盘里点类别标签即可（分类练习）。 */
+        enterTopicBook: function () {
             var book = this.topicBooks[0];
             if (!book) return;
+            this.enterBook(book.id);
+        },
+
+        /* 两个入口共用的「进册」动作。applyBook 自带起点恢复（restore=true 走第一个没通关的关），
+           但它只管铺关卡、不切视图；这里补上视图切换，并把册次弹层定位到这一册所在学段。 */
+        enterBook: function (bookId) {
             if (this.autoMode) this.stopAuto(true);
-            /* applyBook 会把 themeScope 清空（换册语义），所以作用域必须在它之后建 */
-            this.applyBook(book.id, true);
-            var idxs = [], wordCount = 0;
-            for (var i = 0; i < this.levels.length; i++) {
-                if ((this.levels[i].theme || '') !== theme) continue;
-                idxs.push(i);
-                wordCount += (this.levels[i].pairs || []).length;
-            }
-            if (!idxs.length) { this.view = 'play'; this.measureTop(); return; }
-            var done = this.progress[book.id] || [];
-            var start = idxs[0];
-            for (var k = 0; k < idxs.length; k++) {
-                if (done.indexOf(idxs[k]) < 0) { start = idxs[k]; break; }
-            }
-            this.themeScope = { theme: theme, indexes: idxs, wordCount: wordCount };
-            this.levelIndex = start;
-            this.loadLevel();
-            this.openStageOnly(TOPIC_STAGE);
+            this.homeDropOpen = false;
+            this.stageInit = true;
+            this.openStageOnly(this.stageOf(bookId));
             this.view = 'play';
+            /* 大学词库是异步来的：没加载完就切册会先看到空棋盘 */
+            if (this.isCetBook(bookId) && !this.cetLoaded) this.applyBookWhenReady(bookId, true);
+            else this.applyBook(bookId, true);
             this.measureTop();
         },
 
