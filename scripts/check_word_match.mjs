@@ -34,7 +34,7 @@
  *  S10b 短屏 + 满员关（7 对，如三上第 13 关）：顶部信息压缩后不再溢出
  *       （375x667 与 320x568 两档；浮动胶囊不压单词、说明文字横向滑动）
  *  S12 导出为单页 HTML（设置 → 导出：册次多选 / 全选与本学段全选、默认勾当前册；
- *      真实落盘后校验产物零资源外链（只放行「源码」那条导航链接）、只含被勾的册，
+ *      真实落盘后校验产物零资源外链（只放行「在线发音版」「源码」两条导航链接）、只含被勾的册，
  *      再用 file:// 打开跑一遍配对）
  *  S13 搜索单词（工具栏「设置」左边的「搜索」→ 弹窗：输入框 + 搜索按钮 + 右上角关闭键；
  *      完全匹配排最前 / 前缀匹配接后且最多 5 个单词 / 两者都空才做部分匹配；大小写不敏感；
@@ -1031,24 +1031,33 @@ async function main() {
         const r = el.getBoundingClientRect();
         return { items, left: Math.round(r.left), right: Math.round(r.right), vw: window.innerWidth };
     })()`);
-    check('弹层里正好 7 个条目', !!pop && pop.items.length === 7,
+    check('弹层里正好 8 个条目', !!pop && pop.items.length === 8,
         pop ? pop.items.map(i => i.title).join(' / ') : 'null');
-    check('条目名与功能一一对应（错题本/重做本关/音效与朗读/导出 HTML/导出小程序/源码/重置进度）',
-        !!pop && ['错题本', '重做本关', '音效与朗读', '导出 HTML', '导出小程序', '源码', '重置进度']
+    check('条目名与功能一一对应（错题本/重做本关/音效与朗读/导出 HTML/导出小程序/在线发音版/源码/重置进度）',
+        !!pop && ['错题本', '重做本关', '音效与朗读', '导出 HTML', '导出小程序', '在线发音版', '源码', '重置进度']
             .every((t, i) => pop.items[i] && pop.items[i].title.indexOf(t) >= 0),
         pop ? pop.items.map(i => i.title).join(' / ') : 'null');
-    /* 「源码」是唯一的外链条目：必须是真 <a>（中键/右键新标签页才照常可用），
-       且指向仓库、带 target=_blank + rel=noopener */
-    const srcItem = pop && pop.items[5];
+    /* 两个外链条目（在线发音版 → 源码）都必须是真 <a>（中键/右键新标签页才照常可用），
+       且指向正确地址、带 target=_blank + rel=noopener */
+    const onlineItem = pop && pop.items[5];
+    const ONLINE_HREF = 'https://word-match-61798.app.workbuddy.host/?sharecode=ENQEODEVZ3';
+    check('「在线发音版」是外链 <a>：指向已发布的公网链接、新标签页打开',
+        !!onlineItem && onlineItem.tag === 'A' && onlineItem.href === ONLINE_HREF
+            && onlineItem.target === '_blank' && /noopener/.test(onlineItem.rel),
+        onlineItem ? `${onlineItem.tag} ${onlineItem.href} target=${onlineItem.target} rel=${onlineItem.rel}` : 'null');
+    const srcItem = pop && pop.items[6];
     check('「源码」是外链 <a>：指向 GitHub 仓库、新标签页打开',
         !!srcItem && srcItem.tag === 'A'
             && srcItem.href === 'https://github.com/renfufei/Story-Creator'
             && srcItem.target === '_blank' && /noopener/.test(srcItem.rel),
         srcItem ? `${srcItem.tag} ${srcItem.href} target=${srcItem.target} rel=${srcItem.rel}` : 'null');
     /* 条目外观必须和 <button> 版一致：不能被浏览器渲染成带下划线的蓝链接 */
-    check('「源码」看起来仍是设置条目（无下划线、颜色与其它条目一致）',
-        !!srcItem && srcItem.deco === 'none' && srcItem.color === pop.items[0].color,
-        srcItem ? `deco=${srcItem.deco} color=${srcItem.color} vs ${pop.items[0].color}` : 'null');
+    check('两个外链条目看起来仍是设置条目（无下划线、颜色与其它条目一致）',
+        !!srcItem && !!onlineItem && srcItem.deco === 'none' && onlineItem.deco === 'none'
+            && srcItem.color === pop.items[0].color && onlineItem.color === pop.items[0].color,
+        onlineItem && srcItem
+            ? `在线 deco=${onlineItem.deco} color=${onlineItem.color} / 源码 deco=${srcItem.deco} color=${srcItem.color} vs ${pop.items[0].color}`
+            : 'null');
     check('每个条目都带图标', !!pop && pop.items.every(i => i.hasIcon));
     check('每个条目都有文字说明（不是只有标题）', !!pop && pop.items.every(i => i.desc.length >= 4),
         pop ? pop.items.map(i => i.desc).join(' | ') : 'null');
@@ -1583,8 +1592,8 @@ async function main() {
     check('大学分组标题是「大学 · 2 册 · 13159 词」',
         picker && /大学/.test(picker.groups[4] || '') && /2 册 · 13159 词/.test(picker.groups[4] || ''),
         picker ? picker.groups[4] : '');
-    check('专题分组标题是「专题 · 1 册 · 86 词」（有序词群，英文不洗牌那一册）',
-        picker && /1 册 · 86 词/.test(picker.groups[3] || ''), picker ? picker.groups[3] : '');
+    check('专题分组标题是「专题 · 1 册 · 158 词」（有序词群，英文不洗牌那一册）',
+        picker && /1 册 · 158 词/.test(picker.groups[3] || ''), picker ? picker.groups[3] : '');
     /* 学段标题展示的是「N 册 · M 词（已学 K）」而不是关卡数：词汇量是用户关心的量级。
        注意两处前缀/后缀：① 含当前册的那个学段前面会挂一枚「当前册名 · 」标记；
        ② 末尾追加「（已学 K）」。所以下面用 /(\d+) 册 · (\d+) 词/ 取数，
@@ -1646,7 +1655,7 @@ async function main() {
         g1[1].open && g1[1].shown > 0 && g1[2].shown === 0,
         JSON.stringify(g1.map(x => `${x.open ? 'open' : 'close'}:${x.shown}`)));
     check('手风琴：同时只展开一个学段（展开初中后小学自动收起）',
-        JSON.stringify(g1.map(x => x.open)) === JSON.stringify([false, true, false, false]),
+        JSON.stringify(g1.map(x => x.open)) === JSON.stringify([false, true, false, false, false]),
         JSON.stringify(g1.map(x => x.open)));
     check('展开后箭头旋转 90°（matrix 第二行 -1）',
         /matrix\(0,\s*1,\s*-1,\s*0/.test(g1[1].caret), `caret=${g1[1].caret}`);
@@ -2712,6 +2721,30 @@ async function main() {
         `nav=${tiny.navTop}~${tiny.navBottom} lastBottom=${tiny.lastCardBottom}`);
     await shot('19-mobile-tiny-7pairs');
 
+    /* 设置弹层排到 8 条（含「在线发音版」）后，超小屏必须还摸得着最后一条：
+       弹层自身有 max-height + 内部滚动兜底，整层不许顶出视口底边。 */
+    await openSettings();
+    const popTiny = await evalJs(`(() => {
+        const el = document.querySelector('.wm-set-pop');
+        if (!el) return null;
+        const r0 = el.getBoundingClientRect();
+        const items = Array.from(el.querySelectorAll('.wm-set-item'));
+        el.scrollTop = el.scrollHeight;      // 有滚动条的话滚到底，确认最后一条露得出来
+        const last = items[items.length - 1].getBoundingClientRect();
+        const r1 = el.getBoundingClientRect();
+        return { n: items.length, top: Math.round(r0.top), bottom: Math.round(r1.bottom),
+                 lastTop: Math.round(last.top), lastBottom: Math.round(last.bottom),
+                 vh: window.innerHeight,
+                 scrollable: el.scrollHeight > el.clientHeight + 1 };
+    })()`);
+    check('超小屏 320x568：设置弹层 8 条都在、整层不出视口（放不下就内部滚动，最后一条能滚出来）',
+        !!popTiny && popTiny.n === 8 && popTiny.bottom <= popTiny.vh + 1
+            && popTiny.lastTop >= popTiny.top - 1 && popTiny.lastBottom <= popTiny.bottom + 1,
+        popTiny ? `n=${popTiny.n} 弹层=${popTiny.top}~${popTiny.bottom} 末条=${popTiny.lastTop}~${popTiny.lastBottom} vh=${popTiny.vh} 滚动=${popTiny.scrollable}` : 'null');
+    await shot('19b-mobile-tiny-settings-pop');
+    await clickSel('.wm-set-btn');           // 收起，别把弹层带进 S12
+    await sleep(200);
+
     /* ---------- S12. 导出为单页 HTML ---------- */
     console.log('\n— S12 导出为单页 HTML —');
     /* S10b 把视口压到 320x568 了，这里恢复桌面尺寸（宽弹窗才点得准） */
@@ -2742,8 +2775,8 @@ async function main() {
                  sum: document.querySelector('.wm-export-sum').textContent.trim(),
                  head: document.querySelector('#wm-export-modal .wm-count-total').textContent.trim() };
     })()`);
-    check('S12 弹窗打开：26 册全列出、分四个学段',
-        dlg.open && dlg.flag && dlg.items === 26 && dlg.stages === 4,
+    check('S12 弹窗打开：27 册全列出、分五个学段',
+        dlg.open && dlg.flag && dlg.items === 27 && dlg.stages === 5,
         `items=${dlg.items} stages=${dlg.stages}`);
     check('S12 默认只勾当前册（三上），呈「部分选中」态',
         dlg.count === 1 && dlg.first === 'pep-3-1' && dlg.part === true && dlg.all === false,
@@ -2757,11 +2790,11 @@ async function main() {
                  label: document.querySelector('.wm-export-all span').textContent.trim(),
                  sum: document.querySelector('.wm-export-sum').textContent.trim(),
                  goOn: !document.querySelector('#wm-export-go').disabled }; })()`);
-    check('S12 全选：26 册全勾上、文案翻成「取消全选」',
-        allSel.n === 26 && allSel.all === true && allSel.label === '取消全选',
+    check('S12 全选：27 册全勾上、文案翻成「取消全选」',
+        allSel.n === 27 && allSel.all === true && allSel.label === '取消全选',
         `n=${allSel.n} label=${allSel.label}`);
-    check('S12 全选后汇总 = 26 册 / 3546 关 / 20191 词（含大学 2 册 / 2203 关 / 13159 词）',
-        /已选 26 册/.test(allSel.sum) && /3546 关/.test(allSel.sum) && /20191 词/.test(allSel.sum),
+    check('S12 全选后汇总 = 27 册 / 3573 关 / 20349 词（含大学 2 册 / 2203 关 / 13159 词）',
+        /已选 27 册/.test(allSel.sum) && /3573 关/.test(allSel.sum) && /20349 词/.test(allSel.sum),
         allSel.sum);
     await shot('24-export-dialog-all');
 
@@ -2812,21 +2845,30 @@ async function main() {
     }
 
     const SOURCE_URL = 'https://github.com/renfufei/Story-Creator';
+    const ONLINE_URL = 'https://word-match-61798.app.workbuddy.host/?sharecode=ENQEODEVZ3';
+    const NAV_URLS = [SOURCE_URL, ONLINE_URL];
     const extRefs = [...html.matchAll(/(?:src|href)="([^"]*)"/g)]
         .map(m => m[1]).filter(u => !/^data:/.test(u));
-    /* 「源码」那条要放行：它是**导航**链接，不加载任何东西，离线点了也只是没反应，
-       与「零资源外链」并不冲突。除它之外，script / link / img / 字体 url() 仍必须全为零。 */
-    const resRefs = extRefs.filter(u => u !== SOURCE_URL);
-    check('S12 产物零资源外链：除「源码」那条跳转外，不存在任何非 data: 的 src / href',
+    /* 两条**导航**链接放行（在线发音版 / 源码）：都是 <a href>，不加载任何东西，
+       离线点了只是没反应，与「零资源外链」并不冲突。除它们之外，script / link / img
+       与字体 url() 仍必须全为零。 */
+    const resRefs = extRefs.filter(u => NAV_URLS.indexOf(u) < 0);
+    check('S12 产物零资源外链：除两条导航链接（在线发音版 / 源码）外，不存在任何非 data: 的 src / href',
         resRefs.length === 0, resRefs.slice(0, 3).join(' | '));
-    check('S12 「源码」条目在产物里保留，且是唯一的绝对 URL（指向本仓库）',
-        extRefs.length === 1 && extRefs[0] === SOURCE_URL, extRefs.join(' | '));
+    check('S12 两条导航链接在产物里都保留，且没有第三条绝对 URL',
+        extRefs.length === 2 && NAV_URLS.every(u => extRefs.indexOf(u) >= 0), extRefs.join(' | '));
     const aSource = /<a[^>]*class="wm-set-item is-source"[^>]*>/;
     check('S12 产物里的「源码」仍是真 <a target=_blank rel=noopener>（不是 JS 跳转）',
         aSource.test(html)
         && /<a[^>]*class="wm-set-item is-source"[^>]*\btarget="_blank"[^>]*>/.test(html)
         && /<a[^>]*class="wm-set-item is-source"[^>]*\brel="noopener noreferrer"[^>]*>/.test(html),
         '需同时带 target=_blank 与 rel=noopener noreferrer');
+    const aOnline = /<a[^>]*class="wm-set-item is-online"[^>]*>/;
+    check('S12 产物里的「在线发音版」也仍是真 <a target=_blank rel=noopener>（单页件里留着当「去拿最新版」的出口）',
+        aOnline.test(html) && html.indexOf(ONLINE_URL) > 0
+        && /<a[^>]*class="wm-set-item is-online"[^>]*\btarget="_blank"[^>]*>/.test(html)
+        && /<a[^>]*class="wm-set-item is-online"[^>]*\brel="noopener noreferrer"[^>]*>/.test(html),
+        '需同时带 target=_blank、rel=noopener noreferrer 与公网链接');
     const cssRefs = [...html.matchAll(/url\(([^)]+)\)/g)]
         .map(m => m[1].trim().replace(/^['"]|['"]$/g, '')).filter(u => !/^data:/.test(u));
     check('S12 产物 CSS 里也没有外链（字体是 data URI）',
@@ -2916,22 +2958,28 @@ async function main() {
     const soloSet = await evalJs(`(() => {
         const exs = Array.from(document.querySelectorAll('.wm-set-item.is-export'));
         const src = document.querySelector('.wm-set-item.is-source');
+        const onl = document.querySelector('.wm-set-item.is-online');
         return { exportTotal: exs.length,
                  exportHidden: exs.filter(it => getComputedStyle(it).display === 'none').length,
                  sourceVisible: !!src && getComputedStyle(src).display !== 'none',
                  sourceHref: src ? src.getAttribute('href') : '',
                  sourceTag: src ? src.tagName : '',
+                 onlineVisible: !!onl && getComputedStyle(onl).display !== 'none',
+                 onlineHref: onl ? onl.getAttribute('href') : '',
+                 onlineTag: onl ? onl.tagName : '',
                  items: document.querySelectorAll('.wm-set-item').length,
                  titles: Array.from(document.querySelectorAll('.wm-set-item'))
                      .filter(it => getComputedStyle(it).display !== 'none')
                      .map(it => it.querySelector('.wm-set-title').innerText.trim()).join(' / ') };
     })()`);
-    check('S12 单机件里「导出 HTML」「导出小程序」都隐藏、「源码」保留可见（能跳仓库），其余设置项保留',
+    check('S12 单机件里「导出 HTML」「导出小程序」都隐藏、「在线发音版」与「源码」保留可见，其余设置项保留',
         soloSet.exportTotal === 2 && soloSet.exportHidden === 2 && soloSet.sourceVisible === true
         && soloSet.sourceTag === 'A' && soloSet.sourceHref === 'https://github.com/renfufei/Story-Creator'
-        && soloSet.items === 7, JSON.stringify(soloSet));
-    check('S12 单机件里可见的设置项顺序（错题本/重做本关/音效与朗读/源码/重置进度，两个导出项都无）',
-        soloSet.titles === '错题本 / 重做本关 / 音效与朗读 / 源码 / 重置进度', soloSet.titles);
+        && soloSet.onlineVisible === true && soloSet.onlineTag === 'A'
+        && soloSet.onlineHref === 'https://word-match-61798.app.workbuddy.host/?sharecode=ENQEODEVZ3'
+        && soloSet.items === 8, JSON.stringify(soloSet));
+    check('S12 单机件里可见的设置项顺序（错题本/重做本关/音效与朗读/在线发音版/源码/重置进度，两个导出项都无）',
+        soloSet.titles === '错题本 / 重做本关 / 音效与朗读 / 在线发音版 / 源码 / 重置进度', soloSet.titles);
     await shot('27-standalone-settings');
 
     /* --- 回到线上页面，验「起始册」的两种情形 ---

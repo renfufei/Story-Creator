@@ -25,4 +25,6 @@ error_words.log
 # 重新生成：./scripts/learn/export_miniprogram.sh  或网页「设置 → 导出小程序」
 word-match-miniprogram
 *.genie
+# 发布用的单页产物（导出脚本生成，见 scripts/learn/export_word_match_html.mjs）
+publish/
 docs/translation-review/

@@ -61,7 +61,16 @@
             <div class="card sc-card sc-learn-card h-100" data-accent="green" style="cursor: pointer;"
                  onclick="window.location.href='/learn/word-match'">
                 <div class="card-body d-flex flex-column text-center">
-                    <div class="sc-learn-icon"><i class="bi bi-translate"></i></div>
+                    <div class="sc-learn-icon">
+                        <!-- 英语单词匹配的图标：内联 SVG（零网络请求），画的就是 favicon 上那对 A/B 积木。
+                             不带米色底板 —— 本卡容器自身已是圆角色块，方套方会显脏，也跟隔壁
+                             「俄罗斯方块」那张卡（只有方块、没有底板）不一致；底板只属于 favicon。
+                             宽高写 1em，由 .sc-learn-icon 的 font-size 驱动，与隔壁 bootstrap-icons 同盒。
+                             改图请改 favicon 后重跑：python3 scripts/gen_word_match_icon.py --write -->
+                        <!-- wm-ab-icon:start -->
+                        <svg class="wm-ab-icon" viewBox="3.98 5.48 52.04 52.04" style="width:1em;height:1em;vertical-align:baseline" role="img" aria-label="英语单词匹配：A/B 双色积木" xmlns="http://www.w3.org/2000/svg"><g transform="rotate(-14 20 26)"><rect x="8" y="14" width="24" height="24" rx="7" fill="#f0954f"/><path d="M14.8 32.2L20 19.7l5.2 12.5M17.6 28.2h4.8" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></g><g transform="rotate(14 40 37)"><rect x="28" y="25" width="24" height="24" rx="7" fill="#5ab5a8"/><path d="M37.5 30.5v13M37.5 30.5h3.5a2.9 2.9 0 0 1 0 5.8h-3.5M37.5 36.3h3.9a3.6 3.6 0 0 1 0 7.2h-3.9" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></g></svg>
+                        <!-- wm-ab-icon:end -->
+                    </div>
                     <h5 class="card-title">英语单词匹配</h5>
                     <p class="card-text">人教版 24 册词库（3~12 年级）按主题配对闯关，同一主题的单词落在同一关</p>
                     <div class="sc-learn-actions mt-auto">

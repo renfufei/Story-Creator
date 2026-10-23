@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<!-- 英语单词匹配：小程序码中央那枚 A/B 双色积木的简笔版。纯色 + 无 <text>，可直接内联成 data URI。 -->
+<rect width="64" height="64" rx="14" fill="#f9e9d2"/>
+<g transform="rotate(-14 20 26)"><rect x="8" y="14" width="24" height="24" rx="7" fill="#f0954f"/><path d="M14.8 32.2L20 19.7l5.2 12.5M17.6 28.2h4.8" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g transform="rotate(14 40 37)"><rect x="28" y="25" width="24" height="24" rx="7" fill="#5ab5a8"/><path d="M37.5 30.5v13M37.5 30.5h3.5a2.9 2.9 0 0 1 0 5.8h-3.5M37.5 36.3h3.9a3.6 3.6 0 0 1 0 7.2h-3.9" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></g>
+</svg>

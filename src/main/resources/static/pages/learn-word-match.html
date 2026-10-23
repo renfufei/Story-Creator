@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>英语单词匹配 - AI故事创作</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/svg+xml" href="/favicon-word-match.svg">
     <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
     <link rel="stylesheet" href="/vendor/bootstrap-icons/css/bootstrap-icons.min.css">
     <link rel="stylesheet" href="/css/style.css">
@@ -411,6 +411,12 @@
             box-shadow: 0 14px 34px rgba(31, 45, 61, .18);
             padding: .45rem;
             text-align: left;
+            /* 条目已经排到 8 条（含「在线发音版」），短屏 320×568 下弹层会顶出视口底部、
+               最后一条「重置进度」点不到。给个高度上限 + 内部滚动兜住；dvh 那行给移动端
+               浏览器地址栏收缩留准（不支持 dvh 的浏览器吃前一行的 vh）。 */
+            max-height: calc(100vh - 6rem);
+            max-height: calc(100dvh - 6rem);
+            overflow-y: auto;
             animation: wm-pop-soft .18s ease;
         }
 
@@ -1936,7 +1942,7 @@ window.loadWordMatchData = function () {
                  @keydown.escape.window="settingsOpen = false">
                 <button type="button" class="btn btn-sm btn-outline-secondary wm-set-btn"
                         @click="settingsOpen = !settingsOpen" :class="{ 'is-open': settingsOpen }"
-                        title="设置：错题本 / 重做本关 / 朗读 / 导出 HTML / 导出小程序 / 源码 / 重置进度"
+                        title="设置：错题本 / 重做本关 / 朗读 / 导出 HTML / 导出小程序 / 在线发音版 / 源码 / 重置进度"
                         aria-haspopup="true" :aria-expanded="settingsOpen ? 'true' : 'false'">
                     <i class="bi bi-gear"></i>
                     <span class="d-none d-sm-inline ms-1">设置</span>
@@ -2012,6 +2018,20 @@ window.loadWordMatchData = function () {
 
                     <!-- 外链条目用 <a>（不是 button）：能直接在新标签页打开，
                          也让「中键/右键新标签页」这类原生行为照常可用 -->
+                    <!-- 在线发音版 = 已发布的公网链接。跟「源码」同一类（导航链接、不加载资源），
+                         所以也不带 is-export：单页件里照样留着，它是「回去拿线上最新版」的出口。 -->
+                    <a class="wm-set-item is-online"
+                       href="https://word-match-61798.app.workbuddy.host/?sharecode=ENQEODEVZ3"
+                       target="_blank" rel="noopener noreferrer" @click="settingsOpen = false"
+                       title="在新标签页打开已发布的在线发音版">
+                        <i class="bi bi-globe2 wm-set-icon"></i>
+                        <span class="wm-set-main">
+                            <span class="wm-set-title">在线发音版</span>
+                            <span class="wm-set-desc">浏览器直接打开就能玩，也能发给同学</span>
+                        </span>
+                        <i class="bi bi-box-arrow-up-right wm-set-arrow"></i>
+                    </a>
+
                     <a class="wm-set-item is-source" href="https://github.com/renfufei/Story-Creator"
                        target="_blank" rel="noopener noreferrer" @click="settingsOpen = false"
                        title="在新标签页打开项目源码仓库（GitHub）">
@@ -4950,6 +4970,9 @@ var EXPORT_CSS = ['/vendor/bootstrap/css/bootstrap.min.css',
 var EXPORT_JS = ['/js/common.js',
                  '/vendor/alpinejs/cdn.min.js'];
 var EXPORT_FONT = '/vendor/bootstrap-icons/css/fonts/bootstrap-icons.woff2';
+/* 页面图标（小程序码中央那枚 A/B 双色积木的简笔版）：站点版是外链，单机件里换成 data URI ——
+   单机件不许有任何外部引用，而它只有 0.8KB，不值得单独带一个文件、更不该让产物去联网。 */
+var EXPORT_ICON = '/favicon-word-match.svg';
 
 function fetchText(url) {
     return fetch(url, { cache: 'no-store' }).then(function (r) {
@@ -5022,9 +5045,11 @@ function buildStandaloneWordMatch(ids, startBookId) {
         return Promise.all([
             Promise.all(EXPORT_CSS.map(fetchText)),
             Promise.all(EXPORT_JS.map(fetchText)),
-            fetchBase64(EXPORT_FONT)
+            fetchBase64(EXPORT_FONT),
+            /* 图标是锦上添花，取不到就让产物没有 favicon，不许因此整份导出失败 */
+            fetchText(EXPORT_ICON).catch(function () { return ''; })
         ]).then(function (got) {
-            var cssList = got[0], jsList = got[1], fontB64 = got[2];
+            var cssList = got[0], jsList = got[1], fontB64 = got[2], iconSvg = got[3];
             var codeMap = {};
             EXPORT_JS.forEach(function (u, n) { codeMap[u] = jsList[n]; });
             if (!codeMap['/vendor/alpinejs/cdn.min.js']) throw new Error('Alpine 脚本没取到，导出会变成死页面');
@@ -5032,9 +5057,9 @@ function buildStandaloneWordMatch(ids, startBookId) {
             var head = doc.head, body = doc.body;
 
             /* ① 只摘站点导航：#site-nav 是站内导航壳，单机件里没有任何站内页可去。
-                  「源码」那条 <a> 则**保留** —— 它是全页唯一的绝对 URL，但属于**导航**链接、
-                  不加载任何资源（不像 src/href 引资源），离线打开只是点了没反应，
-                  所以不影响「零资源外链」这条自检，也让产物能指向项目出处。 */
+                 「在线发音版」与「源码」那两条 <a> 则**保留** —— 它们是全页仅有的绝对 URL，
+                 但属于**导航**链接、不加载任何资源（不像 src/href 引资源），离线打开只是点了没反应，
+                 所以不影响「零资源外链」这条自检，也让产物能指向线上最新版与项目出处。 */
             var nav = doc.getElementById('site-nav');
             if (nav) nav.remove();
 
@@ -5055,7 +5080,19 @@ function buildStandaloneWordMatch(ids, startBookId) {
             var ownStyle = head.querySelector('style');
             head.insertBefore(styleEl, ownStyle || head.firstChild);
 
-            var drop = doc.querySelectorAll('link[rel="stylesheet"], link[rel="icon"], link[rel="shortcut icon"]');
+            /* ②b 图标：站点版指向 /favicon-word-match.svg，单机件里换成 data URI
+                   （SVG 全文 URL 编码，不 base64 —— 省 1/4 体积，也不用担心中文注释破坏 btoa） */
+            var iconLink = doc.querySelector('link[rel="icon"], link[rel="shortcut icon"]');
+            if (iconLink) {
+                if (iconSvg) {
+                    iconLink.setAttribute('type', 'image/svg+xml');
+                    iconLink.setAttribute('href', 'data:image/svg+xml,' + encodeURIComponent(iconSvg));
+                } else {
+                    iconLink.remove();
+                }
+            }
+
+            var drop = doc.querySelectorAll('link[rel="stylesheet"]');
             for (var i = 0; i < drop.length; i++) drop[i].remove();
 
             /* ③ 外链 JS：就地换内联（bootstrap.bundle 页面一处没用到，丢掉省 80KB） */

@@ -2643,6 +2643,13 @@ class PageRenderingIntegrationTest {
                 .contains("rel=\"noopener noreferrer\"")
                 .doesNotContain("srcLink.remove()");
         assertThat(response.getBody())
+                .as("设置弹层还应提供「在线发音版」：指向已发布的公网链接，同样是真 <a> + "
+                        + "target=_blank + rel=noopener。它和「源码」同属**导航**链接，"
+                        + "单页导出件里一并保留（回去拿线上最新版），不破坏「零资源外链」口径")
+                .contains("wm-set-item is-online")
+                .contains("https://word-match-61798.app.workbuddy.host/?sharecode=ENQEODEVZ3")
+                .contains(">在线发音版<");
+        assertThat(response.getBody())
                 .as("设置弹层应提供「导出为单页 HTML」：册次多选 + 全选 + 默认勾当前册，"
                         + "产物零资源外链（样式/脚本/图标字体/词库全内联，只留「源码」一条导航链接），双击即可玩")
                 .contains("wm-set-item is-export")

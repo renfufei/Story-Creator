@@ -695,9 +695,11 @@ a.list-group-item.sc-anchor-link:focus .bi {
     line-height: 1;
 }
 
-/* 自绘 SVG 图标（俄罗斯方块）的宽高写在行内是 1em，跟着上面这行 font-size 走，
-   与 bootstrap-icons 的字形同号；display:block 去掉行盒多余的行距。 */
-.sc-learn-icon svg.wm-bb-icon {
+/* 自绘 SVG 图标（俄罗斯方块 / 英语单词匹配）的宽高写在行内是 1em，跟着上面这行
+   font-size 走，与 bootstrap-icons 的字形同号；display:block 去掉行盒多余的行距。
+   两枚图标分别由 scripts/gen_block_blast_icon.py、scripts/gen_word_match_icon.py 生成。 */
+.sc-learn-icon svg.wm-bb-icon,
+.sc-learn-icon svg.wm-ab-icon {
     display: block;
 }
 
