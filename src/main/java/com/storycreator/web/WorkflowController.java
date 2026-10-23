@@ -1,5 +1,7 @@
 package com.storycreator.web;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.storycreator.core.domain.CharacterStateDimension;
@@ -1392,40 +1394,55 @@ public class WorkflowController {
 
     /**
      * Global find/replace across all project data (SSE progress)
+     *
+     * <p>★「替换为」留空 = <b>删除</b>左边匹配到的内容（2026-10-23 用户要求）。
+     *
+     * <p>参数用 {@link jakarta.servlet.http.HttpServletRequest#getParameterValues} 读**原始值**，
+     * 不再用 {@code @RequestParam List<String>}：Spring 的「字符串 → 集合」转换器会把**空值转成空集合**
+     * （`?newTexts=` 得到 size=0），后果不只是「这一对丢了」，而是后面所有值**前移错位** ——
+     * 例如三对里第一对「替换为」留空，第二对的值就被用到了第一对上，且尾对静默消失。
+     *
+     * <p>逐项归一：{@code null} → 空字符串；{@code newTexts} 比 {@code oldTexts} 短 → 缺的补空串
+     * （即「删除」）；{@code oldTexts} 为空/纯空白的项跳过，不参与替换。
      */
     @GetMapping(value = "/global-replace", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @ResponseBody
-    public SseEmitter globalReplace(@PathVariable Long projectId,
-                                    @RequestParam List<String> oldTexts,
-                                    @RequestParam List<String> newTexts) {
+    public SseEmitter globalReplace(@PathVariable Long projectId, HttpServletRequest request) {
         /* 全局替换会批量改正文 / 设定 / 角色卡 ⇒ 同样算「改文本的流程」 */
         SseEmitter sealed = rejectIfSealed(projectId, "执行全局替换");
         if (sealed != null) return sealed;
+
+        /* 参数必须在请求线程里读完再进异步线程（request 会被容器回收），顺手做归一 */
+        String[] rawOlds = request.getParameterValues("oldTexts");
+        String[] rawNews = request.getParameterValues("newTexts");
+        List<String> olds = new ArrayList<>();
+        List<String> news = new ArrayList<>();
+        if (rawOlds != null) {
+            for (int i = 0; i < rawOlds.length; i++) {
+                String oldText = rawOlds[i];
+                if (oldText == null || oldText.isBlank()) continue;   // 左边为空 ⇒ 这对无效
+                String newText = (rawNews != null && i < rawNews.length) ? rawNews[i] : null;
+                olds.add(oldText);
+                news.add(newText == null ? "" : newText);             // null 当空串 ⇒ 删除
+            }
+        }
 
         SseEmitter emitter = new SseEmitter(300_000L); // 5 min timeout
 
         executor.submit(() -> {
             try {
-                // Build valid replacement pairs (skip empty oldText)
-                List<int[]> pairs = new java.util.ArrayList<>();
-                for (int i = 0; i < oldTexts.size() && i < newTexts.size(); i++) {
-                    if (oldTexts.get(i) != null && !oldTexts.get(i).isBlank()) {
-                        pairs.add(new int[]{i});
-                    }
-                }
-                if (pairs.isEmpty()) {
+                if (olds.isEmpty()) {
                     emitter.send(SseEmitter.event().name("error").data("没有有效的替换对"));
                     emitter.complete();
                     return;
                 }
 
-                // Helper: apply all replacements to a string
+                // Helper: apply all replacements to a string（replace 是字面量替换，newText 为 "" 即删除）
                 java.util.function.Function<String, String> applyReplace = (text) -> {
                     if (text == null) return null;
                     String result = text;
-                    for (int[] pair : pairs) {
-                        int idx = pair[0];
-                        result = result.replace(oldTexts.get(idx), newTexts.get(idx));
+                    for (int i = 0; i < olds.size(); i++) {
+                        result = result.replace(olds.get(i), news.get(i));
                     }
                     return result;
                 };

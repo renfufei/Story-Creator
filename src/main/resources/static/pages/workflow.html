@@ -1752,7 +1752,7 @@
                             <template x-for="(pair, idx) in replacePairs" :key="idx">
                                 <tr>
                                     <td><input type="text" class="form-control form-control-sm" x-model="pair.oldText" placeholder="查找..." :disabled="globalReplacing"></td>
-                                    <td><input type="text" class="form-control form-control-sm" x-model="pair.newText" placeholder="替换为..." :disabled="globalReplacing"></td>
+                                    <td><input type="text" class="form-control form-control-sm" x-model="pair.newText" placeholder="替换为...（留空 = 删除）" :disabled="globalReplacing"></td>
                                     <td><button class="btn btn-sm btn-outline-danger" @click="replacePairs.splice(idx, 1)" :disabled="globalReplacing || replacePairs.length <= 1"><i class="bi bi-x-lg"></i></button></td>
                                 </tr>
                             </template>

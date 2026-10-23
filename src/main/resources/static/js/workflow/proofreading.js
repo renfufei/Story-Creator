@@ -255,7 +255,15 @@ function workflowProofreadingMixin() {
         },
 
         executeGlobalReplace() {
-            const validPairs = this.replacePairs.filter(p => p.oldText.trim() !== '');
+            // ★「替换为」留空 = 删除左边匹配到的内容。右边为 null / undefined 时必须发**空字符串**：
+            //   URLSearchParams 会把 null 字符串化成字面量 "null"，正文里就真出现这四个字母。
+            //   左边为空/纯空白的行不参与替换（保持"有效对"口径）。
+            const validPairs = this.replacePairs
+                .map(p => ({
+                    oldText: p.oldText == null ? '' : String(p.oldText),
+                    newText: p.newText == null ? '' : String(p.newText)
+                }))
+                .filter(p => p.oldText.trim() !== '');
             if (validPairs.length === 0) {
                 alert('请至少输入一对替换文本');
                 return;

@@ -1277,6 +1277,27 @@
             padding-right: 2px;
         }
 
+        /* ★选册弹窗「默认高度 = 最大高度」：展开/收起学段时框不动，只换框里的内容。
+           原来的写法是「列表 max-height 560，整体高度随内容自适应」——小学 8 册展开、
+           初中折叠时内容就比上限矮，于是每次点学段标题，弹窗都会长高/变矮一截，
+           看着像在抽动。改成 flex 竖排：头部 / 统计 / 关闭按钮各自自然高度，
+           列表 flex:1 吃掉剩余空间，滚动只发生在列表内部。
+           高度取原来的「上限」（列表 560 + 上下留白 ≈ 760），且恒小于 .wm-modal 的
+           max-height（100dvh - 2rem），不会顶出视口。 */
+        .wm-modal.is-books {
+            display: flex;
+            flex-direction: column;
+            height: min(88vh, 760px);
+            height: min(88dvh, 760px);
+            overflow: hidden;                 /* 外框不滚，滚动交给列表 */
+        }
+        .wm-modal.is-books > * { flex: 0 0 auto; }
+        .wm-modal.is-books > .wm-book-list {
+            flex: 1 1 auto;
+            min-height: 0;                    /* 必须：flex 子项默认 min-height:auto，会撑破外框 */
+            max-height: none;                 /* 高度由 flex 决定，别再留旧上限 */
+        }
+
         .wm-book-group { display: flex; flex-direction: column; gap: .5rem; }
 
         .wm-book-group-head {
@@ -1540,6 +1561,129 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+
+        /* ---------- 本册所有类别（类别面板里的【查看所有类别】） ----------
+           与上面那个「单类别」面板同壳同宽，内容换成「本册全部类别 + 各自关卡」：
+           一个类别一行（可展开），展开后是关卡 chips —— 手风琴只开一个，
+           大学册 2000+ 关时也不会一次渲染出上千个按钮。 */
+        .wm-modal.is-wide.is-cats { max-width: 520px; position: relative; }
+        .wm-modal.is-wide.is-cats .wm-modal-head { padding-right: 26px; }
+
+        .wm-cats-list {
+            display: flex;
+            flex-direction: column;
+            gap: .4rem;
+            margin: .7rem 0 0;
+            max-height: min(56vh, 28rem);
+            overflow: auto;
+        }
+
+        .wm-cat {
+            border: 1px solid var(--wm-line);
+            border-radius: 10px;
+            background: #fff;
+            overflow: hidden;                 /* 圆形角标别被内部 hover 底色顶破 */
+        }
+
+        /* 当前类别：左侧一条蓝边（与单类别面板的关卡块同源），一眼看出「我在这儿」 */
+        .wm-cat.is-current { border-left: 3px solid var(--wm-sel-line); }
+
+        /* 整行都是按钮：<button> 的默认样式（居中 / 灰底 / 细边框）必须自己清掉，
+           否则类别名会跑到中间、和右边的「x 关 · y 词」对不齐。 */
+        .wm-cat-head {
+            display: flex;
+            align-items: center;
+            gap: .4rem;
+            width: 100%;
+            padding: 8px 10px;
+            background: none;
+            border: 0;
+            text-align: left;
+            color: var(--wm-ink);
+        }
+
+        .wm-cat-head:hover { background: #f6f9fc; }
+
+        .wm-cat-caret { flex: 0 0 auto; font-size: .72rem; color: var(--wm-muted); }
+
+        /* 四六级细域名可能很长：自己省略，但不许把右边的关数挤掉 */
+        .wm-cat-name {
+            font-weight: 700;
+            font-size: .9rem;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .wm-cat-cur {
+            flex: 0 0 auto;
+            font-size: .64rem;
+            font-weight: 700;
+            border-radius: 999px;
+            padding: 1px 6px;
+            color: var(--wm-sel-ink);
+            background: #eef7fe;
+        }
+
+        .wm-cat-meta { flex: 0 0 auto; margin-left: auto; font-size: .7rem; color: var(--wm-muted); }
+
+        .wm-cat-done {
+            flex: 0 0 auto;
+            font-size: .64rem;
+            font-weight: 700;
+            border-radius: 999px;
+            padding: 1px 6px;
+            color: var(--wm-ok-ink);
+            background: var(--wm-ok-bg);
+        }
+
+        .wm-cat-done.is-part { color: var(--wm-sel-ink); background: #eef7fe; }
+
+        .wm-cat-body { padding: 0 10px 9px; border-top: 1px dashed var(--wm-line); }
+
+        /* 自动列宽：宽屏三列、390px 收成两列，不用另写媒体查询 */
+        .wm-cat-levels {
+            display: grid;
+            gap: .3rem;
+            grid-template-columns: repeat(auto-fill, minmax(6.4rem, 1fr));
+            margin: .5rem 0 0;
+        }
+
+        .wm-cat-lv {
+            display: flex;
+            align-items: center;
+            gap: .25rem;
+            padding: 5px 8px;
+            border-radius: 8px;
+            border: 1px solid var(--wm-line);
+            background: #fbfcfd;
+            font-size: .76rem;
+            color: var(--wm-ink);
+        }
+
+        .wm-cat-lv:hover { border-color: var(--wm-sel-line); }
+        .wm-cat-lv-no { font-weight: 600; white-space: nowrap; }
+        .wm-cat-lv-n { margin-left: auto; font-size: .68rem; color: var(--wm-muted); }
+        .wm-cat-lv .bi-check-lg { flex: 0 0 auto; font-size: .72rem; color: var(--wm-ok); }
+        .wm-cat-lv.is-done { color: var(--wm-ok-ink); background: var(--wm-ok-bg); border-color: transparent; }
+        .wm-cat-lv.is-here { border-color: var(--wm-sel-line); box-shadow: inset 0 0 0 1px var(--wm-sel-line); }
+
+        .wm-cat-play {
+            display: inline-flex;
+            align-items: center;
+            gap: .2rem;
+            margin-top: .5rem;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--wm-sel-line);
+            background: #fff;
+            color: var(--wm-sel-ink);
+            font-size: .74rem;
+            font-weight: 600;
+        }
+
+        .wm-cat-play:hover { background: #eef7fe; }
 
         /* ---------- 搜索单词（工具栏按钮 + 弹窗） ----------
            弹窗挂在 .wm-modal is-wide 上再加 .is-search 放宽到 560px：
@@ -2416,7 +2560,7 @@ window.loadWordMatchData = function () {
 
     <!-- 册次选择（弹出框） -->
     <div class="wm-modal-backdrop" x-show="bookPickerOpen" x-cloak @click.self="bookPickerOpen = false">
-        <div class="wm-modal is-wide">
+        <div class="wm-modal is-wide is-books">
             <div class="wm-modal-head">
                 <h5><i class="bi bi-book"></i> 选择年级册次</h5>
                 <span class="wm-count-total" x-text="books.length + ' 册'"></span>
@@ -2573,9 +2717,68 @@ window.loadWordMatchData = function () {
                         @click="startThemePractice()">
                     <i class="bi bi-play-fill"></i> 练习本分类
                 </button>
-                <button type="button" class="btn btn-outline-secondary btn-sm flex-fill" id="wm-theme-cancel"
-                        @click="closeTheme()">关闭
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="wm-theme-cancel"
+                        style="flex:0 0 auto" @click="closeTheme()">关闭
                 </button>
+            </div>
+            <!-- 本册还有别的类别时才给入口：只有一个类别的册，点开也没得选 -->
+            <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2" id="wm-theme-all"
+                    x-show="themeCount > 1" x-cloak @click="openCats()">
+                <i class="bi bi-collection"></i> 查看所有类别<span
+                    x-show="themeCount > 1" x-text="' （本册 ' + themeCount + ' 个）'"></span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 本册所有类别：类别面板里的【查看所有类别】打开。
+         列的是**整册**的类别（不只当前这个）；点类别展开它的关卡、点某一关直接跳过去。 -->
+    <div class="wm-modal-backdrop" x-show="catsOpen" x-cloak @click.self="closeCats()">
+        <div class="wm-modal is-wide is-cats" id="wm-cats-modal">
+            <button type="button" class="wm-modal-close" @click="closeCats()" aria-label="关闭">
+                <i class="bi bi-x-lg"></i>
+            </button>
+            <div class="wm-modal-head">
+                <h5><i class="bi bi-collection"></i> 本册所有类别</h5>
+                <span class="wm-count-total"
+                      x-text="catsData.length + ' 个类别 · ' + catsLevelCount + ' 关'"></span>
+            </div>
+            <p class="mb-0 mt-1">「<span x-text="bookLabel"></span>」里的全部类别。点类别展开关卡，点某一关直接跳过去（仍在这个类别里连着练）。</p>
+
+            <div class="wm-cats-list">
+                <template x-for="g in catsData" :key="'cat-' + g.theme">
+                    <div class="wm-cat"
+                         :class="{ 'is-open': catsExpanded === g.theme,
+                                   'is-current': !!currentLevel && g.theme === currentLevel.theme }">
+                        <button type="button" class="wm-cat-head" @click="toggleCat(g.theme)"
+                                :title="catsExpanded === g.theme ? '收起「' + g.theme + '」的关卡' : '展开「' + g.theme + '」的关卡'">
+                            <i class="bi wm-cat-caret"
+                               :class="catsExpanded === g.theme ? 'bi-chevron-down' : 'bi-chevron-right'"></i>
+                            <span class="wm-cat-name" x-text="g.theme"></span>
+                            <span class="wm-cat-cur" x-show="!!currentLevel && g.theme === currentLevel.theme" x-cloak>当前</span>
+                            <span class="wm-cat-done" x-show="g.allDone" x-cloak><i class="bi bi-check-lg"></i> 全完成</span>
+                            <span class="wm-cat-done is-part" x-show="!g.allDone && g.doneCount > 0" x-cloak
+                                  x-text="g.doneCount + '/' + g.levelCount"></span>
+                            <span class="wm-cat-meta" x-text="g.levelCount + ' 关 · ' + g.wordCount + ' 词'"></span>
+                        </button>
+                        <div class="wm-cat-body" x-show="catsExpanded === g.theme" x-cloak>
+                            <div class="wm-cat-levels">
+                                <template x-for="lv in g.levels" :key="'cat-lv-' + lv.index">
+                                    <button type="button" class="wm-cat-lv"
+                                            :class="{ 'is-done': lv.done, 'is-here': lv.index === levelIndex }"
+                                            :title="'跳到第 ' + (lv.index + 1) + ' 关（' + lv.pairs.length + ' 个单词）'"
+                                            @click="jumpToThemeLevel(g.theme, lv.index)">
+                                        <span class="wm-cat-lv-no" x-text="'第 ' + (lv.index + 1) + ' 关'"></span>
+                                        <span class="wm-cat-lv-n" x-text="lv.pairs.length + ' 词'"></span>
+                                        <i class="bi bi-check-lg" x-show="lv.done" x-cloak></i>
+                                    </button>
+                                </template>
+                            </div>
+                            <button type="button" class="wm-cat-play" @click="startThemePractice(g.theme)">
+                                <i class="bi bi-play-fill"></i> 从头练这一类
+                            </button>
+                        </div>
+                    </div>
+                </template>
             </div>
         </div>
     </div>
@@ -3090,6 +3293,14 @@ function wordMatchApp() {
 
         /* 类别（主题）面板：点页头的类别标签打开 */
         themeOpen: false,
+        themeCount: 0,          /* 本册有几个类别 —— 只有 >1 才在面板里给【查看所有类别】入口 */
+
+        /* 本册所有类别面板（类别面板里的【查看所有类别】打开）：
+           catsData 是**打开时算一次的快照** —— 大学册 2000+ 关，模板里反复读 getter 会重复遍历；
+           catsExpanded 是手风琴（同时只展开一个类别），避免一次渲染出上千个关卡按钮。 */
+        catsOpen: false,
+        catsData: [],
+        catsExpanded: '',
 
         /* 分类练习作用域：null = 不限（本册全部关卡）。
            形状 { theme, indexes: [本册关卡下标…升序], wordCount }。
@@ -3153,6 +3364,7 @@ function wordMatchApp() {
                 if (e.key === 'Escape') {
                     if (self.bookPickerOpen) { self.bookPickerOpen = false; return; }
                     if (self.wrongOpen) { self.wrongOpen = false; return; }
+                    if (self.catsOpen) { self.catsOpen = false; return; }
                     if (self.themeOpen) { self.themeOpen = false; return; }
                     /* 搜索弹窗：焦点在输入框里时上面的 INPUT 判断会先 return，
                        那一支由输入框自己的 @keydown.escape 兜住 */
@@ -4051,21 +4263,36 @@ function wordMatchApp() {
            作用域的实现要点是**不改写 this.levels** —— 见 themeScope 的说明。 */
         openTheme: function () {
             if (!this.currentLevel || !this.currentLevel.theme) return;
+            this.themeCount = this.countThemes();
             this.themeOpen = true;
         },
 
         closeTheme: function () { this.themeOpen = false; },
 
-        /* 面板内容：本册里 theme 相同的关卡，按关卡顺序分组（含每关的单词）。
-           「已完成」标记取 activeProgress —— 与进度条分段同一口径
-           （练习进度与自动学习进度各一套，看当前模式是哪套）。 */
-        get themeInfo() {
-            var theme = this.currentLevel ? (this.currentLevel.theme || '') : '';
-            var out = { theme: theme, levels: [], levelCount: 0, wordCount: 0, doneCount: 0 };
-            if (!theme) return out;
+        /* 本册有多少个不同类别。
+           ⚠️ 这里**必须数全**：themeCount 同时用于「要不要给入口」和入口文案上的「（本册 N 个）」。
+           早先为了省事写成「数到 2 就 break」，结果三年级上册明明 8 个类别，按钮上写着「本册 2 个」。
+           遍历成本 = 本册关数（最多两千出头），且只在打开面板时算一次。 */
+        countThemes: function () {
+            var seen = {};
+            var n = 0;
+            for (var i = 0; i < this.levels.length; i++) {
+                var th = this.levels[i].theme || '';
+                if (!th || seen[th]) continue;
+                seen[th] = 1;
+                n++;
+            }
+            return n;
+        },
+
+        /* 某个类别在本册的关卡（按本册关卡顺序）。theme 省略 = 当前关的类别。
+           「单类别面板」与「所有类别面板」共用这一段口径，免得两处算法各自漂移。 */
+        themeInfoOf: function (theme) {
+            var out = { theme: theme || '', levels: [], levelCount: 0, wordCount: 0, doneCount: 0 };
+            if (!out.theme) return out;
             var done = this.activeProgress[this.bookId] || [];
             for (var i = 0; i < this.levels.length; i++) {
-                if ((this.levels[i].theme || '') !== theme) continue;
+                if ((this.levels[i].theme || '') !== out.theme) continue;
                 var pairs = this.levels[i].pairs || [];
                 var isDone = done.indexOf(i) >= 0;
                 out.levels.push({ index: i, pairs: pairs, done: isDone });
@@ -4076,10 +4303,97 @@ function wordMatchApp() {
             return out;
         },
 
-        /* 【练习本分类】：关面板 + 进入作用域，只走该类别那几关 */
-        startThemePractice: function () {
-            var info = this.themeInfo;
+        /* 面板内容：本册里 theme 相同的关卡，按关卡顺序分组（含每关的单词）。
+           「已完成」标记取 activeProgress —— 与进度条分段同一口径
+           （练习进度与自动学习进度各一套，看当前模式是哪套）。 */
+        get themeInfo() {
+            return this.themeInfoOf(this.currentLevel ? (this.currentLevel.theme || '') : '');
+        },
+
+        /* ---------- 本册所有类别（类别面板里的【查看所有类别】） ---------- */
+
+        /* 类别快照：按「本册首次出现的顺序」分组，每组带关卡下标与完成情况。
+           只读 this.levels（本册全部关卡）而不改写它 —— 与 themeScope「只记范围」同一思路。 */
+        buildBookThemes: function () {
+            var done = this.activeProgress[this.bookId] || [];
+            var order = [];
+            var map = {};
+            for (var i = 0; i < this.levels.length; i++) {
+                var th = this.levels[i].theme || '未分类';
+                var g = map[th];
+                if (!g) {
+                    g = map[th] = {
+                        theme: th, levels: [], levelCount: 0,
+                        wordCount: 0, doneCount: 0, allDone: false
+                    };
+                    order.push(g);
+                }
+                var pairs = this.levels[i].pairs || [];
+                var isDone = done.indexOf(i) >= 0;
+                g.levels.push({ index: i, pairs: pairs, done: isDone });
+                g.levelCount++;
+                g.wordCount += pairs.length;
+                if (isDone) g.doneCount++;
+            }
+            for (var k = 0; k < order.length; k++) {
+                order[k].allDone = order[k].doneCount === order[k].levelCount;
+            }
+            return order;
+        },
+
+        /* 「所有类别」面板标题上的合计关数（一次遍历；数据量 = 类别数，几十个） */
+        get catsLevelCount() {
+            var n = 0;
+            for (var i = 0; i < this.catsData.length; i++) n += this.catsData[i].levelCount;
+            return n;
+        },
+
+        /* 打开「本册所有类别」：快照一次 + 默认展开当前类别。
+           没有当前类别（理论上不会，入口只在棋盘页头）就展开第一个。 */
+        openCats: function () {
+            this.catsData = this.buildBookThemes();
+            var cur = this.currentLevel ? (this.currentLevel.theme || '') : '';
+            var has = false;
+            for (var i = 0; i < this.catsData.length; i++) {
+                if (this.catsData[i].theme === cur) { has = true; break; }
+            }
+            this.catsExpanded = has ? cur : (this.catsData.length ? this.catsData[0].theme : '');
             this.themeOpen = false;
+            this.catsOpen = true;
+        },
+
+        closeCats: function () { this.catsOpen = false; },
+
+        /* 手风琴：展开一个就收起别的；再点自己收起 */
+        toggleCat: function (theme) {
+            this.catsExpanded = (this.catsExpanded === theme) ? '' : theme;
+        },
+
+        /* 从「所有类别」里点某一关：直接跳过去，并把作用域设成该类别 ——
+           跳完「上一关 / 下一关」仍在这个类别里走，不会莫名其妙串到别的类别去。 */
+        jumpToThemeLevel: function (theme, index) {
+            var info = this.themeInfoOf(theme);
+            if (!info.levelCount) return;
+            if (index < 0 || index >= this.levels.length) return;
+            this.catsOpen = false;
+            if (this.autoMode) this.stopAuto(true);
+            var idxs = info.levels.map(function (g) { return g.index; });
+            this.themeScope = { theme: info.theme, indexes: idxs, wordCount: info.wordCount };
+            this.levelIndex = index;
+            this.loadLevel();
+            this.measureTop();
+            if (typeof SC !== 'undefined' && SC.toast) {
+                SC.toast.success('「' + info.theme + '」第 ' + (index + 1) + ' 关');
+            }
+        },
+
+        /* 【练习本分类】：关面板 + 进入作用域，只走该类别那几关。
+           theme 省略 = 当前关的类别（类别面板那个按钮）；传了就按传的类别走
+           （「所有类别」面板里的【从头练这一类】）。 */
+        startThemePractice: function (theme) {
+            var info = theme ? this.themeInfoOf(theme) : this.themeInfo;
+            this.themeOpen = false;
+            this.catsOpen = false;
             if (!info.levelCount) return;
             if (this.autoMode) this.stopAuto(true);
             var idxs = info.levels.map(function (g) { return g.index; });

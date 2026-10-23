@@ -216,6 +216,25 @@ async function pickerGroups() {
         });
     })()`);
 }
+/* 选册弹窗自己的尺寸：用来钉住「默认高度 = 最大高度、展开/收起时框不动」。
+   同时报出列表高度与外框是否出现滚动条（外框滚 = 内容顶破固定高度，属于回归）。 */
+async function bookModalSize() {
+    return evalJs(`(() => {
+        const back = Array.from(document.querySelectorAll('.wm-modal-backdrop'))
+            .find(e => e.getClientRects().length > 0);
+        const m = back && back.querySelector('.wm-modal');
+        if (!m) return null;
+        const cs = getComputedStyle(m);
+        const list = m.querySelector('.wm-book-list');
+        return { h: Math.round(m.getBoundingClientRect().height),
+                 maxH: Math.round(parseFloat(cs.maxHeight)),
+                 listH: Math.round(list.getBoundingClientRect().height),
+                 listScrollH: list.scrollHeight,
+                 outerScrolls: m.scrollHeight > m.clientHeight + 1,
+                 vh: window.innerHeight };
+    })()`);
+}
+
 async function clickBookItem(text) {
     // 目标册可能在被折叠的学段里：先展开它所属的学段（手风琴，只会展开这一个）
     const stage = await stageOfBook(text);
@@ -1627,6 +1646,7 @@ async function main() {
         picker && JSON.stringify(picker.open) === JSON.stringify([true, false, false, false, false]),
         picker ? JSON.stringify(picker.open) : '');
     const g0 = await pickerGroups();
+    const mh0 = await bookModalSize();
     check('折叠生效：初中 / 高中 / 专题 / 大学四个组的册次一个都不可见',
         picker && picker.shown === g0[0].shown && g0[1].shown === 0 && g0[2].shown === 0
         && g0[3].shown === 0 && g0[4].shown === 0,
@@ -1644,13 +1664,22 @@ async function main() {
     check('高中 11 册在列（必修1 ~ 选修11）',
         picker && /必修1/.test(picker.items[13] || '') && /选修11/.test(picker.items[23] || ''),
         picker ? `[13]=${(picker.items[13] || '').slice(0, 12)} [23]=${(picker.items[23] || '').slice(0, 12)}` : '');
-    check('册次列表限高（不撑破弹窗）', picker && picker.clientH <= 561,
+    /* 列表高度由「弹窗定高 - 头部/统计/按钮」决定，桌面约 570；不再用旧的 560 上限卡它，
+       这里只守住「不撑破弹窗」：列表比弹窗矮，且弹窗本身没超 max-height。 */
+    check('册次列表限高（列表自身滚动，不撑破弹窗）', picker && picker.clientH <= 600,
         picker ? `scrollH=${picker.scrollH} clientH=${picker.clientH}` : '');
+    /* ★高度口径：默认打开时就该是「固定上限」，而不是按内容自适应。
+       原来列表是 max-height，小学 8 册展开、其余折叠时内容比上限矮 ⇒ 每次点学段标题
+       弹窗都长高/变矮一截（用户看到的「抽动」）。现在弹窗定高、只在列表内部滚。 */
+    check('选册弹窗默认高度就已顶到上限（≈760，且仍小于视口允许的 max-height）',
+        !!mh0 && mh0.h >= 700 && mh0.h <= 760 && mh0.h < mh0.maxH,
+        mh0 ? `h=${mh0.h} maxH=${mh0.maxH} vh=${mh0.vh}` : 'null');
     await shot('08-desktop-book-picker');
 
     /* 折叠交互：展开初中 -> 初中组的册次出现且箭头旋转；再点一次收起 */
     await clickStageHead('初中');
     const g1 = await pickerGroups();
+    const mh1 = await bookModalSize();
     check('点学段标题可展开（初中组的册次出现，高中仍折叠）',
         g1[1].open && g1[1].shown > 0 && g1[2].shown === 0,
         JSON.stringify(g1.map(x => `${x.open ? 'open' : 'close'}:${x.shown}`)));
@@ -1666,9 +1695,21 @@ async function main() {
 
     await clickStageHead('初中');
     const g2 = await pickerGroups();
+    const mh2 = await bookModalSize();
     check('再点一次可收起（初中组的册次再次隐藏，箭头复位）',
         !g2[1].open && g2[1].shown === 0 && g2[1].caret === 'none',
         JSON.stringify({ open: g2[1].open, shown: g2[1].shown, caret: g2[1].caret }));
+    /* ★展开 / 收起学段时弹窗高度必须一模一样（±1px 抗亚像素）：
+       这是「抽动」的直接判据，改回 max-height 自适应会立刻红。 */
+    check('展开学段后弹窗高度不变（框不动，只是列表里换了内容）',
+        !!mh1 && Math.abs(mh1.h - mh0.h) <= 1,
+        mh1 && mh0 ? `默认 ${mh0.h} → 展开 ${mh1.h}` : 'null');
+    check('再次收起后弹窗高度仍不变（三次测量同一高度）',
+        !!mh2 && Math.abs(mh2.h - mh0.h) <= 1 && Math.abs(mh2.h - mh1.h) <= 1,
+        mh2 && mh0 && mh1 ? `${mh0.h} / ${mh1.h} / ${mh2.h}` : 'null');
+    check('定高之后溢出只在列表内部消化，外框不出滚动条（内容没顶破固定高度）',
+        !!mh2 && mh2.outerScrolls === false,
+        mh2 ? `outerScrolls=${mh2.outerScrolls} list ${mh2.listH}/${mh2.listScrollH}` : 'null');
 
     // 小学册：点六年级下册（小学组本来就展开着）
     await clickBookItem('六年级下册');
@@ -3486,6 +3527,270 @@ async function main() {
         !!s14Panel && s14Panel.left >= 0 && s14Panel.right <= s14Panel.vw + 1,
         s14Panel ? `left=${s14Panel.left} right=${s14Panel.right} vw=${s14Panel.vw}` : 'null');
     await shot('32-theme-panel');
+
+    /* ---------- S15. 【查看所有类别】-> 本册全部类别面板 ---------- */
+    console.log('\n— S15 本册所有类别 —');
+
+    const catsVisible = () => evalJs(`(() => {
+        const m = document.getElementById('wm-cats-modal');
+        return !!m && m.getClientRects().length > 0;
+    })()`);
+
+    const s14AllEntry = await evalJs(`(() => {
+        const b = document.getElementById('wm-theme-all');
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const r = b ? b.getBoundingClientRect() : null;
+        /* 类别数由探针自己扫本册关卡算，不信组件里的 themeCount */
+        const seen = {}; let real = 0;
+        (d.allLevels[d.bookId] || []).forEach(l => {
+            const th = l.theme || '';
+            if (!th || seen[th]) return;
+            seen[th] = 1; real++;
+        });
+        return { exists: !!b,
+                 visible: !!b && b.getClientRects().length > 0,
+                 text: b ? b.innerText.replace(/\\s+/g, ' ').trim() : '',
+                 icon: !!b && !!b.querySelector('i.bi-collection'),
+                 themeCount: d.themeCount, realThemes: real,
+                 w: r ? Math.round(r.width) : 0, h: r ? Math.round(r.height) : 0,
+                 panelW: Math.round(document.getElementById('wm-theme-modal').getBoundingClientRect().width) };
+    })()`);
+    check('S15 类别面板里给了【查看所有类别】入口，并报出本册有几个类别（数字要数全，不是「>1」）',
+        !!s14AllEntry && s14AllEntry.visible && /查看所有类别/.test(s14AllEntry.text)
+        && s14AllEntry.icon
+        && new RegExp('本册 ' + s14AllEntry.realThemes + ' 个').test(s14AllEntry.text)
+        && s14AllEntry.themeCount === s14AllEntry.realThemes,
+        s14AllEntry ? `${s14AllEntry.text} / real=${s14AllEntry.realThemes} state=${s14AllEntry.themeCount}` : 'null');
+    check('S15 入口是整行大按钮（与主按钮同宽，不是小链接）',
+        !!s14AllEntry && s14AllEntry.h >= 28 && s14AllEntry.w >= s14AllEntry.panelW - 40,
+        s14AllEntry ? `${s14AllEntry.w}x${s14AllEntry.h} / 面板 ${s14AllEntry.panelW}` : 'null');
+    await shot('32b-theme-all-entry');
+
+    await clickSel('#wm-theme-all');
+    await sleep(340);
+    const s14Cats = await evalJs(`(() => {
+        const m = document.getElementById('wm-cats-modal');
+        const tm = document.getElementById('wm-theme-modal');
+        if (!m || !m.getClientRects().length) return null;
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        const lv = d.allLevels[d.bookId];
+        /* 期望值由探针自己按「本册首次出现顺序」重算，不读组件的 catsData */
+        const order = []; const map = {};
+        lv.forEach((l, i) => {
+            const th = l.theme || '未分类';
+            if (!map[th]) { map[th] = { theme: th, idx: [], words: 0 }; order.push(map[th]); }
+            map[th].idx.push(i);
+            map[th].words += (l.pairs || []).length;
+        });
+        const rows = Array.from(m.querySelectorAll('.wm-cat')).map(c => {
+            const cur = c.querySelector('.wm-cat-cur');
+            const body = c.querySelector('.wm-cat-body');
+            return {
+                name: c.querySelector('.wm-cat-name').innerText.trim(),
+                meta: c.querySelector('.wm-cat-meta').innerText.replace(/\\s+/g, ' ').trim(),
+                cur: !!cur && cur.getClientRects().length > 0,
+                open: !!body && body.getClientRects().length > 0,
+                levels: Array.from(c.querySelectorAll('.wm-cat-lv')).map(b => ({
+                    no: b.querySelector('.wm-cat-lv-no').innerText.trim(),
+                    n: b.querySelector('.wm-cat-lv-n').innerText.trim(),
+                    done: b.classList.contains('is-done')
+                })),
+                play: (() => { const p = c.querySelector('.wm-cat-play');
+                    return !!p && p.innerText.replace(/\\s+/g, ' ').trim(); })()
+            };
+        });
+        const r = m.getBoundingClientRect();
+        return { themePanelOpen: !!tm && tm.getClientRects().length > 0,
+                 h5: m.querySelector('h5').innerText.replace(/\\s+/g, ' ').trim(),
+                 total: m.querySelector('.wm-count-total').innerText.replace(/\\s+/g, ' ').trim(),
+                 rows: rows,
+                 expect: order.map(o => ({ theme: o.theme, n: o.idx.length, words: o.words, idx: o.idx })),
+                 currentTheme: d.currentLevel.theme, levelIndex: d.levelIndex,
+                 left: Math.round(r.left), right: Math.round(r.right), vw: window.innerWidth };
+    })()`);
+    check('S15 点【查看所有类别】：单类别面板关掉、新面板打开，标题「本册所有类别」',
+        !!s14Cats && !s14Cats.themePanelOpen && s14Cats.h5 === '本册所有类别',
+        s14Cats ? `themePanel=${s14Cats.themePanelOpen} h5=${s14Cats.h5}` : 'null');
+    check('S15 角标 = 类别数 + 本册总关数（两个数都由真实数据算）',
+        !!s14Cats && s14Cats.total === s14Cats.expect.length + ' 个类别 · '
+        + s14Cats.expect.reduce((n, o) => n + o.n, 0) + ' 关',
+        s14Cats ? s14Cats.total : 'null');
+    check('S15 类别行按「本册首次出现顺序」全部列出（不重不漏，名字逐字一致）',
+        !!s14Cats && s14Cats.rows.length === s14Cats.expect.length
+        && s14Cats.rows.every((r, i) => r.name === s14Cats.expect[i].theme),
+        s14Cats ? s14Cats.rows.map(r => r.name).join(' / ') : 'null');
+    check('S15 每行的「x 关 · y 词」与该类别真实关卡数一致',
+        !!s14Cats && s14Cats.rows.every((r, i) => r.meta === s14Cats.expect[i].n + ' 关 · '
+        + s14Cats.expect[i].words + ' 词'),
+        s14Cats ? s14Cats.rows.map((r, i) => r.meta + '/' + s14Cats.expect[i].n + '关').join(' ') : 'null');
+    check('S15 当前类别带「当前」标记（有且只有一个）',
+        !!s14Cats && s14Cats.rows.filter(r => r.cur).length === 1
+        && s14Cats.rows.find(r => r.cur).name === s14Cats.currentTheme,
+        s14Cats ? `current=${s14Cats.currentTheme}` : 'null');
+    check('S15 默认展开的就是当前类别（手风琴只开一个），关卡数与类别关数一致',
+        !!s14Cats
+        && s14Cats.rows.filter(r => r.open).length === 1
+        && s14Cats.rows.find(r => r.cur).open
+        && s14Cats.rows.find(r => r.cur).levels.length === s14Cats.expect.find(o => o.theme === s14Cats.currentTheme).n,
+        s14Cats ? s14Cats.rows.filter(r => r.open).map(r => r.name + ':' + r.levels.length).join(' ') : 'null');
+    check('S15 关卡 chip 显示的是**本册真实关号**（不是类别内的序号）',
+        !!s14Cats && (() => {
+            const cur = s14Cats.rows.find(r => r.cur);
+            const idx = s14Cats.expect.find(o => o.theme === s14Cats.currentTheme).idx;
+            return cur.levels.every((lv, i) => lv.no === '第 ' + (idx[i] + 1) + ' 关');
+        })(),
+        s14Cats ? s14Cats.rows.find(r => r.cur).levels.map(l => l.no).join(' ') : 'null');
+    check('S15 面板完整落在视口内', !!s14Cats && s14Cats.left >= 0 && s14Cats.right <= s14Cats.vw + 1,
+        s14Cats ? `left=${s14Cats.left} right=${s14Cats.right} vw=${s14Cats.vw}` : 'null');
+    await shot('32c-all-categories');
+
+    /* 换一个类别展开：手风琴必须把当前那个收起来。
+       ⚠️ 不能用 `:nth-child(n)` 定位 —— x-for 的 <template> 也是元素节点，会把行号整体顶偏一格
+       （实测：点「第 2 行」实际点到第 1 行 = 当前类别，于是把展开的那行收起来了）。
+       改为给目标元素临时打 id 再真点。 */
+    const s14Other = s14Cats.rows.findIndex(r => !r.cur);
+    if (s14Other >= 0) {
+        await evalJs(`(() => {
+            const cs = document.querySelectorAll('#wm-cats-modal .wm-cat');
+            const el = cs[${s14Other}].querySelector('.wm-cat-head');
+            if (el) el.id = '__probe_cat_head';
+            return !!el;
+        })()`);
+        await clickSel('#__probe_cat_head');
+        await sleep(300);
+        const s14OtherOpen = await evalJs(`(() => {
+            const cs = Array.from(document.querySelectorAll('#wm-cats-modal .wm-cat'));
+            return cs.map(c => {
+                const b = c.querySelector('.wm-cat-body');
+                return { open: !!b && b.getClientRects().length > 0,
+                         levels: c.querySelectorAll('.wm-cat-lv').length,
+                         caret: (c.querySelector('.wm-cat-caret').className.match(/chevron-(down|right)/) || [])[1] };
+            });
+        })()`);
+        check('S15 点别的类别：它展开（箭头朝下），原来那个自动收起（手风琴）',
+            s14OtherOpen.filter(x => x.open).length === 1
+            && s14OtherOpen[s14Other].open
+            && s14OtherOpen[s14Other].caret === 'down',
+            s14OtherOpen.map((x, i) => `${i}${x.open ? '开' : '合'}/${x.caret}/${x.levels}关`).join(' '));
+        check('S15 展开后关卡数与独立算出的类别关数一致',
+            s14OtherOpen[s14Other].levels === s14Cats.expect[s14Other].n,
+            `${s14OtherOpen[s14Other].levels} vs ${s14Cats.expect[s14Other].n}`);
+
+        /* 点第 2 关（若只有 1 关就点第 1 关）：跳过去 + 作用域换成该类别 */
+        const lvNth = Math.min(1, s14Cats.expect[s14Other].n - 1);
+        const targetIdx = s14Cats.expect[s14Other].idx[lvNth];
+        await evalJs(`(() => {
+            const cs = document.querySelectorAll('#wm-cats-modal .wm-cat');
+            const lvs = cs[${s14Other}].querySelectorAll('.wm-cat-lv');
+            if (lvs[${lvNth}]) lvs[${lvNth}].id = '__probe_cat_lv';
+            return lvs.length;
+        })()`);
+        await clickSel('#__probe_cat_lv');
+        await waitCards();
+        await sleep(360);
+        const s14Jump = await evalJs(`(() => {
+            const d = Alpine.$data(document.querySelector('.wm-root'));
+            const badge = document.querySelector('.wm-theme');
+            return { catsOpen: (() => { const m = document.getElementById('wm-cats-modal');
+                        return !!m && m.getClientRects().length > 0; })(),
+                     levelIndex: d.levelIndex,
+                     theme: d.themeScope ? d.themeScope.theme : null,
+                     indexes: d.themeScope ? d.themeScope.indexes.slice() : null,
+                     currentTheme: d.currentLevel ? d.currentLevel.theme : null,
+                     badge: badge ? badge.innerText.replace(/\\s+/g, ' ').trim() : '',
+                     counter: document.querySelector('.wm-counter').innerText.replace(/\\s+/g, ''),
+                     navMid: document.querySelector('.wm-nav-mid').innerText.replace(/\\s+/g, ' ').trim(),
+                     cards: document.querySelectorAll('.wm-card').length };
+        })()`);
+        const want = s14Cats.expect[s14Other];
+        check('S15 点某一关：面板关闭、跳到那一关（本册真实关号在计数器上）',
+            !!s14Jump && !s14Jump.catsOpen && s14Jump.levelIndex === targetIdx
+            && s14Jump.counter.split('/')[0] === String(targetIdx + 1)
+            && s14Jump.navMid === '第 ' + (targetIdx + 1) + ' 关 / 共 ' + s14Jump.counter.split('/')[1] + ' 关',
+            s14Jump ? `idx=${s14Jump.levelIndex} want=${targetIdx} counter=${s14Jump.counter}` : 'null');
+        check('S15 跳过去之后作用域 = 该类别那几关（「下一关」不会串到别的类别）',
+            !!s14Jump && s14Jump.theme === want.theme
+            && JSON.stringify(s14Jump.indexes) === JSON.stringify(want.idx)
+            && s14Jump.currentTheme === want.theme,
+            s14Jump ? `${s14Jump.theme} / ${JSON.stringify(s14Jump.indexes)}` : 'null');
+        check('S15 页头的类别标签跟着换成新类别',
+            !!s14Jump && s14Jump.badge.indexOf(want.theme) >= 0 && s14Jump.cards > 0,
+            s14Jump ? `${s14Jump.badge} / cards=${s14Jump.cards}` : 'null');
+        await shot('32d-category-jump');
+    }
+
+    /* --- 小屏 390×844：新面板要横向装得下（行内「x 关 · y 词」不能被挤出去） --- */
+    await evalJs(`(() => { const d = Alpine.$data(document.querySelector('.wm-root'));
+        d.catsOpen = false; d.themeOpen = false; return true; })()`);
+    await sleep(200);
+    await send('Emulation.setDeviceMetricsOverride',
+        { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+    await sleep(320);
+    await clickSel('.wm-theme');
+    await sleep(280);
+    await clickSel('#wm-theme-all');
+    await sleep(360);
+    const s15Mob = await evalJs(`(() => {
+        const m = document.getElementById('wm-cats-modal');
+        if (!m || !m.getClientRects().length) return null;
+        const r = m.getBoundingClientRect();
+        const heads = Array.from(m.querySelectorAll('.wm-cat-head')).map(h => {
+            const hr = h.getBoundingClientRect();
+            const meta = h.querySelector('.wm-cat-meta');
+            return { right: Math.round(hr.right), h: Math.round(hr.height),
+                     metaRight: Math.round(meta.getBoundingClientRect().right) };
+        });
+        const lvs = Array.from(m.querySelectorAll('.wm-cat-lv'))
+            .filter(b => b.getClientRects().length > 0);
+        const cols = new Set(lvs.map(b => Math.round(b.getBoundingClientRect().left))).size;
+        return { vw: window.innerWidth,
+                 left: Math.round(r.left), right: Math.round(r.right),
+                 heads: heads, chips: lvs.length, chipCols: cols,
+                 scrollW: document.documentElement.scrollWidth,
+                 closeClear: (() => {
+                     const c = m.querySelector('.wm-modal-close');
+                     const h5 = m.querySelector('h5');
+                     if (!c || !h5) return false;
+                     const a = c.getBoundingClientRect(), b = h5.getBoundingClientRect();
+                     return a.left >= b.right - 1 || a.top >= b.bottom - 1;
+                 })() };
+    })()`);
+    check('S15 390px：类别面板不横向溢出，每行的「x 关 · y 词」都还在视口里',
+        !!s15Mob && s15Mob.left >= -1 && s15Mob.right <= s15Mob.vw + 1
+        && s15Mob.scrollW <= s15Mob.vw + 1
+        && s15Mob.heads.every(x => x.right <= s15Mob.vw + 1 && x.metaRight <= s15Mob.vw + 1),
+        s15Mob ? `panel=${s15Mob.left}~${s15Mob.right} vw=${s15Mob.vw} scrollW=${s15Mob.scrollW}` : 'null');
+    check('S15 390px：展开后的关卡 chips 至少两列（没被压成一列长条）',
+        !!s15Mob && s15Mob.chips > 0 && s15Mob.chipCols >= 2,
+        s15Mob ? `chips=${s15Mob.chips} cols=${s15Mob.chipCols}` : 'null');
+    check('S15 390px：右上角关闭叉不与标题重叠', !!s15Mob && s15Mob.closeClear,
+        s15Mob ? `closeClear=${s15Mob.closeClear}` : 'null');
+    await shot('32e-all-categories-mobile');
+    await clickSel('#wm-cats-modal .wm-modal-close');
+    await sleep(240);
+    await send('Emulation.setDeviceMetricsOverride',
+        { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+    await sleep(280);
+
+    /* 收拾干净：撤掉跳关留下的作用域，回到「三年级上册 + 类别面板打开」，
+       后面的关闭叉 / Esc / 练习本分类三段才按原来的前提跑。 */
+    await evalJs(`(() => {
+        const d = Alpine.$data(document.querySelector('.wm-root'));
+        d.catsOpen = false;
+        d.themeOpen = false;
+        d.themeScope = null;
+        d.applyBook('pep-3-1', false);
+        return d.levelIndex;
+    })()`);
+    await waitCards();
+    await sleep(260);
+    await clickSel('.wm-theme');
+    await sleep(300);
+    check('S15 离场后回到原状（类别面板重新打开，作用域已清）',
+        await s14PanelVisible() && (await evalJs(`(() => {
+            const d = Alpine.$data(document.querySelector('.wm-root'));
+            return d.themeScope === null && d.levelIndex === ${s14.want[0]};
+        })()`)));
 
     await clickSel('#wm-theme-modal .wm-modal-close');
     await sleep(260);
