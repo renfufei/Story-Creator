@@ -156,6 +156,24 @@ class SharedResourceIntegrationTest {
                 .contains("\"modifiedAt\":\"");
     }
 
+    @Test
+    void list_hidesDotFilesFromJson() throws IOException {
+        // 直接在共享根里造「系统垃圾文件 + 隐藏目录」：用户在 Finder / 命令行里放进去的就是这种
+        Path shared = STORAGE_ROOT.resolve("shared");
+        Files.createDirectories(shared);
+        Files.writeString(shared.resolve(".DS_Store"), "junk", StandardCharsets.UTF_8);
+        Files.createDirectories(shared.resolve(".git"));
+        upload("", "it-visible.txt", "x", null);
+
+        String body = restTemplate.getForEntity(url("/shared/api/list"), String.class).getBody();
+        assertThat(body)
+                .as("以点开头的隐藏项不进列表（页面不再显示 .DS_Store / .git 这类东西）")
+                .doesNotContain(".DS_Store")
+                .doesNotContain(".git")
+                .as("可见文件照常下发")
+                .contains("it-visible.txt");
+    }
+
     // ==================== 上传 → 列表 → 下载 → 删除 ====================
 
     @Test

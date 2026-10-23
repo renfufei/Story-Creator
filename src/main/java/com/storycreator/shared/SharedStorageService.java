@@ -310,7 +310,13 @@ public class SharedStorageService {
 
     // ==================== 列表 ====================
 
-    /** 浏览一个目录。 */
+    /**
+     * 浏览一个目录。
+     *
+     * <p>以点（{@code .}）开头的条目**不参与展示**（含上传临时文件、{@code .DS_Store}、
+     * {@code .git} 之类），也不计入 {@code dirCount / fileCount / totalBytes} ——
+     * 用户看到的是「这里有什么可用」，不是一个目录的原始快照。
+     */
     public Listing list(String relativePath) {
         Path rootDir = requireRoot();
         List<String> segments = splitSegments(relativePath);
@@ -324,8 +330,14 @@ public class SharedStorageService {
         try (Stream<Path> stream = Files.list(dir)) {
             for (Path child : stream.toList()) {
                 String name = child.getFileName().toString();
-                if (name.startsWith(TMP_PREFIX) && name.endsWith(TMP_SUFFIX)) {
-                    continue;                       // 上传中的临时文件，别让用户看到半截文件
+                /* 以点（.）开头的一律视作隐藏项，列表里不出现（用户 2026-10-23 明确要求）。
+                   一条规则覆盖三类：① 系统垃圾文件 .DS_Store / Thumbs.db；
+                   ② .git / .env / .idea 这类本来就不该摊在共享盘上的东西；
+                   ③ 我们自己的上传临时文件 .upload-*.tmp（见 TMP_PREFIX）。
+                   注意：只过滤**显示**，不拦访问 —— 深层路径仍可被程序直接引用，
+                   这里的目标是「页面干净」，不是权限控制。 */
+                if (name.startsWith(".")) {
+                    continue;
                 }
                 // 符号链接一律不展示：既不能下载也不能进入，显示出来只会误导
                 if (Files.isSymbolicLink(child)) {

@@ -111,6 +111,27 @@ class SharedStorageServiceTest {
                 .containsExactly("aaa-dir", "zzz-dir", "a.txt", "b.txt");
     }
 
+    @Test
+    @DisplayName("以点开头的隐藏项不进列表：文件、目录、上传临时文件、.DS_Store 都不显示也不计数")
+    void hiddenEntriesAreNotListed() throws IOException {
+        storage.store("", java.util.List.of(file("可见.txt", "x"), file(".env", "SECRET")));
+        Files.createDirectories(sharedRoot.resolve(".git"));
+        Files.writeString(sharedRoot.resolve(".DS_Store"), "junk", StandardCharsets.UTF_8);
+        // 模拟「上传进行到一半」留下的临时文件（正常路径下会被 finally 清掉，这里直接造一个）
+        Files.writeString(sharedRoot.resolve(".upload-123.tmp"), "half", StandardCharsets.UTF_8);
+
+        SharedStorageService.Listing listing = storage.list("");
+        assertThat(listing.items()).extracting(SharedStorageService.Entry::name)
+                .as("只有可见.txt 一个条目")
+                .containsExactly("可见.txt");
+        assertThat(listing.dirCount()).as("隐藏目录不计入目录数").isZero();
+        assertThat(listing.fileCount()).as("隐藏文件不计入文件数").isEqualTo(1);
+        assertThat(listing.totalBytes()).as("隐藏文件的字节数不进总量").isEqualTo("x".length());
+
+        // 只过滤「显示」，不拦访问：隐藏文件仍然能按路径读到（这里不是权限控制）
+        assertThat(storage.open(".env").name()).isEqualTo(".env");
+    }
+
     // ==================== 路径穿越：一律拒绝 ====================
 
     @Test
