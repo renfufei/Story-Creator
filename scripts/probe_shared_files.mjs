@@ -4,7 +4,9 @@
  *
  * 形态：
  *   · 浏览 ${STORY_DB_PATH}/shared 及其子目录（面包屑 / 进入 / 返回上级）；
- *   · 上传（多选 + 拖拽）、下载（浏览器原生 attachment）、新建文件夹、删除（文件与空目录）；
+ *   · 上传（多选 + 拖拽）、下载（浏览器原生 attachment）、新建文件夹；
+ *   · ★ 页面**不提供删除**（2026-10-22 用户要求），这里反向钉住「一点都不许留」；
+ *   · ★ 主操作按钮够大（上传 ≥40px、行内下载 ≥32px），别退回 btn-sm 的 30px；
  *   · 安全：路径穿越在页面上表现为「加载失败」错误态，而不是白屏或列出别处的内容。
  *
  * ★ 需要真实后端（临时 1889 实例，见 /tmp/sc-shared/run.sh），不碰用户的 1888。
@@ -137,6 +139,10 @@ const PAGE_STATE = `(() => {
     }));
     const sortSel = document.getElementById('sortField');
     const dirTextEl = document.getElementById('sortDirText');
+    const h = (sel) => {
+        const el = document.querySelector(sel);
+        return el ? Math.round(el.getBoundingClientRect().height) : 0;
+    };
     return {
         rows,
         grid,
@@ -148,15 +154,23 @@ const PAGE_STATE = `(() => {
             .map(el => (el.innerText || '').replace(/\\s+/g, ' ').trim()),
         crumbLinks: Array.from(document.querySelectorAll('#crumbs a'))
             .map(el => el.getAttribute('data-path')),
-        title: txt('#dirTitle'),
+        h1: txt('#main h1'),
         stat: txt('#dirStat'),
-        empty: !!document.querySelector('#listArea .bi-inbox, #listArea .bi-folder2-open') && rows.length === 0,
+        empty: !!document.querySelector('#listArea .sc-share-empty'),
         listText: txt('#listArea'),
         toasts: Array.from(document.querySelectorAll('.sc-toast')).map(el => el.textContent.trim()),
         progressVisible: (() => {
             const p = document.getElementById('progressWrap');
             return !!p && !p.classList.contains('d-none');
         })(),
+        /* 尺寸测量：主操作按钮必须够大（2026-10-22 用户反馈「太小不好点」） */
+        hUpload: h('#btnUpload'),
+        hMkdir: h('#btnMkdir'),
+        /* ★ 必须限定 td.sc-c-act：文件名本身也是 a[data-act="download"]，
+           不限定就会量到名称链接（22px）而不是右侧的按钮。 */
+        hRowAct: h('#listArea tbody td.sc-c-act a[data-act]'),
+        /* 删除功能已移除：任何一处残留都算回归 */
+        delCount: document.querySelectorAll('[data-act="del"], .bi-trash').length,
         docScrollW: document.documentElement.scrollWidth,
         docClientW: document.documentElement.clientWidth,
         booting: document.body.hasAttribute('data-booting')
@@ -245,11 +259,17 @@ async function main() {
     const settled = await waitFor(async () => (await state(60)).booting === false, 15000);
     check('页面 boot 完成（data-booting 已摘掉）', settled === true);
     let s = await state(300);
-    check('页头是「共享资源」', /共享资源/.test(s.title || ''), s.title);
+    check('页头是「资源共享」', /资源共享/.test(s.h1 || ''), s.h1);
     check('根目录没有「返回上级」面包屑', s.crumbLinks.length === 0, 'links=' + JSON.stringify(s.crumbLinks));
-    check('空目录显示空态提示', s.empty === true || (s.listText || '').indexOf('还没有共享文件') >= 0, s.listText);
-    check('工具栏三个按钮都在',
+    check('空目录显示空态提示', s.empty === true && /还没有共享文件/.test(s.listText || ''), s.listText);
+    check('操作条三个按钮都在',
         (await evalJs(`!!(document.getElementById('btnUpload') && document.getElementById('btnMkdir') && document.getElementById('btnRefresh'))`)) === true);
+    check('【核心】上传 / 新建文件夹按钮够大（≥40px 高）',
+        s.hUpload >= 40 && s.hMkdir >= 40, `upload=${s.hUpload}px mkdir=${s.hMkdir}px`);
+    check('【核心】页面上完全没有删除入口',
+        s.delCount === 0, 'n=' + s.delCount);
+    check('空状态里直接给出「选择文件上传」按钮',
+        (await evalJs(`!!document.querySelector('#listArea [data-act="pick"]')`)) === true);
     await shot('shared-01-empty');
 
     /* ---------- S2 上传（含中文名 + 大一点的文件） ---------- */
@@ -275,6 +295,9 @@ async function main() {
     check('大小按 KB 显示（不显示原始字节数）',
         !!bigRow && /KB$/.test(bigRow.size), bigRow && bigRow.size);
     check('修改时间列有值', !!bigRow && /\d{4}-\d{2}-\d{2}/.test(bigRow.time), bigRow && bigRow.time);
+    check('【核心】行内「下载」按钮带文字标签且高度 ≥32px', s.hRowAct >= 32, 'h=' + s.hRowAct + 'px');
+    check('行内按钮是「下载」文字 + 图标，不是光一个图标',
+        /下载/.test(await evalJs(`(document.querySelector('#listArea tbody td.sc-c-act a[data-act="download"]') || {}).innerText || ''`)) === true);
     check('页头统计报了文件数与总大小',
         !!s.stat && /2 个文件/.test(s.stat) && /共/.test(s.stat), s.stat);
     check('上传完成后进度条已收起', s.progressVisible === false);
@@ -403,7 +426,8 @@ async function main() {
         s.crumbLinks.length === 1 && s.crumbLinks[0] === '', JSON.stringify(s.crumbLinks));
     check('面包屑文案 = 共享资源 / probe-dir',
         s.crumbs.join('/') === '共享资源/probe-dir', s.crumbs.join('/'));
-    check('页头标题变成目录名', /probe-dir/.test(s.title || ''), s.title);
+    check('页头仍然是「资源共享」（目录名不再重复做标题）',
+        /资源共享/.test(s.h1 || '') && (await evalJs(`!document.getElementById('dirTitle')`)) === true, s.h1);
     check('子目录是空的', s.rows.length === 0, 'rows=' + s.rows.length);
     await shot('shared-03-subdir');
 
@@ -412,30 +436,22 @@ async function main() {
     const innerOk = await waitFor(async () => (await state(80)).rows.some(r => r.name === 'inner.txt'), 15000);
     check('在子目录上传的文件落在子目录里', innerOk);
 
-    console.log('\n— S6 非空目录不能直接删除 —');
+    console.log('\n— S6 页面上没有删除入口（后端端点保留给运维）—');
     await clickSel('#crumbs a');
     await waitFor(async () => (await state(80)).crumbLinks.length === 0, 8000);
     s = await state(250);
     check('已回到根目录', s.crumbLinks.length === 0 && s.rows.length >= 3, 'rows=' + s.rows.length);
-    const dirRow = s.rows.findIndex(r => r.name === 'probe-dir');
-    check('根目录里能看到 probe-dir', dirRow >= 0);
-    await clickSel(`#listArea tbody tr:nth-child(${dirRow + 1}) button[data-act="del"]`);
-    await confirmDialog();
-    const gotConflict = await waitFor(async () => (await state(80)).toasts.some(t => /不为空/.test(t)), 8000);
-    check('【核心】删非空目录被拒，toast 报「目录不为空」', gotConflict,
-        (await state(60)).toasts.join(' | '));
-
-    /* ---------- S7 删除文件 ---------- */
-    console.log('\n— S7 删除文件 —');
-    s = await state(150);
-    const fileRow = s.rows.findIndex(r => r.name === n2);
-    await clickSel(`#listArea tbody tr:nth-child(${fileRow + 1}) button[data-act="del"]`);
-    await confirmDialog();
-    const fileGone = await waitFor(async () => !(await state(80)).rows.some(r => r.name === n2), 10000);
-    check('【核心】文件删除后从列表消失', fileGone);
-    s = await state(200);
-    check('删除成功有 toast', s.toasts.some(t => /已删除/.test(t)), s.toasts.join(' | '));
-    await shot('shared-04-after-delete');
+    check('根目录里能看到 probe-dir', s.rows.some(r => r.name === 'probe-dir'));
+    check('【核心】列表里没有删除按钮（DOM 与 trash 图标都没有）', s.delCount === 0, 'n=' + s.delCount);
+    check('【核心】文件行的动作列只剩「下载」一个按钮',
+        (await evalJs(`(() => {
+            const tr = Array.from(document.querySelectorAll('#listArea tbody tr'))
+                .find(t => t.querySelector('a[data-act="download"]'));
+            return tr ? tr.querySelectorAll('td.sc-c-act a, td.sc-c-act button').length : -1;
+        })()`)) === 1);
+    check('【核心】整页文案里不再出现「删除」',
+        (await evalJs(`!/(删除|清空)/.test(document.getElementById('main').innerText)`)) === true);
+    await shot('shared-04-no-delete');
 
     /* ---------- S8 页内路径穿越 ---------- */
     console.log('\n— S8 越界路径：页面上表现为错误态 —');
@@ -460,6 +476,7 @@ async function main() {
     check('窄屏无横向溢出', s.docScrollW <= s.docClientW + 1, `scrollW=${s.docScrollW} clientW=${s.docClientW}`);
     check('窄屏工具栏按钮仍在一屏内（不换行挤爆）',
         (await evalJs(`document.getElementById('btnUpload').getBoundingClientRect().width > 0`)) === true);
+    check('窄屏主操作按钮更高（≥44px，触控友好）', s.hUpload >= 44, 'h=' + s.hUpload + 'px');
     await shot('shared-05-mobile');
 
     /* 窄屏下的卡片视图：两列、不溢出 */
@@ -468,13 +485,11 @@ async function main() {
     check('窄屏卡片视图无横向溢出',
         s.view === 'grid' && s.docScrollW <= s.docClientW + 1,
         `view=${s.view} scrollW=${s.docScrollW} clientW=${s.docClientW}`);
-    check('窄屏卡片是两列且没被压扁',
-        (await evalJs(`(() => {
-            const c = document.querySelector('#listArea .sc-card');
-            if (!c) return false;
-            const w = c.getBoundingClientRect().width;
-            return w > 100 && w < 240;
-        })()`)) === true);
+    const narrowCardW = await evalJs(`(() => {
+        const c = document.querySelector('#listArea .sc-card');
+        return c ? Math.round(c.getBoundingClientRect().width) : 0;
+    })()`);
+    check('窄屏卡片是两列且没被压扁', narrowCardW > 100 && narrowCardW < 240, 'w=' + narrowCardW + 'px');
     await shot('shared-06-mobile-grid');
     await clickSel('#btnViewList');
 

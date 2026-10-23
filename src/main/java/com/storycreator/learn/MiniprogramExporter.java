@@ -48,10 +48,16 @@ public class MiniprogramExporter {
     static final String PACKAGE_DIR = "word-pair";
 
     /** 学段 → 数据文件名后缀。ASCII，避免小程序 require 非 ASCII 模块名。 */
+    /* 学段 → 导出文件名后缀。**必须与 `miniprogram-template/utils/bank.js` 的 LOADERS key 对得上**，
+       也与 `scripts/learn/build_miniprogram_data.py` 的 STAGE_SLUG 同名。
+       ⚠️ 2026-10-22 补上「专题」：此前漏了这一条，序列配对册被导出成 `levels-stage4.js`
+       （fallback 分支），而小程序端 `require('../data/levels-topic.js')` 直接找不到模块
+       ⇒ 这一册的关卡整册读不出来（网页端完全正常，所以肉眼发现不了）。 */
     private static final Map<String, String> STAGE_SLUG = Map.of(
             "小学", "primary",
             "初中", "junior",
             "高中", "senior",
+            "专题", "topic",
             "大学", "college"
     );
 

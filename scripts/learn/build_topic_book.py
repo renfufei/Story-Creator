@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""从 PEP 24 册词库抽取「专题练习」册（同类的、有序的一组词）。
+"""从 PEP 24 册词库抽取「序列配对」册（同类的、有序的一组词）。
 
 为什么单独做一册：
-  数字 / 序数 / 星期 / 月份 / 季节 / 时间，这些是**封闭的序列**，练习价值在「按顺序背下来」，
+  数字 / 序数 / 星期 / 月份 / 季节 / 时间 / 亲人关系 / 疑问词 / 人称代词，
+  这些是**封闭的、有内在顺序的词群**，练习价值在「按顺序背下来」，
   所以这一册在页面上**左列英文保持原顺序、只打乱右列中文**（普通册两列都打乱）。
 
 产出 `src/main/resources/learn/topic-words.json`，形状与 `pep-words.json` 完全一致
@@ -16,8 +17,21 @@
 ⚠️ 白名单里的 zh 是**显式指定**的：词库里同一个 en 可能有多条释义
    （`second`=第二 / `May`=五月·可能 / `March`=三月·行军 / `season`=季·季节），
    按 en 取「第一条」会取错。校验不通过时脚本直接报错退出，不会静默少词。
+
+⚠️ 三元组 `(en, zh, display)` 的第三个元素 = **本册显示用的消歧文本**，
+   只在「同一关里有两个词释义完全相同」时才需要（目前只有 who / whom 都是「谁」）。
+   `zh` 仍然必须逐字命中词库某一条，它才是校验依据；`display` 只影响配对卡面上的中文，
+   **不改动 PEP 词库本身**（`pep-words.json` 一个字都不动）。
+
+⚠️ 三条自动断言（违反直接退出、不写文件）：
+   ① 主题内英文唯一 —— 否则同一个词在一册里教两遍；
+   ② 主题内**显示中文唯一** —— 一关里出现两张一模一样的中文卡，玩家无从选择，
+      配对判定（`l.mean === r.text`）也会让「点错那张」反而算对；
+   ③ 主题词数 ≥ 3 —— `WordMatchBank.load()` 对不足 3 词的主题直接 `continue`，
+      连词一起丢（`MIN_PAIRS`）。
 """
 
+import collections
 import json
 import os
 import sys
@@ -27,7 +41,7 @@ PEP = os.path.join(ROOT, "src/main/resources/learn/pep-words.json")
 OUT = os.path.join(ROOT, "src/main/resources/learn/topic-words.json")
 
 # 一个专题 = 一个 theme，词序即页面上左列（英文）的显示顺序。
-# 每项 (en, zh)：zh 必须与 PEP 词库里该词**某一条**释义逐字相同。
+# 每项 (en, zh) 或 (en, zh, display)：zh 必须与 PEP 词库里该词**某一条**释义逐字相同。
 TOPICS = [
     ("数字", [
         ("zero", "零"), ("one", "一"), ("two", "二"), ("three", "三"), ("four", "四"),
@@ -85,6 +99,66 @@ TOPICS = [
         ("nephew", "侄子/外甥"), ("niece", "侄女；外甥女"),
         ("relative", "亲属"),
     ]),
+    # ==================== 疑问词（2026-10-22 新增） ====================
+    # 按语法书的两个自然类别切，正好一关一类、各 5 对：
+    #   疑问代词 = 用来「代」一个名词的（问事物 / 问选择 / 问人 / 问所属）
+    #   疑问副词 = 用来「问状语」的（时间 / 地点 / 原因 / 方式 / 程度）
+    # 左列顺序就是语法书里的讲解顺序：what → which → who → whom → whose，
+    # when → where → why → how → how much（时间地点原因方式在前，问价钱收尾）。
+    #
+    # ⚠️ who 与 whom 词库释义都是「谁」。同一关里两张「谁」无法区分，
+    #    所以给 whom 显示成「谁（宾格）」——这也是这一对词唯一的区别，顺带把「格」教了。
+    ("疑问代词", [
+        ("what", "什么"),
+        ("which", "哪一个"),
+        ("who", "谁"),
+        ("whom", "谁", "谁（宾格）"),
+        ("whose", "谁的"),
+    ]),
+    ("疑问副词", [
+        ("when", "什么时候"),
+        ("where", "在哪里"),
+        ("why", "为什么"),
+        ("how", "怎样"),
+        ("how much", "多少钱"),
+    ]),
+    # ==================== 人称代词（2026-10-22 新增） ====================
+    # ★ 为什么一个「格」一个主题，而不是把 I/me/my/mine 放一关：
+    #   ① 同一主题内英文必须唯一，而 you / it / his 的**主格与宾格（或形物与名物）同形**，
+    #      放在同一主题里这三个人称只能出现一次，等于半个格教不了；
+    #   ② I/me/my/mine/myself 一关的中文是「我 / 我 / 我的 / 我的 / 我自己」，
+    #      同关两张「我」两张「我的」⇒ 配对歧义，玩家只能瞎点；
+    #   ③ 一关一个格，关内 7 个人称按「一单 → 一复 → 二 → 三单男 → 三单女 → 三单中 → 三复」
+    #      排下来，左列自上而下就是课本后面那张人称代词表的一行 —— 这才是「序列配对」。
+    #   练完主格再练宾格，玩家会看到「英文全换、中文一模一样」，格变位的体感就出来了。
+    #
+    # ⚠️ 认账的两处教材缺口（**不补词、不造释义**，练的永远是课本里有的）：
+    #    · 宾格缺 her —— PEP 只收 `her = 她的`（形容词性物主），没收宾格义「她」；
+    #    · 名物缺 his / its —— 它们与形物同形，教材不单列；
+    #    · 反身缺 yourselves —— PEP 只收了 `yourself`，没有 `yourselves`。
+    ("主格代词", [
+        ("I", "我"), ("we", "我们"), ("you", "你"),
+        ("he", "他"), ("she", "她"), ("it", "它"), ("they", "他们"),
+    ]),
+    ("宾格代词", [
+        ("me", "我"), ("us", "我们"), ("you", "你"),
+        ("him", "他"), ("it", "它"), ("them", "他们"),
+    ]),
+    ("形物代词", [
+        ("my", "我的"), ("our", "我们的"), ("your", "你的"),
+        ("his", "他的"), ("her", "她的"), ("its", "它的"), ("their", "他们的"),
+    ]),
+    ("名物代词", [
+        ("mine", "我的"), ("ours", "我们的"), ("yours", "你的"),
+        ("hers", "她的"), ("theirs", "他们的"),
+    ]),
+    # 反身代词：单数五个人称 → 复数（教材只收了 ourselves / themselves 两个复数）。
+    # 7 对正好一关（MAX_PAIRS = 7），不必按单复数拆成 5+2（2 词不成关）。
+    ("反身代词", [
+        ("myself", "我自己"), ("yourself", "你自己"),
+        ("himself", "他自己"), ("herself", "她自己"), ("itself", "它自己"),
+        ("ourselves", "我们自己"), ("themselves", "他们自己"),
+    ]),
 ]
 
 
@@ -107,19 +181,33 @@ def main():
     total = 0
     for name, words in TOPICS:
         out_words = []
-        seen = set()
-        for en, zh in words:
+        seen_en = set()
+        seen_zh = collections.Counter()
+        for item in words:
+            en, zh = item[0], item[1]
+            display = item[2] if len(item) > 2 else zh
             key = en.lower()
             raw = index.get(key, {}).get(zh)
             if raw is None:
                 near = sorted(index.get(key, {}).keys()) or ["（词库里没有这个词）"]
                 errors.append(f"{name} / {en}={zh} —— 词库中不存在；该词现有释义：{'、'.join(near)}")
                 continue
-            if key in seen:
+            if key in seen_en:
                 errors.append(f"{name} / {en} 重复出现（同一专题内英文必须唯一）")
                 continue
-            seen.add(key)
-            out_words.append([raw, zh])
+            seen_en.add(key)
+            seen_zh[display] += 1
+            out_words.append([raw, display])
+
+        # 关内中文重复 = 配对歧义（见文件头断言②）
+        for zh, n in seen_zh.items():
+            if n > 1:
+                errors.append(f"{name} / 中文「{zh}」出现 {n} 次 —— 同关两张一样的卡，玩家无从区分；"
+                              f"请用三元组 (en, zh, display) 给其中一个消歧")
+        # 不足 3 词的主题会被 WordMatchBank 静默丢弃（连词一起丢）
+        if out_words and len(out_words) < 3:
+            errors.append(f"{name} 只有 {len(out_words)} 个词（< 3），WordMatchBank 会整主题丢弃")
+
         total += len(out_words)
         themes.append({"name": name, "words": out_words})
 

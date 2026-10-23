@@ -10,33 +10,101 @@
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/app.css">
     <style>
-        /* 本页专用的一点点样式：面包屑、拖拽高亮、名称省略。
+        /* 本页专用样式：页头 / 面板 / 路径条 / 操作条 / 列表与卡片。
            通用样式一律留在 app.css，别往这里堆。 */
-        .sc-share-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; font-size: .9rem; }
-        .sc-share-crumbs a { text-decoration: none; }
-        .sc-share-crumbs .sep { color: var(--bs-secondary-color, #adb5bd); }
-        .sc-share-crumbs .cur { color: var(--bs-body-color, #212529); font-weight: 600; }
 
-        #dropZone { position: relative; transition: border-color .15s, background-color .15s; }
-        #dropZone.is-drag { border: 2px dashed var(--bs-primary); background-color: rgba(13, 110, 253, .05); }
-        #dropZone.is-drag::after {
+        .sc-share-sub { margin: .35rem 0 0; font-size: .875rem; color: var(--bs-secondary-color, #6c757d); }
+
+        /* ==================== 面板：路径条 + 操作条 + 内容 + 脚注 一整块 ==================== */
+        .sc-share-panel {
+            position: relative;
+            background: var(--bs-body-bg, #fff);
+            border: 1px solid var(--bs-border-color, #dee2e6);
+            border-radius: .75rem;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+            transition: border-color .15s ease, box-shadow .15s ease;
+        }
+        .sc-share-panel.is-drag {
+            border-color: var(--bs-primary, #0d6efd);
+            box-shadow: 0 0 0 .2rem rgba(13, 110, 253, .15);
+        }
+        .sc-share-panel.is-drag::after {
             content: '松手即可上传到此目录';
             position: absolute; inset: 0; z-index: 4;
             display: flex; align-items: center; justify-content: center;
-            font-weight: 600; color: var(--bs-primary);
-            background-color: rgba(255, 255, 255, .72);
+            font-size: 1.05rem; font-weight: 600; color: var(--bs-primary, #0d6efd);
+            background: var(--bs-body-bg, #fff); opacity: .88;
+            box-shadow: inset 0 0 0 3px rgba(13, 110, 253, .25);
+            border-radius: inherit;
             pointer-events: none;
         }
 
-        .sc-share-name { display: inline-flex; align-items: center; gap: .5rem; min-width: 0; max-width: 100%; }
-        .sc-share-name .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .sc-share-name .ico { flex: 0 0 auto; font-size: 1.05rem; }
-        .sc-share-name .ico.dir { color: #e0a800; }
+        /* 路径条：面包屑在左，统计在右 */
+        .sc-share-path {
+            display: flex; flex-wrap: wrap; align-items: center; gap: .35rem 1rem;
+            padding: .6rem 1rem;
+            background: var(--bs-tertiary-bg, #f8f9fa);
+            border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+            border-radius: .75rem .75rem 0 0;
+        }
+        .sc-share-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; font-size: .9rem; min-width: 0; }
+        .sc-share-crumbs a { text-decoration: none; }
+        .sc-share-crumbs .sep { color: var(--bs-secondary-color, #adb5bd); }
+        .sc-share-crumbs .cur { color: var(--bs-body-color, #212529); font-weight: 600; }
+        .sc-share-stat { margin-left: auto; font-size: .78rem; color: var(--bs-secondary-color, #6c757d); white-space: nowrap; }
+
+        /* 操作条：左边动作，右边视图 / 排序 */
+        .sc-share-bar {
+            display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem;
+            padding: .7rem 1rem;
+            border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+        }
+        .sc-share-actions,
+        .sc-share-tools { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+        .sc-share-tools { margin-left: auto; }
+
+        /* ★ 本页主操作按钮：全站基线是 btn-sm（30px），但文件管理动作每天要点很多次，
+           这里放大到 42px（桌面）/ 44px（窄屏触控），图标也大一号 —— 别再退回 btn-sm。 */
+        .sc-act {
+            display: inline-flex; align-items: center; justify-content: center; gap: .45rem;
+            min-height: 2.625rem; padding: .4rem 1.05rem;
+            font-size: .9375rem; font-weight: 500; line-height: 1.2;
+            border-radius: .5rem;
+        }
+        .sc-act.btn > .bi { margin-right: 0; font-size: 1.05rem; }   /* 留白交给 gap，别和基线叠加 */
+        .sc-act-sq { width: 2.625rem; padding: 0; }
+
+        /* 行内 / 卡片里的小动作钮：比 btn-sm（30px）高一档，且带文字标签 —— 光一个图标不好点 */
+        .sc-act-sm { min-height: 2.25rem; padding: .25rem .8rem; font-size: .8125rem; gap: .35rem; border-radius: .4rem; }
+        .sc-act-sm.btn > .bi { font-size: .95rem; }
+
+        /* 视图 / 排序控件与主操作按钮同高，整条工具带才齐整 */
+        .sc-tool { min-height: 2.25rem; padding: .25rem .65rem; font-size: .8125rem; }
+        .sc-tool.btn > .bi { margin-right: 0; }   /* 与文字之间用 gap/ms-1，别和基线留白叠加 */
+        .sc-tool-ico { width: 2.5rem; padding: 0; }
+        .sc-share-tools .form-select {
+            width: auto; min-width: 8rem; min-height: 2.25rem;
+            padding: .25rem 1.9rem .25rem .6rem; font-size: .8125rem;
+        }
+        @media (max-width: 575.98px) {
+            .sc-act { min-height: 2.75rem; }
+        }
+
+        /* 上传进度条：贴着操作条下沿，细到不抢内容 */
+        .sc-share-progress { height: 4px; border-radius: 0; background: transparent; }
+
+        /* ==================== 列表 ==================== */
         .sc-share-link { text-decoration: none; color: inherit; }
         .sc-share-link:hover .txt { text-decoration: underline; }
+        .sc-share-name { display: inline-flex; align-items: center; gap: .5rem; min-width: 0; max-width: 100%; }
+        .sc-share-name .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sc-share-name .ico { flex: 0 0 auto; font-size: 1.05rem; color: var(--bs-secondary-color, #6c757d); }
+        .sc-share-name .ico.dir { color: #e0a800; }
 
-        /* ---------- 工具栏：展示方式 + 排序 ---------- */
-        .sc-share-tools .form-select { width: auto; min-width: 7.5rem; }
+        /* 行高放宽：文件行是主要点击目标，挤在一起不好点也不好认 */
+        .sc-share-table tbody td { padding-top: .55rem; padding-bottom: .55rem; }
+        .sc-share-table thead th { font-size: .78rem; font-weight: 600; color: var(--bs-secondary-color, #6c757d); white-space: nowrap; }
+
         /* 表头可点排序：整格都能点，别只让文字可点 */
         .sc-share-sort-th { cursor: pointer; user-select: none; white-space: nowrap; }
         .sc-share-sort-th:hover { color: var(--bs-primary, #0d6efd); }
@@ -44,32 +112,50 @@
         .sc-share-sort-th.is-active { color: var(--bs-primary, #0d6efd); }
         .sc-share-sort-th.is-active .bi { opacity: 1; }
 
-        /* ---------- 卡片视图 ---------- */
+        /* ==================== 卡片视图 ==================== */
         .sc-share-grid .sc-card {
-            height: 100%; display: flex; flex-direction: column; gap: .35rem;
-            padding: .8rem .6rem .6rem; background: var(--bs-body-bg, #fff);
-            border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .6rem;
-            transition: border-color .15s, box-shadow .15s;
+            height: 100%; display: flex; flex-direction: column; gap: .5rem;
+            padding: .9rem .7rem .7rem; background: var(--bs-body-bg, #fff);
+            border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .65rem;
+            transition: border-color .15s, box-shadow .15s, transform .15s;
         }
         .sc-share-grid .sc-card:hover {
             border-color: var(--bs-primary, #0d6efd);
-            box-shadow: 0 2px 10px rgba(0, 0, 0, .08);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, .08);
+            transform: translateY(-1px);
         }
-        .sc-share-grid .ico-big { font-size: 2rem; line-height: 1; }
+        .sc-share-grid .sc-card-main {
+            display: flex; flex-direction: column; align-items: center; gap: .3rem;
+            min-width: 0; text-decoration: none; color: inherit;
+        }
+        .sc-share-grid .ico-big { font-size: 2.15rem; line-height: 1; color: var(--bs-secondary-color, #6c757d); }
         .sc-share-grid .ico-big.dir { color: #e0a800; }
         .sc-share-grid .nm {
             font-size: .875rem; font-weight: 600; text-align: center; word-break: break-all;
             display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-            overflow: hidden; min-height: 2.4em;
+            overflow: hidden; min-height: 2.4em; width: 100%;
         }
         .sc-share-grid .meta {
             font-size: .75rem; color: var(--bs-secondary-color, #6c757d);
             text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .sc-share-grid .acts { margin-top: auto; display: flex; justify-content: center; gap: .25rem; }
+        .sc-share-grid .acts { margin-top: auto; display: flex; }
 
-        /* 拖拽时别让浏览器把「打开文件」当成默认动作铺满整页 */
-        body.sc-share-dragging { user-select: none; }
+        /* ==================== 空状态 ==================== */
+        .sc-share-empty { padding: 3rem 1rem 3.25rem; text-align: center; }
+        .sc-share-empty .ico { font-size: 3.25rem; line-height: 1; color: var(--bs-secondary-color, #6c757d); opacity: .6; }
+        .sc-share-empty h3 { font-size: 1.0625rem; font-weight: 600; margin: 1rem 0 .35rem; }
+        .sc-share-empty p { margin: 0; font-size: .875rem; color: var(--bs-secondary-color, #6c757d); }
+        .sc-share-empty .acts { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; margin-top: 1.25rem; }
+
+        /* ==================== 脚注 ==================== */
+        .sc-share-foot {
+            display: flex; flex-wrap: wrap; gap: .15rem .9rem;
+            padding: .6rem 1rem; font-size: .78rem; color: var(--bs-secondary-color, #6c757d);
+            background: var(--bs-tertiary-bg, #f8f9fa);
+            border-top: 1px solid var(--bs-border-color, #dee2e6);
+            border-radius: 0 0 .75rem .75rem;
+        }
     </style>
 </head>
 <body class="sc-page" data-booting="1">
@@ -78,63 +164,66 @@
 
 <main class="sc-main container py-4" id="main">
 
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
-        <div>
-            <h2 class="mb-1"><i class="bi bi-share"></i> 资源共享</h2>
-            <p class="text-muted small mb-0">
-                文件存放在服务端 <code>shared</code> 目录，可与本机其它程序共用；浏览器只能访问这个目录及其子目录。
-            </p>
-        </div>
-        <div class="d-flex flex-wrap align-items-center gap-2">
-            <button type="button" class="btn btn-sm btn-primary" id="btnUpload">
-                <i class="bi bi-upload"></i> 上传文件
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="btnMkdir">
-                <i class="bi bi-folder-plus"></i> 新建文件夹
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="btnRefresh" title="刷新当前目录">
-                <i class="bi bi-arrow-clockwise"></i>
-            </button>
-            <input type="file" id="fileInput" multiple hidden>
-        </div>
+    <div class="mb-3">
+        <h1 class="sc-page-title"><i class="bi bi-share"></i> 资源共享</h1>
+        <p class="sc-share-sub">
+            文件存放在服务端 <code>shared</code> 目录，可与本机其它程序共用；浏览器只能访问这个目录及其子目录。
+        </p>
     </div>
 
-    <nav class="sc-share-crumbs mb-3" id="crumbs" aria-label="目录路径"></nav>
+    <section class="sc-share-panel" id="dropZone">
 
-    <div class="progress d-none mb-2" id="progressWrap" style="height: 6px;" role="progressbar" aria-label="上传进度">
-        <div class="progress-bar progress-bar-striped progress-bar-animated" id="progressBar" style="width: 0%;"></div>
-    </div>
+        <!-- 路径条：面包屑本身就是「返回上级」的入口，右边是当前目录的统计 -->
+        <div class="sc-share-path">
+            <nav class="sc-share-crumbs" id="crumbs" aria-label="目录路径"></nav>
+            <span class="sc-share-stat" id="dirStat"></span>
+        </div>
 
-    <div class="card" id="dropZone">
-        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <strong id="dirTitle"><i class="bi bi-folder2-open"></i> 共享资源</strong>
-            <div class="d-flex flex-wrap align-items-center gap-2 sc-share-tools">
-                <small class="text-muted" id="dirStat"></small>
+        <!-- 操作条：左边是动作（大按钮），右边是展示方式与排序 -->
+        <div class="sc-share-bar">
+            <div class="sc-share-actions">
+                <button type="button" class="btn btn-primary sc-act" id="btnUpload">
+                    <i class="bi bi-cloud-arrow-up"></i>上传文件
+                </button>
+                <button type="button" class="btn btn-outline-secondary sc-act" id="btnMkdir">
+                    <i class="bi bi-folder-plus"></i>新建文件夹
+                </button>
+                <button type="button" class="btn btn-outline-secondary sc-act sc-act-sq" id="btnRefresh"
+                        title="刷新当前目录" aria-label="刷新当前目录">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+                <input type="file" id="fileInput" multiple hidden>
+            </div>
+            <div class="sc-share-tools">
                 <!-- 展示方式：列表 / 卡片。小图标切换，选择记在 localStorage -->
-                <div class="btn-group btn-group-sm" role="group" aria-label="展示方式">
-                    <button type="button" class="btn btn-outline-secondary" id="btnViewList"
+                <div class="btn-group" role="group" aria-label="展示方式">
+                    <button type="button" class="btn btn-outline-secondary sc-tool sc-tool-ico" id="btnViewList"
                             title="列表视图" aria-pressed="true">
                         <i class="bi bi-list-ul"></i>
                     </button>
-                    <button type="button" class="btn btn-outline-secondary" id="btnViewGrid"
+                    <button type="button" class="btn btn-outline-secondary sc-tool sc-tool-ico" id="btnViewGrid"
                             title="卡片视图" aria-pressed="false">
                         <i class="bi bi-grid-3x3-gap-fill"></i>
                     </button>
                 </div>
-                <select class="form-select form-select-sm" id="sortField" title="排序字段"
-                        aria-label="排序字段">
+                <select class="form-select" id="sortField" title="排序字段" aria-label="排序字段">
                     <option value="name">按名称</option>
                     <option value="createdAt">按创建日期</option>
                     <option value="modifiedAt">按修改日期</option>
                     <option value="type">按类型</option>
                 </select>
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnSortDir"
+                <button type="button" class="btn btn-outline-secondary sc-tool" id="btnSortDir"
                         title="切换正序 / 倒序">
                     <i class="bi bi-arrow-down-up"></i><span class="ms-1" id="sortDirText">正序</span>
                 </button>
             </div>
         </div>
-        <div class="card-body p-0" id="listArea">
+
+        <div class="progress sc-share-progress d-none" id="progressWrap" role="progressbar" aria-label="上传进度">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" id="progressBar" style="width: 0%;"></div>
+        </div>
+
+        <div id="listArea">
             <!-- 引导数据还在路上：先摆 4 行骨架，renderList 会整块替换这个容器 -->
             <div class="p-3 sc-skel-row">
                 <div class="sc-skel sc-skel-line" style="width: 26%;"></div>
@@ -153,13 +242,12 @@
                 <div class="sc-skel sc-skel-line w-50"></div>
             </div>
         </div>
-    </div>
 
-    <p class="text-muted small mt-3 mb-0">
-        <i class="bi bi-info-circle"></i>
-        支持多选上传与拖拽；单个文件上限 50 MB。为安全起见，路径里不允许 <code>..</code>、绝对路径和符号链接，
-        非空文件夹需要先清空才能删除。
-    </p>
+        <div class="sc-share-foot">
+            <span><i class="bi bi-info-circle"></i> 支持多选上传与拖拽，单个文件上限 50 MB</span>
+            <span><i class="bi bi-shield-check"></i> 路径里不允许 <code>..</code>、绝对路径和符号链接</span>
+        </div>
+    </section>
 
 </main>
 
@@ -172,10 +260,8 @@
 
     var API = '/shared/api';
 
-    var main = document.getElementById('main');
     var listArea = document.getElementById('listArea');
     var crumbsEl = document.getElementById('crumbs');
-    var dirTitle = document.getElementById('dirTitle');
     var dirStat = document.getElementById('dirStat');
     var dropZone = document.getElementById('dropZone');
     var fileInput = document.getElementById('fileInput');
@@ -264,7 +350,9 @@
         var parts = (l.crumbs || []).map(function (c, i, arr) {
             var last = i === arr.length - 1;
             if (last) {
-                return '<span class="cur">' + SC.escape(c.name) + '</span>';
+                // 根目录时它就是最后一级，也带上图标 —— 和上面页头标题区分开
+                return '<span class="cur">' + (i === 0 ? '<i class="bi bi-hdd"></i> ' : '') +
+                    SC.escape(c.name) + '</span>';
             }
             return '<a href="#" data-act="go" data-path="' + SC.escape(c.path) + '">' +
                 (i === 0 ? '<i class="bi bi-hdd"></i> ' : '') + SC.escape(c.name) + '</a>';
@@ -272,11 +360,10 @@
         crumbsEl.innerHTML = parts.join('<span class="sep">/</span>');
     }
 
+    /* 当前目录名不单独做标题 —— 面包屑的最后一段就是它，重复一遍白占一行 */
     function renderHeader() {
         var l = state.listing;
         if (!l) return;
-        dirTitle.innerHTML = '<i class="bi ' + (l.path ? 'bi-folder2-open' : 'bi-share') + '"></i> ' +
-            SC.escape(l.name || '共享资源');
         if (!l.fileCount && !l.dirCount) {
             dirStat.textContent = '空目录';
         } else {
@@ -349,19 +436,17 @@
             'data-act="download" data-path="' + SC.escape(it.path) + '" title="下载">' + inner + '</a>';
     }
 
-    /** 行内 / 卡片里的操作按钮（进入 or 下载 + 删除），align: end | center */
-    function actionButtons(it, align) {
-        return '<div class="d-flex justify-content-' + (align === 'center' ? 'center' : 'end') + ' gap-1">' +
-            (it.directory
-                ? '<a href="#" class="btn btn-sm btn-outline-primary" data-act="enter" data-path="' +
-                    SC.escape(it.path) + '" title="进入"><i class="bi bi-box-arrow-in-right"></i></a>'
-                : '<a href="' + SC.escape(downloadUrl(it.path)) + '" class="btn btn-sm btn-outline-primary" ' +
-                    'data-act="download" data-path="' + SC.escape(it.path) + '" title="下载">' +
-                    '<i class="bi bi-download"></i></a>') +
-            '<button type="button" class="btn btn-sm btn-outline-danger" data-act="del" ' +
-            'data-path="' + SC.escape(it.path) + '" data-name="' + SC.escape(it.name) + '" ' +
-            'data-dir="' + (it.directory ? '1' : '0') + '" title="删除"><i class="bi bi-trash"></i></button>' +
-            '</div>';
+    /** 行内 / 卡片里的动作钮：目录「进入」、文件「下载」。
+        一律带文字标签 —— 光一个图标不好点，也认不出是干什么的。 */
+    function actionButton(it, extraCls) {
+        var cls = 'btn btn-outline-primary sc-act sc-act-sm' + (extraCls ? ' ' + extraCls : '');
+        if (it.directory) {
+            return '<a href="#" class="' + cls + '" data-act="enter" data-path="' +
+                SC.escape(it.path) + '"><i class="bi bi-box-arrow-in-right"></i>进入</a>';
+        }
+        return '<a href="' + SC.escape(downloadUrl(it.path)) + '" class="' + cls + '" ' +
+            'data-act="download" data-path="' + SC.escape(it.path) + '">' +
+            '<i class="bi bi-download"></i>下载</a>';
     }
 
     /** 可点排序的表头 */
@@ -388,21 +473,21 @@
                     SC.escape(SC.fmt.datetime(it.createdAt)) + '</td>' +
                 '<td class="sc-c-time text-muted small d-none d-md-table-cell text-nowrap" style="width:150px;">' +
                     SC.escape(SC.fmt.datetime(it.modifiedAt)) + '</td>' +
-                '<td class="sc-c-act" style="width:100px;">' + actionButtons(it, 'end') + '</td>' +
+                '<td class="sc-c-act text-end" style="width:92px;">' + actionButton(it) + '</td>' +
                 '</tr>';
         }).join('');
 
         return (
-            // 窄屏 6 列会把整页撑宽，交给 table-responsive 只滚卡片内部
+            // 窄屏 6 列会把整页撑宽，交给 table-responsive 只滚面板内部
             '<div class="table-responsive">' +
-            '<table class="table table-sm table-hover align-middle mb-0">' +
+            '<table class="table table-hover align-middle mb-0 sc-share-table">' +
             '<thead><tr>' +
             sortTh('name', '名称') +
             sortTh('type', '类型', 'd-none d-md-table-cell') +
             '<th class="d-none d-sm-table-cell" style="width:100px;">大小</th>' +
             sortTh('createdAt', '创建时间', 'd-none d-lg-table-cell') +
             sortTh('modifiedAt', '修改时间', 'd-none d-md-table-cell') +
-            '<th style="width:100px;"></th>' +
+            '<th style="width:92px;"></th>' +
             '</tr></thead><tbody>' + rows + '</tbody></table></div>');
     }
 
@@ -412,21 +497,34 @@
             var href = it.directory ? '#' : SC.escape(downloadUrl(it.path));
             var meta = it.directory ? '文件夹' : typeLabel(it) + ' · ' + fmtSize(it.size);
             return '<div class="col"><div class="sc-card">' +
-                '<a href="' + href + '" class="sc-share-link d-flex justify-content-center" ' +
-                    'data-act="' + act + '" data-path="' + SC.escape(it.path) + '" title="' +
-                    (it.directory ? '进入' : '下载') + '">' +
-                    '<i class="bi ' + iconOf(it) + ' ico-big"></i></a>' +
-                '<a href="' + href + '" class="sc-share-link" data-act="' + act + '" ' +
-                    'data-path="' + SC.escape(it.path) + '">' +
-                    '<div class="nm">' + SC.escape(it.name) + '</div></a>' +
-                '<div class="meta">' + SC.escape(meta) + '</div>' +
-                '<div class="meta">' + SC.escape(SC.fmt.datetime(it.modifiedAt)) + '</div>' +
-                '<div class="acts">' + actionButtons(it, 'center') + '</div>' +
+                // 整卡可点：图标 / 名称 / 元信息都在同一个 <a> 里，点到哪儿都算
+                '<a href="' + href + '" class="sc-card-main" data-act="' + act + '" ' +
+                    'data-path="' + SC.escape(it.path) + '" title="' +
+                    (it.directory ? '进入文件夹' : '下载文件') + '">' +
+                    '<i class="bi ' + iconOf(it) + ' ico-big"></i>' +
+                    '<div class="nm">' + SC.escape(it.name) + '</div>' +
+                    '<div class="meta">' + SC.escape(meta) + '</div>' +
+                    '<div class="meta">' + SC.escape(SC.fmt.datetime(it.modifiedAt)) + '</div>' +
+                '</a>' +
+                '<div class="acts">' + actionButton(it, 'w-100') + '</div>' +
                 '</div></div>';
         }).join('');
 
         return '<div class="sc-share-grid row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-xl-5 g-3 p-3">' +
             cols + '</div>';
+    }
+
+    /** 空状态：与其只写一句「暂无」，不如把上传入口直接放在手边。
+        「新建文件夹」上方操作条已经有了，这里不再重复。 */
+    function renderEmpty(inDir) {
+        listArea.innerHTML = '<div class="sc-share-empty">' +
+            '<i class="bi ' + (inDir ? 'bi-folder2-open' : 'bi-cloud-arrow-up') + ' ico"></i>' +
+            '<h3>' + (inDir ? '这个文件夹还是空的' : '还没有共享文件') + '</h3>' +
+            '<p>把文件拖到这个窗口，或者选一个上传</p>' +
+            '<div class="acts">' +
+                '<button type="button" class="btn btn-primary sc-act" data-act="pick">' +
+                    '<i class="bi bi-cloud-arrow-up"></i>选择文件上传</button>' +
+            '</div></div>';
     }
 
     /** 工具栏状态回写（按钮高亮 / 下拉值 / 方向文字） */
@@ -455,9 +553,7 @@
         if (!l) return;
         syncTools();
         if (!l.items || !l.items.length) {
-            listArea.innerHTML = SC.skeleton.empty(
-                l.path ? '这个文件夹还是空的，可以上传文件或新建子文件夹' : '还没有共享文件，点右上角「上传文件」，或把文件拖进来',
-                'bi-folder2-open');
+            renderEmpty(!!l.path);
             return;
         }
         var items = sortedItems();
@@ -620,25 +716,6 @@
         load(path);
     }
 
-    function removeItem(path, name, isDir) {
-        SC.confirm({
-            title: '删除' + (isDir === '1' ? '文件夹' : '文件'),
-            message: (isDir === '1'
-                ? '确定删除空文件夹「' + name + '」？'
-                : '确定删除「' + name + '」？删除后无法恢复。'),
-            confirmText: '删除',
-            danger: true
-        }).then(function (ok) {
-            if (!ok) return;
-            SC.api.post(API + '/delete', { path: path }).then(function () {
-                SC.toast.success('已删除');
-                load(state.path);
-            }).catch(function () {
-                // SC.api 已经弹过错误提示（比如「目录不为空」）
-            });
-        });
-    }
-
     function mkdir() {
         SC.prompt({
             title: '新建文件夹',
@@ -677,9 +754,10 @@
         if (act === 'enter') {
             e.preventDefault();
             enter(el.getAttribute('data-path'));
-        } else if (act === 'del') {
+        } else if (act === 'pick') {
+            // 空状态里的「选择文件上传」
             e.preventDefault();
-            removeItem(el.getAttribute('data-path'), el.getAttribute('data-name'), el.getAttribute('data-dir'));
+            fileInput.click();
         } else if (act === 'download') {
             // 走浏览器原生下载（后端带 Content-Disposition: attachment），
             // 不 fetch 成 Blob —— 大文件不必在内存里再过一遍。

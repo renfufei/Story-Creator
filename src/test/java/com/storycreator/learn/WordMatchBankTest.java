@@ -202,6 +202,15 @@ class WordMatchBankTest {
     @DisplayName("意思相同的词必须在同一关（「选哪个都算对」的前提）")
     void sameMeaningPairs_stayInOneLevel() {
         for (WordMatchBank.BookInfo book : bank.getBooks()) {
+            /* 专题册例外，且只是「跨关」这一半例外：
+               人称代词的格变位主题（主格 / 宾格 / 形物 / 名物）**故意**让中文跨关重复 ——
+               `I` 与 `me` 都是「我」、`my` 与 `mine` 都是「我的」，它们英文不同、语法位不同，
+               必须分成两关才能分别练（同一关里放一起就是「两张一样的卡」）。
+               同关内仍然严格唯一，由上面的
+               {@link #everyLevel_hasDistinctEnglishAndMeaningOnlyInSynonymTheme()} 守住。 */
+            if (TOPIC_BOOK_ID.equals(book.id())) {
+                continue;
+            }
             Map<String, Integer> zhLevel = new HashMap<>();
             Map<String, List<String>> zhWords = new LinkedHashMap<>();
             for (WordMatchBank.Level level : bank.getLevels(book.id())) {
@@ -369,7 +378,7 @@ class WordMatchBankTest {
     }
 
     @Test
-    @DisplayName("专题册：7 个有序专题 / 116 词 / 20 关，且英文顺序就是词库顺序")
+    @DisplayName("专题册：14 个有序专题 / 158 词 / 27 关，且英文顺序就是词库顺序")
     void topicBook_existsWithOrderedThemes() {
         WordMatchBank.BookInfo topic = bank.getBooks().stream()
                 .filter(b -> TOPIC_BOOK_ID.equals(b.id()))
@@ -379,12 +388,15 @@ class WordMatchBankTest {
         assertThat(topic.stage()).as("前端据这个学段名判定「本册左列不洗牌」")
                 .isEqualTo(WordMatchBank.TOPIC_STAGE);
         assertThat(topic.label()).isEqualTo("序列配对");
-        assertThat(topic.wordCount()).as("专题总词数").isEqualTo(116);
-        assertThat(topic.levelCount()).as("切关数（35→6、10→2、11→2、14→2、6→1、10→2、30→5）")
-                .isEqualTo(20);
+        assertThat(topic.wordCount()).as("专题总词数").isEqualTo(158);
+        assertThat(topic.levelCount())
+                .as("切关数（35→6、10→2、11→2、14→2、6→1、10→2、30→5；"
+                        + "疑问词 2 个主题各 5 词 = 2 关，人称代词 5 个格主题各 ≤7 词 = 5 关）")
+                .isEqualTo(27);
 
-        /* 主题顺序与词数：数字 → 序数 → 星期 → 月份 → 季节 → 时间 → 亲人关系。
-           顺序本身就是这册的功能（左列英文不乱序），所以逐条钉死。 */
+        /* 主题顺序与词数：数字 → 序数 → 星期 → 月份 → 季节 → 时间 → 亲人关系
+           → 疑问词 → 人称代词。顺序本身就是这册的功能（左列英文不乱序），所以逐条钉死。
+           新分类一律**追加在末尾**：levelIndex 是本册真实下标，插在中间会让已有进度错位。 */
         List<WordMatchBank.Level> levels = bank.getLevels(TOPIC_BOOK_ID);
         Map<String, Integer> byTheme = new LinkedHashMap<>();
         for (WordMatchBank.Level level : levels) {
@@ -397,7 +409,14 @@ class WordMatchBankTest {
                 Map.entry("月份与年", 14),
                 Map.entry("季节", 6),
                 Map.entry("时间与时刻", 10),
-                Map.entry("亲人关系", 30));
+                Map.entry("亲人关系", 30),
+                Map.entry("疑问代词", 5),
+                Map.entry("疑问副词", 5),
+                Map.entry("主格代词", 7),
+                Map.entry("宾格代词", 6),
+                Map.entry("形物代词", 7),
+                Map.entry("名物代词", 5),
+                Map.entry("反身代词", 7));
 
         // 第 1 关必须是数字的打头 6 个，且**严格按序**（前端 lockLeft 依赖这个顺序）
         assertThat(levels.get(0).pairs()).extracting(WordMatchBank.WordPair::en)
@@ -424,6 +443,47 @@ class WordMatchBankTest {
                 "grandson", "granddaughter",
                 "uncle", "aunt", "cousin", "nephew", "niece",
                 "relative");
+
+        /* 疑问词（2026-10-22）：按语法书的两类各一关，左列顺序 = 讲解顺序。
+           who 与 whom 词库释义都是「谁」，本册给 whom 显示成「谁（宾格）」消歧 ——
+           两者唯一的区别就是「格」，这行标注本身也是知识点。 */
+        assertThat(themeWords(TOPIC_BOOK_ID, "疑问代词"))
+                .containsExactly("what", "which", "who", "whom", "whose");
+        assertThat(themeWords(TOPIC_BOOK_ID, "疑问副词"))
+                .containsExactly("when", "where", "why", "how", "how much");
+        assertThat(themeZh(TOPIC_BOOK_ID, "疑问代词"))
+                .as("同一关里两张「谁」没法选：whom 必须带格标注")
+                .containsExactly("什么", "哪一个", "谁", "谁（宾格）", "谁的");
+
+        /* 人称代词：一个「格」一个主题 —— 因为 you / it / his 的主格与宾格（形物与名物）同形，
+           同一主题内英文必须唯一，放一起等于半个格教不了；而且一关里会有两张「我」「我的」。
+           每个主题内按「一单 → 一复 → 二 → 三单男 → 三单女 → 三单中 → 三复」排列，
+           左列自上而下就是课本那张人称代词表的一行。 */
+        assertThat(themeWords(TOPIC_BOOK_ID, "主格代词"))
+                .containsExactly("I", "we", "you", "he", "she", "it", "they");
+        assertThat(themeWords(TOPIC_BOOK_ID, "宾格代词"))
+                .as("教材只收 her=她的（形容词性物主），没有宾格义「她」⇒ 宾格只有 6 个人称")
+                .containsExactly("me", "us", "you", "him", "it", "them");
+        assertThat(themeWords(TOPIC_BOOK_ID, "形物代词"))
+                .containsExactly("my", "our", "your", "his", "her", "its", "their");
+        assertThat(themeWords(TOPIC_BOOK_ID, "名物代词"))
+                .as("his / its 与形物同形，教材不单列 ⇒ 名物只有 5 个")
+                .containsExactly("mine", "ours", "yours", "hers", "theirs");
+        assertThat(themeWords(TOPIC_BOOK_ID, "反身代词"))
+                .as("教材只收 yourself、没有 yourselves ⇒ 复数反身只有 ourselves / themselves")
+                .containsExactly("myself", "yourself", "himself", "herself", "itself",
+                        "ourselves", "themselves");
+
+        /* 主格 / 宾格、形物 / 名物 的中文集合**故意跨主题重叠**（I 与 me 都是「我」），
+           但同一主题内必须一词一义 —— 这正是「一个格单独成关」能被练的前提。 */
+        assertThat(themeZh(TOPIC_BOOK_ID, "主格代词"))
+                .containsExactly("我", "我们", "你", "他", "她", "它", "他们");
+        assertThat(themeZh(TOPIC_BOOK_ID, "宾格代词"))
+                .containsExactly("我", "我们", "你", "他", "它", "他们");
+        assertThat(themeZh(TOPIC_BOOK_ID, "形物代词"))
+                .containsExactly("我的", "我们的", "你的", "他的", "她的", "它的", "他们的");
+        assertThat(themeZh(TOPIC_BOOK_ID, "名物代词"))
+                .containsExactly("我的", "我们的", "你的", "她的", "他们的");
     }
 
     /** 某册里主题名以 prefix 开头的所有主题的英文词（扁平）。 */
@@ -432,6 +492,17 @@ class WordMatchBankTest {
         for (WordMatchBank.Level level : bank.getLevels(bookId)) {
             if (level.theme().startsWith(prefix)) {
                 level.pairs().forEach(p -> out.add(p.en()));
+            }
+        }
+        return out;
+    }
+
+    /** 某主题下按关卡顺序摊平的中文释义（配 {@link #themeWords} 用）。 */
+    private List<String> themeZh(String bookId, String prefix) {
+        List<String> out = new ArrayList<>();
+        for (WordMatchBank.Level level : bank.getLevels(bookId)) {
+            if (level.theme().startsWith(prefix)) {
+                level.pairs().forEach(p -> out.add(p.zh()));
             }
         }
         return out;

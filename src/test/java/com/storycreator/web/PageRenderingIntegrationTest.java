@@ -2601,7 +2601,7 @@ class PageRenderingIntegrationTest {
                         + "否则按钮写着「从第 1 关开始」，点下去却从别处开始（文案与行为不一致）")
                 .contains("autoStartTitle");
         assertThat(response.getBody())
-                .as("序列配对册（有序词群：数字 / 序数 / 星期 / 月份 / 季节 / 时间）"
+                .as("序列配对册（有序词群：数字 / 序数 / 星期 / 月份 / 季节 / 时间 / 亲人 / 疑问词 / 人称代词）"
                         + "的发牌必须**左列英文保持词库顺序、只打乱中文** —— 这类词的价值就在按序列背，"
                         + "左列一乱练的就不是同一个东西了；锁序只对 stage=专题 生效，别误伤普通册")
                 .contains("TOPIC_STAGE")
@@ -3166,7 +3166,19 @@ class PageRenderingIntegrationTest {
                 .contains("pep-topic")          // 第 25 册：序列配对（stage=专题）
                 .contains("亲人关系")             // 亲属称谓按辈分排（左列锁序才讲得通）
                 .contains("grandfather")
-                .contains("granddaughter");
+                .contains("granddaughter")
+                /* 2026-10-22 新增的两个分类：疑问词 + 人称代词。
+                   人称代词按「格」拆了 5 个主题 —— 因为 you / it / his 的主格与宾格同形，
+                   同一主题内英文必须唯一，放一起等于半个格教不了；且一关里会有两张「我」。 */
+                .contains("疑问代词")             // what / which / who / whom / whose
+                .contains("疑问副词")             // when / where / why / how / how much
+                .contains("主格代词")             // I → we → you → he → she → it → they
+                .contains("宾格代词")             // me / us / you / him / it / them（教材未收 her 的宾格义）
+                .contains("形物代词")             // my / our / your / his / her / its / their
+                .contains("名物代词")             // mine / ours / yours / hers / theirs
+                .contains("反身代词")             // myself … themselves（7 对一关）
+                .contains("谁（宾格）")            // who 与 whom 词库释义都是「谁」，靠格标注消歧
+                .contains("myself");
     }
 
     @Test

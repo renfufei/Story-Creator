@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 所以测试要守住三件事：
  * <ol>
  *   <li><b>清单不许漏</b>：新增模板文件却忘了登记，导出的包会缺文件，而这种缺失在浏览器里完全看不出来；</li>
- *   <li><b>数据不许空</b>：册数 / 关卡数 / 词条数与网页版一致（26 册 / 3546 关 / 20191 词）；</li>
+ *   <li><b>数据不许空</b>：册数 / 关卡数 / 词条数与网页版一致（27 册 / 3573 关 / 20349 词）；</li>
  *   <li><b>工程要能直接跑</b>：appid 留空、页面标题正确、每个关卡都是「主题 + 二元组数组」。</li>
  * </ol>
  */
@@ -77,6 +77,7 @@ class MiniprogramExporterTest {
                 "word-pair/data/levels-primary.js",
                 "word-pair/data/levels-junior.js",
                 "word-pair/data/levels-senior.js",
+                "word-pair/data/levels-topic.js",   // 序列配对（stage=专题），2026-10-20 起导出
                 "word-pair/data/levels-college.js",
                 "word-pair/app.js",
                 "word-pair/app.json",
@@ -85,18 +86,18 @@ class MiniprogramExporterTest {
                 "word-pair/pages/play/play.wxml",
                 "word-pair/utils/bank.js",
                 "word-pair/README.md");
-        // 5 个数据文件 + 模板清单里的全部文件
-        assertThat(entries).hasSize(5 + manifestSize());
+        // 6 个数据文件（5 个 levels-* + books.js）+ 模板清单里的全部文件
+        assertThat(entries).hasSize(6 + manifestSize());
     }
 
     @Test
-    @DisplayName("books.js：26 册 / 4 个学段 / 3546 关 / 20191 词，与网页版一致")
+    @DisplayName("books.js：27 册 / 5 个学段 / 3573 关 / 20349 词，与网页版一致")
     void booksJsMatchesWebData() throws IOException {
         Map<String, byte[]> entries = unzip(exporter.build());
         JsonNode root = moduleJson(entries.get("word-pair/data/books.js"));
 
         JsonNode books = root.path("books");
-        assertThat(books.size()).as("册数").isEqualTo(26);
+        assertThat(books.size()).as("册数（24 教材 + 序列配对 + 四六级 2 册）").isEqualTo(27);
 
         int levels = 0;
         int words = 0;
@@ -106,14 +107,14 @@ class MiniprogramExporterTest {
             assertThat(book.path("id").asText()).isNotBlank();
             assertThat(book.path("label").asText()).isNotBlank();
         }
-        assertThat(levels).as("关卡总数").isEqualTo(3546);
-        assertThat(words).as("词条总数").isEqualTo(20191);
+        assertThat(levels).as("关卡总数（教材 1370 + 四六级 2203）").isEqualTo(3573);
+        assertThat(words).as("词条总数（教材 7190 + 四六级 13159）").isEqualTo(20349);
 
         JsonNode stages = root.path("stages");
-        assertThat(stages.size()).isEqualTo(4);
+        assertThat(stages.size()).as("小学 / 初中 / 高中 / 专题 / 大学").isEqualTo(5);
         List<String> slugs = new ArrayList<>();
         stages.forEach(s -> slugs.add(s.path("slug").asText()));
-        assertThat(slugs).containsExactly("primary", "junior", "senior", "college");
+        assertThat(slugs).containsExactly("primary", "junior", "senior", "topic", "college");
     }
 
     @Test
@@ -129,6 +130,7 @@ class MiniprogramExporterTest {
                 case "小学" -> "primary";
                 case "初中" -> "junior";
                 case "高中" -> "senior";
+                case "专题" -> "topic";      // 序列配对册：与 build_miniprogram_data.py 的 STAGE_SLUG 同名
                 case "大学" -> "college";
                 default -> throw new IllegalStateException("未知学段：" + stage);
             };
