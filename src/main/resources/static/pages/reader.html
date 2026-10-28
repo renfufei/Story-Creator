@@ -16,7 +16,9 @@
         }
         [x-cloak] { display: none !important; }
         /* 正文骨架：行宽节奏贴近真实正文，数据到了不会有明显跳动 */
-        .reader-skeleton { padding: .5rem 0 1.5rem; max-width: 46rem; }
+        /* 正文骨架：行宽节奏贴近真实正文，数据到了不会有明显跳动。
+           宽度跟随 .reader-main（原来写死 46rem，比正文窄，骨架退场时整块会「撑开」一下） */
+        .reader-skeleton { padding: .5rem 0 1.5rem; }
         /* 侧边栏跟随阅读背景色：--reader-sidebar-* 由 applyBg() 按当前底色/文字色推导 */
         .reader-sidebar {
             width: 260px;
@@ -55,14 +57,19 @@
         .reader-sidebar.collapsed {
             transform: translateX(-100%);
         }
+        /* 正文列宽：原来写死 max-width:900px，侧栏占掉 260px 后整块被顶在左边，
+           1920 屏右边要空出近 1000px。现在改成「在侧栏右侧的剩余区域里居中」，
+           宽屏时左右空白均分；窄到装不下时直接铺满剩余区域，不再是固定 900。 */
         .reader-main {
-            margin-left: 260px;
-            padding: 2rem 3rem;
-            max-width: 900px;
+            margin-left: max(260px, calc((100% - 860px) / 2));
+            padding: 2rem 3rem 4rem;
+            max-width: min(1120px, calc(100% - 260px));
             transition: margin-left 0.3s ease;
         }
+        /* 侧栏收起：可用区域是整幅宽度，居中规则跟着换一套 */
         .reader-main.expanded {
-            margin-left: 0;
+            margin-left: max(0px, calc((100% - 1120px) / 2));
+            max-width: min(1120px, 100%);
         }
         .toggle-btn {
             position: fixed;
@@ -140,7 +147,151 @@
             background: #f8f9fa;
             border: 1px solid #dee2e6;
             border-radius: 8px;
-            padding: 0.75rem 1rem;
+            padding: 0.4rem 0.5rem;
+        }
+        /* ===== 收听条：默认只占一行（摘要 + 主操作 + 箭头），点箭头才摊开设置 =====
+           原来音色/语速/段落/导出/全文收听各占一行，手机上这块 237px 高、左边缘还对不齐。 */
+        .tts-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            min-height: 2.25rem;
+        }
+        /* 摘要区就是展开/收起的开关本体：整块可点，右端箭头 180° 旋转示意 */
+        .tts-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            flex: 1 1 auto;
+            min-width: 0;          /* 不加就在 flex 里撑到不收缩，meta 省略号失效 */
+            padding: 0.3rem 0.45rem;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            color: inherit;
+            font-size: 0.88rem;
+            line-height: 1.2;
+            text-align: left;
+        }
+        .tts-toggle:hover { background: rgba(0, 0, 0, 0.045); }
+        .tts-toggle:focus-visible { outline: 2px solid #0d6efd; outline-offset: 1px; }
+        .tts-title { font-weight: 700; white-space: nowrap; flex: 0 0 auto; }
+        .tts-meta {
+            flex: 1 1 auto;
+            min-width: 0;
+            font-size: 0.76rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .tts-caret {
+            flex: 0 0 auto;
+            font-size: 0.72rem;
+            color: currentColor;
+            opacity: 0.65;
+            transition: transform 0.2s ease;
+        }
+        .tts-toggle[aria-expanded="true"] .tts-caret { transform: rotate(180deg); }
+        .tts-bar-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            flex: 0 0 auto;
+        }
+        .tts-progress {
+            font-size: 0.76rem;
+            white-space: nowrap;
+        }
+        /* 折叠态里的暂停 / 停止：定宽定高，不随图标与字数变宽 */
+        .tts-icon-btn {
+            width: 2.2rem;
+            height: 2.2rem;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        /* ===== 展开态 ===== */
+        .tts-detail {
+            border-top: 1px dashed #dee2e6;
+            margin-top: 0.45rem;
+            padding-top: 0.6rem;
+        }
+        /* 行 = 【标签】【控件】【尾随值】三列：所有标签左边缘对齐，控件左边缘也对齐 */
+        .tts-row {
+            display: grid;
+            grid-template-columns: 2.9rem minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .tts-row + .tts-row { margin-top: 0.5rem; }
+        .tts-label {
+            font-size: 0.76rem;
+            white-space: nowrap;
+        }
+        .tts-speed-val {
+            font-size: 0.76rem;
+            min-width: 2.5rem;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        .tts-range { flex: 1 1 auto; min-width: 0; }
+        .tts-num { width: 4.2rem; flex: 0 0 auto; }
+        .tts-extra {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 0.5rem;
+        }
+        /* 「上次到第 N 章」提示：一行装下，文字可省略，按钮不换行 */
+        .tts-resume {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            margin-top: 0.4rem;
+            padding: 0.25rem 0.35rem 0.25rem 0.5rem;
+            border-radius: 6px;
+            background: #e7f1ff;
+            color: #0a4b8c;
+            font-size: 0.76rem;
+            line-height: 1.3;
+        }
+        .tts-resume-text {
+            flex: 1 1 auto;
+            min-width: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .tts-resume .btn { flex: 0 0 auto; font-size: 0.74rem; line-height: 1.55; padding: 0 0.5rem; }
+        /* 320px 这类极窄屏：摘要只剩「s…」这种半截省略号，不如整块让位给按钮 */
+        @media (max-width: 359px) {
+            .tts-meta { display: none; }
+            .tts-toggle { gap: 0.3rem; padding-left: 0.35rem; }
+        }
+        /* 宽屏（≥769px）横向排开一行就够，不必像手机那样竖着堆三行。
+           手机上默认用上面的 grid 竖排；这里只覆盖排版，不动折叠逻辑。 */
+        @media (min-width: 769px) {
+            .tts-detail {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 0.6rem 1.4rem;
+            }
+            .tts-detail-inner {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 0.6rem 1.4rem;
+            }
+            .tts-row {
+                display: flex;
+                align-items: center;
+                gap: 0.4rem;
+            }
+            .tts-row + .tts-row { margin-top: 0; }
+            .tts-row > .form-select { max-width: 11rem; }
+            .tts-row > .tts-range { width: 8rem; flex: 0 0 auto; }
+            .tts-extra { margin-top: 0; margin-left: auto; }
         }
         /* 章节旁的 TTS 操作组：播放/暂停 + 停止，两个按钮之间留 6px 间隔。
            ★ 子按钮不要挂 d-flex 之类带 !important 的显示类 —— 会顶掉 x-show 的 display:none */
@@ -189,6 +340,9 @@
             top: 0;
             left: calc(100% + 8px);
             width: 228px;
+            /* 浮层从按钮右侧 8px 展开（手机并排后约 101px 起）。320 屏放不下 228px，
+               用 vw 兜一下，免得顶出右边界、把页面撑出横向滚动 */
+            max-width: calc(100vw - 112px);
             z-index: 1200;
             background: #fff;
             border: 1px solid #dee2e6;
@@ -243,12 +397,19 @@
         body.reader-dark .reader-main .tts-chapter-btn.btn-outline-primary { color: #8ab4ff; border-color: #4a6ea8; }
         body.reader-dark .reader-main .tts-chapter-btn.btn-outline-danger { color: #ff9b9b; border-color: #8d4a4a; }
         body.reader-dark .reader-main .tts-next-hint { color: #9aa0a6; }
+        /* 收听条在深色底上：分隔虚线提亮、悬停用白色半透明（黑色半透明在这底上等于消失） */
+        body.reader-dark .reader-main .tts-detail { border-top-color: #4b4f55; }
+        body.reader-dark .reader-main .tts-toggle:hover { background: rgba(255, 255, 255, 0.07); }
+        body.reader-dark .reader-main .tts-resume { background: #26364a; color: #a8c7ea; }
         @media (max-width: 768px) {
             .reader-sidebar { transform: translateX(-100%); }
             .reader-sidebar.show-mobile { transform: translateX(0); }
-            .reader-main { margin-left: 0; }
+            /* 手机上左右各 48px 的 padding 吃掉了四分之一屏宽（390 屏正文只剩 294）。
+               收到 16px；顶部 52px 是给浮在左上角的两个按钮让位（横排后只占一行高）。 */
+            .reader-main { margin-left: 0; max-width: 100%; padding: 3.25rem 1rem 3rem; }
             .toggle-btn { left: 10px !important; }
-            .bg-fab { left: 10px !important; }
+            /* 配色按钮与 ☰ 并排横放：原来是往下叠一个，正文顶部要空出 110px 才躲得开 */
+            .bg-fab { top: 10px !important; left: 58px !important; }
         }
     </style>
 </head>
@@ -416,95 +577,123 @@
         </h2>
         <p class="text-muted mb-4" x-show="author" x-cloak x-text="'作者：' + author"></p>
 
-        <!-- TTS Controls -->
+        <!-- TTS Controls：默认折叠成一行（标题 + 音色/语速摘要 + 主操作 + 箭头），
+             展开后才给音色、语速、段落长度、翻章、导出。手机上一行装不下原来那 5 行控件。 -->
         <div class="tts-toolbar mb-4" x-show="tts.configs.length > 0" x-cloak>
-            <div class="d-flex flex-wrap align-items-center gap-3">
-                <span class="fw-bold small"><i class="bi bi-volume-up"></i> TTS</span>
+            <div class="tts-bar">
+                <!-- 整块摘要就是开关：点标题、点音色摘要、点箭头都能展开 -->
+                <button type="button" class="tts-toggle"
+                        @click="ttsOpen = !ttsOpen"
+                        :aria-expanded="ttsOpen ? 'true' : 'false'"
+                        aria-controls="tts-detail"
+                        :title="ttsOpen ? '收起收听设置' : '展开收听设置'">
+                    <i class="bi" :class="playlist.isActive ? 'bi-music-note-list' : 'bi-volume-up'"></i>
+                    <span class="tts-title" x-text="playlist.isActive ? '收听中' : '收听'"></span>
+                    <i class="bi bi-chevron-down tts-caret"></i>
+                    <!-- 播放中让位给章节进度；没播放时显示「音色 · 语速」 -->
+                    <span class="tts-meta text-muted" x-show="!playlist.isActive" x-text="ttsSummary()"></span>
+                    <span class="tts-progress text-muted" x-show="playlist.isActive" x-cloak
+                          x-text="playlist.isActive
+                              ? ('第' + (playlist.chapters[playlist.currentIndex] || '') + '章 · '
+                                 + (playlist.currentIndex + 1) + '/' + playlist.chapters.length)
+                              : ''"></span>
+                </button>
 
-                <!-- Config selector (when multiple) -->
-                <select class="form-select form-select-sm" style="max-width: 160px;"
-                        x-show="tts.configs.length > 1"
-                        x-model="tts.selectedConfigId" @change="onConfigChange()">
-                    <template x-for="cfg in tts.configs" :key="cfg.id">
-                        <option :value="cfg.id" x-text="cfg.displayName"></option>
-                    </template>
-                </select>
-
-                <!-- Voice -->
-                <select class="form-select form-select-sm" style="max-width: 140px;"
-                        x-model="tts.voice" @change="saveTtsPrefs()">
-                    <template x-for="v in getVoiceOptions()" :key="v">
-                        <option :value="v" x-text="v"></option>
-                    </template>
-                </select>
-
-                <!-- Speed -->
-                <div class="d-flex align-items-center gap-1">
-                    <input type="range" class="form-range" style="width: 80px;"
-                           min="0.25" max="4.0" step="0.25"
-                           x-model="tts.speed" @change="saveTtsPrefs()">
-                    <span class="small text-muted" x-text="tts.speed + 'x'" style="min-width: 35px;"></span>
-                </div>
-
-                <!-- Chunk size -->
-                <div class="d-flex align-items-center gap-1">
-                    <span class="small text-muted">段落:</span>
-                    <input type="number" class="form-control form-control-sm" style="width: 55px;"
-                           min="1" max="500" x-model.number="tts.minLen" @change="saveTtsPrefs()">
-                    <span class="small text-muted">-</span>
-                    <input type="number" class="form-control form-control-sm" style="width: 55px;"
-                           min="10" max="4000" x-model.number="tts.maxLen" @change="saveTtsPrefs()">
-                    <span class="small text-muted">字</span>
-                </div>
-
-                <!-- Export button -->
-                <a class="btn btn-sm btn-outline-secondary ms-auto"
-                   :href="'/tts-export?projectId=' + projectId">
-                    <i class="bi bi-download"></i> 导出MP3
-                </a>
-            </div>
-
-            <!-- Resume Banner -->
-            <div x-show="playlistResumeOffer" x-cloak class="alert alert-info alert-dismissible mt-2 mb-0 py-2 small">
-                <i class="bi bi-arrow-clockwise"></i>
-                上次全文收听到第 <strong x-text="playlistResumeChapter"></strong> 章
-                <span class="d-inline-flex align-items-center gap-2 ms-2">
-                    <button @click="acceptResume()" class="btn btn-sm btn-primary"><i class="bi bi-play-fill"></i> 继续</button>
-                    <button @click="dismissResume()" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-lg"></i> 取消</button>
-                </span>
-            </div>
-
-            <!-- Full Listen Controls -->
-            <div class="mt-2 border-top pt-2">
-                <!-- Not active: show start button -->
-                <div x-show="!playlist.isActive">
-                    <button class="btn btn-sm btn-outline-success" @click="startFullListen()">
-                        <i class="bi bi-play-circle"></i> 全文收听
+                <!-- 折叠态只放最常用的动作：开播 / 暂停继续 / 停止 -->
+                <div class="tts-bar-actions">
+                    <button type="button" class="btn btn-sm btn-outline-success"
+                            x-show="!playlist.isActive" @click="startFullListen()">
+                        <i class="bi bi-play-fill"></i> 全文收听
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary tts-icon-btn"
+                            x-show="playlist.isActive" x-cloak
+                            @click="playlist.paused ? playlistResume() : playlistPause()"
+                            :title="playlist.paused ? '继续收听' : '暂停收听'">
+                        <i class="bi" :class="playlist.paused ? 'bi-play-fill' : 'bi-pause-fill'"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger tts-icon-btn"
+                            x-show="playlist.isActive" x-cloak
+                            @click="stopFullListen()" title="停止全文收听">
+                        <i class="bi bi-stop-fill"></i>
                     </button>
                 </div>
-                <!-- Active: show controls -->
-                <div x-show="playlist.isActive">
-                    <div class="d-flex align-items-center gap-2 flex-wrap">
-                        <span class="badge bg-success">
-                            <i class="bi bi-music-note-list"></i> 全文收听中
-                        </span>
-                        <span class="small text-muted" x-text="'第' + (playlist.chapters[playlist.currentIndex] || '') + '章 (' + (playlist.currentIndex + 1) + '/' + playlist.chapters.length + ')'"></span>
-                        <div class="btn-group btn-group-sm ms-auto">
-                            <button class="btn btn-sm btn-outline-secondary" @click="playlistPrev()" :disabled="playlist.currentIndex <= 0">
-                                <i class="bi bi-skip-backward-fill"></i>
+            </div>
+
+            <!-- Resume Banner：一次性提示，折叠态也要看得见。收成一行，窄屏别撑成三行 -->
+            <div x-show="playlistResumeOffer" x-cloak class="tts-resume">
+                <i class="bi bi-arrow-clockwise"></i>
+                <span class="tts-resume-text">上次到第
+                    <strong x-text="playlistResumeChapter"></strong> 章</span>
+                <button @click="acceptResume()" class="btn btn-sm btn-primary py-0 px-2">继续</button>
+                <button @click="dismissResume()" class="btn btn-sm btn-outline-secondary py-0 px-2"
+                        title="取消"><i class="bi bi-x-lg"></i></button>
+            </div>
+
+            <!-- 展开态：手机竖排三行（标签列左对齐），宽屏横排一行 -->
+            <div class="tts-detail" id="tts-detail" x-show="ttsOpen" x-cloak>
+                <div class="tts-detail-inner">
+                    <div class="tts-row" x-show="tts.configs.length > 1" x-cloak>
+                        <span class="tts-label text-muted">配置</span>
+                        <select class="form-select form-select-sm" x-model="tts.selectedConfigId"
+                                @change="onConfigChange()" aria-label="朗读配置">
+                            <template x-for="cfg in tts.configs" :key="cfg.id">
+                                <option :value="cfg.id" x-text="cfg.displayName"></option>
+                            </template>
+                        </select>
+                        <span></span>
+                    </div>
+                    <div class="tts-row">
+                        <span class="tts-label text-muted">音色</span>
+                        <select class="form-select form-select-sm" x-model="tts.voice"
+                                @change="saveTtsPrefs()" aria-label="朗读音色">
+                            <template x-for="v in getVoiceOptions()" :key="v">
+                                <option :value="v" x-text="v"></option>
+                            </template>
+                        </select>
+                        <span></span>
+                    </div>
+                    <div class="tts-row">
+                        <span class="tts-label text-muted">语速</span>
+                        <input type="range" class="form-range tts-range"
+                               min="0.25" max="4.0" step="0.25"
+                               x-model="tts.speed" @change="saveTtsPrefs()" aria-label="朗读语速">
+                        <span class="tts-speed-val text-muted" x-text="tts.speed + 'x'"></span>
+                    </div>
+                    <div class="tts-row">
+                        <span class="tts-label text-muted">段落</span>
+                        <div class="d-flex align-items-center gap-1">
+                            <input type="number" class="form-control form-control-sm tts-num"
+                                   min="1" max="500" x-model.number="tts.minLen"
+                                   @change="saveTtsPrefs()" aria-label="最小段落字数">
+                            <span class="small text-muted">-</span>
+                            <input type="number" class="form-control form-control-sm tts-num"
+                                   min="10" max="4000" x-model.number="tts.maxLen"
+                                   @change="saveTtsPrefs()" aria-label="最大段落字数">
+                            <span class="small text-muted">字</span>
+                        </div>
+                        <span></span>
+                    </div>
+                    <!-- 播放列表的翻章：折叠态只留暂停/停止，上一章/下一章放这儿 -->
+                    <div class="tts-row" x-show="playlist.isActive" x-cloak>
+                        <span class="tts-label text-muted">翻章</span>
+                        <div class="d-flex align-items-center gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    @click="playlistPrev()" :disabled="playlist.currentIndex <= 0">
+                                <i class="bi bi-skip-backward-fill"></i> 上一章
                             </button>
-                            <button class="btn btn-sm btn-outline-primary" @click="playlist.paused ? playlistResume() : playlistPause()">
-                                <i :class="playlist.paused ? 'bi bi-play-fill' : 'bi bi-pause-fill'"></i>
-                                <span x-text="playlist.paused ? '继续' : '暂停'"></span>
-                            </button>
-                            <button class="btn btn-sm btn-outline-secondary" @click="playlistNext()" :disabled="playlist.currentIndex >= playlist.chapters.length - 1">
-                                <i class="bi bi-skip-forward-fill"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger" @click="stopFullListen()">
-                                <i class="bi bi-stop-fill"></i> 停止
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    @click="playlistNext()"
+                                    :disabled="playlist.currentIndex >= playlist.chapters.length - 1">
+                                下一章 <i class="bi bi-skip-forward-fill"></i>
                             </button>
                         </div>
+                        <span></span>
                     </div>
+                </div>
+                <div class="tts-extra">
+                    <a class="btn btn-sm btn-outline-secondary" :href="'/tts-export?projectId=' + projectId">
+                        <i class="bi bi-download"></i> 导出MP3
+                    </a>
                 </div>
             </div>
         </div>
@@ -765,6 +954,20 @@
             },
             playlistResumeOffer: false,
             playlistResumeChapter: '',
+            /* 收听设置默认折叠：手机上一行（标题 + 形色摘要 + 全文收听 + 箭头）就够，
+               展开才给音色/语速/段落长度/翻章/导出。不持久化 —— 每次进页面都从折叠态开始 */
+            ttsOpen: false,
+            /* 折叠行右侧的摘要文案：多配置时带上配置名，再给音色和语速 */
+            ttsSummary() {
+                const parts = [];
+                if (this.tts.configs.length > 1) {
+                    const cfg = this.tts.configs.find(c => c.id === this.tts.selectedConfigId);
+                    if (cfg && cfg.displayName) parts.push(cfg.displayName);
+                }
+                if (this.tts.voice) parts.push(this.tts.voice);
+                parts.push(this.tts.speed + 'x');
+                return parts.join(' · ');
+            },
             async initTts() {
                 try {
                     const res = await fetch(`/projects/${projectId}/tts/configs`);

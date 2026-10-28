@@ -376,6 +376,21 @@ try {
     fs.writeFileSync(path.join(OUT_DIR, '.nojekyll'), '');
     console.log(`  ${path.join(OUT_DIR, 'index.html')} · ${(Buffer.byteLength(html) / 1024).toFixed(0)} KB`);
 
+    /* 内置读音是页面运行期才去取的资源，不进 HTML。导出脚本必须顺手同步一份，
+       否则发布出去的单页件会退化成「系统朗读」——在微信内置浏览器里等于没声音。
+       音频由 scripts/learn/gen_word_audio.py 按册生成，这里只做拷贝（不生成）。 */
+    const AUDIO_SRC = path.resolve(process.cwd(), 'src/main/resources/static/audio/word-match');
+    const AUDIO_DST = path.join(OUT_DIR, 'audio', 'word-match');
+    if (fs.existsSync(AUDIO_SRC)) {
+        fs.rmSync(AUDIO_DST, { recursive: true, force: true });
+        fs.cpSync(AUDIO_SRC, AUDIO_DST, { recursive: true });
+        const bags = fs.readdirSync(AUDIO_DST, { withFileTypes: true })
+            .filter(d => d.isDirectory()).map(d => d.name);
+        console.log(`  内置读音：${bags.length} 册（${bags.join(', ')}）→ ${AUDIO_DST}`);
+    } else {
+        console.log('  ⚠️ 没有内置读音目录，产物将全部依赖系统朗读');
+    }
+
     /* 静态体检：**资源**外链必须为 0（`src=` 与 CSS 里的 `url(http)`）。
        `href` 不在此列 —— 设置里「在线发音版」（已发布的公网链接）与「源码」（仓库）
        都是导航链接、不加载任何东西，单机件里点开只是跳走，离线打开也毫发无损。

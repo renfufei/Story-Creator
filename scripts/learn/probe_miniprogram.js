@@ -28,12 +28,59 @@
 const path = require('path');
 const fs = require('fs');
 
-const ROOT = path.resolve(__dirname, '../../word-match-miniprogram');
+/* 默认校验仓库里那份同步副本；也可指向导出目录：
+     node scripts/learn/probe_miniprogram.js /tmp/mp-new/word-pair */
+const ROOT = path.resolve(process.argv[2] || path.join(__dirname, '../../word-match-miniprogram'));
 
 /* ---------------------------------------------------------------- 桩 */
 const storage = {};
 const toasts = [];
 const navs = [];
+const redirects = [];          // redirectTo 的 url（读音分包路由靠它断言）
+
+/* 音频桩：只记录「怎么被调用的」，不真的出声。
+   点读有没有跳到正确的起点，全靠这里的 src / startTime 断言 ——
+   真机上「从整册开头念」这种毛病，桩里能提前抓住。 */
+const audios = [];
+function newAudio() {
+  const a = {
+    src: '', startTime: 0, currentTime: 0, volume: 1, obeyMuteSwitch: true,
+    plays: 0, stops: 0, seeks: [], destroyed: false,
+    _time: [], _err: [],
+    onTimeUpdate(f) { this._time.push(f); },
+    onError(f) { this._err.push(f); },
+    onCanplay(f) { this._canplay = f; },
+    play() {
+      /* 真机上 destroy 之后再 play 是静默失败（没声音、不报错）。桩记下来，
+         这样「旧页把新页的实例销毁了」这种错才咬得住。 */
+      if (this.destroyed) { this.deadPlays = (this.deadPlays || 0) + 1; return; }
+      this.plays++;
+    },
+    stop() { this.stops++; this.currentTime = 0; },
+    seek(s) { this.seeks.push(s); this.currentTime = s; },
+    destroy() { this.destroyed = true; }
+  };
+  audios.push(a);
+  return a;
+}
+
+/* 受控定时器：speech.js 用 setInterval 主动轮询 currentTime 判停（真机上
+   onTimeUpdate 在 seek 之后会停摆，只靠它会「读完第一个词顺着整册一直念」）。
+   桩把 setInterval 接管下来，由测试手动走一格 —— 于是「会不会自己停」变成
+   确定性断言，而不是等真时钟、还测不出来。 */
+const intervals = new Map();
+let ivSeq = 0;
+global.setInterval = (fn) => { intervals.set(++ivSeq, fn); return ivSeq; };
+global.clearInterval = (id) => { intervals.delete(id); };
+/* 把虚拟时间推到 t（秒）并让所有轮询跑一格。 */
+function advance(a, t) { a.currentTime = t; for (const [id, fn] of [...intervals]) if (intervals.has(id)) fn(); }
+/* 同步睡一会儿（硬超时那一条要等真时钟）。 */
+function sleepSync(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
+
+/* 当前页 route：主包页是 pages/play/play，读音分包页是 packages/<id>/play/play。
+   play.js 正是靠这个前缀判断「我是不是已经在读音分包里」，所以桩必须能改它。 */
+let currentRoute = 'pages/play/play';
+global.getCurrentPages = () => [{ route: currentRoute }];
 
 global.wx = {
   getStorageSync: k => (k in storage ? storage[k] : ''),
@@ -42,6 +89,8 @@ global.wx = {
   showToast: o => { toasts.push((o && o.title) || ''); },
   showModal: o => { if (o && o.success) o.success({ confirm: false }); },
   navigateTo: o => { navs.push(o && o.url); },
+  redirectTo: o => { redirects.push(o && o.url); },     // 桩里不真跳，只记录
+  createInnerAudioContext: () => newAudio(),
   setInnerAudioOption: () => { },
   /* 刻意**不**提供 createWebAudioContext：让 utils/sound.js 走「基础库不支持」的
      降级分支，音效静默失败 —— 探针只关心逻辑，不该去建音频图。 */
@@ -56,6 +105,21 @@ function loadPage(rel) {
   delete require.cache[require.resolve(file)];
   registered = null;
   require(file);
+  if (!registered) throw new Error(rel + ' 没有调用 Page()');
+  return registered;
+}
+
+/* 丢掉某个模块的缓存。★ 必须经 require.resolve：ROOT 可能是 /tmp（符号链接），
+   而 require.cache 的键是 realpath（/private/tmp），直接拿拼接路径删不掉。 */
+function dropCache(rel) {
+  try { delete require.cache[require.resolve(path.join(ROOT, rel))]; } catch (e) { /* 没加载过 */ }
+}
+
+/* 与 loadPage 相同，但**不清模块缓存** —— 用来模拟「第二次进入同一册的分包页」
+   （小程序模块只执行一次，顶层代码不会再跑，只有 onLoad 里的注入点能生效）。 */
+function loadPageKeepCache(rel) {
+  registered = null;
+  require(path.join(ROOT, rel));
   if (!registered) throw new Error(rel + ' 没有调用 Page()');
   return registered;
 }
@@ -128,11 +192,11 @@ function rankHolds(row, q) {
   section('A. utils/search.js —— 检索口径');
 
   const totals = bank.totals();
-  check('词库规模与 data/books.js 声明一致（26 册 / 3546 组 / 20191 词）',
-    totals.books === 26 && totals.levels === 3546 && totals.words === 20191,
+  check('词库规模与 data/books.js 声明一致（27 册 / 3573 组 / 20349 词）',
+    totals.books === 27 && totals.levels === 3573 && totals.words === 20349,
     JSON.stringify(totals));
   check('索引摊平后的行数 = 词条总数（没有漏册漏关）',
-    search._size() === ALL_ROWS && ALL_ROWS === 20191,
+    search._size() === ALL_ROWS && ALL_ROWS === 20349,
     'size=' + search._size() + ' oracle=' + ALL_ROWS);
 
   const empty = search.run('   ');
@@ -350,8 +414,20 @@ function rankHolds(row, q) {
 
   const playDef = loadPage('pages/play/play.js');
 
+  /* 有读音的册，真机上打开的是**分包页**（主包页只认出来就 redirect，不做初始化）。
+     探针必须跟真机一致：该册有分包就加载分包页、route 也设成分包页，
+     否则测到的是「redirect 之后什么都没初始化」的空壳，一堆假红。 */
+  const packOf = (bookId) => `packages/${bookId}/play`;
+  const hasPack = (bookId) => fs.existsSync(path.join(ROOT, packOf(bookId), 'play.js'));
   function openPlay(query) {
-    const inst = instantiate(playDef);
+    /* bookId 不存在时页面会退回默认册 —— 那多半是有读音的册，所以这里也按默认册的路由走，
+       模拟的是「redirect 完成之后」的真实状态。 */
+    const want = (query && query.bookId && bank.book(query.bookId))
+      ? query.bookId : bank.books()[0].id;
+    const usePack = hasPack(want);
+    const def = usePack ? loadPage(packOf(want) + '/play.js') : playDef;
+    currentRoute = usePack ? packOf(want) : 'pages/play/play';
+    const inst = instantiate(def);
     delete storage['word_match_progress_v2'];    // 让「恢复上次那册」走可控的默认态
     inst.onLoad(query);
     return inst;
@@ -468,6 +544,474 @@ function rankHolds(row, q) {
     const miss = ['.js', '.wxml', '.json', '.wxss']
       .filter(ext => !fs.existsSync(path.join(ROOT, pg + ext)));
     check('页面 ' + pg + ' 四件套齐全', miss.length === 0, miss.join(','));
+  }
+
+  /* ================================================================ E. 读音分包
+     微信硬规定：主包不能使用分包资源（开发者工具能播、真机静默无声）。
+     所以「播音频的页面」必须和音频同处一个分包 ⇒ 每册复制一份玩法页进分包，
+     主包的玩法页只负责识别「这册有读音」并 redirect 过去。
+     这一节就守这两件事：路由对不对、点读有没有跳到正确的起点。 */
+  const APP = JSON.parse(fs.readFileSync(path.join(ROOT, 'app.json'), 'utf8'));
+  const subs = APP.subpackages || APP.subPackages || [];
+  const subRoots = subs.map(s => s.root);
+
+  section('E. 读音分包 —— 主包只做路由，分包页才点读');
+
+  if (!subRoots.length) {
+    console.log('  （本工程的 app.json 没有 subpackages，跳过：这份是加读音之前的旧结构）');
+  } else {
+    const BOOK = 'pep-3-1';
+    const PLAIN = 'pep-7-1';                     // 初中册，没有读音
+    const subPlay = `packages/${BOOK}/play/play.js`;
+    const subIndexPath = path.join(ROOT, `packages/${BOOK}/audio/index.js`);
+    const speechPath = path.join(ROOT, 'utils/speech.js');
+    const store = require(path.join(ROOT, 'utils/store.js'));
+
+    check('app.json 登记了 8 个读音分包', subRoots.length === 8, subRoots.join(','));
+    check('每个分包都带页面（纯资源目录微信根本不打包，音频会凭空消失）',
+      subs.every(s => (s.pages || []).length > 0 && s.pages[0] === 'play/play'));
+    check('主包仍是检索页 + 玩法页（没有读音的册走主包这条）',
+      APP.pages.length === 2 && APP.pages.indexOf('pages/play/play') >= 0, APP.pages.join(','));
+
+    const missSub = [subPlay, `packages/${BOOK}/play/play.wxml`,
+      `packages/${BOOK}/play/play.json`, `packages/${BOOK}/play/play.wxss`,
+      `packages/${BOOK}/audio/index.js`, `packages/${BOOK}/audio/sprite.m4a`]
+      .filter(f => !fs.existsSync(path.join(ROOT, f)));
+    check('分包自包含：玩法页四件套 + 索引 + 音频', missSub.length === 0, missSub.join(','));
+
+    const subJs = fs.readFileSync(path.join(ROOT, subPlay), 'utf8');
+    check('分包页的 utils 路径已下移一层（否则真机点进那册就报模块找不到）',
+      subJs.indexOf("require('../../../utils/bank.js')") >= 0
+      && subJs.indexOf("require('../../../utils/speech.js')") >= 0
+      && subJs.indexOf("require('../../utils/") < 0);
+
+    /* speech.js 是模块级单例：每段测试前必须清掉 cache，
+       否则上一段 configure 过的状态会漏到下一段，得到假绿。 */
+    const resetSpeech = () => { delete require.cache[require.resolve(speechPath)]; };
+
+    /* ---- E1 主包页：有读音的册 ⇒ 换成读音分包页 ---- */
+    resetSpeech();
+    currentRoute = 'pages/play/play';
+    redirects.length = 0;
+    storage[store.KEYS.book] = BOOK;
+    let page = instantiate(loadPage('pages/play/play.js'));
+    page.onLoad({});
+    check('主包玩法页：有读音的册 redirect 到读音分包',
+      redirects.length === 1 && redirects[0] === `/packages/${BOOK}/play/play?bookId=${BOOK}`,
+      redirects.join(' | '));
+    check('redirect 之后不做无用的棋盘初始化', !page._s);
+
+    /* ---- E2 主包页：检索结果直达某一关，level 要原样带过去 ---- */
+    resetSpeech();
+    currentRoute = 'pages/play/play';
+    redirects.length = 0;
+    instantiate(loadPage('pages/play/play.js'))
+      .onLoad({ bookId: BOOK, level: '7' });
+    check('从检索结果进某关：redirect 时把 level 一起带过去（否则退回第一关）',
+      redirects.length === 1 && redirects[0].indexOf('&level=7') > 0, redirects.join(' | '));
+
+    /* ---- E3 主包页：没有读音的册 ⇒ 原地跑，行为一点不变 ---- */
+    resetSpeech();
+    currentRoute = 'pages/play/play';
+    redirects.length = 0;
+    audios.length = 0;
+    page = instantiate(loadPage('pages/play/play.js'));
+    page.onLoad({ bookId: PLAIN });
+    check('没有读音的册：不 redirect，原地跑', redirects.length === 0, redirects.join(' | '));
+    check('原地跑时棋盘照常铺开（配对逻辑未受影响）',
+      !!(page._s && page._s.left.length >= 3), page._s && page._s.left.length);
+    page.onTapLeft({ currentTarget: { dataset: { i: 0 } } });
+    check('没有读音的册：点英文卡不建音频实例（静默，不报错）', audios.length === 0);
+
+    /* ---- E4 分包页：不自我重定向，且装载时就把读音接上 ---- */
+    resetSpeech();
+    currentRoute = `packages/${BOOK}/play/play`;
+    redirects.length = 0;
+    audios.length = 0;
+    page = instantiate(loadPage(subPlay));
+    page.onLoad({ bookId: BOOK });
+    check('分包页里不会再 redirect（防自我重定向）', redirects.length === 0, redirects.join(' | '));
+    const speech = require(speechPath);
+    check('分包页一加载就接上读音（导出时追加的 configure 生效）', speech.enabled() === true);
+    check('分包页棋盘照常铺开', !!(page._s && page._s.left.length >= 3), page._s && page._s.left.length);
+
+    /* ---- E5 点读：src 指向本册 sprite，起点取索引 ---- */
+    const meta = require(subIndexPath);
+    const firstWord = page._s.left[0].text;
+    const entry = (meta.words || []).find(w => String(w[0]).toLowerCase() === String(firstWord).toLowerCase());
+    check('能点到索引里有的词（否则下面的断言无意义）', !!entry, firstWord);
+    page.onTapLeft({ currentTarget: { dataset: { i: 0 } } });
+    const a = audios[0];
+    check('点英文卡：建实例并把 src 指向本册 sprite',
+      !!a && a.src === `/packages/${BOOK}/audio/sprite.m4a`, a && a.src);
+    check('点英文卡：起点 = 索引里该词的起点（不会从整册开头念）',
+      !!a && !!entry && Math.abs(a.startTime - entry[1]) < 1e-6,
+      a && entry ? `${a.startTime} vs ${entry[1]}` : '找不到词');
+    check('点一次英文卡只播一次', !!a && a.plays === 1, a && a.plays);
+    check('点英文卡不重复建实例（整册只解码一次，点读才不拖沓）',
+      audios.length === 1, audios.length);
+
+    /* ---- E6 连点第二个词：复用同一实例、跳到新起点（不是重叠播放） ---- */
+    const second = page._s.left[1];
+    const entry2 = (meta.words || []).find(w => String(w[0]).toLowerCase() === String(second.text).toLowerCase());
+    if (entry2) {
+      page.onTapLeft({ currentTarget: { dataset: { i: 1 } } });
+      check('连点第二个词：仍是同一个实例、起点换成第二个词',
+        audios.length === 1 && Math.abs(audios[0].startTime - entry2[1]) < 1e-6,
+        `${audios.length} 个实例 / ${audios[0].startTime} vs ${entry2[1]}`);
+    }
+
+    /* ---- E7 点中文卡不读（读音库里只有英文） ---- */
+    page._s.selUid = null;
+    const before = a.plays;
+    page.onTapRight({ currentTarget: { dataset: { i: 0 } } });
+    check('点中文卡不发声（中文没有录音，硬读会变成念错）', a.plays === before, `${before} → ${a.plays}`);
+
+    /* ---- E8 切后台停读、退出释放 ---- */
+    page.onHide();
+    check('切后台立刻停读（否则耳朵里还在念上一个单词）', a.stops >= 1, a.stops);
+    page.onUnload();
+    check('退出页面释放音频实例', a.destroyed === true);
+
+    /* ---- E9 索引里没有的词：安静失败，不建实例 ---- */
+    resetSpeech();
+    const speech2 = require(speechPath);
+    check('未 configure 时 play() 直接返回 false（主包页就是这样）',
+      speech2.play('ruler') === false);
+    currentRoute = `packages/${BOOK}/play/play`;
+    require(speechPath).configure(`packages/${BOOK}`, require(subIndexPath));
+    audios.length = 0;
+    check('索引里没有的词：返回 false，不建实例、不抛异常',
+      speech2.play('zzz-not-in-this-book') === false && audios.length === 0);
+    check('索引里有的词：返回 true 并真的开播',
+      speech2.play(firstWord) === true && audios.length === 1);
+
+    /* ---- E12 播到词尾必须停（体验版真机 bug：读完第一个词一直往下念） ----
+       根因：判停原先挂在 onTimeUpdate 上，而真机上这个回调在 seek 之后会停摆，
+       条件永远不成立 ⇒ 音频顺着整册播完。这里把「何时该停」钉成确定性断言：
+       两种 currentTime 口径都要停、seek 之后还要停、currentTime 卡死也要停。 */
+    speech2.stop();
+    intervals.clear();
+    const longWord = (meta.words || []).filter(w => (w[2] - w[1]) > 1.2)[0];
+    const lateWord = (meta.words || []).find(w => w[1] > 1 && (w[2] - w[1]) > 0.5);
+    check('本册有可用于判停测试的词（否则下面几条无意义）', !!longWord && !!lateWord);
+
+    /* ① 绝对口径：currentTime 报文件位置（startTime 生效时就是这种） */
+    speech2.play(longWord[0]);
+    let ax = audios[audios.length - 1];
+    let a0 = ax.stops;
+    advance(ax, longWord[1] + 0.08);                    // 首帧：定基准
+    advance(ax, longWord[1] + (longWord[2] - longWord[1]) * 0.6);
+    const aMid = ax.stops;
+    advance(ax, longWord[1] + (longWord[2] - longWord[1]) + 0.2);
+    check('绝对口径：读到一半不停、到词尾立刻停',
+      aMid === a0 && ax.stops === a0 + 1, `mid=${aMid} end=${ax.stops} base=${a0}`);
+    check('停的时候轮询一起清掉（不留空转计时器）', intervals.size === 0, intervals.size);
+
+    /* ② 相对口径：currentTime 从本次播放起点算（部分基础库如此） */
+    speech2.play(longWord[0]);
+    let bx = audios[audios.length - 1];
+    let b0 = bx.stops;
+    advance(bx, 0.08);
+    advance(bx, (longWord[2] - longWord[1]) * 0.6);
+    const bMid = bx.stops;
+    advance(bx, (longWord[2] - longWord[1]) + 0.2);
+    check('相对口径（currentTime 从播放起点算）：同样到词尾停',
+      bMid === b0 && bx.stops === b0 + 1, `mid=${bMid} end=${bx.stops}`);
+
+    /* ③ startTime 没生效（从 0 开始播）⇒ 纠偏一次，且纠偏后仍能判停 */
+    speech2.play(lateWord[0]);
+    let cx = audios[audios.length - 1];
+    cx.seeks.length = 0;
+    let c0 = cx.stops;
+    advance(cx, 0.08);
+    check('startTime 没生效时纠偏一次（否则「点第 40 个词先把前面念一遍」）',
+      cx.seeks.length === 1 && Math.abs(cx.seeks[0] - lateWord[1]) < 1e-6, JSON.stringify(cx.seeks));
+    advance(cx, lateWord[1] + (lateWord[2] - lateWord[1]) + 0.2);
+    check('纠偏之后仍能正常判停（seek 不该把收尾逻辑带坏）',
+      cx.stops === c0 + 1, `${c0} → ${cx.stops}`);
+
+    /* ④ currentTime 卡死不动（解码异常）⇒ 硬超时兜底，绝不能永远读下去 */
+    require(speechPath).configure('packages/fake', { words: [['fake', 0, 0.3]] });
+    speech2.play('fake');
+    let dx = audios[audios.length - 1];
+    let d0 = dx.stops;
+    const t0 = Date.now();
+    advance(dx, 0.05);                                   // 起播了，但位置从此不动
+    sleepSync(1900);                                     // 越过 dur(300ms) + 硬超时余量(1500ms)
+    advance(dx, 0.05);
+    check('currentTime 卡死时靠硬超时收尾（不会一直读下去）',
+      dx.stops === d0 + 1, `${d0} → ${dx.stops} / 等了 ${Date.now() - t0}ms`);
+
+    /* ⑤ 起播慢时不能把时间基准定成 0
+       否则 startTime 一生效，词还没出声就被判成「已播完」。 */
+    require(speechPath).configure('packages/fake', { words: [['slow', 5, 5.9]] });
+    speech2.play('slow');
+    let ex = audios[audios.length - 1];
+    let e0 = ex.stops;
+    ex.seeks.length = 0;                                 // ③ 已经 seek 过一次，这里只算本段
+    for (let k = 0; k < 5; k++) advance(ex, 0);          // 五个格子都还没起播
+    check('还没起播时不判停、不纠偏（否则词还没出声就被掐掉）',
+      ex.stops === e0 && ex.seeks.length === 0, `stops=${ex.stops} seeks=${ex.seeks.length}`);
+    check('还没起播时也不急着定基准', (speech2._state() || {}).base === null,
+      JSON.stringify((speech2._state() || {}).base));
+    advance(ex, 5.05);                                   // 起播：基准定在这里
+    const eMid = ex.stops;
+    advance(ex, 5.9 + 0.2);                              // 播完这个词
+    check('起播后正常判停（慢启动不影响收尾）', eMid === e0 && ex.stops === e0 + 1,
+      `mid=${eMid} end=${ex.stops}`);
+    require(speechPath).configure(`packages/${BOOK}`, require(subIndexPath));
+
+    /* ⑤ 连点两个词只留一套轮询 */
+    intervals.clear();
+    speech2.play(firstWord);
+    speech2.play(page._s.left[1].text);
+    check('连点两个词只留一套轮询（两份轮询互相打架会让判停错乱）',
+      intervals.size === 1, intervals.size);
+    speech2.stop();
+    check('stop() 之后不留任何轮询', intervals.size === 0, intervals.size);
+
+    /* ⑥ 源码级：判停靠轮询，不能退回 onTimeUpdate */
+    const speechSrc = fs.readFileSync(speechPath, 'utf8');
+    check('判停走 setInterval 轮询（onTimeUpdate 在真机会停摆）',
+      /setInterval\s*\(\s*tick/.test(speechSrc), '未找到 setInterval(tick)');
+
+    /* ---- E13 换册必须换页（体验版 bug：只有三年级上册能读） ----
+       根因：选册面板 / 下一册 / 错题本 / 自动练习跨册都只是「改册号」，
+       而一个页面只能访问自己所在分包的资源 ⇒ 音频与索引还停在旧册，点上去没声音。
+       修法：目标册有读音就 redirect 到它的分包页；configure 改到 onLoad 里执行
+       （模块只执行一次，写在顶层的 configure 第二次进页就不跑了）。 */
+    section('E13. 换册 —— 必须换到目标册的分包页，否则音频还是旧册的');
+    const audioBookIds = bank.books().filter(b => b.hasAudio).map(b => b.id);
+    check('本工程至少有 2 个有读音的册（否则「换册要换页」无从谈起）',
+      audioBookIds.length >= 2, audioBookIds.join(','));
+
+    /* ① 每一册都能从主包页换到自己的分包页 */
+    const badRedirect = [];
+    for (const id of audioBookIds) {
+      resetSpeech();
+      currentRoute = 'pages/play/play';
+      redirects.length = 0;
+      instantiate(loadPage('pages/play/play.js')).onLoad({ bookId: id });
+      if (redirects[0] !== `/packages/${id}/play/play?bookId=${id}`) {
+        badRedirect.push(`${id}→${redirects[0]}`);
+      }
+    }
+    check('每个有读音的册都 redirect 到**自己**的分包页（不是都去 3 上）',
+      badRedirect.length === 0, badRedirect.join(' , '));
+
+    /* ② 每册分包页进来后，点读用的就是这一册的音频 */
+    const badBook = [], badSrc = [];
+    for (const id of audioBookIds) {
+      resetSpeech();
+      currentRoute = `packages/${id}/play/play`;
+      audios.length = 0;
+      const p = instantiate(loadPage(`packages/${id}/play/play.js`));
+      p.onLoad({ bookId: id });
+      const sp = require(speechPath);
+      /* 老版本没有 bookId()：记成「无册号」，让断言红出来而不是把探针弄崩。 */
+      const gotBook = typeof sp.bookId === 'function' ? sp.bookId() : '(无 bookId)';
+      if (gotBook !== id) badBook.push(`${id}:${gotBook}`);
+      const subIdx = require(path.join(ROOT, `packages/${id}/audio/index.js`));
+      sp.play(subIdx.words[0][0], id);
+      const aa = audios[audios.length - 1];
+      if (!aa || aa.src !== `/packages/${id}/audio/sprite.m4a`) badSrc.push(`${id}:${aa && aa.src}`);
+    }
+    check('每册分包页 configure 到的就是本册', badBook.length === 0, badBook.join(' , '));
+    check('每册点读的 src 都指向本册的 sprite（换册后不能还在播旧册）',
+      badSrc.length === 0, badSrc.join(' , '));
+
+    /* ③ 来回换册后回到某册：模块已在缓存里（顶层不再执行），仍必须切回该册配置 */
+    resetSpeech();
+    dropCache('packages/pep-3-1/play/play.js');
+    dropCache('packages/pep-3-2/play/play.js');
+    currentRoute = 'packages/pep-3-1/play/play';
+    const d31 = loadPageKeepCache('packages/pep-3-1/play/play.js');
+    const sp3 = require(speechPath);
+    const readBook = () => (typeof sp3.bookId === 'function' ? sp3.bookId() : '(无 bookId)');
+    check('分包页顶层**不**直接 configure（写在顶层的话第二次进页就不生效）',
+      sp3.enabled() === false);
+    instantiate(d31).onLoad({ bookId: 'pep-3-1' });
+    const bk1 = readBook();
+    currentRoute = 'packages/pep-3-2/play/play';
+    const d32 = loadPageKeepCache('packages/pep-3-2/play/play.js');
+    instantiate(d32).onLoad({ bookId: 'pep-3-2' });
+    const bk2 = readBook();
+    currentRoute = 'packages/pep-3-1/play/play';
+    instantiate(d31).onLoad({ bookId: 'pep-3-1' });     // 第二次进 3 上：模块不重新执行
+    check('3上 → 3下 → 回 3上：每次进页都重新 configure（模块缓存不执行顶层代码）',
+      bk1 === 'pep-3-1' && bk2 === 'pep-3-2' && readBook() === 'pep-3-1',
+      `${bk1} → ${bk2} → ${readBook()}`);
+
+    /* ④ 换册的入口都要走「换页」 */
+    resetSpeech();
+    currentRoute = 'packages/pep-3-1/play/play';
+    redirects.length = 0;
+    const pSwitch = instantiate(loadPage(subPlay));
+    pSwitch.onLoad({ bookId: 'pep-3-1' });
+    pSwitch.pickBook({ currentTarget: { dataset: { id: 'pep-3-2' } } });
+    check('选册面板换到有读音的册 ⇒ redirect 到该册分包页',
+      redirects.length === 1 && redirects[0] === '/packages/pep-3-2/play/play?bookId=pep-3-2',
+      redirects.join(' | '));
+    check('换页后不再本地改册号（否则就变成「册变了、音频没变」）',
+      pSwitch._s.bookId === 'pep-3-1', pSwitch._s.bookId);
+
+    resetSpeech();
+    currentRoute = 'packages/pep-3-1/play/play';
+    redirects.length = 0;
+    const pNext = instantiate(loadPage(subPlay));
+    pNext.onLoad({ bookId: 'pep-3-1' });
+    pNext.gotoNextBook();
+    check('「下一册」按钮同样换页', redirects.length === 1, redirects.join(' | '));
+
+    resetSpeech();
+    currentRoute = 'packages/pep-3-1/play/play';
+    redirects.length = 0;
+    const pAuto = instantiate(loadPage(subPlay));
+    pAuto.onLoad({ bookId: 'pep-3-1' });
+    pAuto._enterBookInAuto('pep-4-1');
+    check('自动练习跨册：换到下一册分包页，并把 auto=1 带过去（否则自动练习断掉）',
+      redirects.length === 1 && redirects[0].indexOf('/packages/pep-4-1/play/play') === 0
+      && redirects[0].indexOf('auto=1') > 0, redirects.join(' | '));
+
+    /* ⑤ 换到没有读音的册：本地换册，绝不跳页 */
+    resetSpeech();
+    currentRoute = 'packages/pep-3-1/play/play';
+    redirects.length = 0;
+    const pPlain = instantiate(loadPage(subPlay));
+    pPlain.onLoad({ bookId: 'pep-3-1' });
+    pPlain.pickBook({ currentTarget: { dataset: { id: PLAIN } } });
+    check('换到没有读音的册：本地换册、不跳页（跳了反而多一次白屏）',
+      redirects.length === 0 && pPlain._s.bookId === PLAIN,
+      `${redirects.length} / ${pPlain._s.bookId}`);
+
+    /* ⑥ 兜底：册号对不上就不出声，宁可不读也不能念错册 */
+    resetSpeech();
+    currentRoute = 'packages/pep-3-1/play/play';
+    const spGuard = require(speechPath);
+    instantiate(loadPage(subPlay)).onLoad({ bookId: 'pep-3-1' });
+    const guardOk = typeof spGuard.play === 'function'
+      && spGuard.play('ruler', 'pep-3-2') === false && spGuard.play('ruler', 'pep-3-1') === true;
+    check('speech.play 带错册号 ⇒ 返回 false（不拿 3 上的录音去念 3 下的词）', guardOk);
+
+    /* ---- E14 换册后点读不能带残音（体验版 bug：先念半句上一个词，再从头念一遍） ----
+       根因两条，叠在一起：
+         ① 换册是 wx.redirectTo，旧页的 onUnload 要等新页渲染完才执行 ⇒ 中间那几百毫秒里
+            正在念的词一直响到新页上；
+         ② speech 里的 InnerAudioContext 是**模块级单例**（小程序模块只执行一次、跨页面共享），
+            换册后只在旧实例上改 src + startTime。真机上这一串异步命令会让起播位置停在
+            上一次的播放点上，先漏出半句旧词，随后轮询纠偏再 seek 回词起点 —— 听感正是
+            「读了后半段，然后又读一遍」。
+       修法：换页/换册前立刻 stop；实例按「文件」归属，换文件就重建。 */
+    section('E14. 换册后点读不能带残音：先断声 + 换文件重建实例');
+
+    /* ① 换册跳页前必须立刻断声，不能等 onUnload */
+    resetSpeech();
+    currentRoute = `packages/${BOOK}/play/play`;
+    audios.length = 0;
+    redirects.length = 0;
+    const pS = instantiate(loadPage(subPlay));
+    pS.onLoad({ bookId: BOOK });
+    const spS = require(speechPath);
+    spS.play(pS._s.left[0].text, BOOK);
+    const aS = audios[audios.length - 1];
+    const stopsBefore = aS ? aS.stops : -1;
+    pS.pickBook({ currentTarget: { dataset: { id: 'pep-3-2' } } });
+    check('换册跳页前立刻断声（不等旧页 onUnload，否则旧词会一直响到新页上）',
+      !!aS && aS.stops > stopsBefore, `${stopsBefore} → ${aS && aS.stops}`);
+    check('断声之后仍然换页（别把换册本身弄丢）',
+      redirects.length === 1 && redirects[0].indexOf('/packages/pep-3-2/play/play') === 0,
+      redirects.join(' | '));
+
+    /* ② 换到另一册后点读：必须换成新实例 —— 旧实例还带着旧册的播放位置 */
+    resetSpeech();
+    currentRoute = `packages/${BOOK}/play/play`;
+    audios.length = 0;
+    const pOld = instantiate(loadPage(subPlay));
+    pOld.onLoad({ bookId: BOOK });
+    const spX = require(speechPath);
+    spX.play(pOld._s.left[0].text, BOOK);
+    const oldA = audios[audios.length - 1];
+    check('同册第一次点读：建 1 个实例', audios.length === 1 && !!oldA, audios.length);
+
+    /* 新页（3 下）进来：configure 换册，再点本册第一个词 —— 等价于 redirect 之后那一下 */
+    currentRoute = 'packages/pep-3-2/play/play';
+    dropCache('packages/pep-3-2/play/play.js');
+    const pNew = instantiate(loadPage('packages/pep-3-2/play/play.js'));
+    pNew.onLoad({ bookId: 'pep-3-2' });
+    const idx32 = require(path.join(ROOT, 'packages/pep-3-2/audio/index.js'));
+    const w32 = idx32.words[0];
+    spX.play(w32[0], 'pep-3-2');
+    const newA = audios[audios.length - 1];
+    check('换册后点读换新实例（复用旧实例 ⇒ 起播停在上一次的播放点，就是那半句残音）',
+      audios.length === 2 && newA !== oldA, audios.length);
+    check('旧册实例已销毁（播放位置跟着一起丢掉）', !!oldA && oldA.destroyed === true);
+    check('新实例的 src 指向新册的 sprite',
+      !!newA && newA.src === '/packages/pep-3-2/audio/sprite.m4a', newA && newA.src);
+    check('新实例的起点 = 新册索引里该词的起点（从头念，不是接着上一次的位置）',
+      !!newA && Math.abs(newA.startTime - w32[1]) < 1e-6,
+      newA && `${newA.startTime} vs ${w32[1]}`);
+
+    /* ③ 同一册内连点：仍复用同一个实例（不能退化成每次都重建，点读会明显变慢） */
+    const w32b = idx32.words[1] || w32;
+    const cntBefore = audios.length;
+    spX.play(w32b[0], 'pep-3-2');
+    check('同一册内连点第二个词：仍复用同一实例（不重复解码）',
+      audios.length === cntBefore, `${cntBefore} → ${audios.length}`);
+
+    /* ④ 旧页卸载不能销毁新页的实例：redirect 时新旧页的先后并无保证 */
+    const dBefore = newA.destroyed;
+    pOld.onUnload();                       // 3 上 的老页面此刻才卸载，配置已经是 3 下
+    check('旧页卸载不销毁新页的实例（否则新页刚点下去念半句就没声了）',
+      newA.destroyed === dBefore && dBefore === false, `destroyed=${newA.destroyed}`);
+    const playsBefore = newA.plays;
+    spX.play(w32[0], 'pep-3-2');
+    check('旧页卸载后新页仍能正常点读（实例没被旧页销毁）',
+      newA.plays === playsBefore + 1 && !newA.deadPlays,
+      `plays+${newA.plays - playsBefore} dead=${newA.deadPlays || 0}`);
+
+    /* ⑤ 换回先前那册：重建 3 上的实例（别命中 3 下那个），src 跟着回去 */
+    currentRoute = `packages/${BOOK}/play/play`;
+    const pBack = instantiate(loadPage(subPlay));
+    pBack.onLoad({ bookId: BOOK });
+    spX.play(pBack._s.left[0].text, BOOK);
+    const backA = audios[audios.length - 1];
+    check('换回 3 上：src 跟着回到 3 上（不会还在播 3 下）',
+      !!backA && backA !== newA && backA.src === `/packages/${BOOK}/audio/sprite.m4a`,
+      backA && backA.src);
+    check('3 下 的实例在这次切换时被销毁', newA.destroyed === true);
+
+    /* ⑥ 源码级：实例按文件归属、换文件重建（防止有人改回「只改 src」） */
+    const spSrc = fs.readFileSync(speechPath, 'utf8');
+    check('ensureAudio 接收 url，并只在同一个文件时复用',
+      /function ensureAudio\(url\)/.test(spSrc) && /audioSrc === url/.test(spSrc),
+      '未找到 audioSrc === url 的判断');
+    check('换文件时销毁旧实例（dropAudio）',
+      /function dropAudio\(\)/.test(spSrc) && /if \(audio\) dropAudio\(\)/.test(spSrc));
+    const playSrc = fs.readFileSync(path.join(ROOT, 'pages/play/play.js'), 'utf8');
+    check('换页前断声写在 _goAudioPack 里（所有换册入口都经过它）',
+      /speech\.stop\(\);\s*\n\s*wx\.redirectTo/.test(playSrc), '未找到 stop 后紧跟 redirectTo');
+
+
+    const sizeKb = (dir) => {
+      let sum = 0;
+      for (const e of fs.readdirSync(dir, { withFileTypes: true, recursive: true })) {
+        if (e.isFile()) sum += fs.statSync(path.join(e.parentPath || dir, e.name)).size;
+      }
+      return Math.round(sum / 1024);
+    };
+    const overs = subRoots
+      .map(r => [r, sizeKb(path.join(ROOT, r))])
+      .filter(([, kb]) => kb > 2048);
+    const biggest = Math.max(...subRoots.map(r => sizeKb(path.join(ROOT, r))));
+    check('每个分包都 ≤ 2048 KB（最大的 ' + biggest + ' KB）', overs.length === 0,
+      overs.map(([r, kb]) => `${r}=${kb}KB`).join(','));
+
+    /* ---- E11 books.js 的 hasAudio 与分包一一对应 ---- */
+    const marked = bank.books().filter(b => b.hasAudio).map(b => b.id).sort();
+    const packIds = subRoots.map(r => r.split('/')[1]).sort();
+    check('books.js 标记了读音的册 = 有分包的册（缺一个就会「有音频却永远进不去」）',
+      JSON.stringify(marked) === JSON.stringify(packIds), `marked=${marked.join(',')} packs=${packIds.join(',')}`);
   }
 
   /* ================================================================ 结果 */

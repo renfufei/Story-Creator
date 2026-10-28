@@ -47,6 +47,21 @@ public class MiniprogramExporter {
     /** zip 内的顶层目录名，与 project.config.json 的 projectname 一致。 */
     static final String PACKAGE_DIR = "word-pair";
 
+    /**
+     * 读音资源根（classpath）。与网页端共用同一批整册 sprite：
+     * {@code static/audio/word-match/<bookId>/sprite.m4a|sprite.json}。
+     *
+     * <p><b>为什么读音必须打成「一册一个分包」：</b>
+     * 微信主包上限 2 MB，8 册音频合起来 7.3 MB，塞主包不可能；而
+     * <b>主包不能使用分包资源</b>（开发者工具里能播、真机静默无声，官方社区已答复），
+     * 所以「播音频的页面」必须和音频同处一个分包 ⇒ 每册复制一份玩法页进分包，
+     * 主包的玩法页只负责识别「这册有读音」并 redirect 过去。
+     */
+    static final String AUDIO_ROOT = "static/audio/word-match/";
+
+    /** 分包目录前缀（zip 与小程序内都是 packages/<bookId>/）。 */
+    static final String PACK_SUBDIR = "packages";
+
     /** 学段 → 数据文件名后缀。ASCII，避免小程序 require 非 ASCII 模块名。 */
     /* 学段 → 导出文件名后缀。**必须与 `miniprogram-template/utils/bank.js` 的 LOADERS key 对得上**，
        也与 `scripts/learn/build_miniprogram_data.py` 的 STAGE_SLUG 同名。
@@ -85,7 +100,8 @@ public class MiniprogramExporter {
             throw new IllegalStateException("没有加载到任何册次，无法导出小程序");
         }
 
-        Map<String, byte[]> dataFiles = buildDataFiles(books);
+        Set<String> audioBooks = audioBooks(books);
+        Map<String, byte[]> dataFiles = buildDataFiles(books, audioBooks);
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream(1024 * 1024);
         try (ZipOutputStream zip = new ZipOutputStream(buffer, StandardCharsets.UTF_8)) {
@@ -94,11 +110,20 @@ public class MiniprogramExporter {
             }
             int templateCount = 0;
             for (String relative : manifest()) {
-                putEntry(zip, PACKAGE_DIR + "/" + relative, readTemplate(relative));
+                byte[] bytes = readTemplate(relative);
+                /* 分包清单是算出来的（取决于哪些册有读音），不能写死在模板里 */
+                if ("app.json".equals(relative)) {
+                    bytes = injectSubpackages(bytes, audioBooks);
+                }
+                putEntry(zip, PACKAGE_DIR + "/" + relative, bytes);
                 templateCount++;
             }
-            log.info("导出小程序工程：{} 册 / {} 个数据文件 / {} 个模板文件",
-                    books.size(), dataFiles.size(), templateCount);
+            for (String bookId : audioBooks) {
+                writeAudioPack(zip, bookId);
+            }
+            log.info("导出小程序工程：{} 册 / {} 个数据文件 / {} 个模板文件 / {} 个读音分包（{}）",
+                    books.size(), dataFiles.size(), templateCount, audioBooks.size(),
+                    String.join(",", audioBooks));
         } catch (IOException e) {
             throw new IllegalStateException("导出小程序工程失败", e);
         }
@@ -106,8 +131,8 @@ public class MiniprogramExporter {
     }
 
     /** zip 内 data/ 下的文件（文件名 → 内容），顺序即写入顺序。 */
-    private Map<String, byte[]> buildDataFiles(List<WordMatchBank.BookInfo> books) {
-        // 册元信息：只留小程序要用的五个字段，顺序与网页下发的一致
+    private Map<String, byte[]> buildDataFiles(List<WordMatchBank.BookInfo> books, Set<String> audioBooks) {
+        // 册元信息：只留小程序要用的字段，顺序与网页下发的一致
         List<Object> meta = new ArrayList<>();
         Set<String> stageOrder = new LinkedHashSet<>();
         Map<String, List<WordMatchBank.BookInfo>> byStage = new LinkedHashMap<>();
@@ -118,6 +143,11 @@ public class MiniprogramExporter {
             node.put("stage", b.stage());
             node.put("levelCount", b.levelCount());
             node.put("wordCount", b.wordCount());
+            /* 只有真有读音才写这个字段：没有的册省掉它，books.js 不因「大多数册没有」而整体变胖。
+               玩法页据此决定要不要 redirect 到该册的读音分包（见 play.js 的 _redirectToAudioPack）。 */
+            if (audioBooks.contains(b.id())) {
+                node.put("hasAudio", 1);
+            }
             meta.add(node);
 
             stageOrder.add(b.stage());
@@ -175,6 +205,124 @@ public class MiniprogramExporter {
     private List<WordMatchBank.Level> levelsOf(String bookId) {
         List<WordMatchBank.Level> levels = wordMatchBank.getLevels(bookId);
         return levels.isEmpty() ? cetWordBank.getLevels(bookId) : levels;
+    }
+
+    /** 哪些册已经生成了读音（sprite.m4a 与 sprite.json 都在 classpath 里才算）。 */
+    private static Set<String> audioBooks(List<WordMatchBank.BookInfo> books) {
+        Set<String> out = new LinkedHashSet<>();
+        for (WordMatchBank.BookInfo b : books) {
+            if (hasAudio(b.id())) {
+                out.add(b.id());
+            }
+        }
+        return out;
+    }
+
+    private static boolean hasAudio(String bookId) {
+        return exists(AUDIO_ROOT + bookId + "/sprite.m4a")
+                && exists(AUDIO_ROOT + bookId + "/sprite.json");
+    }
+
+    private static boolean exists(String classpathPath) {
+        return new ClassPathResource(classpathPath).exists();
+    }
+
+    /**
+     * 把 {@code subpackages} 注入 app.json。
+     *
+     * <p>不整份生成 app.json：窗口样式、lazyCodeLoading 这些是页面配置，留在模板里才是真相；
+     * 这里只补「哪些册有读音分包」这一项 —— 它是按音频资源算出来的，模板不可能写死。
+     */
+    private static byte[] injectSubpackages(byte[] appJson, Set<String> audioBooks) {
+        if (audioBooks.isEmpty()) {
+            return appJson;
+        }
+        String text = new String(appJson, StandardCharsets.UTF_8);
+        int at = text.lastIndexOf('}');
+        if (at < 0) {
+            throw new IllegalStateException("app.json 结构异常：找不到收尾的 }");
+        }
+        List<Object> subs = new ArrayList<>();
+        for (String bookId : audioBooks) {
+            Map<String, Object> node = new LinkedHashMap<>();
+            node.put("root", PACK_SUBDIR + "/" + bookId);
+            node.put("pages", List.of("play/play"));
+            subs.add(node);
+        }
+        /* 保留原文件的缩进风格：只去掉收尾前的空白，再接一项。 */
+        String head = text.substring(0, at).stripTrailing();
+        return utf8(head + ",\n  \"subpackages\": " + json(subs) + "\n}\n");
+    }
+
+    /**
+     * 一册一个读音分包：玩法页 + 读音索引 + 整册 sprite。
+     *
+     * <p>体积核对（AAC 32 kbps）：单册 539 KB ~ 1392 KB，加玩法页约 50 KB，
+     * 全部 &lt; 微信单分包 2 MB 上限；8 册合计 7.3 MB，主包 1.0 MB，总包远低于 20 MB。
+     */
+    private static void writeAudioPack(ZipOutputStream zip, String bookId) throws IOException {
+        String root = PACKAGE_DIR + "/" + PACK_SUBDIR + "/" + bookId + "/";
+        putEntry(zip, root + "play/play.js", packPlayJs(bookId));
+        for (String name : new String[]{"play/play.wxml", "play/play.json", "play/play.wxss"}) {
+            putEntry(zip, root + name, readTemplate("pages/" + name));
+        }
+        putEntry(zip, root + "audio/index.js", audioIndexModule(bookId));
+        putEntry(zip, root + "audio/sprite.m4a", readAudio(bookId, "sprite.m4a"));
+    }
+
+    /**
+     * 分包里的玩法页 = 模板玩法页 + 两处改动：
+     * ① {@code require} 路径下移一层（{@code packages/<id>/play/} 比 {@code pages/play/} 深一层）；
+     * ② 末尾给 {@code speechBoot} 赋值，把该册的读音索引交给 utils/speech.js。
+     * 赋值（而非直接调用 configure）是为了让页面每次 onLoad 都能重新 configure ——
+     * 小程序模块只执行一次，直接写在顶层只有首次进页有效。
+     *
+     * <p>把同一份页面代码复制进每个分包，是因为微信不允许主包使用分包资源；
+     * 复制由导出器完成，人只维护模板一份。
+     */
+    private static byte[] packPlayJs(String bookId) {
+        String js = new String(readTemplate("pages/play/play.js"), StandardCharsets.UTF_8);
+        String moved = js.replace("require('../../utils/", "require('../../../utils/");
+        if (moved.equals(js)) {
+            throw new IllegalStateException(
+                    "play.js 里没有 require('../../utils/...')，分包页改写路径会失败（运行时报模块找不到）");
+        }
+        String trailer = "\n\n/* ===== 以下由 MiniprogramExporter 追加：本页在读音分包里 ====="
+                + "\n   模板里没有这段。它把整册读音索引交给 utils/speech.js，"
+                + "\n   于是同一个玩法页在主包是「纯配对」、在分包里多一个点读能力。 */"
+                /* ⚠️ 只给 speechBoot 赋值，**不在模块顶层直接 configure**：
+                   小程序模块只执行一次，第二次进入同一册的分包页不会再跑顶层代码，
+                   而那时 speech 的配置可能已被别的册覆盖 ⇒ 点上去没声音（真机踩过）。
+                   模板的 onLoad 每次都会调用 speechBoot，所以 configure 也就每次都会重新执行。 */
+                + "\nvar __speechIndex = require('../audio/index.js');"
+                /* ⚠️ 是 ../audio 而不是 ./audio：本文件在 <root>/play/ 里，音频在同级的 <root>/audio/。
+                   写成 ./audio 会被解析成 <root>/play/audio/index.js —— 真机上整个分包页白屏（模块找不到），
+                   而开发者工具里未必立刻报出来。 */
+                + "\nspeechBoot = function () {"
+                + "\n    require('../../../utils/speech.js')"
+                + "\n        .configure('" + PACK_SUBDIR + "/" + bookId + "', __speechIndex);"
+                + "\n};\n";
+        return utf8(moved + trailer);
+    }
+
+    /** sprite.json → 可直接 require 的 js 模块（省一次文件读取，也避开部分基础库解析 json 的兼容问题）。 */
+    private static byte[] audioIndexModule(String bookId) {
+        String text = new String(readAudio(bookId, "sprite.json"), StandardCharsets.UTF_8).strip();
+        return utf8("// 由 Story-Creator 导出（整册读音索引），请勿手改。\n"
+                + "// 结构：{ sampleRate, headMs, tailMs, duration, words: [[词, 起点秒, 终点秒], ...] }\n"
+                + "module.exports = " + text + ";\n");
+    }
+
+    private static byte[] readAudio(String bookId, String name) {
+        ClassPathResource resource = new ClassPathResource(AUDIO_ROOT + bookId + "/" + name);
+        if (!resource.exists()) {
+            throw new IllegalStateException("读音资源缺失：" + AUDIO_ROOT + bookId + "/" + name);
+        }
+        try (InputStream in = resource.getInputStream()) {
+            return in.readAllBytes();
+        } catch (IOException e) {
+            throw new IllegalStateException("读取读音资源失败：" + bookId + "/" + name, e);
+        }
     }
 
     private static void putEntry(ZipOutputStream zip, String name, byte[] bytes) throws IOException {

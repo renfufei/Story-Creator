@@ -270,6 +270,47 @@ for (const pg of appJson.pages) {
   else for (const k of f) dataFields.add(k);
 }
 
+/* ===== 读音分包 =====
+   8 册有读音 ⇒ 8 个分包，每包自带一份玩法页 + 整册 sprite。
+   这里守住三件「只有真机/上传时才会炸」的事：
+     ① 分包页四件套必须齐（缺一个，点进那册就是白屏）；
+     ② 分包必须有**页面** —— 纯资源目录微信根本不打包，音频会凭空消失；
+     ③ 单包 ≤ 2048 KB（超了上传直接被拒）。 */
+const subpackages = appJson.subpackages || appJson.subPackages || [];
+const dirSizeKb = (dir) => {
+  let sum = 0;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true, recursive: true })) {
+    if (!e.isFile()) continue;
+    sum += fs.statSync(path.join(e.parentPath || dir, e.name)).size;
+  }
+  return Math.round(sum / 1024);
+};
+for (const sub of subpackages) {
+  const root = sub.root;
+  for (const p of sub.pages || []) {
+    for (const ext of ['.js', '.wxml', '.json', '.wxss']) {
+      if (!fs.existsSync(path.join(ROOT, root, p + ext))) {
+        fail('app.json', 0, `分包 ${root} 的页面 ${p} 缺少 ${ext}`);
+      }
+    }
+    /* 分包页的 data 也要并进来：WXML 里 {{字段}} 的校验是全局复用同一份字段集的 */
+    const f = extractDataFields(path.join(ROOT, root, p + '.js'));
+    if (!f) fail(root + '/' + p + '.js', 0, '解析不出 data: { ... } 块');
+    else for (const k of f) dataFields.add(k);
+  }
+  for (const res of ['audio/index.js', 'audio/sprite.m4a']) {
+    if (!fs.existsSync(path.join(ROOT, root, res))) {
+      fail('app.json', 0, `分包 ${root} 缺少 ${res}`);
+    }
+  }
+  const kb = dirSizeKb(path.join(ROOT, root));
+  if (kb > 2048) {
+    fail('app.json', 0, `分包 ${root} 体积 ${kb} KB，超过微信单分包 2048 KB 上限`);
+  } else {
+    console.log(` 读音分包 ${root}  ${kb} KB`);
+  }
+}
+
 const wxmls = findFiles(ROOT, '.wxml');
 const wxsss = findFiles(ROOT, '.wxss');
 for (const f of wxmls) checkWxml(f, dataFields);

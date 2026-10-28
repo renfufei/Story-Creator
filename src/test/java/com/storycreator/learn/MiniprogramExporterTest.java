@@ -87,7 +87,18 @@ class MiniprogramExporterTest {
                 "word-pair/utils/bank.js",
                 "word-pair/README.md");
         // 6 个数据文件（5 个 levels-* + books.js）+ 模板清单里的全部文件
-        assertThat(entries).hasSize(6 + manifestSize());
+        // + 读音分包（每册 6 个文件：play 四件 + audio/index.js + audio/sprite.m4a）
+        // 分包数不写死：音频按册生成，增删册次不该让这条断言变成维护负担。
+        String packPrefix = "word-pair/" + MiniprogramExporter.PACK_SUBDIR + "/";
+        List<String> packRoots = entries.keySet().stream()
+                .filter(name -> name.startsWith(packPrefix))
+                .map(name -> name.substring(packPrefix.length()).split("/")[0])
+                .distinct().toList();
+        int packFiles = (int) entries.keySet().stream()
+                .filter(name -> name.startsWith(packPrefix)).count();
+        assertThat(packRoots).as("有读音的册都该有一个分包").hasSize(8);
+        assertThat(packFiles).as("每个分包固定 6 个文件，不允许有孤儿文件").isEqualTo(packRoots.size() * 6);
+        assertThat(entries).hasSize(6 + manifestSize() + packFiles);
     }
 
     @Test
@@ -181,6 +192,120 @@ class MiniprogramExporterTest {
         Map<String, byte[]> entries = unzip(exporter.build());
         String readme = text(entries.get("word-pair/README.md"));
         assertThat(readme).contains("appid").contains("微信开发者工具").contains("miniprogram-template");
+    }
+
+    /* ==================== 读音分包 ====================
+       微信规定「主包不能使用分包资源」（开发者工具里能播、真机静默无声），
+       所以播音频的页面必须和音频同处一个分包 ⇒ 每册复制一份玩法页进分包。
+       下面三条守的是这个结构：包内自包含、app.json 登记得上、books.js 标记是对的。 */
+
+    /** 有读音的册（小学 3~6 年级，共 8 册）。顺序即 books.js 里的顺序。 */
+    private static final List<String> AUDIO_BOOKS = List.of(
+            "pep-3-1", "pep-3-2", "pep-4-1", "pep-4-2",
+            "pep-5-1", "pep-5-2", "pep-6-1", "pep-6-2");
+
+    @Test
+    @DisplayName("读音分包：每包自包含（玩法页 + 索引 + 音频），玩法页 require 已下移一层")
+    void audioPacksAreSelfContained() throws IOException {
+        Map<String, byte[]> entries = unzip(exporter.build());
+        String prefix = "word-pair/" + MiniprogramExporter.PACK_SUBDIR + "/";
+
+        List<String> roots = entries.keySet().stream()
+                .filter(name -> name.startsWith(prefix))
+                .map(name -> name.substring(prefix.length()).split("/")[0])
+                .distinct().sorted().toList();
+        assertThat(roots).as("读音分包").containsExactlyElementsOf(AUDIO_BOOKS.stream().sorted().toList());
+
+        for (String id : roots) {
+            String root = prefix + id + "/";
+            assertThat(entries).as(id + " 必须自包含这 6 个文件").containsKeys(
+                    root + "play/play.js", root + "play/play.wxml",
+                    root + "play/play.json", root + "play/play.wxss",
+                    root + "audio/index.js", root + "audio/sprite.m4a");
+
+            /* 分包比主包深一层：packages/<id>/play/ 里必须写成 ../../../utils/，
+               否则运行时报「模块找不到」——而这种错误只有真机/工具里点开那册才会暴露。 */
+            String js = text(entries.get(root + "play/play.js"));
+            assertThat(js).as(id + "：utils 的 require 必须下移一层")
+                    .contains("require('../../../utils/bank.js')")
+                    .contains("require('../../../utils/speech.js')")
+                    .doesNotContain("require('../../utils/");
+
+            /* 主包那一条 require 只是拿到模块；真正让本页「会读」的是导出时给 speechBoot 赋值。
+               索引在同级的 ../audio/（本文件在 <root>/play/ 里）—— 写成 ./audio 会让分包页白屏。
+               ★ 必须是「给 speechBoot 赋值」而不是顶层直接 configure：模块只执行一次，
+               第二次进同一册的分包页就不会再 configure，配置可能已被别的册覆盖 ⇒ 点读没声音。 */
+            assertThat(js).as(id + "：末尾要把该册读音接到 speech")
+                    .contains("speechBoot = function ()")
+                    .contains("configure('" + MiniprogramExporter.PACK_SUBDIR + "/" + id
+                            + "', __speechIndex)")
+                    .contains("require('../audio/index.js')")
+                    .doesNotContain("require('./audio/index.js')");
+
+            /* 模板里的注入点必须是 null 且被 onLoad 调用 —— 两处缺一个，分包页就不会读。 */
+            String mainPageJs = text(entries.get("word-pair/pages/play/play.js"));
+            assertThat(mainPageJs).as("模板要有 speechBoot 注入点")
+                    .contains("var speechBoot = null;")
+                    .contains("if (speechBoot) speechBoot();");
+
+            JsonNode index = moduleJson(entries.get(root + "audio/index.js"));
+            JsonNode words = index.path("words");
+            assertThat(words.size()).as(id + " 的读音索引条数").isGreaterThan(0);
+            assertThat(index.path("sampleRate").asInt()).as(id + " 的采样率").isEqualTo(24000);
+            for (JsonNode row : words) {
+                assertThat(row.size()).as("索引项必须是 [词, 起点, 终点]").isEqualTo(3);
+                assertThat(row.get(0).asText()).isNotBlank();
+                assertThat(row.get(1).asDouble()).as(row.get(0).asText() + " 的起点")
+                        .isLessThan(row.get(2).asDouble());
+            }
+            assertThat(entries.get(root + "audio/sprite.m4a").length)
+                    .as(id + " 的音频体积（应远大于 100 KB）").isGreaterThan(100 * 1024);
+        }
+    }
+
+    @Test
+    @DisplayName("app.json：读音分包登记齐全，主包页面不受影响")
+    void appJsonDeclaresAudioSubpackages() throws IOException {
+        Map<String, byte[]> entries = unzip(exporter.build());
+        JsonNode appJson = MAPPER.readTree(text(entries.get("word-pair/app.json")));
+
+        assertThat(appJson.path("pages")).as("主包仍是检索页 + 玩法页").hasSize(2);
+
+        JsonNode subs = appJson.path("subpackages");
+        assertThat(subs.size()).as("8 册有读音 ⇒ 8 个分包").isEqualTo(AUDIO_BOOKS.size());
+        List<String> declared = new ArrayList<>();
+        for (JsonNode sub : subs) {
+            String root = sub.path("root").asText();
+            declared.add(root);
+            assertThat(root).startsWith(MiniprogramExporter.PACK_SUBDIR + "/");
+            assertThat(sub.path("pages")).as("分包必须含页面，纯资源目录不打包").hasSize(1);
+            assertThat(sub.path("pages").get(0).asText()).isEqualTo("play/play");
+            assertThat(entries).as(root + " 声明的页面必须真的在包里")
+                    .containsKey("word-pair/" + root + "/play/play.wxml");
+        }
+        for (String id : AUDIO_BOOKS) {
+            assertThat(declared).as(id + " 的分包 root").contains(MiniprogramExporter.PACK_SUBDIR + "/" + id);
+        }
+    }
+
+    @Test
+    @DisplayName("books.js：只有真有读音的册带 hasAudio（玩法页据此决定是否 redirect）")
+    void booksJsMarksBooksWithAudio() throws IOException {
+        Map<String, byte[]> entries = unzip(exporter.build());
+        JsonNode books = moduleJson(entries.get("word-pair/data/books.js")).path("books");
+
+        List<String> marked = new ArrayList<>();
+        for (JsonNode book : books) {
+            if (book.path("hasAudio").asInt() == 1) {
+                marked.add(book.path("id").asText());
+            } else {
+                /* 没有的册**不写**这个字段：27 册里只有 8 册有读音，
+                   若每册都写 false，books.js 会为「大多数情况」白胖一圈。 */
+                assertThat(book.has("hasAudio"))
+                        .as(book.path("id").asText() + " 没有读音，不该带 hasAudio 字段").isFalse();
+            }
+        }
+        assertThat(marked).containsExactlyElementsOf(AUDIO_BOOKS);
     }
 
     // ==================== 工具 ====================

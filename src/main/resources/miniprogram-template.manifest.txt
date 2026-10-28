@@ -17,5 +17,6 @@ sitemap.json
 utils/bank.js
 utils/search.js
 utils/sound.js
+utils/speech.js
 utils/store.js
 utils/ui.js

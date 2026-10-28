@@ -15,6 +15,15 @@ var bank = require('../../utils/bank.js');
 var store = require('../../utils/store.js');
 var ui = require('../../utils/ui.js');
 var snd = require('../../utils/sound.js');
+/* 读音：只在「音频分包」里的这个页面被 configure（见 _redirectToAudioPack 与导出时追加的那几行）。
+   主包里的同名页面不 configure，speech.play() 一律安静返回 —— 所以这个 require 不影响任何现有行为。 */
+var speech = require('../../utils/speech.js');
+
+/* 读音注入点。默认 null：主包页点读静默（speech 未 configure）。
+   分包页由导出器在文件末尾赋值：
+     speechBoot = function () { speech.configure('packages/<id>', __speechIndex); };
+   ★ 它被 onLoad 每次调用，而不是在模块顶层直接 configure —— 见 onLoad 里的说明。 */
+var speechBoot = null;
 
 /* ---------- 常量 ---------- */
 var MAX_WRONG = 300;          // 错题本上限（超出按时间淘汰最旧的）
@@ -64,6 +73,27 @@ Page({
   // 生命周期
   // =========================================================================
   onLoad: function (options) {
+    /* 读音分包注入点：主包页是 null（点读永远静默），分包页由导出器赋值。
+       ★ 必须在这里（每次进页面）调用，不能只在模块顶层 configure 一次 ——
+       小程序模块只执行一次，第二次进入同一册的分包页不会再跑顶层代码，
+       而那时 speech 的配置可能已被别的册覆盖 ⇒ 点上去没声音。 */
+    if (speechBoot) speechBoot();
+
+    /* 这一册有读音 ⇒ 真正的页面在「音频分包」里。
+       微信硬规定：主包不能使用分包资源（开发者工具里能播，真机静默无声，官方社区已答复），
+       所以读音必须和音频同处一个分包。这里只做一次 redirect，用户无感（首次多等分包下载）。
+       换不过去（分包还没上传完 / 存储异常）就原地跑纯配对，玩法不受影响。 */
+    if (this._redirectToAudioPack(options)) return;
+    /* 走到这里说明本页没有读音能力（主包页）。把上一个分包页残留的册配置清掉，
+       免得拿别的册的索引去查这一册的词。分包页不会走到这里（它 route 有册号）。 */
+    if (!this._routeBook()) speech.reset();
+    this._boot(options);
+    /* 跨册换页时把「自动练习」带过来：redirect 会销毁旧页面，只能靠参数重启。 */
+    if (options && String(options.auto) === '1') this.startAuto();
+  },
+
+  /* 原来的 onLoad 主体，一字未改，只是搬进 _boot —— 换页失败时还要能原地启动。 */
+  _boot: function (options) {
     // 权威状态（data 只是它在视图上的投影）
     this._s = {
       bookId: '', levelIndex: 0, level: null,
@@ -130,10 +160,79 @@ Page({
     return { bookId: id, level: isFinite(n) ? n : -1 };
   },
 
+  /* 当前页是不是「音频分包里的那一份」。分包页的 route 形如 packages/pep-3-1/play/play，
+     主包页是 pages/play/play —— 只看前缀就能分辨，不依赖任何入口参数。 */
+  _isAudioPackPage: function () {
+    return !!this._routeBook();
+  },
+
+  /* 当前页所在分包是哪一册（'' = 主包页）。换册时靠它判断「要不要换页」。 */
+  _routeBook: function () {
+    var pages = getCurrentPages();
+    var top = (pages && pages.length) ? pages[pages.length - 1] : null;
+    var route = (top && top.route) || '';
+    var m = /^packages\/([^/]+)\//.exec(route);
+    return m ? m[1] : '';
+  },
+
+  /* 该册有没有读音：books.js 的 hasAudio 由导出器按「这册有没有 sprite.m4a」现算。 */
+  _hasAudio: function (bookId) {
+    var b = bookId ? bank.book(bookId) : null;
+    return !!(b && b.hasAudio);
+  },
+
+  /* 目标册：与 _boot 里「起始册」的推断口径完全一致（入口参数 → 上次那册 → 第一册）。 */
+  _targetBook: function (options) {
+    var jump = this._parseJump(options);
+    if (jump) return jump.bookId;
+    var books = bank.books();
+    var saved = store.readStr(store.KEYS.book, '');
+    for (var i = 0; i < books.length; i++) {
+      if (books[i].id === saved) return saved;
+    }
+    return books.length ? books[0].id : '';
+  },
+
+  /* 换到目标册的读音分包页。返回 true = 已经换走，调用方**不要再本地换册**
+     （本地换册只换册号，音频与索引还是旧册的 ⇒ 点上去没声音；一个页面只能访问
+     自己所在分包的资源，所以换册必须换页）。
+     atLevel：下标，-1 = 该册第一个未完成关；withAuto：跨册带着自动练习过去。 */
+  _goAudioPack: function (target, atLevel, withAuto, onFail) {
+    if (!target || !this._hasAudio(target)) return false;
+    if (this._routeBook() === target) return false;      // 已经在这一册的分包页里
+
+    var url = '/packages/' + target + '/play/play?bookId=' + encodeURIComponent(target);
+    var lv = (atLevel === undefined || atLevel === null) ? -1 : atLevel;
+    if (lv >= 0) url += '&level=' + lv;
+    if (withAuto) url += '&auto=1';
+
+    var fail = onFail || function () { };
+    /* 跳页前断声：redirect 是异步的，旧页的 onUnload 要等新页渲染完才会执行，
+       中间那几百毫秒里正在念的词会一直响到新页上（听感就是「残音」）。 */
+    speech.stop();
+    wx.redirectTo({ url: url, fail: fail });
+    return true;
+  },
+
+  /* 启动时：有读音就换到分包里的同名页。返回 true 表示「已经换走，onLoad 不要继续初始化」。 */
+  _redirectToAudioPack: function (options) {
+    /* 分包页以 route 上的册为准：入口参数丢了也不会被 store 带偏到别的册去。 */
+    var target = this._routeBook() || this._targetBook(options);
+    var jump = this._parseJump(options);
+    var self = this;
+    return this._goAudioPack(target, jump ? jump.level : -1, false, function () {
+      /* 分包下载失败等情况：原地继续跑纯配对（没有读音，但玩法完整）。
+         redirectTo 已经返回 true 了，所以启动流程要在这里补上。 */
+      if (!self._s) self._boot(options);
+    });
+  },
+
   // 切后台/退出时停掉自动练习：否则回到前台会发现它「自己跑了一截」，
   // 而且定时器在后台会与用户重新进入后的操作交叉。
   onHide: function () {
     if (this._s && this._s.auto.mode) this._stopAuto(true);
+    /* 切后台立刻停读：否则用户在微信里刷了别的页面，耳朵里还在念上一个单词。 */
+    speech.stop();
   },
 
   onUnload: function () {
@@ -147,6 +246,11 @@ Page({
     if (this._flashTimer) { clearTimeout(this._flashTimer); this._flashTimer = null; }
     if (this._wrongTimer) { clearTimeout(this._wrongTimer); this._wrongTimer = null; }
     if (this._autoTimer) { clearTimeout(this._autoTimer); this._autoTimer = null; }
+    /* 释放音频实例：destroy 之后不能再用，所以只在页面真正卸载时做（切后台走 onHide 的 stop）。
+       带上「本页管的是哪一册」——**不能用 _routeBook**：卸载时路由栈顶可能已经是新页了。
+       换册时新旧页的生命周期先后并不保证，若配置已被新页接管，旧页就不能销毁它的实例，
+       否则新页刚点下去念半句就没声了。 */
+    speech.release((s && s.bookId) || '');
   },
 
   /* 转发给微信好友：卡片标题带上当前在练的册次，点开落在玩法页。
@@ -410,7 +514,7 @@ Page({
     var lastSig = this._lastLayout[sig] || '';
     /* 序列配对册（stage=专题）锁左列：数字 one→ten、星期一到日、一月到十二月，
        英文一乱就没法「按序列背」了 —— 只打乱右列中文。
-       其余册（含教材）依旧两列都洗。防对齐循环不用改：它比的是 pair.key，
+       其余册（含课内词库）依旧两列都洗。防对齐循环不用改：它比的是 pair.key，
        左列固定时只是右列在重试。 */
     var lockLeft = bank.stageOf(s.bookId) === '专题';
     var left = lockLeft ? enBase.slice() : this._shuffle(enBase.slice());
@@ -449,6 +553,19 @@ Page({
       var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
     }
     return arr;
+  },
+
+  /* 「换册」统一入口：目标册有读音就换到它的分包页（同一个页面里只换册号是没有声音的
+     —— 页面只能访问自己所在分包的资源），没有读音才本地换。
+     返回 true = 已经换页，调用方不要再继续改本页状态。 */
+  _switchBook: function (bookId, restore, atLevel) {
+    var lv = restore ? -1 : ((atLevel === undefined || atLevel === null) ? -1 : atLevel);
+    /* 换到有读音的册 ⇒ 换页（_goAudioPack 里会断声）；
+       换到没有读音的册 ⇒ 本地换册，这里也要断声，不然旧册的词会跟着念下去。 */
+    if (this._goAudioPack(bookId, lv, false)) return true;
+    speech.stop();
+    this._applyBook(bookId, restore, atLevel);
+    return false;
   },
 
   nextLevel: function () {
@@ -505,6 +622,12 @@ Page({
     if (!s.selUid) {
       s.selUid = card.uid;
       if (s.soundOn) snd.tap();
+      /* 点英文卡即读（中文卡不读：读音库里只有英文）。
+         没有读音的册、以及主包里的同名页面，speech 未 configure ⇒ play() 直接返回 false。
+         包 try 是因为读音再出错也不能打断配对。 */
+      if (side === 'L' && s.soundOn) {
+        try { speech.play(card.text, s.bookId); } catch (e) { /* 忽略：看点读失败不影响玩法 */ }
+      }
       this.sync();
       return;
     }
@@ -519,6 +642,10 @@ Page({
     // 同侧改选：替换，不判错
     if (first.side === card.side) {
       s.selUid = card.uid;
+      /* 改选英文卡也要读：用户在左列连点几个词，本来就想逐个听听区别。 */
+      if (side === 'L' && s.soundOn) {
+        try { speech.play(card.text, s.bookId); } catch (e) { /* 忽略：点读失败不影响玩法 */ }
+      }
       this.sync();
       return;
     }
@@ -662,7 +789,7 @@ Page({
 
   gotoNextBook: function () {
     var nb = this._nextBook();
-    if (nb) this._applyBook(nb.id, false);
+    if (nb) this._switchBook(nb.id, false);
   },
 
   closeFinish: function () {
@@ -766,7 +893,11 @@ Page({
     if (!w) return;
     s.wrongOpen = false;
     if (s.auto.mode) this._stopAuto(true);
-    if (w.bookId !== s.bookId) this._applyBook(w.bookId, false);
+    if (w.bookId !== s.bookId) {
+      /* 有读音的册要换页，并把错题所在那关一起带过去（否则换过去还得自己找关）。 */
+      var lvOk = (w.level >= 0 && w.level < bank.levelCount(w.bookId)) ? w.level : -1;
+      this._switchBook(w.bookId, false, lvOk);
+    }
     if (w.level >= 0 && w.level < bank.levelCount(w.bookId)) {
       s.levelIndex = w.level;
       this._loadLevel();
@@ -878,7 +1009,8 @@ Page({
     var s = this._s;
     s.pickerOpen = false;
     if (id !== s.bookId) {
-      this._applyBook(id, true);
+      /* 换到有读音的册 ⇒ 换页（否则音频与索引还停在旧册，点上去没声音）。 */
+      if (this._switchBook(id, true)) return;
     }
     // 换册后，下次打开弹层时新册所在学段必须是展开的
     this._openStageOnly(bank.stageOf(id));
@@ -1019,8 +1151,13 @@ Page({
   _enterBookInAuto: function (bookId) {
     var s = this._s;
     if (this._advanceTimer) { clearTimeout(this._advanceTimer); this._advanceTimer = null; }
-    s.bookId = bookId;
+    /* 先把「当前册」落盘：换页后新页面从 store 读起始册，读到的必须是这一册。 */
     store.writeStr(store.KEYS.book, bookId);
+    /* 目标册有读音 ⇒ 换到它的分包页，并把自动练习带过去（redirect 会销毁本页，
+       所以自动练习只能靠参数在新页重启；本页的 _autoSeq 会因 onUnload 里的 _stopAuto 失效，
+       调用方的 await 随即收到 false 退出，不会在已销毁的页面上继续跑）。 */
+    if (this._goAudioPack(bookId, 0, true)) return;
+    s.bookId = bookId;
     s.levelIndex = 0;
     s.finishedAll = false;
     this._loadLevel();

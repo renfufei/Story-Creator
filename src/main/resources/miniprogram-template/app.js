@@ -1,5 +1,6 @@
 // 单词趣味配对 · 微信小程序
-// 词库来自 Story-Creator 的 /learn/word-match：小学 / 初中 / 高中 / 大学 4 个学段共 26 个词库
+// 词库来自 Story-Creator 的 /learn/word-match：小学 / 初中 / 高中 / 专题 / 大学 5 个学段，
+// 册数以 data/books.js 为准（导出时按后端现算，这里的数字会过期，别照着改逻辑）。
 // 进度与错题本全部存在本机（wx.setStorageSync），不依赖任何后端。
 App({
   globalData: {

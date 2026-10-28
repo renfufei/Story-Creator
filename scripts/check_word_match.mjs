@@ -1050,21 +1050,21 @@ async function main() {
         const r = el.getBoundingClientRect();
         return { items, left: Math.round(r.left), right: Math.round(r.right), vw: window.innerWidth };
     })()`);
-    check('弹层里正好 8 个条目', !!pop && pop.items.length === 8,
+    check('弹层里正好 9 个条目', !!pop && pop.items.length === 9,
         pop ? pop.items.map(i => i.title).join(' / ') : 'null');
-    check('条目名与功能一一对应（错题本/重做本关/音效与朗读/导出 HTML/导出小程序/在线发音版/源码/重置进度）',
-        !!pop && ['错题本', '重做本关', '音效与朗读', '导出 HTML', '导出小程序', '在线发音版', '源码', '重置进度']
+    check('条目名与功能一一对应（错题本/重做本关/音效与朗读/朗读方式/导出 HTML/导出小程序/在线发音版/源码/重置进度）',
+        !!pop && ['错题本', '重做本关', '音效与朗读', '朗读方式', '导出 HTML', '导出小程序', '在线发音版', '源码', '重置进度']
             .every((t, i) => pop.items[i] && pop.items[i].title.indexOf(t) >= 0),
         pop ? pop.items.map(i => i.title).join(' / ') : 'null');
     /* 两个外链条目（在线发音版 → 源码）都必须是真 <a>（中键/右键新标签页才照常可用），
        且指向正确地址、带 target=_blank + rel=noopener */
-    const onlineItem = pop && pop.items[5];
+    const onlineItem = pop && pop.items[6];
     const ONLINE_HREF = 'https://word-match-61798.app.workbuddy.host/?sharecode=ENQEODEVZ3';
     check('「在线发音版」是外链 <a>：指向已发布的公网链接、新标签页打开',
         !!onlineItem && onlineItem.tag === 'A' && onlineItem.href === ONLINE_HREF
             && onlineItem.target === '_blank' && /noopener/.test(onlineItem.rel),
         onlineItem ? `${onlineItem.tag} ${onlineItem.href} target=${onlineItem.target} rel=${onlineItem.rel}` : 'null');
-    const srcItem = pop && pop.items[6];
+    const srcItem = pop && pop.items[7];
     check('「源码」是外链 <a>：指向 GitHub 仓库、新标签页打开',
         !!srcItem && srcItem.tag === 'A'
             && srcItem.href === 'https://github.com/renfufei/Story-Creator'
@@ -1089,9 +1089,11 @@ async function main() {
         pop ? `left=${pop.left} right=${pop.right} vw=${pop.vw}` : 'null');
     await shot('01b-desktop-settings-pop');
 
-    /* 朗读开关：点一下切换颜色/文案，且弹层保持打开（能看见状态变化） */
+    /* 朗读开关：点一下切换颜色/文案，且弹层保持打开（能看见状态变化）。
+       ⚠️ 选择器必须用「音效」定位 —— 设置里还有一条「朗读方式」（title 含"朗读"），
+       用 [title*="朗读"] 会同时命中两条，靠 querySelector 取第一个纯属撞运气。 */
     const soundBefore = await evalJs(`document.querySelector('.wm-set-switch').innerText.trim()`);
-    await clickSel('.wm-set-item[title*="朗读"]');
+    await clickSel('.wm-set-item[title*="音效"]');
     await sleep(220);
     const soundAfter = await evalJs(`document.querySelector('.wm-set-switch').innerText.trim()`);
     const swCls = await evalJs(`document.querySelector('.wm-set-switch').className`);
@@ -1100,7 +1102,7 @@ async function main() {
     check('开关状态与高亮同步', (soundAfter === '开') === /is-on/.test(swCls), `cls=${swCls}`);
     check('朗读状态写入 localStorage', (await evalJs(`localStorage.getItem('word_match_sound_v1')`))
         === (soundAfter === '开' ? '1' : '0'));
-    await clickSel('.wm-set-item[title*="朗读"]');       // 切回原状态，不影响后面的朗读用例
+    await clickSel('.wm-set-item[title*="音效"]');       // 切回原状态，不影响后面的朗读用例
     await sleep(220);
 
     /* 点弹层外部应自动收起 */
@@ -2762,7 +2764,7 @@ async function main() {
         `nav=${tiny.navTop}~${tiny.navBottom} lastBottom=${tiny.lastCardBottom}`);
     await shot('19-mobile-tiny-7pairs');
 
-    /* 设置弹层排到 8 条（含「在线发音版」）后，超小屏必须还摸得着最后一条：
+    /* 设置弹层排到 9 条（含「朗读方式」「在线发音版」）后，超小屏必须还摸得着最后一条：
        弹层自身有 max-height + 内部滚动兜底，整层不许顶出视口底边。 */
     await openSettings();
     const popTiny = await evalJs(`(() => {
@@ -2778,8 +2780,8 @@ async function main() {
                  vh: window.innerHeight,
                  scrollable: el.scrollHeight > el.clientHeight + 1 };
     })()`);
-    check('超小屏 320x568：设置弹层 8 条都在、整层不出视口（放不下就内部滚动，最后一条能滚出来）',
-        !!popTiny && popTiny.n === 8 && popTiny.bottom <= popTiny.vh + 1
+    check('超小屏 320x568：设置弹层 9 条都在、整层不出视口（放不下就内部滚动，最后一条能滚出来）',
+        !!popTiny && popTiny.n === 9 && popTiny.bottom <= popTiny.vh + 1
             && popTiny.lastTop >= popTiny.top - 1 && popTiny.lastBottom <= popTiny.bottom + 1,
         popTiny ? `n=${popTiny.n} 弹层=${popTiny.top}~${popTiny.bottom} 末条=${popTiny.lastTop}~${popTiny.lastBottom} vh=${popTiny.vh} 滚动=${popTiny.scrollable}` : 'null');
     await shot('19b-mobile-tiny-settings-pop');

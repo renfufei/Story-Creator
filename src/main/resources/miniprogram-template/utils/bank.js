@@ -15,7 +15,7 @@ var LOADERS = {
   junior: function () { return require('../data/levels-junior.js'); },
   senior: function () { return require('../data/levels-senior.js'); },
   /* 序列配对册（有序词群：数字 / 星期 / 月份 …）。86 词，单文件很小，
-     但同样按需 require —— 只想练教材的人不必为它付解析成本。 */
+     但同样按需 require —— 只练课内这几册的人不必为它付解析成本。 */
   topic: function () { return require('../data/levels-topic.js'); },
   college: function () { return require('../data/levels-college.js'); }
 };
