@@ -18,14 +18,16 @@
     // 二级入口一律从这里下线，改由「首页卡片」或所属模块的页面进入 ——
     // 语音导出 / 导入项目 已挪进 /projects 页头的按钮组，故不再占导航位。
     //
-    // 顺序（2026-10-09 定稿）：首页 → AI教学 → AI聊天 → 故事创作 → 设置▾。
+    // 顺序（2026-10-29 更新）：首页 → AI教学 → AI聊天 → 故事创作 → 资源共享 → 设置▾。
     // 「AI」前缀是**导航栏专有文案**：首页那两张卡片的标题仍是「教学」「聊天」，卡序也没动
     // （用户明确要求只改导航栏），别看到两边不一致就去「顺手统一」。
+    // 「资源共享」2026-10-29 按用户要求升级为一级入口（原先是首页卡片二级入口）。
     var NAV_ITEMS = [
         { key: 'home', text: '首页', href: '/', icon: 'bi-house' },
         { key: 'learn', text: 'AI教学', href: '/learn', icon: 'bi-mortarboard' },
         { key: 'chat', text: 'AI聊天', href: '/chat', icon: 'bi-chat-dots' },
-        { key: 'projects', text: '故事创作', href: '/projects', icon: 'bi-journal-text' }
+        { key: 'projects', text: '故事创作', href: '/projects', icon: 'bi-journal-text' },
+        { key: 'shared', text: '资源共享', href: '/shared', icon: 'bi-share' }
     ];
 
     var SETTING_ITEMS = [

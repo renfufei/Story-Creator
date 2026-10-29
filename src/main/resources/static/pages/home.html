@@ -124,6 +124,34 @@
         </div>
 
         <div class="col">
+            <div class="card sc-card sc-learn-card h-100" data-accent="teal" style="cursor: pointer;"
+                 onclick="window.location.href='/shared'">
+                <div class="card-body d-flex flex-column text-center">
+                    <div class="sc-learn-icon"><i class="bi bi-share"></i></div>
+                    <h5 class="card-title">资源共享</h5>
+                    <p class="card-text">把文件放进服务端 shared 目录，浏览器里就能浏览、上传与下载</p>
+                    <ul class="sc-module-links">
+                        <li>
+                            <a href="/shared" onclick="event.stopPropagation();">
+                                <i class="bi bi-folder2-open"></i> 浏览共享文件
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/import/txt" onclick="event.stopPropagation();">
+                                <i class="bi bi-upload"></i> 导入项目
+                            </a>
+                        </li>
+                    </ul>
+                    <div class="sc-learn-actions mt-auto">
+                        <a href="/shared" class="btn" onclick="event.stopPropagation();">
+                            <i class="bi bi-share"></i> 进入资源共享
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col">
             <div class="card sc-card sc-learn-card h-100" data-accent="slate" style="cursor: pointer;"
                  onclick="window.location.href='/settings'">
                 <div class="card-body d-flex flex-column text-center">
@@ -160,34 +188,6 @@
                     <div class="sc-learn-actions mt-auto">
                         <a href="/settings" class="btn" onclick="event.stopPropagation();">
                             <i class="bi bi-cpu"></i> AI模型配置
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col">
-            <div class="card sc-card sc-learn-card h-100" data-accent="teal" style="cursor: pointer;"
-                 onclick="window.location.href='/shared'">
-                <div class="card-body d-flex flex-column text-center">
-                    <div class="sc-learn-icon"><i class="bi bi-share"></i></div>
-                    <h5 class="card-title">资源共享</h5>
-                    <p class="card-text">把文件放进服务端 shared 目录，浏览器里就能浏览、上传与下载</p>
-                    <ul class="sc-module-links">
-                        <li>
-                            <a href="/shared" onclick="event.stopPropagation();">
-                                <i class="bi bi-folder2-open"></i> 浏览共享文件
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/import/txt" onclick="event.stopPropagation();">
-                                <i class="bi bi-upload"></i> 导入项目
-                            </a>
-                        </li>
-                    </ul>
-                    <div class="sc-learn-actions mt-auto">
-                        <a href="/shared" class="btn" onclick="event.stopPropagation();">
-                            <i class="bi bi-share"></i> 进入资源共享
                         </a>
                     </div>
                 </div>

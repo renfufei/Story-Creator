@@ -78,6 +78,11 @@
         .sc-act-sm { min-height: 2.25rem; padding: .25rem .8rem; font-size: .8125rem; gap: .35rem; border-radius: .4rem; }
         .sc-act-sm.btn > .bi { font-size: .95rem; }
 
+        /* 按钮文字永不折行：动作列一旦被长文件名挤压，「下载」会折成「下/载」两行，非常难看。
+           配合下面的 td min-width，让表格把收缩压力转给名称列（名称自带省略号）。 */
+        .sc-act, .sc-act-sm, .sc-tool { white-space: nowrap; }
+        .sc-share-table td.sc-c-act { min-width: 92px; }
+
         /* 视图 / 排序控件与主操作按钮同高，整条工具带才齐整 */
         .sc-tool { min-height: 2.25rem; padding: .25rem .65rem; font-size: .8125rem; }
         .sc-tool.btn > .bi { margin-right: 0; }   /* 与文字之间用 gap/ms-1，别和基线留白叠加 */
@@ -87,6 +92,7 @@
             padding: .25rem 1.9rem .25rem .6rem; font-size: .8125rem;
         }
         @media (max-width: 575.98px) {
+            /* 触屏上主动作钮再高一档（42 → 44px），别退回 btn-sm */
             .sc-act { min-height: 2.75rem; }
         }
 
@@ -155,6 +161,29 @@
             background: var(--bs-tertiary-bg, #f8f9fa);
             border-top: 1px solid var(--bs-border-color, #dee2e6);
             border-radius: 0 0 .75rem .75rem;
+        }
+
+        /* ==================== 移动端（≤575.98px）：修复走样 + 默认精简 ====================
+           ★ 这个块必须放在所有基础规则之后：同特异性下后者胜，
+             放前面会被 .sc-share-foot 的 display:flex 之类覆盖（踩过：脚注藏不掉）。 */
+        @media (max-width: 575.98px) {
+            /* 触屏上主动作钮再高一档（42 → 44px），别退回 btn-sm */
+            .sc-act { min-height: 2.75rem; }
+
+            /* ---- 默认精简：次要信息收起，一屏留给文件列表 ---- */
+            .sc-share-sub { display: none; }        /* 页头说明文字 */
+            .sc-share-foot { display: none; }       /* 面板脚注两条 */
+            #btnSortDir span { display: none; }     /* 「正序/倒序」只留图标 */
+
+            /* ---- 操作条折成两行时都贴左：工具组原来 margin-left:auto，
+               折行后会孤零零缩在中间，视觉上像错位 ---- */
+            .sc-share-tools { margin-left: 0; width: 100%; }
+            .sc-share-tools .form-select { flex: 1 1 auto; min-width: 0; }
+
+            /* ---- 表格固定布局：动作列钉在 92px 不被长文件名挤压，
+               名称列拿剩余宽度、自带省略号（否则动作列被挤出面板右缘） ---- */
+            .sc-share-table { table-layout: fixed; width: 100%; }
+            .sc-share-table th, .sc-share-table td { overflow: hidden; }
         }
     </style>
 </head>

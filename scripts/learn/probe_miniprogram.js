@@ -992,7 +992,40 @@ function rankHolds(row, q) {
     check('换页前断声写在 _goAudioPack 里（所有换册入口都经过它）',
       /speech\.stop\(\);\s*\n\s*wx\.redirectTo/.test(playSrc), '未找到 stop 后紧跟 redirectTo');
 
+    /* ---- E15 进页面先看到「正在准备词库」，而不是「加载失败」 ----
+       初始 data 里 levelCount 是 0：改成三态之前，页面第一帧就把
+       「单词库加载失败」的兜底当默认背景亮了出来（redirect 等分包下载的
+       等待期里一直停在这帧）。改成 加载中 / 正常 / 真失败 三态互斥。 */
+    section('E15. 进页面先显示「正在准备词库」，失败兜底只在真失败时出现');
+    const wxmlSrc = fs.readFileSync(path.join(ROOT, 'pages/play/play.wxml'), 'utf8');
+    check('加载态分支在最前（wx:if={{!loaded}}，带转圈）',
+      /wx:if="\{\{!loaded\}\}"/.test(wxmlSrc) && /wm-fallback-spinner/.test(wxmlSrc));
+    check('主舞台改用 wx:elif（三态互斥，levelCount=0 不会再落到兜底）',
+      /wx:elif="\{\{levelCount > 0\}\}"/.test(wxmlSrc));
+    check('失败兜底文案友好并带「重试」出口',
+      /词库暂时没有加载出来/.test(wxmlSrc) && /bindtap="retryBoot"/.test(wxmlSrc)
+      && !/单词库加载失败/.test(wxmlSrc));
 
+    resetSpeech();
+    currentRoute = `packages/${BOOK}/play/play`;
+    const pL = instantiate(loadPage(subPlay));
+    check('初始 data.loaded 是 false（第一帧显示加载态）', pL.data.loaded === false);
+    pL.onLoad({ bookId: BOOK });
+    check('初始化完成后 loaded 变 true（加载态撤掉、棋盘铺开）',
+      pL.data.loaded === true && !!(pL._s && pL._s.left.length >= 3));
+
+    /* 兜底上的「重试」：按原入口参数重跑 _boot。
+       旧版没有 retryBoot —— 用防御式判断，让断言红出来而不是把探针弄崩。 */
+    const canRetry = typeof pL.retryBoot === 'function';
+    if (canRetry) {
+      pL.data.loaded = false;                      // 模拟兜底可见时按下重试
+      pL.retryBoot();
+    }
+    check('重试后 loaded 恢复 true、棋盘重新铺开',
+      canRetry && pL.data.loaded === true && !!(pL._s && pL._s.left.length >= 3),
+      canRetry ? '见上' : '页面没有 retryBoot 方法');
+
+    /* ---- E10 体积闸门：单分包 ≤ 2048 KB（超了上传直接被拒） ---- */
     const sizeKb = (dir) => {
       let sum = 0;
       for (const e of fs.readdirSync(dir, { withFileTypes: true, recursive: true })) {

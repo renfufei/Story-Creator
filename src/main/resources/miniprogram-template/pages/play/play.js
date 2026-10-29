@@ -49,7 +49,8 @@ Page({
 
   data: {
     /* 册 / 关 */
-    bookId: '', bookLabel: '', levelIndex: 0, levelCount: 0, theme: '',
+    /* loaded：初始化完成之前页面显示「正在准备词库」，而不是把失败兜底当默认背景 */
+    bookId: '', bookLabel: '', levelIndex: 0, levelCount: 0, theme: '', loaded: false,
     /* 棋盘 */
     leftCards: [], rightCards: [],
     /* 顶部进度 */
@@ -94,6 +95,8 @@ Page({
 
   /* 原来的 onLoad 主体，一字未改，只是搬进 _boot —— 换页失败时还要能原地启动。 */
   _boot: function (options) {
+    /* 记下入口参数：失败兜底上的「重试」按钮要按原样重新初始化一遍。 */
+    this._bootOptions = options || {};
     // 权威状态（data 只是它在视图上的投影）
     this._s = {
       bookId: '', levelIndex: 0, level: null,
@@ -146,6 +149,19 @@ Page({
     var jump = this._parseJump(options);
     if (jump) this._applyBook(jump.bookId, false, jump.level);
     else this._applyBook(bookId, true);
+  },
+
+  /* 失败兜底上的「重试」：按原入口参数重新初始化一遍。
+     _boot 是同步的，重跑安全（它会重置 _destroyed 并重新读存储）。 */
+  retryBoot: function () {
+    if (this._retrying) return;
+    this._retrying = true;
+    try {
+      this._boot(this._bootOptions || {});
+    } finally {
+      var self = this;
+      setTimeout(function () { self._retrying = false; }, 400);
+    }
   },
 
   /* 解析入口参数。bookId 必须真实存在——分享出去的链接可能被手改，
@@ -284,6 +300,11 @@ Page({
     var lv = s.level;
     var done = s.progress[s.bookId] || [];
     var patch = {};
+
+    /* sync 能跑就说明初始化已经完成 —— 把「正在准备词库」的加载态撤掉。
+       初始 data 里它是 false：不然页面第一帧（levelCount 还是 0）会把
+       「加载失败」的兜底分支当成默认背景亮出来。 */
+    patch.loaded = true;
 
     /* ---- 卡片：class 在这里算好，WXML 只负责贴上去 ---- */
     patch.leftCards = this._cardsView(s.left);

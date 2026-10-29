@@ -43,8 +43,18 @@
         </view>
     </view>
 
+    <!-- 词库还没就绪：onLoad 到 _boot 之间的一瞬、以及分包下载的等待期。
+         ★ 这段必须比「失败兜底」先判断 —— 初始 data 里 levelCount 是 0，
+           不加这个分支的话，页面第一帧就会把「加载失败」当成默认背景提示语亮出来。 -->
+    <view class="wm-stage" wx:if="{{!loaded}}">
+        <view class="wm-fallback is-loading">
+            <view class="wm-fallback-spinner"></view>
+            <text>正在准备词库…</text>
+        </view>
+    </view>
+
     <!-- ==================== 舞台 ==================== -->
-    <view class="wm-stage" wx:if="{{levelCount > 0}}">
+    <view class="wm-stage" wx:elif="{{levelCount > 0}}">
 
         <!-- HUD：高度为 0，浮在舞台顶边，不占纵向空间 -->
         <view class="wm-hud">
@@ -129,11 +139,13 @@
 
     </view>
 
-    <!-- 词库没读到时的兜底 -->
+    <!-- 词库读到了却铺不出关卡（内部错误才走得到这里）：给一个能自己按的重试出口 -->
     <view class="wm-stage" wx:else>
         <view class="wm-fallback">
             <text class="wm-fallback-icon">!</text>
-            单词库加载失败，请退出小程序后重新进入。
+            <text>词库暂时没有加载出来</text>
+            <view class="wm-fallback-retry" hover-class="wm-tap" bindtap="retryBoot">重试</view>
+            <text class="wm-fallback-hint">还是不行的话，退出小程序后重新进入</text>
         </view>
     </view>
 
