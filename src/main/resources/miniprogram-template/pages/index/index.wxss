@@ -358,3 +358,95 @@
 
 .ix-entry-seq .ix-entry-title { color: #a56500; }
 .ix-entry-seq .ix-entry-go { color: #a56500; }
+
+/* ==================== 序列配对 · 专题选择面板 ====================
+   替代 wx.showActionSheet（一次最多 6 项，而专题册有 14 个主题）。
+   固定贴底、遮罩半透明；列表只在自身内部滚，条目再多也不会把整页顶出去。
+   safe-area-inset-bottom：全面屏底部横条不能压住【取消】。 */
+.ix-sheet-wrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(16, 24, 32, .42);
+}
+
+.ix-sheet {
+  width: 100%;
+  max-height: 82vh;
+  border-radius: 24rpx 24rpx 0 0;
+  background: #ffffff;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.ix-sheet-head {
+  padding: 28rpx 28rpx 18rpx;
+  border-bottom: 2rpx solid #f0f3f6;
+}
+
+.ix-sheet-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #16202b;
+  line-height: 1.35;
+}
+
+.ix-sheet-sub {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #8b96a3;
+  line-height: 1.4;
+}
+
+/* 58vh ≈ 屏幕一半多一点：14 条一行也放不下，所以列表自身必须可滚；
+   条目少时高度按内容收缩，不会留一大片空白。 */
+.ix-sheet-list {
+  max-height: 58vh;
+}
+
+.ix-tp {
+  display: flex;
+  align-items: center;
+  padding: 22rpx 28rpx;
+  border-bottom: 2rpx solid #f0f3f6;
+}
+
+.ix-tp-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ix-tp-name {
+  font-size: 29rpx;
+  font-weight: 700;
+  color: #16202b;
+  line-height: 1.35;
+}
+
+.ix-tp-sub {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #8b96a3;
+  line-height: 1.4;
+}
+
+.ix-tp-go {
+  flex: 0 0 auto;
+  margin-left: 16rpx;
+  color: #a56500;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.ix-sheet-cancel {
+  padding: 26rpx 0;
+  border-top: 2rpx solid #f0f3f6;
+  text-align: center;
+  color: #5b6673;
+  font-size: 28rpx;
+  font-weight: 600;
+}

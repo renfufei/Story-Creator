@@ -37,6 +37,7 @@ const storage = {};
 const toasts = [];
 const navs = [];
 const redirects = [];          // redirectTo 的 url（读音分包路由靠它断言）
+const sheets = [];             // showActionSheet 的 itemList（校验「6 项上限」这条硬规则）
 
 /* 音频桩：只记录「怎么被调用的」，不真的出声。
    点读有没有跳到正确的起点，全靠这里的 src / startTime 断言 ——
@@ -45,20 +46,26 @@ const audios = [];
 function newAudio() {
   const a = {
     src: '', startTime: 0, currentTime: 0, volume: 1, obeyMuteSwitch: true,
+    /* paused：真机上 stop() 之后为 true、play() 之后为 false。
+       speech 的起播看门狗靠它排除「其实在播、只是 currentTime 不涨」的机型。 */
+    paused: true,
     plays: 0, stops: 0, seeks: [], destroyed: false,
-    _time: [], _err: [],
+    _time: [], _err: [], _play: [],
     onTimeUpdate(f) { this._time.push(f); },
     onError(f) { this._err.push(f); },
     onCanplay(f) { this._canplay = f; },
+    onPlay(f) { this._play.push(f); },
     play() {
       /* 真机上 destroy 之后再 play 是静默失败（没声音、不报错）。桩记下来，
          这样「旧页把新页的实例销毁了」这种错才咬得住。 */
       if (this.destroyed) { this.deadPlays = (this.deadPlays || 0) + 1; return; }
       this.plays++;
+      this.paused = false;
+      for (const f of this._play) f();     // 真机是异步回调，桩里同步发，断言好写
     },
-    stop() { this.stops++; this.currentTime = 0; },
+    stop() { this.stops++; this.currentTime = 0; this.paused = true; },
     seek(s) { this.seeks.push(s); this.currentTime = s; },
-    destroy() { this.destroyed = true; }
+    destroy() { this.destroyed = true; this.paused = true; }
   };
   audios.push(a);
   return a;
@@ -82,6 +89,10 @@ function sleepSync(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 
 let currentRoute = 'pages/play/play';
 global.getCurrentPages = () => [{ route: currentRoute }];
 
+/* 系统音频中断（锁屏 / 来电）与前后台切换的钩子注册表：speech.js 在 configure 时
+   挂一次，探针手动触发，用来验证「锁屏回来怎么自愈」。 */
+const interrupt = { begin: [], end: [], show: [], hide: [] };
+
 global.wx = {
   getStorageSync: k => (k in storage ? storage[k] : ''),
   setStorageSync: (k, v) => { storage[k] = v; },
@@ -90,8 +101,24 @@ global.wx = {
   showModal: o => { if (o && o.success) o.success({ confirm: false }); },
   navigateTo: o => { navs.push(o && o.url); },
   redirectTo: o => { redirects.push(o && o.url); },     // 桩里不真跳，只记录
+  /* wx.showActionSheet 的**官方硬限制**：itemList 最多 6 项，超了直接 fail。
+     桩照真机模拟这条，于是「拿 actionSheet 列 14 个专题」的旧实现会得到干净的红色，
+     而不是 TypeError 把整个探针打断（那样后面上百条都测不到）。 */
+  showActionSheet: o => {
+    const list = (o && o.itemList) || [];
+    sheets.push(list.slice());
+    if (list.length > 6) {
+      if (o && o.fail) o.fail({ errMsg: 'showActionSheet:fail parameter error: itemList should not be larger than 6' });
+      return;
+    }
+    if (o && o.success) o.success({ tapIndex: 0 });
+  },
   createInnerAudioContext: () => newAudio(),
   setInnerAudioOption: () => { },
+  onAudioInterruptionBegin: f => { interrupt.begin.push(f); },
+  onAudioInterruptionEnd: f => { interrupt.end.push(f); },
+  onAppShow: f => { interrupt.show.push(f); },
+  onAppHide: f => { interrupt.hide.push(f); },
   /* 刻意**不**提供 createWebAudioContext：让 utils/sound.js 走「基础库不支持」的
      降级分支，音效静默失败 —— 探针只关心逻辑，不该去建音频图。 */
 };
@@ -409,6 +436,119 @@ function rankHolds(row, q) {
       calls === base, 'called=' + calls + ' base=' + base);
   }
 
+  /* ================================================================ B2. 序列配对入口
+     曾经的 bug：点【序列配对】没有任何反应 —— 原因是 UI 用了 wx.showActionSheet，
+     它**一次最多列 6 项**（微信硬限制），而专题册有 14 个主题 ⇒ API 直接 fail，
+     fail 回调里又什么都不做，于是「点了没反应」。
+     下面这几条把「面板能列全、能选、能跳、起点对」钉死。 */
+  section('B2. 【序列配对】入口 —— 页内专题面板（不是 actionSheet）');
+
+  const storeMod = require(path.join(ROOT, 'utils/store.js'));
+  const idxSrc = fs.readFileSync(path.join(ROOT, 'pages/index/index.js'), 'utf8');
+  check('首页源码不再调用 wx.showActionSheet（6 项上限，14 个主题必然失败）',
+    !/wx\.showActionSheet\s*\(/.test(idxSrc));
+  check('首页挂了页内专题面板的处理器（gotoTopic / pickTopic / closeTopic）',
+    typeof idxDef.gotoTopic === 'function' && typeof idxDef.pickTopic === 'function'
+      && typeof idxDef.closeTopic === 'function');
+
+  const topicBookInfo = bank.books().filter(b => b.stage === '专题')[0];
+  check('词库里存在序列配对册（stage=专题）', !!topicBookInfo,
+    topicBookInfo ? topicBookInfo.id : '（没有）');
+
+  /* 主题清单用 bank 现算（不写死 14），并且按「同一主题连续排」口径分组 */
+  const themes = [];
+  {
+    const seen = {};
+    const n = bank.levelCount(topicBookInfo.id);
+    for (let i = 0; i < n; i++) {
+      const lv = bank.levelAt(topicBookInfo.id, i);
+      if (!lv || !lv.theme) continue;
+      if (!seen[lv.theme]) {
+        seen[lv.theme] = { name: lv.theme, first: i, last: i };
+        themes.push(seen[lv.theme]);
+      }
+      seen[lv.theme].last = i;
+    }
+  }
+  check('专题册主题数 > 6（这正是 actionSheet 装不下的临界点）', themes.length > 6, themes.length + ' 个');
+
+  /* 把「为什么不能用 actionSheet」也做成可执行断言：桩按官方 6 项上限模拟，
+     一次塞进全部主题会被微信直接 fail —— 谁日后改回 actionSheet，这条就会红。 */
+  let sheetFailed = false;
+  wx.showActionSheet({
+    itemList: themes.map(t => t.name),
+    success: () => { },
+    fail: () => { sheetFailed = true; }
+  });
+  check('wx.showActionSheet 装不下全部主题（桩按官方 6 项上限 fail）',
+    sheetFailed === true && themes.length > 6, themes.length + ' 项 → fail=' + sheetFailed);
+
+  delete storage[storeMod.KEYS.progress];
+  const idxT = instantiate(idxDef);
+  idxT.onLoad();
+  check('首页认出序列配对册（入口才会显示）', idxT.data.hasTopic === true);
+
+  const navsBeforeTopic = navs.length;
+  idxT.gotoTopic();
+  check('点【序列配对】→ 弹面板，而不是直接跳页',
+    idxT.data.topicOpen === true && navs.length === navsBeforeTopic,
+    JSON.stringify({ open: idxT.data.topicOpen, nav: navs.length - navsBeforeTopic }));
+  /* 旧实现没有 topicRows，所以一律用 `|| []` 兜住 —— 反向验证时让它「红」而不是崩。 */
+  const rowsT = idxT.data.topicRows || [];
+  check('面板条目 = 全部主题，一个不少（含第 7 项之后的，旧 actionSheet 到第 6 项就没了）',
+    rowsT.length === themes.length
+      && rowsT.every((r, i) => r.name === themes[i].name && /关 · \d+ 词/.test(r.sub)),
+    rowsT.map(r => r.name).join(','));
+  check('面板第 7 条（下标 6）确实存在且有可点内容 —— 旧实现到这就超限失败',
+    !!rowsT[6] && !!rowsT[6].name, rowsT[6] && rowsT[6].name);
+
+  const navsBeforePick = navs.length;
+  if (typeof idxT.pickTopic === 'function') idxT.pickTopic({ currentTarget: { dataset: { i: 6 } } });
+  check('点第 7 个主题 → 关面板 + 进玩法页，落在该主题第一关',
+    idxT.data.topicOpen === false && navs.length === navsBeforePick + 1
+      && navs[navs.length - 1] === '/pages/play/play?bookId='
+        + encodeURIComponent(topicBookInfo.id) + '&level=' + themes[6].first,
+    navs[navs.length - 1]);
+
+  /* 起点口径：该主题前两关练过 ⇒ 从第 3 关进（与网页端同一规则） */
+  storage[storeMod.KEYS.progress] = JSON.stringify({
+    [topicBookInfo.id]: [themes[6].first, themes[6].first + 1]
+  });
+  const idxP = instantiate(idxDef);
+  idxP.onLoad();
+  idxP.gotoTopic();
+  const rowsP = idxP.data.topicRows || [];
+  check('面板条目带上「已练 N 关」（读的是本册进度）',
+    !!rowsP[6] && /已练 2 关/.test(rowsP[6].sub), rowsP[6] && rowsP[6].sub);
+  const navsBeforeJump = navs.length;
+  if (typeof idxP.pickTopic === 'function') idxP.pickTopic({ currentTarget: { dataset: { i: 6 } } });
+  check('起点跳过已练过的关：该主题前两关练过 ⇒ 直接进第 3 关',
+    navs.length === navsBeforeJump + 1
+      && navs[navs.length - 1].slice(-('level=' + (themes[6].first + 2)).length)
+        === 'level=' + (themes[6].first + 2),
+    navs[navs.length - 1]);
+
+  delete storage[storeMod.KEYS.progress];
+  const idxC = instantiate(idxDef);
+  idxC.onLoad();
+  idxC.gotoTopic();
+  const navsBeforeClose = navs.length;
+  if (typeof idxC.closeTopic === 'function') idxC.closeTopic();
+  check('点遮罩 / 【取消】→ 面板收起，不跳页',
+    idxC.data.topicOpen === false && navs.length === navsBeforeClose, String(idxC.data.topicOpen));
+
+  /* WXML / WXSS 侧的硬要求：遮罩可关、面板本体拦冒泡、列表自身可滚 */
+  const sheetWxml = fs.readFileSync(path.join(ROOT, 'pages/index/index.wxml'), 'utf8');
+  const sheetWxss = fs.readFileSync(path.join(ROOT, 'pages/index/index.wxss'), 'utf8');
+  check('WXML：遮罩 catchtap 关闭 + 面板本体 catchtap 拦冒泡（点列表不会误关）',
+    /ix-sheet-wrap[^>]*catchtap="closeTopic"/.test(sheetWxml)
+    && /class="ix-sheet" catchtap="noop"/.test(sheetWxml));
+  check('WXML：每条主题整行可点（bindtap="pickTopic" + data-i）',
+    /wx:for="\{\{topicRows\}\}"/.test(sheetWxml) && /bindtap="pickTopic"/.test(sheetWxml));
+  check('WXSS：列表自身可滚（14 条一屏放不下）且避让底部安全区',
+    /\.ix-sheet-list[^}]*max-height[^}]*vh/.test(sheetWxss)
+    && /env\(safe-area-inset-bottom\)/.test(sheetWxss));
+
   /* ================================================================ C */
   section('C. pages/play/play.js —— 按 ?bookId=&level= 直达');
 
@@ -567,7 +707,15 @@ function rankHolds(row, q) {
     const speechPath = path.join(ROOT, 'utils/speech.js');
     const store = require(path.join(ROOT, 'utils/store.js'));
 
-    check('app.json 登记了 8 个读音分包', subRoots.length === 8, subRoots.join(','));
+    /* 分包数不再写死：books.js 里 hasAudio=1 的册就是应该有的分包。
+       两边对不上（漏册 / 多册）都说明导出与音频资源不同步。 */
+    const audioIds = bank.books().filter(b => b.hasAudio).map(b => b.id);
+    check('app.json 登记了全部读音分包（= books.js 里 hasAudio 的册）',
+      subRoots.length === audioIds.length
+      && audioIds.every(id => subRoots.indexOf(`packages/${id}`) >= 0),
+      subRoots.join(',') + ' vs ' + audioIds.join(','));
+    check('序列配对册（pep-topic）也在读音分包里 —— 它以前是唯一没有读音的有序词群',
+      subRoots.indexOf('packages/pep-topic') >= 0, subRoots.join(','));
     check('每个分包都带页面（纯资源目录微信根本不打包，音频会凭空消失）',
       subs.every(s => (s.pages || []).length > 0 && s.pages[0] === 'play/play'));
     check('主包仍是检索页 + 玩法页（没有读音的册走主包这条）',
@@ -648,17 +796,21 @@ function rankHolds(row, q) {
       !!a && !!entry && Math.abs(a.startTime - entry[1]) < 1e-6,
       a && entry ? `${a.startTime} vs ${entry[1]}` : '找不到词');
     check('点一次英文卡只播一次', !!a && a.plays === 1, a && a.plays);
-    check('点英文卡不重复建实例（整册只解码一次，点读才不拖沓）',
-      audios.length === 1, audios.length);
 
-    /* ---- E6 连点第二个词：复用同一实例、跳到新起点（不是重叠播放） ---- */
+    /* ---- E6 连点第二个词：换全新实例、旧的当场销毁（体验版 bug：念一半掐断重念 /
+           连点偶发无声 —— 复用同一实例时 stop/startTime/play 命令异步交错） ---- */
     const second = page._s.left[1];
     const entry2 = (meta.words || []).find(w => String(w[0]).toLowerCase() === String(second.text).toLowerCase());
     if (entry2) {
       page.onTapLeft({ currentTarget: { dataset: { i: 1 } } });
-      check('连点第二个词：仍是同一个实例、起点换成第二个词',
-        audios.length === 1 && Math.abs(audios[0].startTime - entry2[1]) < 1e-6,
-        `${audios.length} 个实例 / ${audios[0].startTime} vs ${entry2[1]}`);
+      const a2 = audios[audios.length - 1];
+      check('连点第二个词：换一个全新实例（不给旧实例的交错命令留土壤）',
+        a2 !== a && audios.length === 2, `${audios.length} 个实例`);
+      check('……旧实例当场销毁（两个声音绝无可能重叠）', a.destroyed === true, `destroyed=${a.destroyed}`);
+      check('……新实例起点 = 第二个词的起点',
+        !!a2 && Math.abs(a2.startTime - entry2[1]) < 1e-6,
+        a2 && `${a2.startTime} vs ${entry2[1]}`);
+      check('……新实例一次 play（不重播、不补播）', !!a2 && a2.plays === 1, a2 && a2.plays);
     }
 
     /* ---- E7 点中文卡不读（读音库里只有英文） ---- */
@@ -719,13 +871,17 @@ function rankHolds(row, q) {
     check('相对口径（currentTime 从播放起点算）：同样到词尾停',
       bMid === b0 && bx.stops === b0 + 1, `mid=${bMid} end=${bx.stops}`);
 
-    /* ③ startTime 没生效（从 0 开始播）⇒ 纠偏一次，且纠偏后仍能判停 */
+    /* ③ startTime 没生效（从 0 开始播）⇒ 连续两拍确认后纠偏一次，且纠偏后仍能判停 */
     speech2.play(lateWord[0]);
     let cx = audios[audios.length - 1];
     cx.seeks.length = 0;
     let c0 = cx.stops;
-    advance(cx, 0.08);
-    check('startTime 没生效时纠偏一次（否则「点第 40 个词先把前面念一遍」）',
+    advance(cx, 0.05);
+    advance(cx, 0.13);
+    check('只涨了一拍还不纠偏（先排除「读数滞后」，见 ⑥b）',
+      cx.seeks.length === 0, JSON.stringify(cx.seeks));
+    advance(cx, 0.21);
+    check('startTime 没生效（读数每拍稳定递增）时纠偏一次（否则「点第 40 个词先把前面念一遍」）',
       cx.seeks.length === 1 && Math.abs(cx.seeks[0] - lateWord[1]) < 1e-6, JSON.stringify(cx.seeks));
     advance(cx, lateWord[1] + (lateWord[2] - lateWord[1]) + 0.2);
     check('纠偏之后仍能正常判停（seek 不该把收尾逻辑带坏）',
@@ -762,6 +918,64 @@ function rankHolds(row, q) {
       `mid=${eMid} end=${ex.stops}`);
     require(speechPath).configure(`packages/${BOOK}`, require(subIndexPath));
 
+    /* ⑥ 首帧采样晚（切册后首屏 setData 卡顿）绝不能 seek ——
+       体验版 bug：切册后点第一个词，先念半句、紧接着从头再念一遍。
+       根因：纠偏看的是「首帧位置与起点之差的**绝对值**」，采样晚 0.6s 时把
+       「其实已经从起点播了 0.6s」误判成「startTime 没生效」，seek 回起点重播。 */
+    speech2.stop();
+    const lateW = (meta.words || []).find(w => w[1] > 1 && (w[2] - w[1]) > 0.8);
+    check('有可用于「采样晚」测试的词（否则下面几条无意义）', !!lateW);
+    speech2.play(lateW[0]);
+    let fx = audios[audios.length - 1];
+    fx.seeks.length = 0;
+    const f0 = fx.plays, fs0 = fx.stops;
+    advance(fx, lateW[1] + 0.6);                       // 第一拍就已经晚到起点后 0.6s
+    check('首帧比起点晚（首屏卡顿）时不 seek —— seek 回起点等于把这个词重念一遍',
+      fx.seeks.length === 0, JSON.stringify(fx.seeks));
+    check('……也不会因此多播一次', fx.plays === f0, `${f0} → ${fx.plays}`);
+    advance(fx, lateW[2] + 0.05);
+    check('采样晚的那一段仍按真实词尾收（基准取起点，不串到下一个词）',
+      fx.stops === fs0 + 1, `${fs0} → ${fx.stops}`);
+
+    /* ⑥b 解码期读数滞后（**从没下载过的册**首播）也绝不能 seek ——
+       体验版 bug：新册第一次点词「第一遍念到一半、紧接着从头念一遍」。
+       根因：首播要现解码，currentTime 先报一个很小的残留值（0.02~0.05），
+       随后**跳变**到真实位置；纠偏若只看「ct 早于起点」就立刻 seek 回起点 ⇒ 重念。
+       修法：读数是「低位原地踏步 + 跳变」还是「每拍稳定递增」，必须分开对待。 */
+    speech2.stop();
+    speech2.play(lateW[0]);
+    let gx = audios[audios.length - 1];
+    gx.seeks.length = 0;
+    const g0 = gx.plays, gs0 = gx.stops;
+    advance(gx, 0.02);                                  // 解码期残留读数
+    advance(gx, 0.03);                                  // 原地踏步（涨幅 < 20ms）
+    advance(gx, 0.04);
+    check('解码期读数在低位原地踏步时不 seek（否则这个词会被拉回起点重念）',
+      gx.seeks.length === 0, JSON.stringify(gx.seeks));
+    advance(gx, lateW[1] + 0.6);                        // 解码完成：读数跳变到真实位置
+    check('读数跳变到真实位置后也绝不 seek', gx.seeks.length === 0, JSON.stringify(gx.seeks));
+    check('……整个过程只有一次 play、没有被掐断重播（一次点读只一遍声）',
+      gx.plays === g0 && gx.stops === gs0, `plays+${gx.plays - g0} stops+${gx.stops - gs0}`);
+    advance(gx, lateW[2] + 0.05);
+    check('……仍按真实词尾收（基准取起点，不串到下一个词）',
+      gx.stops === gs0 + 1, `${gs0} → ${gx.stops}`);
+
+    /* ⑦ 播放模型：一次点读 = 一个全新实例（体验版两轮 bug 的根治点）
+       复用同一实例时，「stop → 设 startTime → play」三条命令在真机上异步交错：
+       上一次的 stop 排到本次 play 之后 ⇒ 点了没声；残留读数触发误纠偏 ⇒ 念一半重念。 */
+    speech2.play(firstWord);
+    let hx = audios[audios.length - 1];
+    const hPrev = audios[audios.length - 2];
+    check('每次点读都换新实例（从根上避开命令交错，不靠现场状态碰运气）',
+      !!hx && hx !== hPrev, '实例没有换新');
+    check('……上一次的实例已被销毁（不存在双声重叠的可能）',
+      !!hPrev && hPrev.destroyed === true, `destroyed=${hPrev && hPrev.destroyed}`);
+    check('……一次点读只有一次 play、零 seek（不重播、不补播、不纠偏）',
+      hx.plays === 1 && hx.seeks.length === 0, `plays=${hx.plays} seeks=${JSON.stringify(hx.seeks)}`);
+    speech2.stop();
+    check('stop 之后实例是停止态（不销毁，留给下一次点读换新时销毁）',
+      hx.stops >= 1 && hx.destroyed === false, `stops=${hx.stops} destroyed=${hx.destroyed}`);
+
     /* ⑤ 连点两个词只留一套轮询 */
     intervals.clear();
     speech2.play(firstWord);
@@ -774,7 +988,8 @@ function rankHolds(row, q) {
     /* ⑥ 源码级：判停靠轮询，不能退回 onTimeUpdate */
     const speechSrc = fs.readFileSync(speechPath, 'utf8');
     check('判停走 setInterval 轮询（onTimeUpdate 在真机会停摆）',
-      /setInterval\s*\(\s*tick/.test(speechSrc), '未找到 setInterval(tick)');
+      /setInterval\s*\(/.test(speechSrc) && /\btick\s*\(\s*mine\s*\)/.test(speechSrc),
+      '未找到 setInterval(... tick(mine) ...)');
 
     /* ---- E13 换册必须换页（体验版 bug：只有三年级上册能读） ----
        根因：选册面板 / 下一册 / 错题本 / 自动练习跨册都只是「改册号」，
@@ -952,23 +1167,30 @@ function rankHolds(row, q) {
       !!newA && Math.abs(newA.startTime - w32[1]) < 1e-6,
       newA && `${newA.startTime} vs ${w32[1]}`);
 
-    /* ③ 同一册内连点：仍复用同一个实例（不能退化成每次都重建，点读会明显变慢） */
+    /* ③ 同一册内连点：也换新实例。旧模型「复用同一实例不重复解码」在真机上换来的是
+       stop / startTime / play 三条命令异步交错 —— 上一次的 stop 排到本次 play 之后
+       ⇒ 点了没声；残留读数触发误纠偏 ⇒ 念一半掐断重念。重建的开销只是解码头。 */
     const w32b = idx32.words[1] || w32;
     const cntBefore = audios.length;
     spX.play(w32b[0], 'pep-3-2');
-    check('同一册内连点第二个词：仍复用同一实例（不重复解码）',
-      audios.length === cntBefore, `${cntBefore} → ${audios.length}`);
+    const w32bA = audios[audios.length - 1];
+    check('同一册内连点第二个词：换新实例（不给交错命令留土壤）',
+      audios.length === cntBefore + 1 && w32bA !== newA, `${cntBefore} → ${audios.length}`);
+    check('……上一个实例当场销毁（两个声音绝无可能重叠）',
+      newA.destroyed === true, `destroyed=${newA.destroyed}`);
+    check('……新实例的起点 = 第二个词的起点',
+      !!w32bA && Math.abs(w32bA.startTime - w32b[1]) < 1e-6,
+      w32bA && `${w32bA.startTime} vs ${w32b[1]}`);
 
-    /* ④ 旧页卸载不能销毁新页的实例：redirect 时新旧页的先后并无保证 */
-    const dBefore = newA.destroyed;
+    /* ④ 旧页卸载不能碰新页正在用的实例：redirect 时新旧页先后并无保证 */
     pOld.onUnload();                       // 3 上 的老页面此刻才卸载，配置已经是 3 下
     check('旧页卸载不销毁新页的实例（否则新页刚点下去念半句就没声了）',
-      newA.destroyed === dBefore && dBefore === false, `destroyed=${newA.destroyed}`);
-    const playsBefore = newA.plays;
+      w32bA.destroyed === false, `destroyed=${w32bA.destroyed}`);
     spX.play(w32[0], 'pep-3-2');
-    check('旧页卸载后新页仍能正常点读（实例没被旧页销毁）',
-      newA.plays === playsBefore + 1 && !newA.deadPlays,
-      `plays+${newA.plays - playsBefore} dead=${newA.deadPlays || 0}`);
+    const afterA = audios[audios.length - 1];
+    check('旧页卸载后新页仍能正常点读（新实例 play 没落空、旧实例没在销毁后 play）',
+      afterA !== w32bA && afterA.plays === 1 && !w32bA.deadPlays,
+      `plays=${afterA.plays} dead=${w32bA.deadPlays || 0}`);
 
     /* ⑤ 换回先前那册：重建 3 上的实例（别命中 3 下那个），src 跟着回去 */
     currentRoute = `packages/${BOOK}/play/play`;
@@ -977,17 +1199,19 @@ function rankHolds(row, q) {
     spX.play(pBack._s.left[0].text, BOOK);
     const backA = audios[audios.length - 1];
     check('换回 3 上：src 跟着回到 3 上（不会还在播 3 下）',
-      !!backA && backA !== newA && backA.src === `/packages/${BOOK}/audio/sprite.m4a`,
+      !!backA && backA !== afterA && backA.src === `/packages/${BOOK}/audio/sprite.m4a`,
       backA && backA.src);
-    check('3 下 的实例在这次切换时被销毁', newA.destroyed === true);
+    check('3 下 的实例在这次切换时被销毁', afterA.destroyed === true);
 
-    /* ⑥ 源码级：实例按文件归属、换文件重建（防止有人改回「只改 src」） */
+    /* ⑥ 源码级：每次点读都新建实例（防止有人改回「复用同一实例」） */
     const spSrc = fs.readFileSync(speechPath, 'utf8');
-    check('ensureAudio 接收 url，并只在同一个文件时复用',
-      /function ensureAudio\(url\)/.test(spSrc) && /audioSrc === url/.test(spSrc),
-      '未找到 audioSrc === url 的判断');
+    check('freshAudio：每次建实例前先销毁旧的（play 里也必须走它）',
+      /function freshAudio\(url\)/.test(spSrc) && /if \(audio\) dropAudio\(\)/.test(spSrc),
+      '未找到 freshAudio / dropAudio 组合');
+    check('播放入口直接调 freshAudio（不允许按 url 复用旧实例）',
+      /var a = freshAudio\(url\)/.test(spSrc), '未找到 freshAudio(url) 调用');
     check('换文件时销毁旧实例（dropAudio）',
-      /function dropAudio\(\)/.test(spSrc) && /if \(audio\) dropAudio\(\)/.test(spSrc));
+      /function dropAudio\(\)/.test(spSrc));
     const playSrc = fs.readFileSync(path.join(ROOT, 'pages/play/play.js'), 'utf8');
     check('换页前断声写在 _goAudioPack 里（所有换册入口都经过它）',
       /speech\.stop\(\);\s*\n\s*wx\.redirectTo/.test(playSrc), '未找到 stop 后紧跟 redirectTo');
@@ -1024,6 +1248,107 @@ function rankHolds(row, q) {
     check('重试后 loaded 恢复 true、棋盘重新铺开',
       canRetry && pL.data.loaded === true && !!(pL._s && pL._s.left.length >= 3),
       canRetry ? '见上' : '页面没有 retryBoot 方法');
+
+    /* ---- E16 锁屏回来「点哪个词都没声、换册才恢复」----
+       体验版实测：锁屏几分钟解锁后，本页点读集体静音，只有换册（重新 configure）
+       或重开小程序才恢复。两个来源都已定位：
+       ① onError 里把 conf 永久置空 —— 中断期间底层报一次系统错误，本页点读就地全废；
+       ② 音频会话被打断后没恢复，新实例 play 也静默失败 ⇒ 需要销毁实例 + 探针戳醒，
+          并接官方 wx.onAudioInterruptionBegin/End。 */
+    section('E16. 锁屏 / 系统中断后必须能自愈（不能靠换册救）');
+    resetSpeech();
+    currentRoute = `packages/${BOOK}/play/play`;
+    audios.length = 0;
+    interrupt.begin.length = 0; interrupt.end.length = 0;
+    interrupt.show.length = 0; interrupt.hide.length = 0;
+    require(speechPath).configure(`packages/${BOOK}`, require(subIndexPath));
+    const spL = require(speechPath);
+    /* 防御式触发：旧版没有这些钩子时不许把探针打断（要「红完跑到底」）。 */
+    const fire = (arr) => { if (typeof arr[0] === 'function') arr[0](); };
+
+    /* ① 钩子必须在 configure 时挂上 */
+    check('configure 时挂了音频中断开始/结束监听',
+      interrupt.begin.length === 1 && interrupt.end.length === 1,
+      `begin=${interrupt.begin.length} end=${interrupt.end.length}`);
+    check('configure 时挂了前后台切换监听（锁屏时小程序会切后台）',
+      interrupt.hide.length === 1 && interrupt.show.length === 1,
+      `hide=${interrupt.hide.length} show=${interrupt.show.length}`);
+
+    /* ② onError 不能把 conf 封死：中断期间偶发一次系统错误很正常 */
+    spL.play(firstWord);
+    let ex2 = audios[audios.length - 1];
+    check('实例上注册了 onError', !!ex2 && ex2._err.length > 0, ex2 && ex2._err.length);
+    if (ex2 && ex2._err.length) ex2._err[0]({ errMsg: 'errCode:10002 system error', errCode: 10002 });
+    check('onError 只停当前段，不把 conf 封死（否则本页读音全废、只能换册）',
+      spL.enabled() === true && spL._state() === null, `enabled=${spL.enabled()}`);
+    const nErr = audios.length;
+    spL.play(firstWord);
+    check('报过错之后下一次点读照常出声（换新实例重试，不需要换册）',
+      audios.length === nErr + 1 && audios[audios.length - 1].plays === 1,
+      `新实例 ${audios.length - nErr} 个`);
+
+    /* ③ 中断开始：立即停声（锁屏/来电不该继续念） */
+    spL.play(firstWord);
+    const curAudio = audios[audios.length - 1];
+    const stopsB = curAudio.stops;
+    check('中断开始立即停声（锁屏 / 来电时不该继续念）',
+      typeof interrupt.begin[0] === 'function'
+        && (fire(interrupt.begin), curAudio.stops > stopsB && spL._state() === null),
+      typeof interrupt.begin[0] === 'function' ? `stops+${curAudio.stops - stopsB}` : '没有挂 onAudioInterruptionBegin');
+
+    /* ④ 中断结束：销毁可能已被打坏的实例（留着只会静默无声） */
+    spL.play(firstWord);
+    const zombie = audios[audios.length - 1];
+    fire(interrupt.end);
+    check('中断结束时销毁实例（被打坏的实例留着 = 后续永远没声）', zombie.destroyed === true);
+    const nEnd = audios.length;
+    spL.play(firstWord);
+    const afterEnd = audios[audios.length - 1];
+    check('中断结束后点读用全新实例、能正常 play',
+      audios.length === nEnd + 1 && afterEnd.plays === 1 && !afterEnd.deadPlays,
+      `plays=${afterEnd && afterEnd.plays} dead=${afterEnd && afterEnd.deadPlays}`);
+
+    /* ⑤ 后台超过 3 秒回来：revive 发一个 0 音量探针戳醒音频会话 */
+    fire(interrupt.hide);
+    sleepSync(3100);
+    const nProbe = audios.length;
+    fire(interrupt.show);
+    const probe = audios[audios.length - 1];
+    check('后台超过 3 秒回来会发一个探针（戳醒中断后哑掉的音频会话）',
+      audios.length === nProbe + 1, `${nProbe} → ${audios.length}`);
+    check('探针是 0 音量、播本册 sprite（只戳会话：不出声、不串册）',
+      !!probe && probe.volume === 0 && probe.src === `/packages/${BOOK}/audio/sprite.m4a`,
+      probe && `${probe.volume} / ${probe.src}`);
+    check('探针真的发起了播放', !!probe && probe.plays === 1, probe && probe.plays);
+    sleepSync(700);                       // 探针 600ms 后自毁（等真定时器）
+    await sleep(20);                      // 让出事件循环，定时器才会真的跑
+    check('探针几百毫秒后自己销毁（不留常驻实例、不会偷偷念完整册）',
+      !!probe && probe.destroyed === true);
+
+    /* ⑥ 刚切走就回来（< 3 秒）不该打扰用户：不发探针 */
+    const nShort = audios.length;
+    fire(interrupt.hide);
+    fire(interrupt.show);
+    check('刚切走就回来（< 3 秒）不发探针', audios.length === nShort, `${nShort} → ${audios.length}`);
+
+    /* ⑦ 自愈之后点读照常（探针不能把正常路径带坏） */
+    const nAfter = audios.length;
+    spL.play(firstWord);
+    const afterProbe = audios[audios.length - 1];
+    check('自愈之后点读照常：新实例、音量正常、一次 play',
+      audios.length === nAfter + 1 && afterProbe.plays === 1 && afterProbe.volume === 1,
+      `plays=${afterProbe && afterProbe.plays} vol=${afterProbe && afterProbe.volume}`);
+    check('……此时 conf 仍在（不需要换册重新 configure）', spL.enabled() === true);
+
+    /* ⑧ 源码级：防止有人把这套改回去 */
+    const spSrc2 = fs.readFileSync(speechPath, 'utf8');
+    check('全文件只在 reset() 里清 conf（onError 不再封印读音）',
+      (spSrc2.match(/^\s*conf = null;/gm) || []).length === 1,
+      (spSrc2.match(/^\s*conf = null;/gm) || []).length + ' 处');
+    check('接了官方 onAudioInterruptionBegin / End',
+      /onAudioInterruptionBegin/.test(spSrc2) && /onAudioInterruptionEnd/.test(spSrc2));
+    check('前后台切换用 onAppHide / onAppShow 追踪，并在后台超时后 revive',
+      /onAppHide/.test(spSrc2) && /onAppShow/.test(spSrc2) && /function revive\(/.test(spSrc2));
 
     /* ---- E10 体积闸门：单分包 ≤ 2048 KB（超了上传直接被拒） ---- */
     const sizeKb = (dir) => {

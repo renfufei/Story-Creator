@@ -23,6 +23,26 @@
 //   ⇒ 并且时间基准取「首帧读到的位置」而不是词起点：真机上 currentTime 到底是
 //      「文件绝对位置」还是「相对本次播放起点」两种口径都见过，用首帧当零点，
 //      两种口径都算得对。
+//
+// ★★ 为什么每次点读都新建实例，而不是同一册复用一个：
+//   真机上同一实例的「stop → 设 startTime → play」是**异步下发**的三条命令，
+//   交错顺序不受我们控制，由此产生过两类真机病：
+//   ① 上一次的 stop 排到本次 play 之后 ⇒ 音频刚起就被掐掉，**不报错**，
+//      表现是「点了没声音，再点别的词、回头再点这个又好了」；
+//   ② 残留的播放位置 / paused / currentTime 读数和现实对不上，纠偏与判停
+//      全建立在错读数上，越纠越乱（表现为「念一半掐断重念」）。
+//   补 play 的看门狗救不了 ①（paused / currentTime 的更新时序同样不可信，
+//   实测会把正在播的词在半路掐断重播）。新实例没有历史状态，两类病都没有土壤；
+//   分包文件在本机，重建的开销只是解码头，几十毫秒，点读无感。
+//
+// ★★ 锁屏 / 系统中断（真机病灶三）：
+//   锁屏几分钟再解锁后「点哪个词都没声、换册才恢复」有两个来源：
+//   ① 中断期间底层报一次错触发 onError —— onError 里若把 conf 永久置空，
+//     本页所有点读就地静音，直到换册重新 configure（正是体验版实测症状）；
+//   ② 音频会话被打断后没恢复，新实例 play 静默失败。
+//   对策：onError 只停当前段、**绝不封 conf**；接官方 wx.onAudioInterruptionBegin/End
+//   （Begin 停播、End 销毁实例）；再挂 wx.onAppHide/onAppShow，后台超过 3 秒回来
+//   就 revive()——销毁僵尸实例并用 0 音量探针把音频会话戳醒。见 hookInterruption/revive。
 
 /* 轮询间隔。80ms 对耳朵是连续的；比 onTimeUpdate 的 ~250ms 还密。 */
 var TICK_MS = 80;
@@ -33,17 +53,17 @@ var TAIL_PAD = 0.02;
 /* 硬超时余量：词长之外再给 1.5s，无论如何都要停（兜底，不参与正常路径）。 */
 var HARD_PAD_MS = 1500;
 
-/* 纠偏阈值：首帧位置与词起点差超过这个量，说明 startTime 没生效、音频从 0 开始播。 */
+/* 纠偏阈值：首帧位置**早于**词起点超过这个量，才认定 startTime 没生效、音频从更靠前
+   的位置开播。★ 只认「早于」，不认「晚于」—— 见 tick 里的说明。 */
 var DRIFT = 0.5;
 
 /* 当前配置：{ root, meta, map }。null = 本页没有读音能力。 */
 var conf = null;
 
-/* 播放上下文。同一册（同一个 sprite 文件）只建一个、反复复用 —— 新建实例要重新解码，
-   点读的手感会明显变差。但**换了文件（换册）必须重建**，原因见 ensureAudio。 */
+/* 当前（最多一个）实例。点一次词换一个：见文件头「为什么每次点读都新建实例」。 */
 var audio = null;
 
-/* 上面那个实例当前加载的是哪个文件。换册后 src 变了就重建，避免播放位置残留。 */
+/* 上面那个实例当前加载的是哪个文件。 */
 var audioSrc = '';
 
 /* 正在播的那一段：{ start, end, dur, base, t0, jumped, watch }。null = 没在播。 */
@@ -65,6 +85,84 @@ function buildMap(meta) {
     return map;
 }
 
+/* 系统音频中断（锁屏 / 来电 / 其他应用抢占）与前后台切换的钩子。★ 只挂一次：
+   模块是单例，configure 每页都会调，重复注册会让一次中断触发 N 遍回调。 */
+var interruptionHooked = false;
+
+/* 上一次切到后台的时刻。0 = 当前在前台（或从未离开过）。 */
+var hiddenAt = 0;
+
+function hookInterruption() {
+    if (interruptionHooked) return;
+    interruptionHooked = true;
+    /* obeyMuteSwitch 从基础库 2.3.0 起要经这个接口统一设置（实例上的属性已不生效）。 */
+    try { wx.setInnerAudioOption({ obeyMuteSwitch: false }); } catch (e) { /* 老基础库没有 */ }
+    try {
+        if (typeof wx.onAudioInterruptionBegin === 'function') {
+            wx.onAudioInterruptionBegin(function () { stop(); });
+        }
+        if (typeof wx.onAudioInterruptionEnd === 'function') {
+            /* 中断结束：实例多半已被打坏（再 play 会静默失败），销毁掉，
+               让下一次点读走全新上下文。 */
+            wx.onAudioInterruptionEnd(function () { halt(); dropAudio(); });
+        }
+        if (typeof wx.onAppHide === 'function') {
+            wx.onAppHide(function () { stop(); hiddenAt = Date.now(); });
+        }
+        if (typeof wx.onAppShow === 'function') {
+            wx.onAppShow(function () {
+                if (hiddenAt && Date.now() - hiddenAt > 3000) revive();
+                hiddenAt = 0;
+            });
+        }
+    } catch (e) { /* 老基础库没有这组 API：退化为「下一次点读重建实例」 */ }
+}
+
+/* 后台回来（解锁 / 切回小程序）时的自愈。锁屏几分钟后音频会话常被打断，
+   此时新实例 play 也会静默失败 —— 先销毁僵尸实例，再用一个 0 音量的探针
+   播放把会话「戳醒」：探针不出声、几百毫秒后自毁，用户下一次点读照常
+   走全新实例。 */
+function revive() {
+    if (!conf) return false;
+    stop();
+    dropAudio();
+    poke(0);
+    return true;
+}
+
+/* 0 音量探针：只做「让音频会话重新活过来」这一件事。
+   真机上锁屏回来的恢复可能要一两秒，试一次不一定够 —— 没收到 onPlay 回执
+   就隔 700ms 再来一次，最多 3 次；拿到了就到此为止（探针只播 600ms 就销毁）。 */
+function poke(tries) {
+    if (!conf) return;
+    var probe;
+    try { probe = wx.createInnerAudioContext(); } catch (e) { return; }
+
+    var alive = false, done = false;
+    var finish = function () {
+        if (done) return;
+        done = true;
+        try { probe.destroy(); } catch (e) { /* 已销毁 */ }
+    };
+
+    probe.src = '/' + conf.root + '/audio/sprite.m4a';
+    probe.volume = 0;            /* 只戳会话，不出声 */
+    if (typeof probe.onPlay === 'function') {
+        probe.onPlay(function () { alive = true; });   /* 回执 = 会话真的活了 */
+    }
+    if (typeof probe.onError === 'function') {
+        probe.onError(finish);
+    }
+    try { probe.play(); } catch (e) { /* 下一轮再试 */ }
+
+    setTimeout(function () {
+        finish();
+        if (!alive && tries < 2 && conf) {
+            setTimeout(function () { poke(tries + 1); }, 700);
+        }
+    }, 600);
+}
+
 /**
  * 把读音能力接到当前页面。
  *
@@ -73,6 +171,7 @@ function buildMap(meta) {
  * @returns {boolean} 是否配置成功
  */
 function configure(root, meta) {
+    hookInterruption();
     if (!root || !meta || !meta.words || !meta.words.length) return false;
     var id = String(root).split('/').pop();      // 'packages/pep-3-2' → 'pep-3-2'
     conf = { root: String(root), bookId: id, meta: meta, map: buildMap(meta) };
@@ -117,18 +216,11 @@ function halt() {
     }
 }
 
-/* 惰性建实例 + 只注册一次监听。
-   这里的监听只做兜底：真正判停的是 play() 里起的轮询（见文件头注释）。
-
-   ★ 为什么换文件要重建，而不是在旧实例上改 src：
-   真机上「stop → 改 src → 改 startTime → play」这一串命令是异步下发的，startTime
-   有时会被上一次的 stop / seek 覆盖，起播位置落在**上一次的播放点**上。耳朵里就是
-   「先念半句上一个词（残音），再从头念一遍这个词」—— 换册后第一次点读最明显，
-   因为文件换了、解码也要重来，时序更乱。
-   同文件复用没有这个问题，还省掉一次解码，所以只在 url 变化时重建。 */
-function ensureAudio(url) {
-    if (audio && audioSrc === url) return audio;
-    if (audio) dropAudio();          // 换文件：旧实例连着它的播放位置一起丢掉
+/* 每次点读都换一个全新实例（旧的当场销毁）。为什么不复用见文件头注释 ——
+   一句话：真机上同一实例的 stop / startTime / play 是异步交错的命令，
+   复用等于把「念一半掐断重念」「点了没声」两个病根留在身边。 */
+function freshAudio(url) {
+    if (audio) dropAudio();          // 旧实例连着它的播放位置、排队中的命令一起丢掉
 
     audio = wx.createInnerAudioContext();
     audioSrc = url;
@@ -141,10 +233,21 @@ function ensureAudio(url) {
     if (typeof audio.onEnded === 'function') {
         audio.onEnded(function () { if (cur) halt(); });
     }
+    /* 兜底：极端环境下没有定时器能力时才用 onTimeUpdate（见 play 里的 catch）。
+       正常路径靠 setInterval 轮询，这个回调在 watch 存在时直接跳过，不重复跑。 */
+    if (typeof audio.onTimeUpdate === 'function') {
+        audio.onTimeUpdate(function () {
+            if (cur && cur.watch === null) tick(cur);
+        });
+    }
     audio.onError(function () {
-        /* 音频缺失 / 解码失败：本页就此放弃读音，但绝不影响配对玩法。 */
+        /* 音频缺失 / 解码失败 / 系统中断错误：停掉这一段就好。
+           ★★ 绝不能把 conf 永久置空 —— 锁屏后真机会偶发报一次系统错误，
+           一旦置空，本页所有点读就地静音，直到换册重新 configure 才恢复
+           （体验版实测：「锁屏回来点哪个都没声，换册就好」正是这个病灶）。
+           下一次点读本来就会重建全新实例，自然完成重试；真缺音频的册
+           每次都安静失败，也不影响配对玩法。 */
         halt();
-        conf = null;
     });
 
     return audio;
@@ -161,30 +264,71 @@ function dropAudio() {
 /* 一次轮询判定。cur 里的 base 是「首帧读到的位置」，相当于给 currentTime
    定了个零点 —— 于是不管它报的是文件绝对位置还是本次播放的相对位置，
    elapsed 都是「这一段已经播了多久」。 */
-function tick() {
+function tick(myCur) {
+    /* 段归属：轮询只服务「建它时那一段」。切册 / 换页时旧页可能留下一个来不及清掉的
+       interval（新旧页的 onLoad / onUnload 先后并无保证），若它也来 tick 新段，就会
+       多出一套判停、多几拍补 play ⇒ 偶发「重播」「忽然没声」。对不上就自尽。
+       ⚠️ myCur 只认带 jumped 字段的段对象：没有定时器能力时退化成 onTimeUpdate(tick)，
+       那时第一个参数是事件对象，必须按「当前段」处理。 */
+    var owner = (myCur && typeof myCur === 'object' && 'jumped' in myCur) ? myCur : null;
+    if (owner && owner !== cur) {
+        if (owner.watch !== null && owner.watch !== undefined) {
+            try { clearInterval(owner.watch); } catch (e) { /* 忽略 */ }
+        }
+        owner.watch = null;
+        return;
+    }
+
     var c = cur;
     if (!c || !audio) return;
 
     var ct = Number(audio.currentTime);
     if (!isFinite(ct) || ct < 0) ct = 0;
+    var now = Date.now();
 
     if (c.base === null) {
-        /* 还没起播（解码 / 首次下载慢）：**绝不能在这里把基准定成 0**。
-           否则 startTime 一生效，currentTime 会从词起点开始涨，而基准还停在 0，
-           elapsed 立刻就像「已经播完」⇒ 词还没出声就被判停。 */
+        /* 还没起播（解码 / 缓冲中，新实例也要给几十毫秒）：
+           **绝不能在这里把基准定成 0** —— 否则 startTime 一生效，currentTime 从词
+           起点开始涨，而基准还停在 0，elapsed 立刻像「已播完」⇒ 词还没出声就被判停。
+           ★ 这里不做任何补救动作（不补 play）：真机 paused / currentTime
+           的更新时序都不可信，靠它们当触发条件只会把正在播的词掐断重念。 */
         if (ct <= 0.001) {
-            if (Date.now() - c.t0 > c.dur * 1000 + 6000) halt();   // 起播都没成功，别留着空转
+            if (now - c.t0 > c.dur * 1000 + 6000) halt();   // 迟迟不出声，别留着空转
             return;
         }
-        c.base = ct;
-        c.tick0 = Date.now();
-        /* startTime 没生效 ⇒ 音频从 0 开始播（表现为「点第 40 个词，先把前面念一遍」）。
-           纠偏一次就够了；之后 base 用词起点，仍按同一套 elapsed 逻辑走。 */
-        if (!c.jumped && c.start > DRIFT && Math.abs(ct - c.start) > DRIFT) {
-            c.jumped = true;
-            try { audio.seek(c.start); } catch (e) { /* 不支持 seek 就让它自然播完 */ }
-            c.base = c.start;
+        if (ct < c.start - DRIFT) {
+            /* ct 明显早于词起点 —— 两种可能，**绝不在一拍之内动手**：
+               (a) startTime 真没生效：音频在播更靠前的内容，ct 会**每拍稳定递增**
+                   （约 +80ms/拍）却迟迟追不上起点 ⇒ 连续两拍确认后 seek 一次拉回；
+               (b) 解码刚起、读数还没跟上：音频其实已从词起点开播，currentTime 先报
+                   一个很小的残留值、随后**跳变**到真实位置（≥ 起点）。此时 seek 等于
+                   把正在播的词拉回起点**重念一遍** —— 新下载册的前 1~2 个词
+                   「念到一半又从头念」正是它（首播要现解码，读数节节滞后；
+                   册越大、解码越久，越容易撞上）。
+               区分依据只有一条：ct 是否**稳定递增**。(b) 是小值原地踏步后跳变，
+               (a) 是每拍都涨。误判 (b) 的代价是重播，比漏一次纠偏严重得多，
+               所以要求连续两拍（≈240ms）都在涨才动手。 */
+            if (c.prevCt !== null && ct > c.prevCt + 0.02) c.grow++; else c.grow = 0;
+            c.prevCt = ct;
+            if (c.grow >= 2 && c.start > DRIFT) {
+                /* 连续两拍都稳定上涨（≈ 240ms 都还在起点之前）⇒ 判定 startTime 没生效 */
+                c.jumped = true;
+                try { audio.seek(c.start); } catch (e) { /* 不支持 seek 就让它自然播完 */ }
+                c.base = c.start;
+                c.tick0 = now;
+            } else if (now - c.t0 > c.dur * 1000 + 6000) {
+                halt();   // 一直追不上也收尾
+            }
+            return;
         }
+        /* 基准取哪儿，取决于「这一拍是不是真的晚了」：
+           · 这一拍来得晚（ct 已越过起点）⇒ 音频确实是从起点开始播的，基准取**起点**；
+             取 ct 会把判停整体推后 (ct-start) 秒，词尾串到下一个词上。
+           · ct 就在起点附近 ⇒ 直接取 ct，绝对 / 相对两种 currentTime 口径都算得对。
+           ★ 反方向（ct 比起点晚）绝不 seek：那是**第一次采样来得晚**（切册后首屏
+           setData 卡主线程），不是 startTime 没生效；seek 回起点等于重念一遍。 */
+        c.base = (ct > c.start + DRIFT) ? c.start : ct;
+        c.tick0 = now;
         return;
     }
 
@@ -193,7 +337,7 @@ function tick() {
 
     /* 硬超时：从「真的起播」算起，词长之外再给 1.5s。
        seek 不生效、currentTime 卡死等异常路径全兜在这里。 */
-    if (Date.now() - c.tick0 > c.dur * 1000 + HARD_PAD_MS) halt();
+    if (now - c.tick0 > c.dur * 1000 + HARD_PAD_MS) halt();
 }
 
 /**
@@ -217,15 +361,16 @@ function play(word, bookId, restart) {
 
     var url = '/' + conf.root + '/audio/sprite.m4a';
 
-    /* 先停掉上一段（含它的计时器），否则连点两个词会有两套轮询同时判停。
-       ★ 顺序：先 halt 再取实例 —— 取实例时可能销毁重建，先 halt 才不会漏停旧实例。 */
+    /* 先停掉上一段（含它的计时器），否则连点两个词会有两套轮询同时判停。 */
     halt();
 
-    var a = ensureAudio(url);
+    /* 每次点读都换新实例：旧实例（连同它队列里可能还没执行完的 stop / seek 命令）
+       当场销毁 —— 这正是「点了没声（play 被上一次的 stop 吞掉）」和
+       「念一半掐断重念（错读数触发误纠偏）」的病根。 */
+    var a = freshAudio(url);
     var mySeq = ++seq;
 
-    /* 起点。同一实例上「stop → 改 startTime → play」就是让「跳着播不同词」稳定的组合；
-       换文件的情形由 ensureAudio 重建实例兜住（那里有为什么不能只改 src 的说明）。 */
+    /* 全新实例 + startTime：文件是本机缓存，起播就是从词起点开始。 */
     a.startTime = start;
 
     cur = {
@@ -236,6 +381,10 @@ function play(word, bookId, restart) {
         t0: Date.now(),
         tick0: null,
         jumped: false,
+        /* 上一拍的 currentTime / 连续上涨的拍数：用来区分「startTime 没生效（读数
+           每拍稳定递增）」和「解码期读数滞后（小值原地踏步后跳变）」，见 tick。 */
+        prevCt: null,
+        grow: 0,
         seq: mySeq,
         watch: null
     };
@@ -245,13 +394,15 @@ function play(word, bookId, restart) {
         cur = null;
         return false;
     }
-    /* 起轮询。setInterval 的第一次回调在 TICK_MS 之后，正好用来取首帧基准。 */
+    /* 起轮询。setInterval 的第一次回调在 TICK_MS 之后，正好用来取首帧基准。
+       把「这一段」作为参数传进去：旧段残留的轮询再跑到时能认出自己已经过期。 */
+    var mine = cur;
     try {
-        cur.watch = setInterval(tick, TICK_MS);
+        mine.watch = setInterval(function () { tick(mine); }, TICK_MS);
     } catch (e) {
-        /* 极端情况下没有定时器能力：退化成「靠 onTimeUpdate 尽力而为」。 */
-        cur.watch = null;
-        if (typeof a.onTimeUpdate === 'function') a.onTimeUpdate(tick);
+        /* 极端情况下没有定时器能力：退化成「靠 onTimeUpdate 尽力而为」
+           （监听在 freshAudio 里注册，条件见那里的说明）。 */
+        mine.watch = null;
     }
     return true;
 }
@@ -285,6 +436,8 @@ module.exports = {
     stop: stop,
     reset: reset,
     release: release,
+    /* 后台回来时戳醒音频会话（onAppShow 里自动调；也留给页面手动兜底）。 */
+    revive: revive,
     /* 调试出口：探针用它读「当前在播哪一段」，页面不要用。 */
     _state: function () { return cur; }
 };

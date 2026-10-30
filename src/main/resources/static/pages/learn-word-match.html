@@ -3356,19 +3356,21 @@ function wordMatchApp() {
         return pick;
     }
 
-    /* 已经生成过音频的册次白名单（小学 3~6 年级共 8 册）。
+    /* 已经生成过音频的册次白名单（小学 3~6 年级共 8 册 + 序列配对 1 册）。
        sprite:1 = 该册产出了「整册单文件」（sprite.m4a + sprite.json）：
                  一次加载整册、用 currentTime 定位，请求数从「每词 1 次」降到「整册 1 次」。
        single:0 = 该册**没有**按需单文件（已 prune），播放只能走 sprite 或系统朗读。
                  ⚠️ 没有这个标记的话，sprite 还没下完时会去请求不存在的单文件，
                  404 会把整册标成 dead，之后连 sprite 都不再用 —— 等于静默降级。
        ⚠️ **新增一册音频后必须在这里登记**，否则页面不会去请求音频、直接走系统朗读。
-       生成脚本：scripts/learn/gen_word_audio.py --book <册次> --engine edge --sprite [--prune] */
+       生成脚本：scripts/learn/gen_word_audio.py --book <册次> --engine edge --sprite [--prune]
+       序列配对册（pep-topic）的词库是 topic-words.json，脚本已把它并入册次表，id 直接可用。 */
     var AUDIO_BOOKS = {
         'pep-3-1': { sprite: 1, single: 0 }, 'pep-3-2': { sprite: 1, single: 0 },
         'pep-4-1': { sprite: 1, single: 0 }, 'pep-4-2': { sprite: 1, single: 0 },
         'pep-5-1': { sprite: 1, single: 0 }, 'pep-5-2': { sprite: 1, single: 0 },
-        'pep-6-1': { sprite: 1, single: 0 }, 'pep-6-2': { sprite: 1, single: 0 }
+        'pep-6-1': { sprite: 1, single: 0 }, 'pep-6-2': { sprite: 1, single: 0 },
+        'pep-topic': { sprite: 1, single: 0 }
     };
     /* 音频扩展名。改这里必须同步生成脚本的 --format，
        且服务端 Content-Type 必须是 audio/mp4（Spring 静态资源实测返回 audio/mp4 + Range 206）。 */

@@ -405,15 +405,99 @@
             .reader-sidebar { transform: translateX(-100%); }
             .reader-sidebar.show-mobile { transform: translateX(0); }
             /* 手机上左右各 48px 的 padding 吃掉了四分之一屏宽（390 屏正文只剩 294）。
-               收到 16px；顶部 52px 是给浮在左上角的两个按钮让位（横排后只占一行高）。 */
-            .reader-main { margin-left: 0; max-width: 100%; padding: 3.25rem 1rem 3rem; }
+               收到 16px；顶部 52px 是给浮在左上角的两个按钮让位（横排后只占一行高）。
+               底部留 5.5rem：给「上一章 / 下一章」悬浮胶囊让位，最后一行才不会被盖住。 */
+            .reader-main { margin-left: 0; max-width: 100%; padding: 3.25rem 1rem 5.5rem; }
             .toggle-btn { left: 10px !important; }
             /* 配色按钮与 ☰ 并排横放：原来是往下叠一个，正文顶部要空出 110px 才躲得开 */
             .bg-fab { top: 10px !important; left: 58px !important; }
         }
+
+        /* ==================== 章节翻页（上一章 / 下一章） ====================
+           桌面：贴右边缘竖排一行（宽 38px，正好落在正文右侧 48px 留白里，压不到字）；
+           手机：落到底部居中做胶囊，横向两颗、拇指好按，只占页面底边一条。
+           ★ 这段必须留在样式表最后：媒体查询里的改写要盖住上面的基础规则。 */
+        .chapter-nav {
+            position: fixed;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+            z-index: 900;                 /* 高于正文，低于弹层（modal 1055 / toast 2000） */
+        }
+        .chapter-nav-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: .3rem;
+            width: 38px;
+            padding: .5rem 0;
+            border: 1px solid var(--bs-border-color, #dee2e6);
+            border-radius: .5rem;
+            background: rgba(255, 255, 255, .93);
+            color: var(--bs-body-color, #212529);
+            font-size: .78rem;
+            line-height: 1.15;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+            transition: background .15s, border-color .15s, color .15s, opacity .15s;
+        }
+        .chapter-nav-btn .lbl { writing-mode: vertical-rl; letter-spacing: .12em; }
+        .chapter-nav-btn .bi { font-size: 1rem; line-height: 1; }
+        .chapter-nav-btn:hover:not(:disabled) {
+            background: #fff;
+            border-color: var(--bs-primary, #0d6efd);
+            color: var(--bs-primary, #0d6efd);
+        }
+        .chapter-nav-btn:focus-visible {
+            outline: 2px solid var(--bs-primary, #0d6efd);
+            outline-offset: 2px;
+        }
+        .chapter-nav-btn:disabled { opacity: .35; cursor: default; }
+
+        /* 平滑滚动落点：留一点缝，标题别贴着窗口顶端 */
+        .reader-main h3[id^="chapter-"] { scroll-margin-top: .75rem; }
+
+        /* 深色背景：浮钮跟着换皮，别留一块白 */
+        body.reader-dark .chapter-nav-btn {
+            background: rgba(42, 46, 54, .93);
+            border-color: #3f444c;
+            color: #e6e8eb;
+        }
+        body.reader-dark .chapter-nav-btn:hover:not(:disabled) {
+            background: #2f343c;
+            border-color: #8ab4ff;
+            color: #8ab4ff;
+        }
+
+        /* 手机：底部居中的胶囊。右边缘在 390 屏上只剩 16px 留白，
+           竖排按钮必然压字；底部一条既够大拇指，又只盖住页脚空白。 */
+        @media (max-width: 768px) {
+            .chapter-nav {
+                right: auto;
+                left: 50%;
+                top: auto;
+                bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+                transform: translateX(-50%);
+                flex-direction: row;
+                gap: .5rem;
+            }
+            .chapter-nav-btn {
+                flex-direction: row;
+                width: auto;
+                min-width: 6.25rem;
+                min-height: 2.75rem;          /* 44px：拇指好按（和共享盘那页的动作钮同一档） */
+                padding: .5rem .95rem;
+                border-radius: 999px;
+                font-size: .8125rem;
+            }
+            .chapter-nav-btn .lbl { writing-mode: horizontal-tb; letter-spacing: 0; }
+        }
     </style>
 </head>
-<body x-data="readerApp()" x-init="initTts(); initBg(); boot()">
+<body x-data="readerApp()" x-init="initTts(); initBg(); initChapterNav(); boot()">
 
     <button class="btn btn-sm toggle-btn"
             :class="{ 'shifted': sidebarOpen && window.innerWidth > 768,
@@ -787,6 +871,23 @@
         </div>
     </main>
 
+    <!-- 章节翻页：桌面贴右侧竖排，手机落到底部胶囊。
+         prev / next 由滚动位置实时算（navChapter），到头那侧自动禁用。 -->
+    <div class="chapter-nav" x-show="chapters.length > 0" x-cloak>
+        <button type="button" class="chapter-nav-btn"
+                :disabled="navChapter.prev === null"
+                @click="gotoChapter(navChapter.prev)"
+                aria-label="上一章" title="上一章">
+            <i class="bi bi-chevron-up"></i><span class="lbl">上一章</span>
+        </button>
+        <button type="button" class="chapter-nav-btn"
+                :disabled="navChapter.next === null"
+                @click="gotoChapter(navChapter.next)"
+                aria-label="下一章" title="下一章">
+            <i class="bi bi-chevron-down"></i><span class="lbl">下一章</span>
+        </button>
+    </div>
+
     <script src="/vendor/alpinejs/cdn.min.js" defer></script>
     <script>
     /*
@@ -844,6 +945,8 @@
             openVolumes: [],
             sideStoriesData: [],
             openSideStories: [],
+            // 章节翻页按钮的可用章号：null = 到头了（按钮禁用）
+            navChapter: { prev: null, next: null },
 
             /**
              * 引导数据是异步的：await 之后再把书目/正文铺进来。
@@ -882,6 +985,64 @@
                 } else if (this.volumes.length > 0) {
                     this.openVolumes = [this.volumes[0].volumeNumber];
                 }
+            },
+            /**
+             * 章节翻页：滚动时实时算出「当前这一章」的上一章 / 下一章。
+             * 判定看各章标题的 id（chapter-N）—— 视口顶部往上 120px 内、最后一个已经滚过去的
+             * 标题就是当前章；一章都还没滚到（停在页首）按第一章算。
+             * 滚动用 rAF 节流：平滑滚动会连发几十次 scroll，别每次都查一遍 DOM。
+             */
+            initChapterNav() {
+                if (this._navBound) return;
+                this._navBound = true;
+                const schedule = () => {
+                    if (this._navRaf) return;
+                    this._navRaf = requestAnimationFrame(() => {
+                        this._navRaf = 0;
+                        this.updateChapterNav();
+                    });
+                };
+                window.addEventListener('scroll', schedule, { passive: true });
+                window.addEventListener('resize', schedule);
+                // 正文是异步铺进来的：数据一到就重算，否则按钮一直是初始的空状态
+                this.$watch('chapters', () => this.$nextTick(schedule));
+                this.$nextTick(schedule);
+            },
+            updateChapterNav() {
+                const list = (this.chapters || []).map(c => c.number);
+                if (!list.length) {
+                    this.navChapter.prev = null;
+                    this.navChapter.next = null;
+                    return;
+                }
+                const LINE = 120;   // 标题进入这个高度以内就算「已到」
+                let cur = null;
+                const marks = document.querySelectorAll('.reader-main h3[id^="chapter-"]');
+                for (const el of marks) {
+                    if (el.getBoundingClientRect().top <= LINE) cur = Number(el.id.slice(8));
+                    else break;     // 文档顺序就是章号顺序，后面的都在更下面
+                }
+                if (cur === null) cur = list[0];
+                // 滚到文档最末尾就是最后一章：末章标题可能早被滚过顶端，
+                // 也可能还停在 120px 线下面（末章很短时），后者不修会让「下一章」永远亮着
+                const doc = document.documentElement;
+                if (window.innerHeight + window.scrollY >= doc.scrollHeight - 4) {
+                    cur = list[list.length - 1];
+                }
+                const i = list.indexOf(cur);
+                // 找不到（后台数据与 DOM 不一致）就两头都不给，宁可禁用也别跳到错章
+                const prev = i > 0 ? list[i - 1] : null;
+                const next = i >= 0 && i < list.length - 1 ? list[i + 1] : null;
+                if (this.navChapter.prev !== prev) this.navChapter.prev = prev;
+                if (this.navChapter.next !== next) this.navChapter.next = next;
+            },
+            gotoChapter(no) {
+                if (no === null || no === undefined) return;
+                const el = document.getElementById('chapter-' + no);
+                if (!el) return;
+                // 只改 hash（replaceState 不新增历史记录），刷新或分享还能落回这一章
+                try { history.replaceState(null, '', '#chapter-' + no); } catch (e) { /* file:// 下可能抛 */ }
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
             },
             get hasCollapsibleGroups() {
                 return (this.volumes && this.volumes.length > 0) ||

@@ -99,7 +99,7 @@
     <!-- ==================== 序列配对（有序词群） ====================
          玩法与趣味配对完全一样，差别只在发牌：左列英文保持 1→10、周一→周日、
          一月→十二月 的原始顺序，只打乱中文（数字一乱就没法按序列背了）。
-         一册 6 个主题，点这里先弹一行让用户选主题。 -->
+         一册 14 个主题，点这里先弹面板让用户选主题。 -->
     <view class="ix-entry ix-entry-seq" wx:if="{{hasTopic}}" hover-class="wm-tap" bindtap="gotoTopic">
         <view class="ix-entry-icon">🔢</view>
         <view class="ix-entry-main">
@@ -107,6 +107,31 @@
             <view class="ix-entry-desc">{{topicDesc}}</view>
         </view>
         <view class="ix-entry-go">选择 ›</view>
+    </view>
+
+    <!-- ==================== 序列配对 · 专题选择面板 ====================
+         为什么不用 wx.showActionSheet：它一次最多列 6 项（官方硬限制），
+         专题册有 14 个主题 ⇒ 超限直接 fail，表现就是「点了没反应」。
+         改成固定底部的页内面板后条目数不再受限，还能顺带标出每个专题练到第几关。
+         点遮罩 = 取消；面板本体 catchtap="noop" 拦住冒泡，避免点列表时把面板关掉。 -->
+    <view class="ix-sheet-wrap" wx:if="{{topicOpen}}" catchtap="closeTopic">
+        <view class="ix-sheet" catchtap="noop">
+            <view class="ix-sheet-head">
+                <view class="ix-sheet-title">序列配对 · 选一个专题</view>
+                <view class="ix-sheet-sub">英文保持原顺序，只打乱中文</view>
+            </view>
+            <scroll-view class="ix-sheet-list" scroll-y>
+                <view class="ix-tp" wx:for="{{topicRows}}" wx:key="name" data-i="{{index}}"
+                      hover-class="wm-tap" bindtap="pickTopic">
+                    <view class="ix-tp-main">
+                        <view class="ix-tp-name">{{item.name}}</view>
+                        <view class="ix-tp-sub">{{item.sub}}</view>
+                    </view>
+                    <view class="ix-tp-go">进入 ›</view>
+                </view>
+            </scroll-view>
+            <view class="ix-sheet-cancel" hover-class="wm-tap" catchtap="closeTopic">取消</view>
+        </view>
     </view>
 
 </view>

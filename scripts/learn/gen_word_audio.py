@@ -48,6 +48,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PEP_JSON = ROOT / "src/main/resources/learn/pep-words.json"
+# 序列配对册（pep-topic：数字 / 星期 / 月份…）与课内册不同源，单独一个词库文件。
+# 结构完全一致（{books:[{id,label,themes:[{name,words:[[en,zh],...]}]}]}），所以直接并进来，
+# 册次 id 仍是 pep-topic —— 产物目录 / audio/word-match/pep-topic/ 与页面、导出器天然对齐。
+TOPIC_JSON = ROOT / "src/main/resources/learn/topic-words.json"
 DEFAULT_OUT = ROOT / "src/main/resources/static/audio"
 SILENCE_SEC = 0.05
 
@@ -74,8 +78,18 @@ def slugify(word: str) -> str:
 
 
 def load_books():
-    with PEP_JSON.open(encoding="utf-8") as f:
-        return json.load(f)["books"]
+    """课内册（pep-words.json）+ 序列配对册（topic-words.json）合并成一张册次表。
+
+    两个文件都是 {books: [...]}，字段口径一致；合并后 --book 对两边的 id 都能用，
+    all 也会把 pep-topic 一起带上。
+    """
+    books = []
+    for path in (PEP_JSON, TOPIC_JSON):
+        if not path.exists():
+            continue
+        with path.open(encoding="utf-8") as f:
+            books += json.load(f)["books"]
+    return books
 
 
 def uniq_words(book):

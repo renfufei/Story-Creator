@@ -96,7 +96,7 @@ class MiniprogramExporterTest {
                 .distinct().toList();
         int packFiles = (int) entries.keySet().stream()
                 .filter(name -> name.startsWith(packPrefix)).count();
-        assertThat(packRoots).as("有读音的册都该有一个分包").hasSize(8);
+        assertThat(packRoots).as("有读音的册都该有一个分包").hasSize(AUDIO_BOOKS.size());
         assertThat(packFiles).as("每个分包固定 6 个文件，不允许有孤儿文件").isEqualTo(packRoots.size() * 6);
         assertThat(entries).hasSize(6 + manifestSize() + packFiles);
     }
@@ -199,10 +199,10 @@ class MiniprogramExporterTest {
        所以播音频的页面必须和音频同处一个分包 ⇒ 每册复制一份玩法页进分包。
        下面三条守的是这个结构：包内自包含、app.json 登记得上、books.js 标记是对的。 */
 
-    /** 有读音的册（小学 3~6 年级，共 8 册）。顺序即 books.js 里的顺序。 */
+    /** 有读音的册（小学 3~6 年级 8 册 + 序列配对 1 册）。顺序即 books.js 里的顺序。 */
     private static final List<String> AUDIO_BOOKS = List.of(
             "pep-3-1", "pep-3-2", "pep-4-1", "pep-4-2",
-            "pep-5-1", "pep-5-2", "pep-6-1", "pep-6-2");
+            "pep-5-1", "pep-5-2", "pep-6-1", "pep-6-2", "pep-topic");
 
     @Test
     @DisplayName("读音分包：每包自包含（玩法页 + 索引 + 音频），玩法页 require 已下移一层")
@@ -272,7 +272,7 @@ class MiniprogramExporterTest {
         assertThat(appJson.path("pages")).as("主包仍是检索页 + 玩法页").hasSize(2);
 
         JsonNode subs = appJson.path("subpackages");
-        assertThat(subs.size()).as("8 册有读音 ⇒ 8 个分包").isEqualTo(AUDIO_BOOKS.size());
+        assertThat(subs.size()).as("有读音的册数 = 分包数").isEqualTo(AUDIO_BOOKS.size());
         List<String> declared = new ArrayList<>();
         for (JsonNode sub : subs) {
             String root = sub.path("root").asText();
@@ -299,7 +299,7 @@ class MiniprogramExporterTest {
             if (book.path("hasAudio").asInt() == 1) {
                 marked.add(book.path("id").asText());
             } else {
-                /* 没有的册**不写**这个字段：27 册里只有 8 册有读音，
+                /* 没有的册**不写**这个字段：27 册里只有 9 册有读音，
                    若每册都写 false，books.js 会为「大多数情况」白胖一圈。 */
                 assertThat(book.has("hasAudio"))
                         .as(book.path("id").asText() + " 没有读音，不该带 hasAudio 字段").isFalse();

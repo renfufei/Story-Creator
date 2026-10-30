@@ -64,7 +64,15 @@ Page({
     results: [],      // 结果列表
     resultTip: '',    // 命中的匹配档位说明
     hasTopic: false,  // 词库里有没有【序列配对】那一册（旧数据没有 ⇒ 不挂死入口）
-    topicDesc: '英文按顺序 · 中文打乱'
+    topicDesc: '英文按顺序 · 中文打乱',
+    /* 【序列配对】的专题选择面板。
+       ⚠️ 这里**不能**用 wx.showActionSheet：它一次最多列 6 项（官方硬限制），
+       而专题册已经有 14 个主题（数字 / 序数 / 星期 / 月份 / 季节 / 时刻 / 亲属 /
+       疑问代词 / 疑问副词 / 主格 / 宾格 / 形物 / 名物 / 反身），
+       超限时 API 直接 fail（parameter error），fail 回调里不提示就等于「点了没反应」。
+       所以改成页内底部面板，条目数不再受限。 */
+    topicOpen: false,
+    topicRows: []      // [{ name, sub }] 纯展示字段，跳转用 this._topicThemes
   },
 
   onLoad: function () {
@@ -218,8 +226,8 @@ Page({
     });
   },
 
-  /* 【序列配对】：一册里 6 个主题共 15 关，直接进整册会从「数字」开始、用户未必想练那个
-     ⇒ 先弹一行让用户选主题（小程序原生 actionSheet，零额外页面）。
+  /* 【序列配对】：一册里 14 个主题共 27 关，直接进整册会从「数字」开始、用户未必想练那个
+     ⇒ 先弹一个页内面板让用户选主题（不用 actionSheet，理由见 data.topicOpen 处注释）。
      起点按网页端同一口径：该主题里第一个还没练过的关；全练完就从头再练。 */
   gotoTopic: function () {
     var book = topicBook();
@@ -228,26 +236,50 @@ Page({
     var themes = topicThemes(book.id);
     if (!themes.length) { ui.info('序列配对词库还没有内容'); return; }
 
+    /* 进度只用来在条目标「已练几关」，读一次就够 */
     var done = store.readMap(store.KEYS.progress)[book.id] || [];
-    var names = [];
-    for (var i = 0; i < themes.length; i++) names.push(themes[i].name);
+    var rows = [];
+    for (var i = 0; i < themes.length; i++) {
+      var t = themes[i];
+      var levels = t.last - t.first + 1;
+      var cleared = 0;
+      for (var k = t.first; k <= t.last; k++) {
+        if (done.indexOf(k) >= 0) cleared++;
+      }
+      rows.push({
+        name: t.name,
+        sub: levels + ' 关 · ' + t.words + ' 词' + (cleared ? ' · 已练 ' + cleared + ' 关' : '')
+      });
+    }
 
-    wx.showActionSheet({
-      itemList: names,
-      success: function (res) {
-        var t = themes[res.tapIndex];
-        if (!t) return;
-        var start = t.first;
-        for (var k = t.first; k <= t.last; k++) {
-          if (done.indexOf(k) < 0) { start = k; break; }
-        }
-        wx.navigateTo({
-          url: '/pages/play/play?bookId=' + encodeURIComponent(book.id) + '&level=' + start,
-          fail: function () { ui.info('打开玩法页失败，请重试'); }
-        });
-      },
-      /* 用户取消选择：什么都不做（不是错误，不弹提示） */
-      fail: function () { }
+    this._topicThemes = themes;
+    this.setData({ topicOpen: true, topicRows: rows });
+  },
+
+  closeTopic: function () {
+    if (!this.data.topicOpen) return;
+    this.setData({ topicOpen: false });
+  },
+
+  /* 点某个主题 ⇒ 关面板 + 进玩法页。data-i 是 topicRows 的下标，与 _topicThemes 同序。 */
+  pickTopic: function (e) {
+    var i = Number(e.currentTarget.dataset.i);
+    var t = (this._topicThemes || [])[i];
+    if (!t) return;
+
+    var book = topicBook();
+    if (!book) { this.setData({ topicOpen: false }); return; }
+
+    var done = store.readMap(store.KEYS.progress)[book.id] || [];
+    var start = t.first;
+    for (var k = t.first; k <= t.last; k++) {
+      if (done.indexOf(k) < 0) { start = k; break; }
+    }
+
+    this.setData({ topicOpen: false });
+    wx.navigateTo({
+      url: '/pages/play/play?bookId=' + encodeURIComponent(book.id) + '&level=' + start,
+      fail: function () { ui.info('打开玩法页失败，请重试'); }
     });
   }
 });
